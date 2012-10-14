@@ -6,5 +6,11 @@ object Build extends sbt.Build {
     "build",
     file("."),
     settings = BuildSettings.buildSettings
-  ) aggregate ()
+  ) aggregate (soqlParser)
+
+  lazy val soqlParser = Project(
+    "soql-parser",
+    file("soql-parser"),
+    settings = SoqlParser.settings
+  )
 }

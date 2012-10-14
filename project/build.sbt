@@ -8,3 +8,8 @@ externalResolvers <<= resolvers map { rs =>
 }
 
 addSbtPlugin("com.socrata" % "socrata-sbt" % "0.2.3")
+
+libraryDependencies ++= Seq(
+  "de.jflex" % "jflex" % "1.4.3",
+  "org.apache.ant" % "ant" % "1.8.4"
+)
