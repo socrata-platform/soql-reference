@@ -1,0 +1,490 @@
+\documentclass{article}
+\usepackage{syntax}
+\usepackage{varioref}
+\usepackage{listings}
+\begin{document}
+\newcommand{\code}[1]{{\texttt{#1}}}
+\newcommand{\column}[1]{{\texttt{#1}}}
+\newcommand{\nonterm}[1]{{\textit{#1}}}
+\newcommand{\SoQL}{SoQL}
+\newcommand{\SODA}{SODA}
+\newcommand{\transformsTo}{ $\Longrightarrow$ }
+\setlength{\grammarindent}{5em}
+
+\lstset{
+    basicstyle=\ttfamily,
+    keywordstyle=\ttfamily,
+    identifierstyle=\ttfamily,
+    stringstyle=\ttfamily,
+    showstringspaces=false}
+
+\title{\SoQL{} Level 0}
+\maketitle
+\section{Introduction to \SoQL{}}
+
+\SoQL{} is a SQL-like language for querying datasets stored in a
+\SODA{} provider.
+
+TODO
+\begin{itemize}
+\item Dataset context
+\item Simple examples?
+\end{itemize}
+
+\SoQL{} Level~0 contains operations that occur on a single dataset
+without joins.
+
+\section{Reserved words}
+
+\SoQL{} reserves a number of identifiers for its own use.  They are
+listed in figure~\ref{reservedwords} and~\ref{futurewords}.  In order
+to refer to a column whose name is the same as one of these reserved
+words, it must be enclosed in backticks.  For example, ``\code{SELECT
+  `select` WHERE `limit` = 5}'' would select the column named
+\column{select} on rows where the \column{limit} column contains the
+value 5.  Without the backticks, this query would have been rejected
+with a syntax error.
+
+The reserved words in figure~\ref{futurewords} are not used in \SoQL{}
+Level~0, but are still reserved for compatibility with higher levels.
+
+\begin{figure}
+\begin{center}
+\begin{tabular}{l l l l l l}
+AND   & ASC    & BETWEEN & BY    & DESC   & EXCEPT \\
+FIRST & GROUP  & IS      & LAST  & LIMIT  & NOT    \\
+NULL  & OFFSET & OR      & ORDER & SELECT & WHERE  \\
+\end{tabular}
+\end{center}
+\caption{Reserved words}
+\label{reservedwords}
+\end{figure}
+
+\begin{figure}
+\begin{center}
+\begin{tabular}{l l l l l l}
+DISTINCT & FROM & FULL & IN & INNER \\
+JOIN & LEFT & ON & OUTER & RIGHT \\
+\end{tabular}
+\end{center}
+\caption{Not presently used, but still reserved}
+\label{futurewords}
+\end{figure}
+
+\section{Lexical structure}
+
+\subsection{Identifiers}
+Identifiers are not case-sensitive.  More precisely, they are
+converted to lower case in the locale specified by the dataset
+context\footnote{With one addition: dashes are converted to
+  underscores as part of the case conversion process.}.  An
+identifier matches the regex
+\begin{lstlisting}
+[:jidentifierstart:][:jidentifiercont:]*
+\end{lstlisting}
+where the two character-classes represent the set of unicode
+characters accepted by the Java functions
+\lstinline|isJavaIdentifierStart| and \lstinline|isJavaIdentifierPart|
+on the \lstinline|java.lang.Character| class.
+
+Identifiers can also be quoted with backticks.  Quoting is primarily
+concerned with allowing keywords to be used as identifiers, but also
+allows dashes within the identifier.  Some examples:
+\begin{itemize}
+\item \lstinline!`hello`! --- the same as \lstinline!hello!.
+\item \lstinline!`hello-world`! --- legal, and the same (after case-canonicalization) as \lstinline!hello_world!.
+\item \lstinline!`-hello`! --- legal, and the same (after case-canonicalization) as \lstinline!_hello!.
+\item \lstinline!`where`! --- legal; an identifier, not a keyword.
+\item \lstinline!`hello world`! --- illegal; spaces not allowed in identifiers.
+\end{itemize}
+
+System identifiers are names in the column namespace which are
+provided by the system; names in this format cannot be introduced by
+users.  They match the regex
+\begin{lstlisting}
+:[:jidentifiercont:]+
+\end{lstlisting}
+If backtick-quoted, system identifiers may also contain dashes.
+
+\subsection{Numbers}
+Number literals are anything which matches the regular expression
+\begin{lstlisting}
+[0-9]+(\.[0-9]*)?([eE][+-]?[0-9]+)?
+\end{lstlisting}
+Integer literals are any number literal which does not contain a
+decimal point or an exponent.  They may be used anywhere a number is
+allowed, but some places in the grammar expect specifically a literal
+integer.
+
+\subsection{Strings}
+String literals come in two forms: Java-style strings and SQL-style
+strings.
+
+Java-style strings are delimited with double quotation marks and use
+backslash as an escape character.  They may not contain newlines but
+otherwise no characters are off-limits.  Figure~\vref{escapes} shows
+the legal escape sequences.  Any other character following a backslash
+is an error.
+\begin{figure}
+\begin{center}
+\begin{tabular}{c l}
+\lstinline|\b| & Backspace (code point 8) \\
+\lstinline|\f| & Formfeed (code point 12) \\
+\lstinline|\n| & Newline (code point 10) \\
+\lstinline|\r| & Carriage return (code point 13) \\
+\lstinline|\t| & Tab (code point 9) \\
+\lstinline|\u| & Unicode (followed by four hex digits representing the code point) \\
+\lstinline|\U| & Unicode (followed by six hex digits representing the code point) \\
+\lstinline|\"| & Double-quote \\
+\lstinline|\\| & Backslash \\
+\end{tabular}
+\end{center}
+\caption{Legal escape sequences}
+\label{escapes}
+\end{figure}
+
+SQL-style strings are delimited with single quotation marks.  They
+have no escape character and may contain anything, including newlines.
+To include a single-quote in a SQL-style string, double it.
+
+\subsection{Comments}
+
+\SoQL{} supports comments initiated by a double-hyphen
+(``\lstinline|--|'') and terminated by the end of the line.
+
+\section{Grammatical structure}
+
+\subsection{Select}
+\begin{grammar}
+<select> ::= `SELECT' <select-list> [<where-clause>] [<group-by-clause> [<having-clause>]] [<order-by-clause>] [<limit-clause>] [<offset-clause>]
+\end{grammar}
+
+No \code{FROM} clause is necessary because it is implicit in the
+dataset context.
+
+\subsubsection{Selection lists}
+\begin{grammar}
+<select-list> ::= <system-star> [`,' <only-user-star-select-list>]
+ \alt <only-user-star-select-list>
+
+<only-user-star-select-list> ::= <user-star> [`,' <expression-select-list>]
+ \alt <expression-select-list>
+
+<expression-select-list> ::= <selection> (`,' <selection>)*
+
+<system-star> ::= `:*' [`(' `EXCEPT' system-identifier (`,' system-identifier)* `)']
+
+<user-star> ::= `*' [`(' `EXCEPT' user-identifier (`,' user-identifier)* `)']
+
+<selection> ::= <expression> [`AS' user-identifier]
+\end{grammar}
+
+Unlike SQL, \SoQL{} does not automatically include \emph{all} columns
+when \lstinline|*| is used in the selection.  Instead, only the
+dataset's user-defined columns are included.  System columns may be
+included individually by name or through use of the \lstinline|:*|
+token\footnote{It is meant to suggest ``all names which begin with a
+  colon''.}.
+
+Note that this grammar implies that \lstinline|:*| and \lstinline|*|,
+if they appear at all, must be at the start of the selection list and,
+if both are present, in that order.
+
+\subsubsection{\code{WHERE} clause}
+\begin{grammar}
+<where-clause> ::= `WHERE' <expression>
+\end{grammar}
+
+A \code{WHERE} clause filters the input table to those rows for which
+the given \nonterm{expression} evaluates to true.
+
+\subsubsection{\code{GROUP BY} clause}
+\begin{grammar}
+<group-by-clause> ::= `GROUP' `BY' <expression-list>
+
+<expression-list> ::= <expression> (`,' <expression>)*
+\end{grammar}
+
+\subsubsection{\code{HAVING} clause}
+\begin{grammar}
+<having-clause> ::= `HAVING' <expression>
+\end{grammar}
+
+A \code{HAVING} clause filters the grouped table to those rows for
+which the given \nonterm{expression} evaluates to true.  If there is
+no \code{GROUP BY} clause, a \code{HAVING} clause is an error.
+
+\subsubsection{\code{ORDER BY} clause}
+\begin{grammar}
+<order-by-clause> ::= `ORDER' `BY' <ordering-list>
+
+<ordering-list> ::= <ordering> (`,' <ordering>)*
+
+<ordering> ::= <expression> [`ASC' | `DESC'] [`NULL' (`FIRST' | `LAST')]
+\end{grammar}
+
+\code{ORDER BY} sorts the output table by some criteria.
+
+If unspecified, the default modifiers are ``sort ascending'' and
+``null values last''.
+
+\subsubsection{\code{LIMIT} clause}
+\begin{grammar}
+<limit-clause> ::= `LIMIT' integer-literal
+\end{grammar}
+
+\subsubsection{\code{OFFSET} clause}
+\begin{grammar}
+<offset-clause> ::= `OFFSET' integer-literal
+\end{grammar}
+
+\subsection{Expressions}
+
+Figure~\vref{precedence} contains a list of precedence levels which
+may be easier to read than the formal grammar.
+
+\begin{grammar}
+<identifier> ::= user-identifier | system-identifier
+
+<identifier-or-funcall> ::= <identifier> [`(' <expression-list> | `*' `)' ]
+\end{grammar}
+
+An identifier in this production can be in one of two forms---either
+it can be an alias for an expression or a reference to a column (i.e.,
+it refers to a value), or it can be the name of a function.  Value
+identifiers are case-canonicalized in the locale of the dataset
+context.  Function names are case-canonicalized in the locale of the
+\SoQL{} implementation.
+
+\begin{grammar}
+<literal> ::= number-literal | string-literal | boolean-literal | `NULL'
+
+<value> ::= <identifier-or-funcall> | <literal> | `(' <expression> `)'
+
+<dereference> ::= <dereference> `.' <identifier>
+ \alt <dereference> `[' <expression> `]'
+ \alt <value>
+\end{grammar}
+
+The dot-form of a dereference is syntactic sugar for a
+bracket-dereference with a literal string.  As a result, this form is
+not case-canonicalized at all.
+
+\begin{grammar}
+<cast> ::= <cast> `::' <identifier> | <dereference>
+\end{grammar}
+
+The identifier in a cast is part of the \SoQL{} implementation, and
+therefor it is case-canonicalized in that locale.
+
+\begin{grammar}
+<unary> ::= [`+' | `-'] <unary> | <cast>
+
+<factor> ::= [<factor> (`*' | `/')] <unary>
+
+<term> ::= [<term> (`+' | `-' | `||')] <factor>
+
+<order> ::= [<order> (`=' | `==' | `!=' | `<>' | `<' | `<=' | `=>' | `>')] <term>
+
+<is-between> ::= <is-between> `IS' [`NOT'] `NULL'
+ \alt <is-between> [`NOT'] `BETWEEN' <is-between> `AND' <is-between>
+ \alt <order>
+
+<negation> ::= `NOT' <negation>
+ \alt <is-between>
+
+<conjunction> ::= [<conjunction> `AND'] <negation>
+
+<disjunction> ::= [<disjunction> `OR'] <conjunction>
+
+<expression> ::= <disjunction>
+\end{grammar}
+
+\begin{figure}
+\begin{center}
+\begin{tabular}{c}
+\lstinline|()| (function application) \\
+\lstinline|. []| (field/subscript selection) \\
+\lstinline|::| \\
+\lstinline|+ -| (unary) \\
+\lstinline|* /| \\
+\lstinline!+ - ||! \\
+\lstinline|= == != <> < <= > >=| \\
+\lstinline|IS (NOT) NULL, BETWEEN| \\
+\lstinline|NOT| \\
+\lstinline|AND| \\
+\lstinline|OR| \\
+\end{tabular}
+\end{center}
+\caption{Precedence levels from highest to lowest}
+\label{precedence}
+\end{figure}
+
+\section{Identifiers and scope}
+
+Aliases introduce new names; they do not actually rename things.  In a
+statement with the selection \lstinline|a AS b|, it is still legal to
+refer to \code{a}; it simply will not occur in the output columns
+unless separately selected as itself.
+
+The full algorithm for naming things is:
+\begin{enumerate}
+\item Expressions which are simple column-names, or the columns
+  imported by \code{*} or \code{:*}, are considered to be
+  semi-explicitly aliased to themselves.  All other columns are in
+  scope but are unaliased.
+\item It is an error for any pair of semi-explicitly or explicitly
+  aliased expressions to have the same alias.  Explicitly aliased
+  expressions can hide columns that exist on the dataset but are not
+  referred to in the selection list.
+\item After semi-explicit and explicit aliases are assigned, the
+  complex expressions have their aliases assigned according to the
+  paragraph below.  Note that simply wrapping a simple expression in
+  parenthesis DOES make it a complex expression (and hence
+  ``\code{(a)}'' will generate a name like \lstinline|a_1| to avoid
+  conflicting with column \lstinline|a|).  This process will never
+  hide any existing column or alias, which means that dataset schema
+  changes can cause these implicit aliases to change!
+\end{enumerate}
+
+Expressions more complex than a simple column-name but without
+explicit aliases have an implicit alias automatically assigned in
+left-to-right order across the selection list.  This alias consists of
+all the \code{identifier}s, \code{literal}, and keywords\footnote{The
+  ``\code{-}'' operator is not a keyword, even though a single dash is
+  a valid identifier when quoted.} in the expression, in the order in
+which they appear in the expression, transformed in the following
+manner:
+\begin{enumerate}
+\item All non-\code{javaIdentifierPart}-or-dash characters are
+  replaced by SYNTHETIC underscores (a special marker which is
+  distinguishable from all other characters, including underscores).
+\item The tokens are joined with SYNTHETIC underscores into a single
+  unit.
+\item Runs of SYNTHETIC underscores are collapsed.
+\item SYNTHETIC underscores at the start, end, or adjacent to a real
+  underscore or dash are removed.
+\item All SYNTHETIC underscores are replaced by real underscores.
+\item If the resulting string does not start with a dash or a
+  \code{javaIdentifierStart}, a single underscore is prefixed.
+\end{enumerate}
+Finally, if this generated identifier is the same as any existing
+column names or aliases (including previously generated synthetic
+aliases), the first positive integer is found such that suffixing it
+(separating by an underscore if the generated alias does not already
+end with a dash or underscore) causes no conflicts.
+
+Examples:
+\begin{itemize}
+\item \lstinline|select a, a| is an error --- two semi-explicitly
+  aliased expressions have the same alias.
+\item \lstinline|select a, (a)| is not an error.  The second column
+  will be implicitly aliased to \lstinline|a_1| (assuming there is no
+  exisiting \lstinline|a_1| column in the dataset context).
+\item \lstinline|select 1 + num| is not an error.  The selected
+  column will be implicitly aliased to \lstinline|_1_num| if there
+  is no such column in the dataset, or \lstinline|_1_num_1| if there is.
+\item \lstinline|select a as b| is not an error, even if there is a
+  column \code{b} on the dataset already.  If there is, column
+  \code{b} is hidden by the alias.
+\item \lstinline|select *, a as b| is only an error if there is a
+  \code{b} column on the dataset, because it is a conflict between a
+  semi-explicitly aliased column and an explicitly aliased one.
+\item \lstinline|select * (except b), a as b| is not an error.  Column
+  \code{b} is hidden by the alias.
+\item \lstinline|select a + __b__| will have its column aliased to
+  \lstinline|a__b__|, or (in the event that name is in use by a
+  column) \lstinline|a__b__1|.  Note that no underscores are
+  introduced in either case.
+\item \lstinline|select (a),(a),(a)| will generate aliases
+  \lstinline|a_1|, \lstinline|a_2|, and \lstinline|a_3|.
+\item \lstinline|select :id - 1| will generate alias \lstinline|id_1|.
+\end{itemize}
+
+\section{Grouping}
+
+Usually, expressions are evaluated in a context referred to as
+``ungrouped'', where each expression refers to a single value.  A
+second execution context, the ``grouped'' context, is introduced by
+either using an aggregation function in the selection list or by the
+presence of a \code{GROUP BY} clause.  In this context, expressions
+refer to collections of values.  Only literals, expressions which are
+structurally equal (see section~\vref{structuralequality}) to
+expressions which appear in the \code{GROUP BY} clause, applications
+of aggregation functions, and expressions built from these categories
+are valid in the grouped contex.  Within the argument list of
+aggregation functions, the ungrouped context is used.
+
+If a grouped context exists in the query, all aliases are introduced
+into the grouped namespace\footnote{An implementation should give a
+  useful error when an out-of-scope but nonetheless existing alias is
+  referred to in an ungrouped context.}.  Examples, given a table with
+columns \code{x} and \code{y}:
+\begin{itemize}
+\item \lstinline|select x as a where a > 3| is legal.
+\item \lstinline|select x as a where a > 3 group by x| is illegal---the
+  alias is not in scope.
+\item \lstinline|select x as a where x > 3 group by x| is legal.
+\item \lstinline|select x where x > 3 group by x| is legal because the
+  semi-explicit alias is not in scope, but the column itself is.
+\item \lstinline|select x+7 as y, count(y) group by y| is legal but
+  has what may be a surprising meaning---the parameter of the
+  \code{count} function refers to the column~\code{y}, not the value
+  \code{x+7}.  On the other hand, the \code{y} in the \code{GROUP BY}
+  clause \emph{does} refer to the alias.  It is legal because the
+  \code{x+7} is structurally equal to its alias~\code{y}.
+\end{itemize}
+Another way of saying this is that the \code{WHERE} clause always
+exists in the ungrouped context, but the other clauses depend on
+whether or not the grouped context has been introduced\footnote{An
+  implementation should warn if a column which happens to share the
+  name of an explicit alias is referred to in an ungrouped context
+  when a grouped context is present on the query.}.  The \code{GROUP
+  BY} clause itself is special; it may contain references to aliases
+that themselves do not contain (even indirectly) aggregate functions.
+
+\section{Structure equality}\label{structuralequality}
+
+Two expressions are considered structurally equal if their ``normal
+form'' representations are the same.
+
+\SoQL{} normal form is a notional alternate syntax for \SoQL{} which defines
+an unambiguous textual representation of a \SoQL{} expression.  Normal
+Form \SoQL{} consists only of literals, column references, and function
+calls.  A \SoQL{} query is transformed in the following manner:
+\begin{enumerate}
+\item All comments are replaced by whitespace.
+\item All aliases are expanded into their source expressions.
+\item All keywords are normalized to upper-case.
+\item All identifiers except for those used as the ``argument'' to the
+  \lit{.} operator are case-canonicalized (and not backtick-quoted).
+\item All string literals are rendered as SQL-style strings.
+\item Syntactic operators except for \lit{.} are translated into
+  function calls by placing the operator before a parameter list as if
+  it were a normal function.  \lit{.} is desugared into an application
+  of \code{[]}.
+\item \code{\synt{expression} IS NULL} is translated into
+  \code{IS_NULL(\synt{expression})}.
+\item \code{\synt{expression} IS NOT NULL} is translated into
+  \code{NOT(IS_NULL(\synt{expression}))}.
+\item \code{\synt{e1} BETWEEN \synt{e2} AND \synt{e3}} is translated
+  into \code{BETWEEN(\synt{e1},\synt{e2},\synt{e3})}.
+\item \code{\synt{e1} NOT BETWEEN \synt{e2} AND \synt{e3}} is translated
+  into \code{NOT(BETWEEN(\synt{e1},\synt{e2},\synt{e3}))}.
+\item All parentheses that do not denote function application are removed.
+\item All whitespace outside string literals is removed.
+\end{enumerate}
+
+Examples:
+\begin{itemize}
+\item \code{1+1}\transformsTo\code{+(1,1)}
+\item \code{`where` between 1 and 10}\transformsTo\code{BETWEEN(where,1,10)}
+\item \code{(a or b) and c}\transformsTo\code{AND(OR(a,b),c)}
+\item \code{a or b and c}\transformsTo\code{OR(a,AND(b,c))}
+\item \code{count(*)}\transformsTo\code{count(*)}
+\item \code{a::foo}\transformsTo\code{::(a,foo)}
+\item \code{a[foo]}\transformsTo\code{[](a,foo)}
+\item \code{a.Foo}\transformsTo\code{[](a,'Foo')}
+\end{itemize}
+
+\end{document}
