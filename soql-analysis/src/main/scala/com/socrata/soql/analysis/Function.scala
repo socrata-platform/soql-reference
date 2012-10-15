@@ -6,15 +6,22 @@ sealed trait TypeLike[+Type]
 case class FixedType[Type](typ: Type) extends TypeLike[Type]
 case class VariableType(name: String) extends TypeLike[Nothing]
 
-case class Function[Type](name: FunctionName, variableConstraints: Map[String, Set[Type]], parameters: Seq[TypeLike[Type]], result: TypeLike[Type]) {
-  require(variableConstraints.keys.forall(k => parameters.contains(VariableType(k))), "unused constraint")
-
+case class Function[Type](name: FunctionName, parameters: Seq[TypeLike[Type]], result: TypeLike[Type]) {
   val arity = parameters.length
+
+  lazy val typeParameters: Set[String] =
+    (parameters ++ List(result)).collect {
+      case VariableType(typeParameter) => typeParameter
+    }.toSet
+
+  lazy val monomorphic: Option[MonomorphicFunction[Type]] =
+    if(result.isInstanceOf[FixedType[_]] && parameters.forall(_.isInstanceOf[FixedType[_]]))
+      Some(MonomorphicFunction(this, Map.empty))
+    else
+      None
 
   override def toString = {
     val sb = new StringBuilder(name.toString).append(" :: ")
-    sb.append(variableConstraints.map { case (k, vs) => vs.mkString(k + ":{", ", ", "}") }.mkString(", "))
-    if(variableConstraints.nonEmpty) sb.append(" => ")
     sb.append(parameters.map {
       case FixedType(typ) => typ
       case VariableType(name) => name
