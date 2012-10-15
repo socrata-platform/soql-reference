@@ -1,4 +1,4 @@
-package com.socrata.soql.analysis
+package com.socrata.soql.analysis.untyped
 
 import scala.util.parsing.input.{Position, NoPosition}
 
@@ -16,6 +16,7 @@ sealed abstract class UntypedFF extends Product {
   protected def asString: String
   override final def toString = if(UntypedFF.pretty) asString else productIterator.mkString(productPrefix + "(",",",")")
 }
+
 object UntypedFF {
   def main(args: Array[String]) {
     implicit val ctx = new DatasetContext {
@@ -31,7 +32,7 @@ object UntypedFF {
 
   val pretty = false
 
-  def apply(e: ast.Expression)(implicit ctx: DatasetContext): UntypedFF = e match {
+  def apply(expression: ast.Expression)(implicit ctx: DatasetContext): UntypedFF = expression match {
     case ast.NullLiteral(p) =>
       pos(NullLiteral(), p)
     case ast.NumberLiteral(v, p) =>
@@ -89,7 +90,7 @@ object SpecialFunctions {
   val NOT = FunctionName(com.socrata.soql.tokens.AND().printable)
 }
 
-case class ColumnOrAliasRef[Type](column: ColumnName) extends UntypedFF {
+case class ColumnOrAliasRef(column: ColumnName) extends UntypedFF {
   protected def asString = column.toString
 }
 
