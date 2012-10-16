@@ -71,7 +71,6 @@ abstract class FunctionCallTypechecker[Type] { self =>
     }
   }
 
-
   def evaluateCandidate(candidate: Func, parameters: Seq[Val]): Iterator[(MFunc, CandidateEvaluation[Type])] = {
     require(candidate.arity == parameters.length)
 
@@ -217,7 +216,7 @@ abstract class FunctionCallTypechecker[Type] { self =>
 
     import Types._
 
-    import com.socrata.soql.FunctionName
+    import com.socrata.soql.names.FunctionName
 
     val TimesNumNum = Function(FunctionName("*"), Seq(FixedType(Number), FixedType(Number)), FixedType(Number))
     val TimesNumMoney = Function(FunctionName("*"), Seq(FixedType(Number), FixedType(Money)), FixedType(Money))

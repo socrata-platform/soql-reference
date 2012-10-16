@@ -69,11 +69,9 @@ case class RPAREN() extends FormattedToken(")")
 case class LESSTHAN() extends FormattedToken("<")
 case class LESSTHANOREQUALS() extends FormattedToken("<=")
 case class EQUALS() extends FormattedToken("=")
-case class EQUALSEQUALS() extends FormattedToken("==")
 case class GREATERTHANOREQUALS() extends FormattedToken(">=")
 case class GREATERTHAN() extends FormattedToken(">")
 case class LESSGREATER() extends FormattedToken("<>")
-case class BANGEQUALS() extends FormattedToken("!=") // yes, we accept != and <>
 
 // Other primitive Boolean operators
 case class IS() extends Token

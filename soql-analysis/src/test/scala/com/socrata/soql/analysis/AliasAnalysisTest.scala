@@ -7,12 +7,13 @@ import org.scalatest.matchers.MustMatchers
 
 import com.socrata.soql.parsing.{LexerReader, Parser}
 
-import com.socrata.soql.{DatasetContext, ColumnName}
+import com.socrata.soql.DatasetContext
+import com.socrata.soql.names.ColumnName
 import com.socrata.soql.ast._
 
 class AliasAnalysisTest extends WordSpec with MustMatchers {
   def columnName(name: String)(implicit ctx: DatasetContext) =
-    new ColumnName(name)
+    ColumnName(name)
 
   def columnNames(names: String*)(implicit ctx: DatasetContext) =
     Set(names.map(columnName): _*)
@@ -24,64 +25,69 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
       lazy val columns = columnNames(cols: _*)
     }
 
-  def fixturePosition(l: Int, c: Int) = new Position {
+  def fixturePosition(l: Int, c: Int): Position = new Position {
     def line = l
     def column = c
     def lineContents = " " * c
   }
 
-  implicit def selections(e: String): Selection = {
+  implicit def selections(e: String)(implicit ctx: DatasetContext): Selection = {
     val parser = new Parser
     parser.selection(e) match {
       case parser.Success(parsed, _) => parsed
       case failure => fail("Unable to parse expression fixture " + e + ": " + failure)
     }
   }
-  def selectionsNoPos(e: String): Selection = selections(e).unpositioned
-  def expr(e: String) = {
+  def selectionsNoPos(e: String)(implicit ctx: DatasetContext): Selection = selections(e)
+  def expr(e: String)(implicit ctx: DatasetContext): Expression = {
     val parser = new Parser
     parser.expression(e) match {
       case parser.Success(parsed, _) => parsed
       case failure => fail("Unable to parse expression fixture " + e + ": " + failure)
     }
   }
-  def ident(e: String) = {
+  def ident(e: String)(implicit ctx: DatasetContext): ColumnName = {
     val parser = new Parser
     parser.identifier(new LexerReader(e)) match {
-      case parser.Success(parsed, _) => parsed
+      case parser.Success(parsed, _) => ColumnName(parsed._1)
       case failure => fail("Unable to parse expression fixture " + e + ": " + failure)
     }
   }
-  def unaliased(names: String*)(pos: Position) = names.map { i => SelectedExpression(Identifier(i,false,pos), None) }
+  def unaliased(names: String*)(pos: Position)(implicit ctx: DatasetContext) = names.map { i => SelectedExpression(ColumnOrAliasRef(columnName(i)), None) }
 
   "processing a star" should {
     implicit val ctx = fixtureContext()
     val pos = fixturePosition(4, 3)
 
     "expand to all input columns when there are no exceptions" in {
-      AliasAnalysis.processStar(StarSelection(Seq.empty, pos), columnNames("a","b","c")) must equal (unaliased("a", "b", "c")(pos))
+      // TODO: check the positions
+      AliasAnalysis.processStar(StarSelection(Seq.empty).positionedAt(pos), columnNames("a","b","c")) must equal (unaliased("a", "b", "c")(pos))
     }
 
     "expand to the empty list when there are no columns" in {
-      AliasAnalysis.processStar(StarSelection(Seq.empty, pos), columnNames()) must equal (Seq.empty)
+      AliasAnalysis.processStar(StarSelection(Seq.empty).positionedAt(pos), columnNames()) must equal (Seq.empty)
     }
 
     "expand with exclusions exluded" in {
-      AliasAnalysis.processStar(StarSelection(Seq(Identifier("b", false, NoPosition)), pos), columnNames("a","b","c")) must equal (unaliased("a","c")(pos))
+      // TODO: check the positions
+      AliasAnalysis.processStar(StarSelection(Seq((ident("b"), fixturePosition(5, 3)))).positionedAt(pos), columnNames("a","b","c")) must equal (unaliased("a","c")(pos))
     }
 
     "throw an exception if an exception does not occur in the column-set" in {
-      evaluating { AliasAnalysis.processStar(StarSelection(Seq(Identifier("not_there", false, NoPosition)), pos), columnNames("a","c")) } must produce[NoSuchColumnException]
+      // TODO: Check the position
+      evaluating { AliasAnalysis.processStar(StarSelection(Seq((ident("not_there"), NoPosition))).positionedAt(pos), columnNames("a","c")) } must produce[NoSuchColumnException]
     }
 
     "throw an exception if an exception occurs more than once" in {
-      evaluating { AliasAnalysis.processStar(StarSelection(Seq(Identifier("a", false, NoPosition), Identifier("a", false, NoPosition)), pos), columnNames("a","c")) } must produce[RepeatedExceptionException]
+        // TODO: Check the position
+      evaluating { AliasAnalysis.processStar(StarSelection(Seq((ident("a"), NoPosition), (ident("a"), NoPosition))).positionedAt(pos), columnNames("a","c")) } must produce[RepeatedExceptionException]
     }
   }
 
   "expanding a selection" should {
     implicit val ctx = fixtureContext(":a",":b","c","d","e")
     val pos = fixturePosition(5, 12)
+    val pos2 = fixturePosition(32, 1)
     val someSelections = selections("2+2,hello,avg(gnu) as average").expressions
 
     "return the input if there were no stars" in {
@@ -89,23 +95,28 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     }
 
     "return the system columns if there was a :*" in {
-      AliasAnalysis.expandSelection(Selection(Some(StarSelection(Seq.empty, pos)), None, someSelections)) must equal (unaliased(":a",":b")(pos) ++ someSelections)
+      // TODO: check the positions
+      AliasAnalysis.expandSelection(Selection(Some(StarSelection(Seq.empty).positionedAt(pos)), None, someSelections)) must equal (unaliased(":a",":b")(pos) ++ someSelections)
     }
 
     "return the un-excepted columns if there was a :*" in {
-      AliasAnalysis.expandSelection(Selection(Some(StarSelection(Seq(ident(":a")), pos)), None, someSelections)) must equal (unaliased(":b")(pos) ++ someSelections)
+      // TODO: check the positions
+      AliasAnalysis.expandSelection(Selection(Some(StarSelection(Seq((ident(":a"), NoPosition))).positionedAt(pos)), None, someSelections)) must equal (unaliased(":b")(pos) ++ someSelections)
     }
 
     "return the user columns if there was a *" in {
-      AliasAnalysis.expandSelection(Selection(None, Some(StarSelection(Seq.empty, pos)), someSelections)) must equal (unaliased("c","d","e")(pos) ++ someSelections)
+      // TODO: check the positions
+      AliasAnalysis.expandSelection(Selection(None, Some(StarSelection(Seq.empty).positionedAt(pos)), someSelections)) must equal (unaliased("c","d","e")(pos) ++ someSelections)
     }
 
     "return the un-excepted user columns if there was a *" in {
-      AliasAnalysis.expandSelection(Selection(None, Some(StarSelection(Seq(ident("d"),ident("e")), pos)), someSelections)) must equal (unaliased("c")(pos) ++ someSelections)
+      // TODO: check the positions
+      AliasAnalysis.expandSelection(Selection(None, Some(StarSelection(Seq((ident("d"), NoPosition),(ident("e"), NoPosition))).positionedAt(pos)), someSelections)) must equal (unaliased("c")(pos) ++ someSelections)
     }
 
     "return the all user columns if there was a :* and a *" in {
-      AliasAnalysis.expandSelection(Selection(Some(StarSelection(Seq.empty, pos)), Some(StarSelection(Seq.empty, pos)), someSelections)) must equal (unaliased(":a",":b","c","d","e")(pos) ++ someSelections)
+      // TODO: check the positions
+      AliasAnalysis.expandSelection(Selection(Some(StarSelection(Seq.empty).positionedAt(pos)), Some(StarSelection(Seq.empty).positionedAt(pos2)), someSelections)) must equal (unaliased(":a",":b")(pos) ++ unaliased("c","d","e")(pos2) ++ someSelections)
     }
   }
 
@@ -186,53 +197,53 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     implicit val ctx = fixtureContext(":a",":b","c","d","e")
 
     "expand *" in {
-      AliasAnalysis(selections("*").unpositioned) must equal(Map(
-        columnName("c") -> expr("c").unpositioned,
-        columnName("d") -> expr("d").unpositioned,
-        columnName("e") -> expr("e").unpositioned
+      AliasAnalysis(selections("*")) must equal(Map(
+        columnName("c") -> expr("c"),
+        columnName("d") -> expr("d"),
+        columnName("e") -> expr("e")
       ))
     }
 
     "expand :*" in {
-      AliasAnalysis(selections(":*").unpositioned) must equal(Map(
-        columnName(":a") -> expr(":a").unpositioned,
-        columnName(":b") -> expr(":b").unpositioned
+      AliasAnalysis(selections(":*")) must equal(Map(
+        columnName(":a") -> expr(":a"),
+        columnName(":b") -> expr(":b")
       ))
     }
 
     "expand :*,*" in {
-      AliasAnalysis(selections(":*,*").unpositioned) must equal(Map(
-        columnName(":a") -> expr(":a").unpositioned,
-        columnName(":b") -> expr(":b").unpositioned,
-        columnName("c") -> expr("c").unpositioned,
-        columnName("d") -> expr("d").unpositioned,
-        columnName("e") -> expr("e").unpositioned
+      AliasAnalysis(selections(":*,*")) must equal(Map(
+        columnName(":a") -> expr(":a"),
+        columnName(":b") -> expr(":b"),
+        columnName("c") -> expr("c"),
+        columnName("d") -> expr("d"),
+        columnName("e") -> expr("e")
       ))
     }
 
     "not select an alias the same as a column in the dataset context" in {
-      AliasAnalysis(selections("(c)").unpositioned) must equal(Map(
-        columnName("c_1") -> expr("(c)").unpositioned
+      AliasAnalysis(selections("(c)")) must equal(Map(
+        columnName("c_1") -> expr("(c)")
       ))
     }
 
     "not select an alias the same as an expression in the dataset context" in {
-      AliasAnalysis(selections("c as c_d, c - d").unpositioned) must equal(Map(
-        columnName("c_d") -> expr("c").unpositioned,
-        columnName("c_d_1") -> expr("c - d").unpositioned
+      AliasAnalysis(selections("c as c_d, c - d")) must equal(Map(
+        columnName("c_d") -> expr("c"),
+        columnName("c_d_1") -> expr("c - d")
       ))
     }
 
     "never infer the same alias twice" in {
-      AliasAnalysis(selections("c + d, c - d").unpositioned) must equal(Map(
-        columnName("c_d") -> expr("c + d").unpositioned,
-        columnName("c_d_1") -> expr("c - d").unpositioned
+      AliasAnalysis(selections("c + d, c - d")) must equal(Map(
+        columnName("c_d") -> expr("c + d"),
+        columnName("c_d_1") -> expr("c - d")
       ))
     }
 
     "allow hiding a column if it's not selected" in {
-      AliasAnalysis(selections("c as d").unpositioned) must equal(Map(
-        columnName("d") -> expr("c").unpositioned
+      AliasAnalysis(selections("c as d")) must equal(Map(
+        columnName("d") -> expr("c")
       ))
     }
 
@@ -249,10 +260,10 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     }
 
     "allow hiding a column if it's excluded via *" in {
-      AliasAnalysis(selections("* (except d), c as d").unpositioned) must equal(Map(
-        columnName("c") -> expr("c").unpositioned,
-        columnName("d") -> expr("c").unpositioned,
-        columnName("e") -> expr("e").unpositioned
+      AliasAnalysis(selections("* (except d), c as d")) must equal(Map(
+        columnName("c") -> expr("c"),
+        columnName("d") -> expr("c"),
+        columnName("e") -> expr("e")
       ))
     }
 

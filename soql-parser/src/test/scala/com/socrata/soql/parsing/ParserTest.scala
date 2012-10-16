@@ -6,8 +6,14 @@ import org.scalatest._
 import org.scalatest.matchers.MustMatchers
 
 import com.socrata.soql.ast._
+import com.socrata.soql.names.ColumnName
+import com.socrata.soql.DatasetContext
 
 class ParserTest extends WordSpec with MustMatchers {
+  implicit val ctx = new DatasetContext {
+    def locale = com.ibm.icu.util.ULocale.ENGLISH
+    def columns = Set.empty[ColumnName]
+  }
   def parseExpression(soql: String) = {
     val p = new Parser
     p.expression(soql) match {
@@ -24,7 +30,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
   }
 
-  def ident(name: String) = Identifier(name, false, NoPosition)
+  def ident(name: String) = ColumnOrAliasRef(ColumnName(name))
 
   "Parsing" should {
     "require a full `between' clause" in {
@@ -56,7 +62,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "accept a lone identifier" in {
-      parseExpression("a").unpositioned must equal (ident("a"))
+      parseExpression("a") must equal (ident("a"))
     }
 
     "require something after a dereference-dot" in {
@@ -64,7 +70,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "accept expr.identifier" in {
-      parseExpression("a.b").unpositioned must equal (Dereference(ident("a"), ident("b"), NoPosition))
+      parseExpression("a.b") must equal (FunctionCall(SpecialFunctions.Subscript, Seq(ident("a"), StringLiteral("b"))))
     }
 
     "reject expr.identifier." in {
@@ -80,7 +86,16 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "accept expr[expr]" in {
-      parseExpression("a[2 * b]").unpositioned must equal (Subscript(ident("a"), BinaryOperation(SymbolicOperator("*", NoPosition), NumberLiteral(2, NoPosition), ident("b"), NoPosition), NoPosition))
+      parseExpression("a[2 * b]") must equal (
+        FunctionCall(
+          SpecialFunctions.Subscript,
+          Seq(
+            ident("a"),
+            FunctionCall(
+              SpecialFunctions.Operator("*"),
+              Seq(
+                NumberLiteral(2),
+                ident("b"))))))
     }
 
     "reject expr[expr]." in {
@@ -88,11 +103,31 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "accept expr[expr].ident" in {
-      parseExpression("a[2 * b].c").unpositioned must equal (Dereference(Subscript(ident("a"), BinaryOperation(SymbolicOperator("*", NoPosition), NumberLiteral(2, NoPosition), ident("b"), NoPosition), NoPosition), ident("c"), NoPosition))
+      parseExpression("a[2 * b].c") must equal (FunctionCall(SpecialFunctions.Subscript, Seq(
+        FunctionCall(
+          SpecialFunctions.Subscript,
+          Seq(
+            ident("a"),
+            FunctionCall(SpecialFunctions.Operator("*"), Seq(
+              NumberLiteral(2),
+              ident("b"))))),
+        StringLiteral("c"))))
     }
 
     "accept expr[expr].ident[expr]" in {
-      parseExpression("a[2 * b].c[3]").unpositioned must equal (Subscript(Dereference(Subscript(ident("a"), BinaryOperation(SymbolicOperator("*", NoPosition), NumberLiteral(2, NoPosition), ident("b"), NoPosition), NoPosition), ident("c"), NoPosition), NumberLiteral(3, NoPosition), NoPosition))
+      parseExpression("a[2 * b].c[3]") must equal (FunctionCall(SpecialFunctions.Subscript, Seq(
+        FunctionCall(
+          SpecialFunctions.Subscript,
+          Seq(
+            FunctionCall(
+              SpecialFunctions.Subscript,
+              Seq(
+                ident("a"),
+                FunctionCall(SpecialFunctions.Operator("*"), Seq(
+                  NumberLiteral(2),
+                  ident("b"))))),
+            StringLiteral("c"))),
+        NumberLiteral(3))))
     }
 
   // def show[T](x: => T) {
@@ -117,7 +152,7 @@ class ParserTest extends WordSpec with MustMatchers {
   //   show(p.expression("étäøîn"))
   //   show(p.expression("_abc + -- hello world!\n123 -- gnu"))
   //   show(p.expression("\"gnu\""))
-  //   show(p.expression("\"\\U01D000\"")) 
+  //   show(p.expression("\"\\U01D000\""))
   //   show(p.selectStatement("SELECT x AS `where`, y AS `hither-thither`")) // this one's only a semi-lexer-test
   //   show(p.limit("12e1"))
   //   show(p.expression("`hello world`"))

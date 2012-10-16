@@ -1,12 +1,13 @@
-package com.socrata.soql
+package com.socrata.soql.names
 
 import com.ibm.icu.lang.UCharacter
+import com.ibm.icu.text.Normalizer
+
+import com.socrata.soql.DatasetContext
 
 final class ColumnName(val name: String)(implicit val datasetContext: DatasetContext) extends Ordered[ColumnName] {
-  val canonicalName = UCharacter.toLowerCase(datasetContext.locale, name).replaceAll("-","_")
+  val canonicalName = Normalizer.normalize(UCharacter.toLowerCase(datasetContext.locale, name).replaceAll("-","_"), Normalizer.DEFAULT)
 
-  // I don't think this is correct; in particular I don't think a == b
-  // implies a.hashCode == b.hashCode.
   override def hashCode = canonicalName.hashCode ^ datasetContext.hashCode ^ 0x342a3466
 
   // two column names are the same if they share the same dataset

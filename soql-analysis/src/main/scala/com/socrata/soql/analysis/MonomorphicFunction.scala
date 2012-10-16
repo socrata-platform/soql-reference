@@ -1,8 +1,8 @@
 package com.socrata.soql.analysis
 
-import com.socrata.soql.FunctionName
+import com.socrata.soql.names.FunctionName
 
-case class MonomorphicFunction[Type](function: Function[Type], bindings: Map[String, Type]) {
+case class MonomorphicFunction[+Type](function: Function[Type], bindings: Map[String, Type]) {
   def this(name: FunctionName, parameters: Seq[Type], result: Type) = this(Function(name, parameters.map(FixedType(_)), FixedType(result)), Map.empty)
 
   require(bindings.keySet == function.parameters.collect { case VariableType(n) => n }.toSet, "bindings do not match")
@@ -12,7 +12,7 @@ case class MonomorphicFunction[Type](function: Function[Type], bindings: Map[Str
   def arity = function.arity
   def result: Type = bind(function.result)
 
-  private def bind(typeLike: TypeLike[Type]) = typeLike match {
+  private def bind[B >: Type](typeLike: TypeLike[B]) = typeLike match {
     case FixedType(t) => t
     case VariableType(n) => bindings(n)
   }

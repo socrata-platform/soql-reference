@@ -2,19 +2,21 @@ package com.socrata.soql.ast
 
 import scala.util.parsing.input.{Position, NoPosition}
 
+import com.socrata.soql.names.{FunctionName, ColumnName, TypeName}
+
 sealed abstract class Expression extends Product {
-  /** The position of the start of this expression in the source code */
-  def position: Position
-  def withPosition(position: Position): Expression
-  override final def toString =
-    if(AST.pretty) asString
-    else AST.unpretty(this)
-
+  var position: Position = NoPosition
   protected def asString: String
+  override final def toString = if(Expression.pretty) asString else productIterator.mkString(productPrefix + "(",",",")")
+  def allColumnRefs: Set[ColumnOrAliasRef]
 
-  /** Returns a string usable as a base for synthetic column names.  This is
-   * NOT sufficient in itself, as it does not check for collisions.  Another
-   * stage will, if necessary, append the disambiguation. */
+  def positionedAt(p: Position): this.type = {
+    position = p
+    this
+  }
+
+  def removeParens: Expression
+
   def toSyntheticIdentifierBase: String = {
     // This is clearly not optimized, but the inputs are small and it
     // mirrors the prose spec closely.
@@ -44,13 +46,11 @@ sealed abstract class Expression extends Product {
     else if(!Character.isJavaIdentifierStart(asString.charAt(0)) && asString.charAt(0) != '-') "_" + asString
     else asString
   }
-
-  // produces a version of this tree without any position information
-  // to make fixtures easier
-  def unpositioned: Expression
 }
 
 object Expression {
+  val pretty = false
+
   private def collapseRuns[T](in: Seq[T], v: T): Seq[T] = {
     val r = new scala.collection.immutable.VectorBuilder[T]
     val it = in.iterator.buffered
@@ -93,38 +93,22 @@ object Expression {
   }
 
   private def findIdentsAndLiterals(e: Expression): Seq[String] = e match {
-    case _: NullLiteral => Vector("null")
-    case v: ValueLiteral[_] => Vector(v.value.toString)
-    case Identifier(name, _, _) => Vector(name)
-    case Paren(expr, _) => findIdentsAndLiterals(expr)
-    case FunctionCall(func, NormalFunctionParameters(params), _) =>
-      findIdentsAndLiterals(func) ++ params.flatMap(findIdentsAndLiterals)
-    case FunctionCall(func, StarParameter(_), _) =>
-      findIdentsAndLiterals(func)
-    case UnaryOperation(KeywordOperator(op, _), arg, _) =>
-      op +: findIdentsAndLiterals(arg)
-    case UnaryOperation(SymbolicOperator(_, _), arg, _) =>
-      findIdentsAndLiterals(arg)
-    case BinaryOperation(KeywordOperator(op, _), a, b, _) =>
-      findIdentsAndLiterals(a) ++ Vector(op) ++ findIdentsAndLiterals(b)
-    case BinaryOperation(SymbolicOperator(_, _), a, b, _) =>
-      findIdentsAndLiterals(a) ++ findIdentsAndLiterals(b)
-    case Dereference(expr, field, _) =>
-      findIdentsAndLiterals(expr) ++ findIdentsAndLiterals(field)
-    case Subscript(expr, index, _) =>
-      findIdentsAndLiterals(expr) ++ findIdentsAndLiterals(index)
-    case Cast(expr, targetType, _) =>
-      findIdentsAndLiterals(expr) ++ findIdentsAndLiterals(targetType)
-    case IsNull(expr, negated, _) =>
-      val suffix =
-        if(negated) Vector("IS", "NOT", "NULL")
-        else Vector("IS", "NULL")
-      findIdentsAndLiterals(expr) ++ suffix
-    case Between(expr, negated, lowerBound, upperBound, _) =>
-      val center =
-        if(negated) Vector("NOT", "BETWEEN")
-        else Vector("BETWEEN")
-      findIdentsAndLiterals(expr) ++ center ++ findIdentsAndLiterals(lowerBound) ++ Vector("AND") ++ findIdentsAndLiterals(upperBound)
+    case v: Literal => Vector(v.asString)
+    case ColumnOrAliasRef(name) => Vector(name.canonicalName)
+    case fc: FunctionCall =>
+      fc match {
+        case FunctionCall(SpecialFunctions.StarFunc(base), Seq()) => Vector(base)
+        case FunctionCall(SpecialFunctions.Operator(_), args) => args.flatMap(findIdentsAndLiterals)
+        case FunctionCall(SpecialFunctions.IsNull, args) => args.flatMap(findIdentsAndLiterals) ++ Vector("IS", "NULL")
+        case FunctionCall(SpecialFunctions.IsNotNull, args) => args.flatMap(findIdentsAndLiterals) ++ Vector("IS", "NOT", "NULL")
+        case FunctionCall(SpecialFunctions.Between, Seq(a,b,c)) =>
+          findIdentsAndLiterals(a) ++ Vector("BETWEEN") ++ findIdentsAndLiterals(b) ++ Vector("AND") ++ findIdentsAndLiterals(c)
+        case FunctionCall(SpecialFunctions.NotBetween, Seq(a,b,c)) =>
+          findIdentsAndLiterals(a) ++ Vector("NOT", "BETWEEN") ++ findIdentsAndLiterals(b) ++ Vector("AND") ++ findIdentsAndLiterals(c)
+        case FunctionCall(other, args) => Vector(other.canonicalName) ++ args.flatMap(findIdentsAndLiterals)
+      }
+    case Cast(expr, targetType) =>
+      findIdentsAndLiterals(expr) :+ targetType.canonicalName
   }
 
   private def joinWith[T](xs: Seq[Seq[T]], i: T): Seq[T] = {
@@ -138,121 +122,81 @@ object Expression {
   }
 }
 
+object SpecialFunctions {
+  object StarFunc {
+    def apply(f: String) = FunctionName(f + "/*")
+    def unapply(f: FunctionName) = f.name match {
+      case Regex(x) => Some(x)
+      case _ => None
+    }
+    val Regex = """^(.*)/\*$""".r
+  }
+  val IsNull = FunctionName("#IS_NULL")
+  val Between = FunctionName("#BETWEEN")
+  val IsNotNull = FunctionName("#IS_NOT_NULL") // redundant but needed for synthetic identifiers
+  val NotBetween = FunctionName("#NOT_BETWEEN") // ditto
+  val Subscript = FunctionName("op$[]")
+  object Operator {
+    def apply(op: String) = FunctionName("op$" + op)
+    def unapply(f: FunctionName) = f.name match {
+      case Regex(x) => Some(x)
+      case _ => None
+    }
+    val Regex = """^op\$(.*)$""".r
+  }
+
+  // this exists only so that selecting "(foo)" is never semi-explicitly aliased.
+  // it's stripped out by the typechecker with removeParens.
+  val Parens = Operator("()")
+}
+
+case class ColumnOrAliasRef(column: ColumnName) extends Expression {
+  protected def asString = column.toString
+  def allColumnRefs = Set(this)
+  def removeParens = this
+}
+
 sealed abstract class Literal extends Expression {
-  def unpositioned = withPosition(NoPosition)
+  def allColumnRefs = Set.empty
+  def removeParens = this
 }
-final case class NullLiteral(position: Position) extends Literal {
-  protected def asString = "NULL"
-  def withPosition(p: Position) = copy(position = p)
-}
-
-sealed abstract class ValueLiteral[T] extends Literal {
-  def value: T
-}
-
-final case class NumberLiteral(value: BigDecimal, position: Position) extends ValueLiteral[BigDecimal] {
+case class NumberLiteral(value: BigDecimal) extends Literal {
   protected def asString = value.toString
-  def withPosition(p: Position) = copy(position = p)
 }
-
-final case class StringLiteral(value: String, position: Position) extends ValueLiteral[String] {
+case class StringLiteral(value: String) extends Literal {
   protected def asString = "'" + value.replaceAll("'", "''") + "'"
-  def withPosition(p: Position) = copy(position = p)
+}
+case class BooleanLiteral(value: Boolean) extends Literal {
+  protected def asString = value.toString.toUpperCase
+}
+case class NullLiteral() extends Literal {
+  override final def asString = "NULL"
 }
 
-final case class BooleanLiteral(value: Boolean, position: Position) extends ValueLiteral[Boolean] {
-  protected def asString = value.toString
-  def withPosition(p: Position) = copy(position = p)
-}
+case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression]) extends Expression {
+  var functionNamePosition: Position = NoPosition
+  protected def asString = parameters.mkString(functionName.toString + "(", ",", ")")
+  lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
 
-final case class Identifier(name: String, quoted: Boolean, position: Position) extends Expression {
-  protected def asString =
-    if(quoted) "`" + name + "`"
-    else name
-
-  def withPosition(p: Position) = copy(position = p)
-  def unpositioned = copy(position = NoPosition)
-}
-
-final case class Paren(expression: Expression, position: Position) extends Expression { // needed for "simple name" analysis
-  protected def asString = "(" + expression + ")"
-  def withPosition(p: Position) = copy(position = p)
-  def unpositioned = Paren(expression.unpositioned, NoPosition)
-}
-
-sealed abstract class FunctionParameters {
-  def unpositioned: FunctionParameters
-}
-case class NormalFunctionParameters(parameters: Seq[Expression]) extends FunctionParameters {
-  def unpositioned = NormalFunctionParameters(parameters.map(_.unpositioned))
-}
-case class StarParameter(position: Position) extends FunctionParameters {
-  def unpositioned = StarParameter(NoPosition)
-}
-
-final case class FunctionCall(name: Identifier, parameters: FunctionParameters, position: Position) extends Expression {
-  protected def asString = parameters match {
-    case NormalFunctionParameters(params) => params.mkString(name + "(", ", ", ")")
-    case StarParameter(_) => name + "(*)"
+  def functionNameAt(p: Position): this.type = {
+    functionNamePosition = p
+    this
   }
-  def withPosition(p: Position) = copy(position = p)
-  def unpositioned = FunctionCall(name.unpositioned, parameters.unpositioned, NoPosition)
+  def removeParens =
+    if(functionName == SpecialFunctions.Parens) parameters(0).removeParens
+    else copy(parameters = parameters.map(_.removeParens)).positionedAt(position).functionNameAt(functionNamePosition)
 }
 
-sealed abstract class Operator {
-  def name: String
-  def position: Position
-  def unpositioned: Operator
-  final override def toString = name
-}
-final case class SymbolicOperator(name: String, position: Position) extends Operator {
-  def unpositioned = copy(position = NoPosition)
-}
-final case class KeywordOperator(name: String, position: Position) extends Operator {
-  def unpositioned = copy(position = NoPosition)
-}
+case class Cast(expression: Expression, targetType: TypeName) extends Expression {
+  var operatorPosition: Position = NoPosition
+  var targetTypePosition: Position = NoPosition
+  protected def asString = "::("+targetType+")"
+  def allColumnRefs = expression.allColumnRefs
+  def removeParens = copy(expression = expression.removeParens).positionedAt(position).operatorAndTypeAt(operatorPosition, targetTypePosition)
 
-final case class UnaryOperation(operator: Operator, argument: Expression, position: Position) extends Expression {
-  protected def asString = operator match {
-    case SymbolicOperator(opName, _) => opName + argument
-    case KeywordOperator(opName, _) => opName + " " + argument
+  def operatorAndTypeAt(opPos: Position, typePos: Position): this.type = {
+    operatorPosition = opPos
+    targetTypePosition = typePos
+    this
   }
-  def withPosition(p: Position) = copy(position = p)
-  def unpositioned = UnaryOperation(operator.unpositioned, argument.unpositioned, NoPosition)
-}
-
-final case class BinaryOperation(operator: Operator, lhs: Expression, rhs: Expression, position: Position) extends Expression {
-  protected def asString = lhs + " " + operator + " " + rhs
-  def withPosition(p: Position) = copy(position = p)
-  def unpositioned = BinaryOperation(operator.unpositioned, lhs.unpositioned, rhs.unpositioned, NoPosition)
-}
-
-final case class Dereference(expression: Expression, field: Identifier, position: Position) extends Expression {
-  protected def asString = expression + "." + field
-  def withPosition(p: Position) = copy(position = p)
-  def unpositioned = Dereference(expression.unpositioned, field.unpositioned, NoPosition)
-}
-
-final case class Subscript(expression: Expression, index: Expression, position: Position) extends Expression {
-  protected def asString = expression + "[" + index + "]"
-  def withPosition(p: Position) = copy(position = p)
-  def unpositioned = Subscript(expression.unpositioned, index.unpositioned, NoPosition)
-}
-
-final case class Cast(expression: Expression, targetType: Identifier, position: Position) extends Expression {
-  protected def asString = expression + " :: " + targetType
-  def withPosition(p: Position) = copy(position = p)
-  def unpositioned = Cast(expression.unpositioned, targetType.unpositioned, NoPosition)
-}
-
-final case class IsNull(expression: Expression, negated: Boolean, position: Position) extends Expression {
-  protected def asString = expression + (if(negated) " IS NOT NULL" else " IS NULL")
-  def withPosition(p: Position) = copy(position = p)
-  def unpositioned = IsNull(expression.unpositioned, negated, NoPosition)
-}
-
-final case class Between(expression: Expression, negated: Boolean, lowerBound: Expression, upperBound: Expression, position: Position) extends Expression {
-  protected def asString = expression + (if(negated) " NOT BETWEEN " else " BETWEEN ") + lowerBound + " AND " + upperBound
-  def withPosition(p: Position) = copy(position = p)
-  def unpositioned = Between(expression.unpositioned, negated, lowerBound.unpositioned, upperBound.unpositioned, NoPosition)
 }

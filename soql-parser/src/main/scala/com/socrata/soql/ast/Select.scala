@@ -1,6 +1,7 @@
 package com.socrata.soql.ast
 
 import scala.util.parsing.input.{Position, NoPosition}
+import com.socrata.soql.names.ColumnName
 
 case class Select(selection: Selection, where: Option[Expression], groupBy: Option[GroupBy], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt]) {
   override def toString = {
@@ -33,15 +34,17 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Opti
       AST.unpretty(this)
     }
   }
-
-  def unpositioned = Selection(allSystemExcept.map(_.unpositioned), allUserExcept.map(_.unpositioned), expressions.map(_.unpositioned))
 }
 
-case class StarSelection(exceptions: Seq[Identifier], starPosition: Position) {
-  def unpositioned = StarSelection(exceptions.map(_.unpositioned), NoPosition)
+case class StarSelection(exceptions: Seq[(ColumnName, Position)]) {
+  var starPosition: Position = NoPosition
+  def positionedAt(p: Position): this.type = {
+    starPosition = p
+    this
+  }
 }
 
-case class SelectedExpression(expression: Expression, name: Option[Identifier]) {
+case class SelectedExpression(expression: Expression, name: Option[(ColumnName, Position)]) {
   override def toString =
     if(AST.pretty) {
       name match {
@@ -51,8 +54,6 @@ case class SelectedExpression(expression: Expression, name: Option[Identifier]) 
     } else {
       AST.unpretty(this)
     }
-
-  def unpositioned = SelectedExpression(expression.unpositioned, name.map(_.unpositioned))
 }
 
 case class GroupBy(expressions: Seq[Expression], having: Option[Expression]) {

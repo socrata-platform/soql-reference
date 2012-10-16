@@ -1,14 +1,16 @@
 package com.socrata.soql.parsing
 
 import scala.util.parsing.combinator.{Parsers, PackratParsers}
-import scala.util.parsing.input.{Reader, NoPosition}
+import util.parsing.input.{Position, Reader, NoPosition}
 
+import com.socrata.soql.DatasetContext
+import com.socrata.soql.names._
 import com.socrata.soql.tokens
 import com.socrata.soql.tokens._
 import com.socrata.soql.ast
 import com.socrata.soql.ast._
 
-class Parser extends Parsers with PackratParsers {
+class Parser(implicit ctx: DatasetContext) extends Parsers with PackratParsers {
   type Elem = Token
 
   /*
@@ -62,10 +64,6 @@ class Parser extends Parsers with PackratParsers {
 
   def eof = EOF() | acceptIf(_ => false)(errors.missingEOF)
 
-  def operatorize(token: Token): Operator =
-    if(token.printable.forall(_.isLetter)) KeywordOperator(token.printable, token.position)
-    else SymbolicOperator(token.printable, token.position)
-
   /*
    *               *************************
    *               * FULL SELECT STATEMENT *
@@ -107,16 +105,21 @@ class Parser extends Parsers with PackratParsers {
   def expressionSelectList = rep1sep(namedSelection, COMMA()) ^^ (Selection(None, None, _))
 
   def allSystemSelection =
-    COLONSTAR() ~ opt(selectExceptions(systemIdentifier)) ^^ { case star ~ exceptions => StarSelection(exceptions.getOrElse(Seq.empty), star.position) }
+    COLONSTAR() ~ opt(selectExceptions(systemIdentifier)) ^^ { case star ~ exceptions => StarSelection(exceptions.getOrElse(Seq.empty)).positionedAt(star.position) }
 
   def allUserSelection =
-    STAR() ~ opt(selectExceptions(userIdentifier)) ^^ { case star ~ exceptions => StarSelection(exceptions.getOrElse(Seq.empty), star.position) }
+    STAR() ~ opt(selectExceptions(userIdentifier)) ^^ { case star ~ exceptions => StarSelection(exceptions.getOrElse(Seq.empty)).positionedAt(star.position) }
 
-  def selectExceptions(identifierType: Parser[ast.Identifier]) =
-    LPAREN() ~ EXCEPT() ~> rep1sep(identifierType, COMMA()) <~ (RPAREN() | failure(errors.missingArg))
+  def selectExceptions(identifierType: Parser[(String, Position)]): Parser[Seq[(ColumnName, Position)]] =
+    LPAREN() ~ EXCEPT() ~> rep1sep(identifierType, COMMA()) <~ (RPAREN() | failure(errors.missingArg)) ^^ { namePoses =>
+      namePoses.map { case (name, pos) =>
+        (ColumnName(name), pos)
+      }
+    }
 
   def namedSelection = expr ~ opt(AS() ~> userIdentifier) ^^ {
-    case e ~ n => SelectedExpression(e, n)
+    case e ~ None => SelectedExpression(e, None)
+    case e ~ Some((name, pos)) => SelectedExpression(e, Some((ColumnName(name), pos)))
   }
 
   /*
@@ -162,56 +165,67 @@ class Parser extends Parsers with PackratParsers {
 
   val literal =
     accept[LiteralToken] ^^ {
-      case n: tokens.NumberLiteral => ast.NumberLiteral(n.value, n.position)
-      case s: tokens.StringLiteral => ast.StringLiteral(s.value, s.position)
-      case b: tokens.BooleanLiteral => ast.BooleanLiteral(b.value, b.position)
-      case n: NULL => NullLiteral(n.position)
+      case n: tokens.NumberLiteral => ast.NumberLiteral(n.value).positionedAt(n.position)
+      case s: tokens.StringLiteral => ast.StringLiteral(s.value).positionedAt(s.position)
+      case b: tokens.BooleanLiteral => ast.BooleanLiteral(b.value).positionedAt(b.position)
+      case n: NULL => NullLiteral().positionedAt(n.position)
     }
 
 
-  val userIdentifier =
+  val userIdentifier: Parser[(String, Position)] =
     accept[tokens.Identifier] ^^ { t =>
-      ast.Identifier(t.value, t.quoted, t.position)
+      (t.value, t.position)
     } | failure(errors.missingUserIdentifier)
 
-  val systemIdentifier =
+  val systemIdentifier: Parser[(String, Position)] =
     accept[tokens.SystemIdentifier] ^^ { t =>
-      ast.Identifier(t.value, t.quoted, t.position)
+      (t.value, t.position)
     } | failure(errors.missingSystemIdentifier)
 
-  val identifier = systemIdentifier | userIdentifier | failure(errors.missingIdentifier)
+  val identifier: Parser[(String, Position)] = systemIdentifier | userIdentifier | failure(errors.missingIdentifier)
 
-  def paramList =
-    repsep(expr, COMMA()) ^^ (NormalFunctionParameters(_)) |
-    STAR() ^^ { star => StarParameter(star.position) }
+  def paramList: Parser[Either[Position, Seq[Expression]]] =
+    repsep(expr, COMMA()) ^^ (Right(_)) |
+    STAR() ^^ { star => Left(star.position) }
 
-  def params =
+  def params: Parser[Either[Position, Seq[Expression]]] =
     LPAREN() ~> paramList <~ (RPAREN() | failure(errors.missingArg))
 
-  def identifier_or_funcall =
+  def identifier_or_funcall: Parser[Expression] =
     identifier ~ opt(params) ^^ {
-      case ident ~ None => ident
-      case ident ~ Some(params) => FunctionCall(ident, params, ident.position)
+      case ((ident, identPos)) ~ None =>
+        ColumnOrAliasRef(ColumnName(ident)).positionedAt(identPos)
+      case ((ident, identPos)) ~ Some(Right(params)) =>
+        FunctionCall(FunctionName(ident), params).positionedAt(identPos).functionNameAt(identPos)
+      case ((ident, identPos)) ~ Some(Left(position)) =>
+        FunctionCall(SpecialFunctions.StarFunc(ident), Seq.empty).positionedAt(identPos).functionNameAt(identPos)
     }
 
-  def paren =
-    LPAREN() ~ expr <~ RPAREN() ^^ { case open ~ expr => Paren(expr, open.position) }
+  def paren: Parser[Expression] =
+    LPAREN() ~> expr <~ RPAREN() ^^ { e => FunctionCall(SpecialFunctions.Parens, Seq(e)).positionedAt(e.position).functionNameAt(e.position) }
 
   def atom =
     literal | identifier_or_funcall | paren | failure(errors.missingExpr)
 
   lazy val dereference: PackratParser[Expression] =
     dereference ~ DOT() ~ identifier ^^ {
-      case a ~ dot ~ b => Dereference(a, b, a.position)
+      case a ~ dot ~ ((b, bPos)) =>
+        FunctionCall(SpecialFunctions.Subscript, Seq(a, ast.StringLiteral(b).positionedAt(bPos))).
+          positionedAt(a.position).
+          functionNameAt(dot.position)
     } |
     dereference ~ LBRACKET() ~ expr ~ RBRACKET() ^^ {
-      case a ~ lbrak ~ b ~ _ => Subscript(a, b, a.position)
+      case a ~ lbrak ~ b ~ _ =>
+        FunctionCall(SpecialFunctions.Subscript, Seq(a, b)).
+          positionedAt(a.position).
+          functionNameAt(lbrak.position)
     } |
     atom
 
   lazy val cast: PackratParser[Expression] =
     cast ~ COLONCOLON() ~ identifier ^^ {
-      case a ~ colcol ~ b => Cast(a, b, a.position)
+      case a ~ colcol ~ ((b, bPos)) =>
+        Cast(a, TypeName(b)).positionedAt(a.position).operatorAndTypeAt(colcol.position, bPos)
     } |
     dereference
 
@@ -221,7 +235,7 @@ class Parser extends Parsers with PackratParsers {
   lazy val unary: PackratParser[Expression] =
     opt(unary_op) ~ unary ^^ {
       case None ~ b => b
-      case Some(f) ~ b => UnaryOperation(operatorize(f), b, f.position)
+      case Some(f) ~ b => FunctionCall(SpecialFunctions.Operator(f.printable), Seq(b)).positionedAt(f.position).functionNameAt(f.position)
     } |
     cast
 
@@ -231,7 +245,7 @@ class Parser extends Parsers with PackratParsers {
   lazy val factor: PackratParser[Expression] =
     opt(factor ~ factor_op) ~ unary ^^ {
       case None ~ a => a
-      case Some(a ~ op) ~ b => BinaryOperation(operatorize(op), a, b, a.position)
+      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b)).positionedAt(a.position).functionNameAt(op.position)
     }
 
   val term_op =
@@ -240,51 +254,60 @@ class Parser extends Parsers with PackratParsers {
   lazy val term: PackratParser[Expression] =
     opt(term ~ term_op) ~ factor ^^ {
       case None ~ a => a
-      case Some(a ~ op) ~ b => BinaryOperation(operatorize(op), a, b, a.position)
+      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b)).positionedAt(a.position).functionNameAt(op.position)
     }
 
   val order_op =
-    EQUALS() | EQUALSEQUALS() | BANGEQUALS() | LESSGREATER() | LESSTHAN() | LESSTHANOREQUALS() | GREATERTHAN() | GREATERTHANOREQUALS()
+    EQUALS() | LESSGREATER() | LESSTHAN() | LESSTHANOREQUALS() | GREATERTHAN() | GREATERTHANOREQUALS()
 
   lazy val order: PackratParser[Expression] =
     opt(order ~ order_op) ~ term ^^ {
       case None ~ a => a
-      case Some(a ~ op) ~ b => BinaryOperation(operatorize(op), a, b, a.position)
+      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b)).positionedAt(a.position).functionNameAt(op.position)
     }
 
   lazy val isBetween: PackratParser[Expression] =
-    isBetween ~ IS() ~ NULL() ^^ { case a ~ _ ~ _ => IsNull(a, false, a.position) } |
+    isBetween ~ IS() ~ NULL() ^^ {
+      case a ~ is ~ _ => FunctionCall(SpecialFunctions.IsNull, Seq(a)).positionedAt(a.position).functionNameAt(is.position)
+    } |
     isBetween ~ IS() ~ (NOT() | failure(errors.missingKeywords(NOT(), NULL()))) ~ NULL() ^^ {
-      case a ~ _ ~ _ ~ _ => IsNull(a, true, a.position)
+      case a ~ is ~ not ~ _ =>
+        FunctionCall(SpecialFunctions.IsNotNull, Seq(a)).positionedAt(a.position).functionNameAt(is.position)
     } |
     isBetween ~ BETWEEN() ~ isBetween ~ AND() ~ isBetween ^^ {
-      case a ~ _ ~ b ~ _ ~ c => Between(a, false, b, c, a.position)
+      case a ~ between ~ b ~ _ ~ c =>
+        FunctionCall(SpecialFunctions.Between, Seq(a, b, c)).positionedAt(a.position).functionNameAt(between.position)
     } |
     isBetween ~ (NOT() | failure(errors.missingKeywords(NOT(), BETWEEN()))) ~ BETWEEN() ~ isBetween ~ AND() ~ isBetween ^^ {
-      case a ~ _ ~ _ ~ b ~ _ ~ c => Between(a, true, b, c, a.position)
+      case a ~ not ~ _ ~ b ~ _ ~ c =>
+        FunctionCall(SpecialFunctions.NotBetween, Seq(a, b, c)).positionedAt(a.position).functionNameAt(not.position)
     } |
     order
 
   lazy val negation: PackratParser[Expression] =
-    NOT() ~ negation ^^ { case op ~ b => UnaryOperation(operatorize(op), b, op.position) } |
+    NOT() ~ negation ^^ { case op ~ b => FunctionCall(FunctionName(op.printable), Seq(b)).positionedAt(op.position).functionNameAt(op.position) } |
     isBetween
 
   lazy val conjunction: PackratParser[Expression] =
     opt(conjunction ~ AND()) ~ negation ^^ {
       case None ~ b => b
-      case Some(a ~ op) ~ b => BinaryOperation(operatorize(op), a, b, a.position)
+      case Some(a ~ op) ~ b => FunctionCall(FunctionName(op.printable), Seq(a, b)).positionedAt(a.position).functionNameAt(op.position)
     }
 
   lazy val disjunction: PackratParser[Expression] =
     opt(disjunction ~ OR()) ~ conjunction ^^ {
       case None ~ b => b
-      case Some(a ~ op) ~ b => BinaryOperation(operatorize(op), a, b, a.position)
+      case Some(a ~ op) ~ b => FunctionCall(FunctionName(op.printable), Seq(a, b)).positionedAt(a.position).functionNameAt(op.position)
     }
 
   def expr = disjunction | failure(errors.missingExpr)
 }
 
 object Parser extends App {
+  implicit val ctx = new DatasetContext {
+    val locale = com.ibm.icu.util.ULocale.ENGLISH
+    val columns = Set.empty[ColumnName]
+  }
   def p = new Parser
 
   def show[T](x: => T) {
@@ -368,6 +391,7 @@ object Parser extends App {
     show(p.expression("`hello world`"))
     show(p.selectStatement("select x"))
 
+    show(p.expression("count(__gnu__)+a+b"))
     show(p.expression("count(__gnu__)+a+b").asInstanceOf[Parsers#Success[Expression]].result.toSyntheticIdentifierBase)
     show(p.expression("count(a) == 'hello, world!  This is a smiling gnu.'").asInstanceOf[Parsers#Success[Expression]].result.toSyntheticIdentifierBase)
     show(p.expression("count(a) == `hello-world`").asInstanceOf[Parsers#Success[Expression]].result.toSyntheticIdentifierBase)

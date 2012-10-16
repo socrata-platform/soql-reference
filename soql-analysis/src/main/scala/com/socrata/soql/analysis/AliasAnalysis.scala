@@ -4,11 +4,14 @@ import scala.util.parsing.input.{Position, NoPosition}
 import scala.collection.mutable.HashSet
 
 import com.socrata.soql.ast._
-import com.socrata.soql.{ColumnName, DatasetContext}
+import com.socrata.soql.DatasetContext
+import com.socrata.soql.names._
+import collection.mutable
 
-class RepeatedExceptionException(val name: String, val position: Position) extends Exception("Column `" + name + "' has already been excluded:\n" + position.longString)
-class DuplicateAliasException(val name: String, val position: Position) extends Exception("There is already a column named `" + name + "' selected:\n" + position.longString)
-class NoSuchColumnException(val name: String, val position: Position) extends Exception("No such column `" + name + "':\n" + position.longString)
+class RepeatedExceptionException(val name: ColumnName, val position: Position) extends Exception("Column `" + name + "' has already been excluded:\n" + position.longString)
+class DuplicateAliasException(val name: ColumnName, val position: Position) extends Exception("There is already a column named `" + name + "' selected:\n" + position.longString)
+class NoSuchColumnException(val name: ColumnName, val position: Position) extends Exception("No such column `" + name + "':\n" + position.longString)
+class CircularAliasDefinitionException(val name: ColumnName, val position: Position) extends Exception("Circular reference while defining alias " + name + ":\n" + position.longString)
 
 trait AliasAnalysis {
   def apply(selection: Selection)(implicit ctx: DatasetContext): Map[ColumnName, Expression]
@@ -25,7 +28,7 @@ object AliasAnalysis extends AliasAnalysis {
    * @throws NoSuchColumnException if a column not on the dataset is excepted
    * @throws DuplicateAliasException if the duplicate aliases are detected
    */
-  def apply(selection: Selection)(implicit ctx: DatasetContext) = {
+  def apply(selection: Selection)(implicit ctx: DatasetContext): Map[ColumnName, Expression] = {
     log.debug("Input: {}", selection)
     val starsExpanded = expandSelection(selection)
     log.debug("After expanding stars: {}", starsExpanded)
@@ -58,26 +61,25 @@ object AliasAnalysis extends AliasAnalysis {
    * Expands a single [[com.socrata.soql.ast.StarSelection]] into a list of
    * [[com.socrata.soql.ast.SelectedExpression]]s.
    *
-   * @param ss The star-selection to expand
+   * @param starSelection The star-selection to expand
    * @param columns The set of column-names into which this star would expand if
    *   there were no exceptions.
    *
    * @throws RepeatedExceptionException if the same column is EXCEPTed more than once
    * @throws NoSuchColumnException if a column not on the dataset is excepted.
    */
-  def processStar(ss: StarSelection, columns: Set[ColumnName])(implicit ctx: DatasetContext): Seq[SelectedExpression] = {
-    val StarSelection(exceptions, position) = ss
-    val exceptedColumnNames = new HashSet[ColumnName]
-    for(exception <- exceptions) {
-      val col = new ColumnName(exception.name)
-      if(exceptedColumnNames.contains(col)) throw new RepeatedExceptionException(exception.name, exception.position)
-      if(!columns.contains(col)) throw new NoSuchColumnException(exception.name, exception.position)
-      exceptedColumnNames += col
+  def processStar(starSelection: StarSelection, columns: Set[ColumnName])(implicit ctx: DatasetContext): Seq[SelectedExpression] = {
+    val StarSelection(exceptions) = starSelection
+    val exceptedColumnNames = new mutable.HashSet[ColumnName]
+    for((column, position) <- exceptions) {
+      if(exceptedColumnNames.contains(column)) throw new RepeatedExceptionException(column, position)
+      if(!columns.contains(column)) throw new NoSuchColumnException(column, position)
+      exceptedColumnNames += column
     }
     for {
       col <- columns.toIndexedSeq.sorted
       if !exceptedColumnNames(col)
-    } yield SelectedExpression(Identifier(col.name, false, position), None)
+    } yield SelectedExpression(ColumnOrAliasRef(col).positionedAt(starSelection.starPosition), None)
   }
 
   /**
@@ -96,17 +98,17 @@ object AliasAnalysis extends AliasAnalysis {
     selections.foldLeft((Map.empty[ColumnName, Expression], Vector.empty[Expression])) { (results, selection) =>
       val (assigned, unassigned) = results
 
-      def register(ident: Identifier, expr: Expression) = {
-        val colName = new ColumnName(ident.name)
-        if(assigned.contains(colName)) throw new DuplicateAliasException(ident.name, ident.position)
-        (assigned + (colName -> expr), unassigned)
+      def register(ident: (ColumnName, Position), expr: Expression) = {
+        val (name, position) = ident
+        if(assigned.contains(name)) throw new DuplicateAliasException(name, position)
+        (assigned + (name -> expr), unassigned)
       }
 
       selection match {
         case SelectedExpression(expr, Some(ident)) =>
           register(ident, expr)
-        case SelectedExpression(expr: Identifier, None) =>
-          register(expr, expr)
+        case SelectedExpression(expr: ColumnOrAliasRef, None) =>
+          register((expr.column, expr.position), expr)
         case SelectedExpression(expr, None) =>
           (assigned, unassigned :+ expr)
       }
@@ -122,7 +124,7 @@ object AliasAnalysis extends AliasAnalysis {
    */
   def assignImplicit(assignedAliases: Map[ColumnName, Expression], unassignedSelections: Seq[Expression])(implicit ctx: DatasetContext): Map[ColumnName, Expression] = {
     unassignedSelections.foldLeft(assignedAliases) { (results, selection) =>
-      assert(!selection.isInstanceOf[Identifier], "found un-aliased pure identifier")
+      assert(!selection.isInstanceOf[ColumnOrAliasRef], "found un-aliased pure identifier")
       val newName = implicitAlias(selection, results.keySet)
       results + (newName -> selection)
     }
@@ -139,17 +141,78 @@ object AliasAnalysis extends AliasAnalysis {
     def inUse(name: ColumnName) = existingAliases.contains(name) || ctx.columns.contains(name)
 
     val base = selection.toSyntheticIdentifierBase
-    val firstTry = new ColumnName(base)
+    val firstTry = ColumnName(base)
 
     if(inUse(firstTry)) {
       val prefix = if(base.endsWith("_") || base.endsWith("-")) base
                    else base + "_"
       Iterator.from(1).
-        map { i => new ColumnName(prefix + i) }.
+        map { i => ColumnName(prefix + i) }.
         dropWhile(inUse).
         next()
     } else {
       firstTry
+    }
+  }
+
+  private def topoSort(graph: Map[ColumnName, Set[ColumnOrAliasRef]]): Either[ColumnOrAliasRef, Seq[ColumnName]] = {
+    class CircleFound(val node: ColumnOrAliasRef) extends Exception with scala.util.control.ControlThrowable
+    try {
+      val visited = new mutable.HashSet[ColumnName]
+      val result = new mutable.ListBuffer[ColumnName]
+      def visit(n: ColumnName, seen: Set[ColumnName]) {
+        if(!visited(n)) {
+          visited += n
+          val newSeen = seen + n
+          for(m <- graph.getOrElse(n, Set.empty)) {
+            if(seen contains n) throw new CircleFound(m)
+            visit(m.column, newSeen)
+          }
+          result += n
+        }
+      }
+      for(k <- graph.keys) visit(k, Set.empty)
+      Right(result.toList)
+    } catch {
+      case e: CircleFound => Left(e.node)
+    }
+  }
+
+  def orderAliases(in: Map[ColumnName, Expression])(implicit ctx: DatasetContext): Seq[ColumnName] = {
+    val (selfRefs, otherRefs) = in.partition {
+      case (aliasName, ColumnOrAliasRef(colOrAliasName)) if aliasName == colOrAliasName => true
+      case _ => false
+    }
+
+    // like "a intersect b" but guaranteed to result only in items contains in "a"
+    // (as it happens, the implementation of intersect will do exactly that, but
+    // it's not documented to do so)
+    def intersectLeftBiased[U](a: Set[U], b: Set[U]): Set[U] = a.filter(b)
+
+    topoSort(otherRefs.mapValues { e => intersectLeftBiased[ColumnOrAliasRef](e.allColumnRefs, otherRefs.keySet.map(ColumnOrAliasRef(_))) }) match {
+      case Right(order) =>
+        selfRefs.keys.toSeq ++ order
+      case Left(badNode) =>
+        throw new CircularAliasDefinitionException(badNode.column, badNode.position)
+    }
+  }
+}
+
+object AA {
+  import AliasAnalysis._
+  def main(args: Array[String]) {
+    implicit val datasetCtx = new DatasetContext {
+      implicit val ctx = this
+      val locale = com.ibm.icu.util.ULocale.ENGLISH
+      val columns = Set(":id", ":created_at", "a", "b", "c", "d").map(ColumnName(_))
+    }
+    val p = new com.socrata.soql.parsing.Parser
+    p.selection(":*, * (except b,c), a + c as b, d as c") match {
+      case p.Success(sel, _) =>
+        val aliased = apply(sel)
+        println(aliased)
+        val ordered = orderAliases(aliased)
+        println(ordered)
     }
   }
 }
