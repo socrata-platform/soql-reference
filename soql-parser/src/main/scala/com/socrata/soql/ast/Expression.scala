@@ -99,12 +99,12 @@ object Expression {
       fc match {
         case FunctionCall(SpecialFunctions.StarFunc(base), Seq()) => Vector(base)
         case FunctionCall(SpecialFunctions.Operator(_), args) => args.flatMap(findIdentsAndLiterals)
-        case FunctionCall(SpecialFunctions.IsNull, args) => args.flatMap(findIdentsAndLiterals) ++ Vector("IS", "NULL")
-        case FunctionCall(SpecialFunctions.IsNotNull, args) => args.flatMap(findIdentsAndLiterals) ++ Vector("IS", "NOT", "NULL")
+        case FunctionCall(SpecialFunctions.IsNull, args) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "null")
+        case FunctionCall(SpecialFunctions.IsNotNull, args) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "not", "null")
         case FunctionCall(SpecialFunctions.Between, Seq(a,b,c)) =>
-          findIdentsAndLiterals(a) ++ Vector("BETWEEN") ++ findIdentsAndLiterals(b) ++ Vector("AND") ++ findIdentsAndLiterals(c)
+          findIdentsAndLiterals(a) ++ Vector("between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
         case FunctionCall(SpecialFunctions.NotBetween, Seq(a,b,c)) =>
-          findIdentsAndLiterals(a) ++ Vector("NOT", "BETWEEN") ++ findIdentsAndLiterals(b) ++ Vector("AND") ++ findIdentsAndLiterals(c)
+          findIdentsAndLiterals(a) ++ Vector("not", "between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
         case FunctionCall(other, args) => Vector(other.canonicalName) ++ args.flatMap(findIdentsAndLiterals)
       }
     case Cast(expr, targetType) =>
@@ -133,9 +133,12 @@ object SpecialFunctions {
   }
   val IsNull = FunctionName("#IS_NULL")
   val Between = FunctionName("#BETWEEN")
-  val IsNotNull = FunctionName("#IS_NOT_NULL") // redundant but needed for synthetic identifiers
-  val NotBetween = FunctionName("#NOT_BETWEEN") // ditto
-  val Subscript = FunctionName("op$[]")
+
+  // both of these are redundant but needed for synthetic identifiers because we need to
+  // distinguish between "not (x is null)" and "x is not null" when generating them.
+  val IsNotNull = FunctionName("#IS_NOT_NULL")
+  val NotBetween = FunctionName("#NOT_BETWEEN")
+
   object Operator {
     def apply(op: String) = FunctionName("op$" + op)
     def unapply(f: FunctionName) = f.name match {
@@ -144,6 +147,7 @@ object SpecialFunctions {
     }
     val Regex = """^op\$(.*)$""".r
   }
+  val Subscript = Operator("[]")
 
   // this exists only so that selecting "(foo)" is never semi-explicitly aliased.
   // it's stripped out by the typechecker with removeParens.
@@ -170,7 +174,7 @@ case class BooleanLiteral(value: Boolean) extends Literal {
   protected def asString = value.toString.toUpperCase
 }
 case class NullLiteral() extends Literal {
-  override final def asString = "NULL"
+  override final def asString = "null"
 }
 
 case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression]) extends Expression {
