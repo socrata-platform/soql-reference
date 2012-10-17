@@ -27,7 +27,7 @@ object AliasAnalysis extends AliasAnalysis {
    *
    * @throws RepeatedExceptionException if the same column is excepted more than once
    * @throws NoSuchColumnException if a column not on the dataset is excepted
-   * @throws DuplicateAliasException if the duplicate aliases are detected
+   * @throws DuplicateAliasException if duplicate aliases are detected
    * @throws CircularAliasDefinitionException if an alias is defined in terms of itself
    */
   def apply(selection: Selection)(implicit ctx: DatasetContext): Analysis = {
@@ -164,49 +164,47 @@ object AliasAnalysis extends AliasAnalysis {
     }
   }
 
-  private def topoSort(graph: Map[ColumnName, Set[ColumnOrAliasRef]]): Either[ColumnOrAliasRef, Seq[ColumnName]] = {
-    class CircleFound(val node: ColumnOrAliasRef) extends Exception with scala.util.control.ControlThrowable
-    try {
-      val visited = new mutable.HashSet[ColumnName]
-      val result = new mutable.ListBuffer[ColumnName]
-      def visit(n: ColumnName, seen: Set[ColumnName]) {
-        if(!visited(n)) {
-          visited += n
-          val newSeen = seen + n
-          for(m <- graph.getOrElse(n, Set.empty)) {
-            if(seen contains n) throw new CircleFound(m)
-            visit(m.column, newSeen)
-          }
-          result += n
+  private def topoSort(graph: Map[ColumnName, Set[ColumnOrAliasRef]]): Seq[ColumnName] = {
+    val visited = new mutable.HashSet[ColumnName]
+    val result = new mutable.ListBuffer[ColumnName]
+    def visit(n: ColumnName, seen: Set[ColumnName]) {
+      if(!visited(n)) {
+        visited += n
+        val newSeen = seen + n
+        for(m <- graph.getOrElse(n, Set.empty)) {
+          if(seen contains n) throw new CircularAliasDefinitionException(m.column, m.position)
+          visit(m.column, newSeen)
         }
+        result += n
       }
-      for(k <- graph.keys) visit(k, Set.empty)
-      Right(result.toList)
-    } catch {
-      case e: CircleFound => Left(e.node)
     }
+    for(k <- graph.keys) visit(k, Set.empty)
+    result.toList
   }
 
+  /** Produces a list of the order in which aliased expressions should be typechecked or
+    * evaluated, based on their references to other aliases.
+    *
+    * @return the aliases in evaluation order
+    * @throws CircularAliasDefinitionException if an alias's expansion refers to itself, even indirectly. */
   def orderAliasesForEvaluation(in: OrderedMap[ColumnName, Expression])(implicit ctx: DatasetContext): Seq[ColumnName] = {
+    // We'll divide all the aliases up into two categories -- aliases which refer
+    // to a column of the same name ("selfRefs") and everything else ("otherRefs").
     val (selfRefs, otherRefs) = in.partition {
       case (aliasName, ColumnOrAliasRef(colOrAliasName)) if aliasName == colOrAliasName => true
       case _ => false
     }
 
     val graph = otherRefs.mapValues { expr =>
-      // The only column references which are interesting are those which point at
-      // non-trivial aliases.
+      // selfRefs are non-circular, but since they _look_ circular we want to exclude them.
+      // This also excludes references to columns which don't exist at all, but that'll be
+      // caught at type-checking time.
       expr.allColumnRefs.filter { cr =>
         otherRefs.contains(cr.column)
       }
     }
 
-    topoSort(graph) match {
-      case Right(order) =>
-        selfRefs.keys.toSeq ++ order
-      case Left(badNode) =>
-        throw new CircularAliasDefinitionException(badNode.column, badNode.position)
-    }
+    selfRefs.keys.toSeq ++ topoSort(graph)
   }
 }
 
