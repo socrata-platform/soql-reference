@@ -93,23 +93,22 @@ object AliasAnalysis extends AliasAnalysis {
    *
    * @return A new selection list in the same order but with semi-explicit
    *         aliases assigned.
-   * @throws DuplicateAliasException if the duplicate aliases are detected
+   * @throws DuplicateAliasException if a duplicate alias is detected
    */
   def assignExplicitAndSemiExplicit(selections: Seq[SelectedExpression])(implicit ctx: DatasetContext): Seq[SelectedExpression] = {
     selections.foldLeft((Set.empty[ColumnName], Vector.empty[SelectedExpression])) { (results, selection) =>
       val (assigned, mapped) = results
 
-      def register(ident: (ColumnName, Position), expr: Expression) = {
-        val (name, position) = ident
-        if(assigned.contains(name)) throw new DuplicateAliasException(name, position)
-        (assigned + name, mapped :+ SelectedExpression(expr, Some(ident)))
+      def register(alias: ColumnName, position: Position, expr: Expression) = {
+        if(assigned.contains(alias)) throw new DuplicateAliasException(alias, position)
+        (assigned + alias, mapped :+ SelectedExpression(expr, Some((alias, position))))
       }
 
       selection match {
-        case SelectedExpression(expr, Some(ident)) =>
-          register(ident, expr)
+        case SelectedExpression(expr, Some((alias, position))) =>
+          register(alias, position, expr)
         case SelectedExpression(expr: ColumnOrAliasRef, None) =>
-          register((expr.column, expr.position), expr)
+          register(expr.column, expr.position, expr)
         case other =>
           (assigned, mapped :+ other)
       }
