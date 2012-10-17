@@ -22,14 +22,15 @@ object AliasAnalysis extends AliasAnalysis {
   val log = org.slf4j.LoggerFactory.getLogger(classOf[AliasAnalysis])
 
   /** Validate and generate aliases for selected columns.
-   *
-   * @return a map from each alias to its corresponding expression
-   *
-   * @throws RepeatedExceptionException if the same column is excepted more than once
-   * @throws NoSuchColumnException if a column not on the dataset is excepted
-   * @throws DuplicateAliasException if duplicate aliases are detected
-   * @throws CircularAliasDefinitionException if an alias is defined in terms of itself
-   */
+    *
+    * @return an Analysis object which contains an ordered map from each alias to its expansion
+    *         and a list of the aliases in the order they should be typechecked/evaluated.
+    *
+    * @throws RepeatedExceptionException if the same column is excepted more than once
+    * @throws NoSuchColumnException if a column not on the dataset is excepted
+    * @throws DuplicateAliasException if duplicate aliases are detected
+    * @throws CircularAliasDefinitionException if an alias is defined in terms of itself
+    */
   def apply(selection: Selection)(implicit ctx: DatasetContext): Analysis = {
     log.debug("Input: {}", selection)
     val starsExpanded = expandSelection(selection)
@@ -46,6 +47,7 @@ object AliasAnalysis extends AliasAnalysis {
    * selections in the provided [[com.socrata.soql.ast.Selection]].
    *
    * @param selection A selection-list to desugar.
+   * @return The same list with any stars expanded
    *
    * @throws RepeatedExceptionException if the same column is excepted more than once
    * @throws NoSuchColumnException if a column not on the dataset is excepted
@@ -65,6 +67,9 @@ object AliasAnalysis extends AliasAnalysis {
    * @param starSelection The star-selection to expand
    * @param columns The set of column-names into which this star would expand if
    *   there were no exceptions.
+   *
+   * @return A list of [[com.socrata.soql.ast.SelectedExpression]]s equivalent to
+   *         this star, in the same order as they appear in `columns`
    *
    * @throws RepeatedExceptionException if the same column is EXCEPTed more than once
    * @throws NoSuchColumnException if a column not on the dataset is excepted.
