@@ -1,12 +1,15 @@
 package com.socrata.soql.analysis.types
 
 import com.socrata.soql.names.TypeName
+import com.ibm.icu.util.CaseInsensitiveString
 
 sealed abstract class SoQLType(val name: TypeName) {
   def this(name: String) = this(TypeName(name))
   override final def toString = name.toString
 
   def real = true
+
+  def isPassableTo(that: SoQLType): Boolean = (this == that)
 }
 
 object SoQLType {
@@ -28,14 +31,22 @@ case object SoQLFloatingTimestamp extends SoQLType("floating_timestamp")
 case object SoQLObject extends SoQLType("object")
 case object SoQLArray extends SoQLType("array")
 case object SoQLLocation extends SoQLType("location")
-case object SoQLNull extends SoQLType("null")
+
+case object SoQLNull extends SoQLType("null") {
+  override def isPassableTo(that: SoQLType) = true
+}
 
 sealed abstract class FakeSoQLType(name: String) extends SoQLType(name) {
   override def real = false
 }
 
-case object SoQLTextLiteral extends FakeSoQLType("*text")
-case object SoQLTextFixedTimestampLiteral extends FakeSoQLType("*text/fixed_timestamp")
-case object SoQLTextFloatingTimestampLiteral extends FakeSoQLType("*text/floating_timestamp")
+case class SoQLTextLiteral(text: CaseInsensitiveString) extends FakeSoQLType("*text") {
+  override def isPassableTo(that: SoQLType) = super.isPassableTo(that) || that == SoQLText
+}
+object SoQLTextLiteral {
+  def apply(s: String): SoQLTextLiteral = apply(new CaseInsensitiveString(s))
+}
 
-case object SoQLNumberLiteral extends FakeSoQLType("*number")
+case class SoQLNumberLiteral(number: BigDecimal) extends FakeSoQLType("*number") {
+  override def isPassableTo(that: SoQLType) = super.isPassableTo(that) || that == SoQLNumber
+}

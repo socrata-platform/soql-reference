@@ -5,6 +5,7 @@ object UtilTypes {
 }
 
 import UtilTypes._
+import com.socrata.collection.OrderedSet
 
 sealed abstract class OverloadResult[+Type]
 case object NoMatch extends OverloadResult[Nothing]
@@ -37,7 +38,7 @@ abstract class FunctionCallTypechecker[Type] { self =>
     *
     * @note even though the type of this is Seq, it's really an ordered
     *       set.  The order is more important than the setness, though. */
-  def typeParameterUniverse: Seq[Type]
+  def typeParameterUniverse: OrderedSet[Type]
   def implicitConversions(from: Type, to: Type): Option[MFunc]
   def canBePassedToWithoutConversion(actual: Type, expected: Type): Boolean // this accepts at least a->a and null->a
 
@@ -205,7 +206,7 @@ abstract class FunctionCallTypechecker[Type] { self =>
       val TextLiteral, TextFixedTSLiteral, TextFloatingTSLiteral = Value
       val textLiterals = Set(TextLiteral, TextFixedTSLiteral, TextFloatingTSLiteral)
 
-      val realTypes = Vector(
+      val realTypes = OrderedSet(
         Number, Money, Double,
         Text,
         Bool,

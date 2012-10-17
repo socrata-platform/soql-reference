@@ -3,6 +3,7 @@ package com.socrata.soql.analysis
 import com.socrata.soql.ast._
 import com.socrata.soql.names._
 import util.parsing.input.Position
+import com.socrata.collection.OrderedSet
 
 abstract class Typechecker[Type] { self =>
   def aliases: Map[ColumnName, typed.TypedFF[Type]]
@@ -85,7 +86,7 @@ abstract class Typechecker[Type] { self =>
   // throws IncompatibleType exception
   def getCastFunction(from: Type, to: Type, position: Position): MonomorphicFunction[Type]
 
-  def typeParameterUniverse: Seq[Type]
+  def typeParameterUniverse: OrderedSet[Type]
 
   def implicitConversions(from: Type, to: Type): Option[MonomorphicFunction[Type]]
 

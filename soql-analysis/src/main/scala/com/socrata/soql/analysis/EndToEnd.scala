@@ -10,16 +10,9 @@ import util.parsing.input.Position
 class EndToEnd(val aliases: Map[ColumnName, typed.TypedFF[SoQLType]], val columns: Map[ColumnName, SoQLType])(implicit ctx: DatasetContext) extends Typechecker[SoQLType] with SoQLTypeConversions {
   def booleanLiteralType(b: Boolean) = SoQLBoolean
 
-  val FixedTimestampRegex = """^[0-9]{4,}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:,[0-9]{1,3})?Z$""".r
-  val FloatingTimestampRegex = """^[0-9]{4,}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:,[0-9]{1,3})?$""".r
+  def stringLiteralType(s: String) = SoQLTextLiteral(s)
 
-  def stringLiteralType(s: String) = s match {
-    case FixedTimestampRegex() => SoQLTextFixedTimestampLiteral
-    case FloatingTimestampRegex() => SoQLTextFloatingTimestampLiteral
-    case _ => SoQLTextLiteral
-  }
-
-  def numberLiteralType(n: BigDecimal) = SoQLNumberLiteral
+  def numberLiteralType(n: BigDecimal) = SoQLNumberLiteral(n)
 
   def nullLiteralType = SoQLNull
 
@@ -62,16 +55,18 @@ object EndToEnd extends App {
       ColumnName("name_last") -> SoQLText,
       ColumnName("name_first") -> SoQLText,
       ColumnName("visits") -> SoQLNumber,
-      ColumnName("last_visit") -> SoQLFixedTimestamp
+      ColumnName("last_visit") -> SoQLFixedTimestamp,
+      ColumnName("address") -> SoQLLocation
     )
 
     def columns = columnTypes.keySet
   }
 
-  val query = "select :*, nf || ' ' || name_last as name, name_first as nf, name_last as nl where last_visit > '2012-05-05T00:00:00Z'"
+  val query = "select :*, nf || ' ' || name_last as name, name_first as nf, name_last as nl, address.latitude where last_visit > '2012-05-05T00:00:00Z'"
 
   println(ctx.columnTypes)
   println(query)
+  println(SoQLFunctions.functionsByNameThenArity)
 
   import com.socrata.soql.parsing.Parser
   val parser = new Parser

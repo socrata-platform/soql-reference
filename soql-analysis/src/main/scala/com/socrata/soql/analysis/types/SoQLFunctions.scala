@@ -9,7 +9,9 @@ object SoQLFunctions {
   val TextToFixedTimestamp = new MonomorphicFunction(FunctionName("to_fixed_timestamp"), Seq(SoQLText), SoQLFixedTimestamp).function
   val TextToFloatingTimestamp = new MonomorphicFunction(FunctionName("to_floating_timestamp"), Seq(SoQLText), SoQLFloatingTimestamp).function
   val Concat = Function(SpecialFunctions.Operator("||"), Seq(VariableType("a"), VariableType("b")), FixedType(SoQLText))
-  def Gt = Function(SpecialFunctions.Operator(">"), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
+  val Gt = Function(SpecialFunctions.Operator(">"), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
+  val LatitudeField = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("latitude")), SoQLDouble).function
+  val LongitudeField = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("longitude")), SoQLDouble).function
 
   lazy val allFunctions = {
     for {
