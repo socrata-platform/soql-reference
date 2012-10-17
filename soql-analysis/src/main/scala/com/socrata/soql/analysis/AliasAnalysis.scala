@@ -184,12 +184,15 @@ object AliasAnalysis extends AliasAnalysis {
       case _ => false
     }
 
-    // like "a intersect b" but guaranteed to result only in items contains in "a"
-    // (as it happens, the implementation of intersect will do exactly that, but
-    // it's not documented to do so)
-    def intersectLeftBiased[U](a: Set[U], b: Set[U]): Set[U] = a.filter(b)
+    val graph = otherRefs.mapValues { expr =>
+      // The only column references which are interesting are those which point at
+      // non-trivial aliases.
+      expr.allColumnRefs.filter { cr =>
+        otherRefs.contains(cr.column)
+      }
+    }
 
-    topoSort(otherRefs.mapValues { e => intersectLeftBiased[ColumnOrAliasRef](e.allColumnRefs, otherRefs.keySet.map(ColumnOrAliasRef(_))) }) match {
+    topoSort(graph) match {
       case Right(order) =>
         selfRefs.keys.toSeq ++ order
       case Left(badNode) =>
