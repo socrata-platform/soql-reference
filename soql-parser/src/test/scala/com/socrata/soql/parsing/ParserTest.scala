@@ -1,18 +1,17 @@
 package com.socrata.soql.parsing
 
-import scala.util.parsing.input.NoPosition
-
 import org.scalatest._
 import org.scalatest.matchers.MustMatchers
 
 import com.socrata.soql.ast._
 import com.socrata.soql.names.ColumnName
 import com.socrata.soql.DatasetContext
+import com.socrata.collection.OrderedSet
 
 class ParserTest extends WordSpec with MustMatchers {
   implicit val ctx = new DatasetContext {
     def locale = com.ibm.icu.util.ULocale.ENGLISH
-    def columns = Set.empty[ColumnName]
+    def columns = OrderedSet.empty[ColumnName]
   }
   def parseExpression(soql: String) = {
     val p = new Parser

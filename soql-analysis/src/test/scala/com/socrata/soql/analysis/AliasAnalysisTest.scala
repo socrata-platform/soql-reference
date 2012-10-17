@@ -10,13 +10,14 @@ import com.socrata.soql.parsing.{LexerReader, Parser}
 import com.socrata.soql.DatasetContext
 import com.socrata.soql.names.ColumnName
 import com.socrata.soql.ast._
+import com.socrata.collection.{OrderedMap, OrderedSet}
 
 class AliasAnalysisTest extends WordSpec with MustMatchers {
   def columnName(name: String)(implicit ctx: DatasetContext) =
     ColumnName(name)
 
   def columnNames(names: String*)(implicit ctx: DatasetContext) =
-    Set(names.map(columnName): _*)
+    OrderedSet(names.map(columnName): _*)
 
   def fixtureContext(cols: String*) =
     new DatasetContext {
@@ -30,6 +31,12 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     def column = c
     def lineContents = " " * c
   }
+
+  def se(e: String)(implicit ctx: DatasetContext): SelectedExpression =
+    SelectedExpression(expr(e), None)
+
+  def se(e: String, name: String, position: Position)(implicit ctx: DatasetContext): SelectedExpression =
+    SelectedExpression(expr(e), Some((ColumnName(name), position)))
 
   implicit def selections(e: String)(implicit ctx: DatasetContext): Selection = {
     val parser = new Parser
@@ -125,14 +132,16 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
 
     "assign aliases to simple columns" in {
       val ss = selections("2+2,hello,world,avg(gnu),(x)").expressions
-      val exprs = ss.map(_.expression)
-      AliasAnalysis.assignExplicitAndSemiExplicit(ss) must equal ((Map(columnName("hello") -> exprs(1),columnName("world") -> exprs(2)), exprs.take(1) ++ exprs.drop(3)))
+      AliasAnalysis.assignExplicitAndSemiExplicit(ss) must equal (
+        Seq(ss(0), se("hello","hello", ss(1).expression.position), se("world", "world", ss(2).expression.position), ss(3), ss(4))
+      )
     }
 
     "accept aliases" in {
       val ss = selections("2+2 as four,hello as x,avg(gnu),world,(x)").expressions
-      val exprs = ss.map(_.expression)
-      AliasAnalysis.assignExplicitAndSemiExplicit(ss) must equal ((Map(columnName("four") -> exprs(0),columnName("x") -> exprs(1),columnName("world") -> exprs(3)), exprs.drop(2).take(1) ++ exprs.drop(4)))
+      AliasAnalysis.assignExplicitAndSemiExplicit(ss) must equal (
+        Seq(ss(0), ss(1), ss(2), se("world","world",ss(3).expression.position), ss(4))
+      )
     }
 
     "reject duplicate aliases when one is explicit and the other semi-explicit" in {
@@ -174,22 +183,32 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
   "assigning implicits" should {
     implicit val ctx = fixtureContext(":a",":b","c","d","e")
 
-    val startingAliases = Map(
-      columnName("c") -> expr(":a + 1"),
-      columnName("c_minus_d") -> expr("c - d"),
-      columnName("d_1") -> expr("e")
-    )
-
     "assign non-conflicting aliases" in {
-      AliasAnalysis.assignImplicit(startingAliases, Seq(expr(":a + 1"), expr("-c"), expr("-d"))) must equal (Map(
-        columnName("a_1") -> expr(":a + 1"),
-        columnName("c_1") -> expr("-c"),
-        columnName("d_2") -> expr("-d")
-      ) ++ startingAliases)
+      AliasAnalysis.assignImplicit(Seq(se(":a + 1", "c", NoPosition), se(":a + 1"), se("-c"), se("-d"), se("e", "d_1", NoPosition))) must equal (
+        Map(
+          columnName("c") -> expr(":a + 1"),
+          columnName("a_1") -> expr(":a + 1"),
+          columnName("c_1") -> expr("-c"),
+          columnName("d_2") -> expr("-d"),
+          columnName("d_1") -> expr("e")
+        )
+      )
+    }
+
+    "preserve ordering" in {
+      AliasAnalysis.assignImplicit(Seq(se(":a + 1", "c", NoPosition), se(":a + 1"), se("-c"), se("-d"), se("e", "d_1", NoPosition))).toSeq must equal (
+        Seq(
+          columnName("c") -> expr(":a + 1"),
+          columnName("a_1") -> expr(":a + 1"),
+          columnName("c_1") -> expr("-c"),
+          columnName("d_2") -> expr("-d"),
+          columnName("d_1") -> expr("e")
+        )
+      )
     }
 
     "reject assigning to a straight identifier" in {
-      evaluating { AliasAnalysis.assignImplicit(Map.empty, Seq(expr("q"))) } must produce[AssertionError]
+      evaluating { AliasAnalysis.assignImplicit(Seq(se("q"))) } must produce[AssertionError]
     }
   }
 
@@ -197,53 +216,74 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     implicit val ctx = fixtureContext(":a",":b","c","d","e")
 
     "expand *" in {
-      AliasAnalysis(selections("*")) must equal(Map(
-        columnName("c") -> expr("c"),
-        columnName("d") -> expr("d"),
-        columnName("e") -> expr("e")
+      AliasAnalysis(selections("*")) must equal(AliasAnalysis.Analysis(
+        OrderedMap(
+          columnName("c") -> expr("c"),
+          columnName("d") -> expr("d"),
+          columnName("e") -> expr("e")
+        ),
+        Seq("c","d","e").map(columnName)
       ))
     }
 
     "expand :*" in {
-      AliasAnalysis(selections(":*")) must equal(Map(
-        columnName(":a") -> expr(":a"),
-        columnName(":b") -> expr(":b")
+      AliasAnalysis(selections(":*")) must equal(AliasAnalysis.Analysis(
+        OrderedMap(
+          columnName(":a") -> expr(":a"),
+          columnName(":b") -> expr(":b")
+        ),
+        Seq(":a", ":b").map(columnName)
       ))
     }
 
     "expand :*,*" in {
-      AliasAnalysis(selections(":*,*")) must equal(Map(
-        columnName(":a") -> expr(":a"),
-        columnName(":b") -> expr(":b"),
-        columnName("c") -> expr("c"),
-        columnName("d") -> expr("d"),
-        columnName("e") -> expr("e")
+      AliasAnalysis(selections(":*,*")) must equal(AliasAnalysis.Analysis(
+        OrderedMap(
+          columnName(":a") -> expr(":a"),
+          columnName(":b") -> expr(":b"),
+          columnName("c") -> expr("c"),
+          columnName("d") -> expr("d"),
+          columnName("e") -> expr("e")
+        ),
+        Seq(":a", ":b", "c", "d", "e").map(columnName)
       ))
     }
 
     "not select an alias the same as a column in the dataset context" in {
-      AliasAnalysis(selections("(c)")) must equal(Map(
-        columnName("c_1") -> expr("(c)")
+      AliasAnalysis(selections("(c)")) must equal(AliasAnalysis.Analysis(
+        OrderedMap(
+          columnName("c_1") -> expr("(c)")
+        ),
+        Seq("c_1").map(columnName)
       ))
     }
 
     "not select an alias the same as an expression in the dataset context" in {
-      AliasAnalysis(selections("c as c_d, c - d")) must equal(Map(
-        columnName("c_d") -> expr("c"),
-        columnName("c_d_1") -> expr("c - d")
+      AliasAnalysis(selections("c as c_d, c - d")) must equal(AliasAnalysis.Analysis(
+        OrderedMap(
+          columnName("c_d") -> expr("c"),
+          columnName("c_d_1") -> expr("c - d")
+        ),
+        Seq("c_d", "c_d_1").map(columnName)
       ))
     }
 
     "never infer the same alias twice" in {
-      AliasAnalysis(selections("c + d, c - d")) must equal(Map(
-        columnName("c_d") -> expr("c + d"),
-        columnName("c_d_1") -> expr("c - d")
+      AliasAnalysis(selections("c + d, c - d")) must equal(AliasAnalysis.Analysis(
+        OrderedMap(
+          columnName("c_d") -> expr("c + d"),
+          columnName("c_d_1") -> expr("c - d")
+        ),
+        Seq("c_d", "c_d_1").map(columnName)
       ))
     }
 
     "allow hiding a column if it's not selected" in {
-      AliasAnalysis(selections("c as d")) must equal(Map(
-        columnName("d") -> expr("c")
+      AliasAnalysis(selections("c as d")) must equal(AliasAnalysis.Analysis(
+        OrderedMap(
+          columnName("d") -> expr("c")
+        ),
+        Seq(columnName("d"))
       ))
     }
 
@@ -260,10 +300,13 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     }
 
     "allow hiding a column if it's excluded via *" in {
-      AliasAnalysis(selections("* (except d), c as d")) must equal(Map(
-        columnName("c") -> expr("c"),
-        columnName("d") -> expr("c"),
-        columnName("e") -> expr("e")
+      AliasAnalysis(selections("* (except d), c as d")) must equal(AliasAnalysis.Analysis(
+        OrderedMap(
+          columnName("c") -> expr("c"),
+          columnName("d") -> expr("c"),
+          columnName("e") -> expr("e")
+        ),
+        Seq("c", "e", "d").map(columnName)
       ))
     }
 

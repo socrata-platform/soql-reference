@@ -306,7 +306,7 @@ class Parser(implicit ctx: DatasetContext) extends Parsers with PackratParsers {
 object Parser extends App {
   implicit val ctx = new DatasetContext {
     val locale = com.ibm.icu.util.ULocale.ENGLISH
-    val columns = Set.empty[ColumnName]
+    val columns = com.socrata.collection.OrderedSet.empty[ColumnName]
   }
   def p = new Parser
 

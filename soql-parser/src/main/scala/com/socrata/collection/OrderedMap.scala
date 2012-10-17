@@ -39,6 +39,8 @@ class OrderedMap[A, +B](val underlying: HashMap[A, (Int, B)], ordering: Vector[A
       case None =>
         this
     }
+
+  override def keySet: OrderedSet[A] = new OrderedSet(underlying.mapValues(_._1), ordering)
 }
 
 object OrderedMap extends ImmutableMapFactory[OrderedMap] {

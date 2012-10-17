@@ -48,7 +48,7 @@ object EndToEnd extends App {
 
     val locale = ULocale.ENGLISH
 
-    val columnTypes = Map(
+    val columnTypes = com.socrata.collection.OrderedMap(
       ColumnName(":id") -> SoQLNumber,
       ColumnName(":updated_at") -> SoQLFixedTimestamp,
       ColumnName(":created_at") -> SoQLFloatingTimestamp,
@@ -75,12 +75,11 @@ object EndToEnd extends App {
     case parser.Failure(msg, _) => sys.error(msg)
   }
   val aliasesUntyped = AliasAnalysis(ast.selection)
-  val sorted = AliasAnalysis.orderAliases(aliasesUntyped)
 
-  println(sorted)
+  println(aliasesUntyped.evaluationOrder)
 
-  val e2e = sorted.foldLeft(new EndToEnd(Map.empty, ctx.columnTypes)) { (e2e, alias) =>
-    val r = e2e(aliasesUntyped(alias))
+  val e2e = aliasesUntyped.evaluationOrder.foldLeft(new EndToEnd(Map.empty, ctx.columnTypes)) { (e2e, alias) =>
+    val r = e2e(aliasesUntyped.expressions(alias))
     new EndToEnd(e2e.aliases + (alias -> r), ctx.columnTypes)
   }
   println(e2e.aliases)
