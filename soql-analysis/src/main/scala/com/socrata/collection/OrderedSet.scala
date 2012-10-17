@@ -35,6 +35,9 @@ class OrderedSet[A](underlying: Map[A, Int], order: Vector[A])
       case Some(i) => new OrderedSet(underlying - e, order.take(i) ++ order.drop(i + 1))
       case None => this
     }
+
+  override def toSeq = order
+  override def toIndexedSeq[B >: A] = order
 }
 
 object OrderedSet extends ImmutableSetFactory[OrderedSet] {
