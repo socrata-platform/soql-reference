@@ -44,7 +44,7 @@ abstract class Typechecker[Type] extends (Expression => typed.TypedFF[Type]) { s
     case fc@FunctionCall(name, parameters) =>
       val typedParameters = parameters.map(typecheck(_))
 
-      val options = functionsWithArity(name, typedParameters.length, e.position)
+      val options = functionsWithArity(name, typedParameters.length, fc.functionNamePosition)
       functionCallTypechecker.resolveOverload(options, typedParameters) match {
         case Matched(f, cs) =>
           val realParameterList = (typedParameters, cs).zipped.map { (param, converter) =>
