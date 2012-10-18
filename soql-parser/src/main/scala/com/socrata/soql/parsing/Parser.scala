@@ -71,8 +71,8 @@ class Parser(implicit ctx: DatasetContext) extends Parsers with PackratParsers {
    */
 
   def fullSelect =
-    (SELECT() ~> selectList ~ opt(whereClause) ~ opt(groupByClause ~ opt(havingClause)) ~ opt(orderByClause) ~ opt(limitClause) ~ opt(offsetClause) ^^ {
-      case s ~ w ~ gbh ~ ord ~ lim ~ off => Select(s, w, gbh.map { case gb ~ h => GroupBy(gb,h) }, ord, lim, off)
+    (SELECT() ~> selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ opt(orderByClause) ~ opt(limitClause) ~ opt(offsetClause) ^^ {
+      case s ~ w ~ gb ~ h ~ ord ~ lim ~ off => Select(s, w, gb, h, ord, lim, off)
     })
 
   def whereClause = WHERE() ~> expr

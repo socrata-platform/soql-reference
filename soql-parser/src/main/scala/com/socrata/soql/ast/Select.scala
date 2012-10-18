@@ -3,12 +3,13 @@ package com.socrata.soql.ast
 import scala.util.parsing.input.{Position, NoPosition}
 import com.socrata.soql.names.ColumnName
 
-case class Select(selection: Selection, where: Option[Expression], groupBy: Option[GroupBy], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt]) {
+case class Select(selection: Selection, where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt]) {
   override def toString = {
     if(AST.pretty) {
       val sb = new StringBuilder("SELECT " + selection)
-      where.foreach(sb.append(" ").append(_))
-      groupBy.foreach(sb.append(" ").append(_))
+      where.foreach(sb.append(" WHERE ").append(_))
+      groupBy.foreach { gb => sb.append(gb.mkString(" GROUP BY ", ",", "")) }
+      having.foreach(sb.append(" HAVING ").append(_))
       orderBy.foreach { ob => sb.append(ob.mkString(" ORDER BY ", ", ", "")) }
       limit.foreach(sb.append(" LIMIT ").append(_))
       offset.foreach(sb.append(" OFFSET ").append(_))
@@ -56,14 +57,6 @@ case class SelectedExpression(expression: Expression, name: Option[(ColumnName, 
     }
 }
 
-case class GroupBy(expressions: Seq[Expression], having: Option[Expression]) {
-  override def toString =
-    if(AST.pretty) {
-      "GROUP BY " + expressions.mkString(", ") + having.map { h => " HAVING " + h }.getOrElse("")
-    } else {
-      AST.unpretty(this)
-    }
-}
 case class OrderBy(expression: Expression, ascending: Boolean, nullLast: Boolean) {
   override def toString =
     if(AST.pretty) {
