@@ -56,7 +56,8 @@ object EndToEnd extends App {
       ColumnName("name_first") -> SoQLText,
       ColumnName("visits") -> SoQLNumber,
       ColumnName("last_visit") -> SoQLFixedTimestamp,
-      ColumnName("address") -> SoQLLocation
+      ColumnName("address") -> SoQLLocation,
+      ColumnName("balance") -> SoQLMoney
     )
 
     def columns = columnTypes.keySet
