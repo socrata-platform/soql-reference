@@ -1,6 +1,7 @@
 package com.socrata.soql.analysis.typed
 
 import scala.util.parsing.input.{Position, NoPosition}
+import scala.runtime.ScalaRunTime
 
 import com.socrata.soql.names.ColumnName
 import com.socrata.soql.analysis.{Typable, MonomorphicFunction}
@@ -9,7 +10,8 @@ import com.socrata.soql.analysis.{Typable, MonomorphicFunction}
 sealed abstract class TypedFF[+Type] extends Product with Typable[Type] {
   var position: Position = NoPosition
   protected def asString: String
-  override final def toString = if(TypedFF.pretty) (asString + " :: " + typ) else productIterator.mkString(productPrefix + "(",",",")")
+  override final def toString = if(TypedFF.pretty) (asString + " :: " + typ) else ScalaRunTime._toString(this)
+  override final lazy val hashCode = ScalaRunTime._hashCode(this)
 }
 
 object TypedFF {

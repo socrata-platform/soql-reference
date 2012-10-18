@@ -1,13 +1,15 @@
 package com.socrata.soql.ast
 
 import scala.util.parsing.input.{Position, NoPosition}
+import scala.runtime.ScalaRunTime
 
 import com.socrata.soql.names.{FunctionName, ColumnName, TypeName}
 
 sealed abstract class Expression extends Product {
   var position: Position = NoPosition
   protected def asString: String
-  override final def toString = if(Expression.pretty) asString else productIterator.mkString(productPrefix + "(",",",")")
+  override final def toString = if(Expression.pretty) asString else ScalaRunTime._toString(this)
+  override final lazy val hashCode = ScalaRunTime._hashCode(this)
   def allColumnRefs: Set[ColumnOrAliasRef]
 
   def positionedAt(p: Position): this.type = {
