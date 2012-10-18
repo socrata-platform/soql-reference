@@ -4,10 +4,12 @@ import scala.util.parsing.input.{NoPosition, Position}
 
 import com.socrata.soql.ast._
 import com.socrata.soql.names._
-import util.parsing.input.Position
 import com.socrata.collection.OrderedSet
 
-abstract class Typechecker[Type] { self =>
+class TypeMismatchError[Type](val name: FunctionName, val actual: Type, position: Position) extends Exception("Cannot pass a value of type " + actual + " to " + name + ":\n" + position.longString)
+class AmbiguousCall[Type](val name: FunctionName, position: Position) extends Exception("Ambiguous call to " + name + ":\n" + position.longString)
+
+abstract class Typechecker[Type] extends (Expression => typed.TypedFF[Type]) { self =>
   def aliases: Map[ColumnName, typed.TypedFF[Type]]
   def columns: Map[ColumnName, Type]
 
@@ -52,10 +54,13 @@ abstract class Typechecker[Type] { self =>
             }
           }
           typed.FunctionCall(f, realParameterList.toSeq).positionedAt(fc.position).functionNameAt(fc.functionNamePosition)
+        case NoMatch =>
+          val failure = functionCallTypechecker.narrowDownFailure(options, typedParameters)
+          throw new TypeMismatchError(name, typedParameters(failure.idx).typ, typedParameters(failure.idx).position)
         case Ambiguous(_) | NoMatch =>
           // when reporting this, remember to convert special functions back to their syntactic form
           // also TODO: better error reporting in the "no match" case
-          error("nyi")
+          throw new AmbiguousCall(name, fc.functionNamePosition)
       }
     case bl@BooleanLiteral(b) =>
       typed.BooleanLiteral(b, booleanLiteralType(b)).positionedAt(bl.position)

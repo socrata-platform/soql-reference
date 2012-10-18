@@ -115,7 +115,7 @@ abstract class FunctionCallTypechecker[Type] { self =>
     Passed(parameterConversions)
   }
 
-  def narrowDownFailure(candidate: Func, fs: Set[Func], params: Seq[Val], parameterIndices: Seq[Int]): UnificationFailure[Type] = {
+  def narrowDownFailure(fs: Set[Func], params: Seq[Val]): UnificationFailure[Type] = {
     // the first value we return will be the first index whose
     // addition causes a type error.
     for(paramList <- params.inits.toIndexedSeq.reverse.drop(1)) {
@@ -123,9 +123,7 @@ abstract class FunctionCallTypechecker[Type] { self =>
       val res = resolveOverload(fs.map { f => f.copy(parameters = f.parameters.take(n)) }, paramList)
       res match {
         case NoMatch =>
-          val paramIdx = parameterIndices(n - 1)
-          val name = candidate.parameters(paramIdx).asInstanceOf[VariableType].name
-          val typeSet = typeParameterUniverse
+          val paramIdx = n - 1
           return UnificationFailure(params.take(n - 1).map(_.typ).toSet, params(n - 1).typ, paramIdx)
         case _ => // ok, try again
       }
