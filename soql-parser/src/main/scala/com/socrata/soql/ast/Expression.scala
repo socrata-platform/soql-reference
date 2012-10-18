@@ -100,7 +100,9 @@ object Expression {
     case fc: FunctionCall =>
       fc match {
         case FunctionCall(SpecialFunctions.StarFunc(base), Seq()) => Vector(base)
-        case FunctionCall(SpecialFunctions.Operator(_), args) => args.flatMap(findIdentsAndLiterals)
+        case FunctionCall(SpecialFunctions.Operator(op), Seq(arg)) => op +: findIdentsAndLiterals(arg)
+        case FunctionCall(SpecialFunctions.Operator(op), Seq(arg1, arg2)) => findIdentsAndLiterals(arg1) ++ Vector(op) ++ findIdentsAndLiterals(arg2)
+        case FunctionCall(SpecialFunctions.Operator(op), _) => sys.error("Found a non-unary, non-binary operator: " + op)
         case FunctionCall(SpecialFunctions.IsNull, args) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "null")
         case FunctionCall(SpecialFunctions.IsNotNull, args) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "not", "null")
         case FunctionCall(SpecialFunctions.Between, Seq(a,b,c)) =>
