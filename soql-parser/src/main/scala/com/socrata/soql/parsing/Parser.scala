@@ -185,8 +185,10 @@ class Parser(implicit ctx: DatasetContext) extends Parsers with PackratParsers {
   val identifier: Parser[(String, Position)] = systemIdentifier | userIdentifier | failure(errors.missingIdentifier)
 
   def paramList: Parser[Either[Position, Seq[Expression]]] =
-    repsep(expr, COMMA()) ^^ (Right(_)) |
-    STAR() ^^ { star => Left(star.position) }
+    // the clauses have to be in this order, or it can't backtrack enough to figure out it's allowed to take
+    // the STAR path.
+    STAR() ^^ { star => Left(star.position) } |
+    repsep(expr, COMMA()) ^^ (Right(_))
 
   def params: Parser[Either[Position, Seq[Expression]]] =
     LPAREN() ~> paramList <~ (RPAREN() | failure(errors.missingArg))
