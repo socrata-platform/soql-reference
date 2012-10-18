@@ -12,6 +12,11 @@ object SoQLFunctions {
   val Gt = Function(SpecialFunctions.Operator(">"), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
   val LatitudeField = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("latitude")), SoQLDouble).function
   val LongitudeField = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("longitude")), SoQLDouble).function
+  val IsNotNull = Function(SpecialFunctions.IsNotNull, Seq(VariableType("a")), FixedType(SoQLBoolean))
+  val Max = Function(FunctionName("max"), Seq(VariableType("a")), VariableType("a"), isAggregate = true)
+  val CountStar = Function(SpecialFunctions.StarFunc("count"), Seq(), FixedType(SoQLNumber), isAggregate = true)
+
+  val PlusNumNum = new MonomorphicFunction(SpecialFunctions.Operator("+"), Seq(SoQLNumber, SoQLNumber), SoQLNumber).function
 
   lazy val allFunctions = {
     for {

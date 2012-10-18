@@ -51,7 +51,7 @@ object EndToEnd extends App {
     val columnTypes = com.socrata.collection.OrderedMap(
       ColumnName(":id") -> SoQLNumber,
       ColumnName(":updated_at") -> SoQLFixedTimestamp,
-      ColumnName(":created_at") -> SoQLFloatingTimestamp,
+      ColumnName(":created_at") -> SoQLFixedTimestamp,
       ColumnName("name_last") -> SoQLText,
       ColumnName("name_first") -> SoQLText,
       ColumnName("visits") -> SoQLNumber,
@@ -62,26 +62,37 @@ object EndToEnd extends App {
     def columns = columnTypes.keySet
   }
 
-  val query = "select :*, nf || ' ' || name_last as name, name_first as nf, name_last as nl, address.latitude where last_visit > '2012-05-05T00:00:00Z'"
-
   println(ctx.columnTypes)
-  println(query)
-  println(SoQLFunctions.functionsByNameThenArity)
+
+  val query = readLine("Enter a SoQL Level 0 Query> ")
 
   import com.socrata.soql.parsing.Parser
   val parser = new Parser
-  val ast = parser.selectStatement(query) match {
+  val ast: Select = parser.selectStatement(query) match {
     case parser.Success(ast, _) => ast
-    case parser.Failure(msg, _) => sys.error(msg)
+    case parser.Failure(msg, next) => sys.error(msg + "\n" + next.pos.longString)
   }
   val aliasesUntyped = AliasAnalysis(ast.selection)
 
-  println(aliasesUntyped.evaluationOrder)
+  println("alias typechecking order: " + aliasesUntyped.evaluationOrder)
 
   val e2e = aliasesUntyped.evaluationOrder.foldLeft(new EndToEnd(Map.empty, ctx.columnTypes)) { (e2e, alias) =>
     val r = e2e(aliasesUntyped.expressions(alias))
     new EndToEnd(e2e.aliases + (alias -> r), ctx.columnTypes)
   }
-  println(e2e.aliases)
-  println(e2e(ast.where.get))
+  val aliases = e2e.aliases
+  val where = ast.where.map(e2e)
+  val groupBys = ast.groupBy.map(_.map(e2e))
+  val having = ast.having.map(e2e)
+  val orderBys = ast.orderBy.map(_.map { ob => e2e(ob.expression) }).getOrElse(Nil)
+
+  val aggregateChecker = new AggregateChecker[SoQLType]
+  val hasAggregates = aggregateChecker(aliases.values.toSeq, where, groupBys, having, orderBys)
+
+  println("Outputs: " + aliases)
+  println("where: " + where)
+  println("group bys: " + groupBys)
+  println("having: " + having)
+  println("order bys: " + orderBys)
+  println("has aggregates: " + hasAggregates)
 }
