@@ -21,9 +21,21 @@ object SoQLFunctions {
   val Max = Function(FunctionName("max"), Seq(VariableType("a")), VariableType("a"), isAggregate = true)
   val CountStar = Function(SpecialFunctions.StarFunc("count"), Seq(), FixedType(SoQLNumber), isAggregate = true)
 
+  val PlusNum = new MonomorphicFunction(SpecialFunctions.Operator("+"), Seq(SoQLNumber), SoQLNumber).function
+  val PlusMoney = new MonomorphicFunction(SpecialFunctions.Operator("+"), Seq(SoQLMoney), SoQLMoney).function
+  val PlusDouble = new MonomorphicFunction(SpecialFunctions.Operator("+"), Seq(SoQLDouble), SoQLDouble).function
+
+  val MinusNum = new MonomorphicFunction(SpecialFunctions.Operator("-"), Seq(SoQLNumber), SoQLNumber).function
+  val MinusMoney = new MonomorphicFunction(SpecialFunctions.Operator("-"), Seq(SoQLMoney), SoQLMoney).function
+  val MinusDouble = new MonomorphicFunction(SpecialFunctions.Operator("-"), Seq(SoQLDouble), SoQLDouble).function
+
   val PlusNumNum = new MonomorphicFunction(SpecialFunctions.Operator("+"), Seq(SoQLNumber, SoQLNumber), SoQLNumber).function
   val PlusMoneyMoney = new MonomorphicFunction(SpecialFunctions.Operator("+"), Seq(SoQLMoney, SoQLMoney), SoQLMoney).function
   val PlusDoubleDouble = new MonomorphicFunction(SpecialFunctions.Operator("+"), Seq(SoQLDouble, SoQLDouble), SoQLDouble).function
+
+  val MinusNumNum = new MonomorphicFunction(SpecialFunctions.Operator("-"), Seq(SoQLNumber, SoQLNumber), SoQLNumber).function
+  val MinusMoneyMoney = new MonomorphicFunction(SpecialFunctions.Operator("-"), Seq(SoQLMoney, SoQLMoney), SoQLMoney).function
+  val MinusDoubleDouble = new MonomorphicFunction(SpecialFunctions.Operator("-"), Seq(SoQLDouble, SoQLDouble), SoQLDouble).function
 
   val TimesNumNum = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLNumber, SoQLNumber), SoQLNumber).function
   val TimesDoubleDouble = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLDouble, SoQLDouble), SoQLDouble).function
