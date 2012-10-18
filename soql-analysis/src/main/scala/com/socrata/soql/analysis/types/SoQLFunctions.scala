@@ -33,9 +33,9 @@ object SoQLFunctions {
   val NumberToMoney = new MonomorphicFunction(SpecialFunctions.Operator("to_money"), Seq(SoQLNumber), SoQLMoney).function
   val NumberToDouble = new MonomorphicFunction(SpecialFunctions.Operator("to_double"), Seq(SoQLNumber), SoQLDouble).function
 
-  val And = new MonomorphicFunction(FunctionName("and"), Seq(SoQLBoolean, SoQLBoolean), SoQLBoolean).function
-  val Or = new MonomorphicFunction(FunctionName("or"), Seq(SoQLBoolean, SoQLBoolean), SoQLBoolean).function
-  val Not = new MonomorphicFunction(FunctionName("not"), Seq(SoQLBoolean), SoQLBoolean).function
+  val And = new MonomorphicFunction(SpecialFunctions.Operator("and"), Seq(SoQLBoolean, SoQLBoolean), SoQLBoolean).function
+  val Or = new MonomorphicFunction(SpecialFunctions.Operator("or"), Seq(SoQLBoolean, SoQLBoolean), SoQLBoolean).function
+  val Not = new MonomorphicFunction(SpecialFunctions.Operator("not"), Seq(SoQLBoolean), SoQLBoolean).function
 
   lazy val allFunctions = {
     for {

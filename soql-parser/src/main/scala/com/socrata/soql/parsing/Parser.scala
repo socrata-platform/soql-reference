@@ -287,19 +287,19 @@ class Parser(implicit ctx: DatasetContext) extends Parsers with PackratParsers {
     order
 
   lazy val negation: PackratParser[Expression] =
-    NOT() ~ negation ^^ { case op ~ b => FunctionCall(FunctionName(op.printable), Seq(b)).positionedAt(op.position).functionNameAt(op.position) } |
+    NOT() ~ negation ^^ { case op ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(b)).positionedAt(op.position).functionNameAt(op.position) } |
     isBetween
 
   lazy val conjunction: PackratParser[Expression] =
     opt(conjunction ~ AND()) ~ negation ^^ {
       case None ~ b => b
-      case Some(a ~ op) ~ b => FunctionCall(FunctionName(op.printable), Seq(a, b)).positionedAt(a.position).functionNameAt(op.position)
+      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b)).positionedAt(a.position).functionNameAt(op.position)
     }
 
   lazy val disjunction: PackratParser[Expression] =
     opt(disjunction ~ OR()) ~ conjunction ^^ {
       case None ~ b => b
-      case Some(a ~ op) ~ b => FunctionCall(FunctionName(op.printable), Seq(a, b)).positionedAt(a.position).functionNameAt(op.position)
+      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b)).positionedAt(a.position).functionNameAt(op.position)
     }
 
   def expr = disjunction | failure(errors.missingExpr)
