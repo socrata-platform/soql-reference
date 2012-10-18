@@ -27,11 +27,15 @@ trait SoQLTypeConversions {
     FloatingTimestampRegex.matcher(text).matches()
 
   def implicitConversions(from: SoQLType, to: SoQLType): Option[MonomorphicFunction[SoQLType]] = {
-    from match {
-      case SoQLTextLiteral(text) if isFixedTimestampLiteral(text.getString) && to == SoQLFixedTimestamp =>
+    (from,to) match {
+      case (SoQLTextLiteral(text), SoQLFixedTimestamp) if isFixedTimestampLiteral(text.getString)  =>
         Some(SoQLFunctions.TextToFixedTimestamp.monomorphic.getOrElse(sys.error("text to fixed_timestamp conversion not monomorphic?")))
-      case SoQLTextLiteral(text) if isFloatingTimestampLiteral(text.getString) && to == SoQLFloatingTimestamp =>
+      case (SoQLTextLiteral(text), SoQLFloatingTimestamp) if isFloatingTimestampLiteral(text.getString) =>
         Some(SoQLFunctions.TextToFloatingTimestamp.monomorphic.getOrElse(sys.error("text to floating_timestamp conversion not monomorphic?")))
+      case (SoQLNumberLiteral(num), SoQLMoney) =>
+        Some(SoQLFunctions.NumberToMoney.monomorphic.getOrElse(sys.error("text to money conversion not monomorphic?")))
+      case (SoQLNumberLiteral(num), SoQLDouble) =>
+        Some(SoQLFunctions.NumberToDouble.monomorphic.getOrElse(sys.error("text to money conversion not monomorphic?")))
       case _ =>
         None
     }
