@@ -19,9 +19,7 @@ sealed abstract class CandidateEvaluation[Type]
 case class TypeMismatch[Type](expected: Set[Type], found: Type, idx: Int) extends CandidateEvaluation[Type] {
   require(!expected.contains(found), "type mismatch but found in expected")
 }
-case class UnificationFailure[Type](existing: Set[Type], found: Type, idx: Int) extends CandidateEvaluation[Type] {
-  require(!existing.contains(found), "unification failure but found in existing")
-}
+case class UnificationFailure[Type](found: Type, idx: Int) extends CandidateEvaluation[Type]
 case class Passed[Type](conversionSet: ConversionSet[Type]) extends CandidateEvaluation[Type]
 
 abstract class FunctionCallTypechecker[Type] { self =>
@@ -124,7 +122,7 @@ abstract class FunctionCallTypechecker[Type] { self =>
       res match {
         case NoMatch =>
           val paramIdx = n - 1
-          return UnificationFailure(params.take(n - 1).map(_.typ).toSet, params(n - 1).typ, paramIdx)
+          return UnificationFailure(params(paramIdx).typ, paramIdx)
         case _ => // ok, try again
       }
     }
