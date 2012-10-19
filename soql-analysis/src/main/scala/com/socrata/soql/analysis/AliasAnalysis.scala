@@ -222,10 +222,7 @@ object AA {
     }
     val p = new com.socrata.soql.parsing.Parser
     println(datasetCtx.columns)
-    p.selection(":*, * (except b,c), a + c as b, d as c") match {
-      case p.Success(sel, _) =>
-        val aliased = apply(sel)
-        println(aliased)
-    }
+    val aliased = apply(p.selection(":*, * (except b,c), a + c as b, d as c"))
+    println(aliased)
   }
 }

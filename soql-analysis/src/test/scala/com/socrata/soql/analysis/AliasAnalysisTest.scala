@@ -40,18 +40,12 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
 
   implicit def selections(e: String)(implicit ctx: DatasetContext): Selection = {
     val parser = new Parser
-    parser.selection(e) match {
-      case parser.Success(parsed, _) => parsed
-      case failure => fail("Unable to parse expression fixture " + e + ": " + failure)
-    }
+    parser.selection(e)
   }
   def selectionsNoPos(e: String)(implicit ctx: DatasetContext): Selection = selections(e)
   def expr(e: String)(implicit ctx: DatasetContext): Expression = {
     val parser = new Parser
-    parser.expression(e) match {
-      case parser.Success(parsed, _) => parsed
-      case failure => fail("Unable to parse expression fixture " + e + ": " + failure)
-    }
+    parser.expression(e)
   }
   def ident(e: String)(implicit ctx: DatasetContext): ColumnName = {
     val parser = new Parser

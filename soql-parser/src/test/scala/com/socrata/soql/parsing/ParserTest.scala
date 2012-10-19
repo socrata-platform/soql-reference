@@ -15,17 +15,16 @@ class ParserTest extends WordSpec with MustMatchers {
   }
   def parseExpression(soql: String) = {
     val p = new Parser
-    p.expression(soql) match {
-      case p.Success(r, _) => r
-      case p.Failure(msg, _) => fail("Unexpected parse failure: " + msg)
-    }
+    p.expression(soql)
   }
 
   def expectFailure(expectedMsg: String, soql: String) = {
     val p = new Parser
-    p.expression(soql) match {
-      case p.Success(_, _) => fail("Unexpected success")
-      case p.Failure(msg, _) => msg must equal (expectedMsg)
+    try {
+      p.expression(soql)
+      fail("Unexpected success")
+    } catch {
+      case e: BadParseException => e.message must equal (expectedMsg)
     }
   }
 

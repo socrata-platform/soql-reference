@@ -69,10 +69,7 @@ object EndToEnd extends App {
 
   import com.socrata.soql.parsing.Parser
   val parser = new Parser
-  val ast: Select = parser.selectStatement(query) match {
-    case parser.Success(ast, _) => ast
-    case parser.Failure(msg, next) => sys.error(msg + "\n" + next.pos.longString)
-  }
+  val ast = parser.selectStatement(query)
   val aliasesUntyped = AliasAnalysis(ast.selection)
 
   println("alias typechecking order: " + aliasesUntyped.evaluationOrder)

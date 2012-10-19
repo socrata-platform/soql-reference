@@ -10,6 +10,8 @@ import com.socrata.soql.tokens._
 import com.socrata.soql.ast
 import com.socrata.soql.ast._
 
+class BadParseException(val message: String, val position: Position) extends Exception(message + "\n" + position.longString)
+
 class Parser(implicit ctx: DatasetContext) extends Parsers with PackratParsers {
   type Elem = Token
 
@@ -18,13 +20,20 @@ class Parser(implicit ctx: DatasetContext) extends Parsers with PackratParsers {
    *               * ENDPOINTS *
    *               *************
    */
-  def selection(soql: String) = phrase(selectList <~ eof)(new LexerReader(soql))
-  def expression(soql: String) = phrase(expr <~ eof)(new LexerReader(soql))
-  def orderings(soql: String) = phrase(orderingList <~ eof)(new LexerReader(soql))
-  def groupBys(soql: String) = phrase(groupByList <~ eof)(new LexerReader(soql))
-  def selectStatement(soql: String) = phrase(fullSelect <~ eof)(new LexerReader(soql))
-  def limit(soql: String) = phrase(integer <~ eof)(new LexerReader(soql))
-  def offset(soql: String) = phrase(integer <~ eof)(new LexerReader(soql))
+  def selection(soql: String) = parseFull(selectList, soql)
+  def expression(soql: String) = parseFull(expr, soql)
+  def orderings(soql: String) = parseFull(orderingList, soql)
+  def groupBys(soql: String) = parseFull(groupByList, soql)
+  def selectStatement(soql: String) = parseFull(fullSelect, soql)
+  def limit(soql: String) = parseFull(integer, soql)
+  def offset(soql: String) = parseFull(integer, soql)
+
+  private def parseFull[T](parser: Parser[T], soql: String): T = {
+    phrase(parser <~ eof)(new LexerReader(soql)) match {
+      case Success(result, _) => result
+      case Failure(msg, next) => throw new BadParseException(msg, next.pos)
+    }
+  }
 
   /*
    *               ******************
