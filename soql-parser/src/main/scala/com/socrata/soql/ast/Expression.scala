@@ -100,6 +100,7 @@ object Expression {
     case fc: FunctionCall =>
       fc match {
         case FunctionCall(SpecialFunctions.StarFunc(base), Seq()) => Vector(base)
+        case FunctionCall(SpecialFunctions.Operator("-"), args) => args.flatMap(findIdentsAndLiterals) // otherwise minus looks like a non-synthetic underscore
         case FunctionCall(SpecialFunctions.Operator(op), Seq(arg)) => op +: findIdentsAndLiterals(arg)
         case FunctionCall(SpecialFunctions.Operator(op), Seq(arg1, arg2)) => findIdentsAndLiterals(arg1) ++ Vector(op) ++ findIdentsAndLiterals(arg2)
         case FunctionCall(SpecialFunctions.Operator(op), _) => sys.error("Found a non-unary, non-binary operator: " + op)
