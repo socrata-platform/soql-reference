@@ -6,8 +6,9 @@ import com.socrata.soql.DatasetContext
 import com.socrata.soql.ast._
 import com.ibm.icu.util.ULocale
 import util.parsing.input.Position
+import com.socrata.collection.OrderedMap
 
-class EndToEnd(val aliases: Map[ColumnName, typed.TypedFF[SoQLType]], val columns: Map[ColumnName, SoQLType])(implicit ctx: DatasetContext) extends Typechecker[SoQLType] with SoQLTypeConversions {
+class EndToEnd(val aliases: OrderedMap[ColumnName, typed.TypedFF[SoQLType]], val columns: Map[ColumnName, SoQLType])(implicit ctx: DatasetContext) extends Typechecker[SoQLType] with SoQLTypeConversions {
   def booleanLiteralType(b: Boolean) = SoQLBoolean
 
   def stringLiteralType(s: String) = SoQLTextLiteral(s)
@@ -74,7 +75,7 @@ object EndToEnd extends App {
 
   println("alias typechecking order: " + aliasesUntyped.evaluationOrder)
 
-  val e2e = aliasesUntyped.evaluationOrder.foldLeft(new EndToEnd(Map.empty, ctx.columnTypes)) { (e2e, alias) =>
+  val e2e = aliasesUntyped.evaluationOrder.foldLeft(new EndToEnd(OrderedMap.empty, ctx.columnTypes)) { (e2e, alias) =>
     val r = e2e(aliasesUntyped.expressions(alias))
     new EndToEnd(e2e.aliases + (alias -> r), ctx.columnTypes)
   }
