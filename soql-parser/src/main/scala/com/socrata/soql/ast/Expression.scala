@@ -51,7 +51,7 @@ sealed abstract class Expression extends Product {
 }
 
 object Expression {
-  val pretty = false
+  val pretty = true
 
   private def collapseRuns[T](in: Seq[T], v: T): Seq[T] = {
     val r = new scala.collection.immutable.VectorBuilder[T]
@@ -184,7 +184,18 @@ case class NullLiteral() extends Literal {
 
 case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression]) extends Expression {
   var functionNamePosition: Position = NoPosition
-  protected def asString = parameters.mkString(functionName.toString + "(", ",", ")")
+  protected def asString = functionName match {
+    case SpecialFunctions.Parens => "(" + parameters(0) + ")"
+    case SpecialFunctions.Subscript => parameters(0) + "[" + parameters(1) + "]"
+    case SpecialFunctions.StarFunc(f) => f + "(*)"
+    case SpecialFunctions.Operator(op) if parameters.size == 1 => op + parameters(0)
+    case SpecialFunctions.Operator(op) if parameters.size == 2 => parameters(0) + " " + op + " " + parameters(1)
+    case SpecialFunctions.Between => parameters(0) + " BETWEEN " + parameters(1) + " AND " + parameters(2)
+    case SpecialFunctions.NotBetween => parameters(0) + " NOT BETWEEN " + parameters(1) + " AND " + parameters(2)
+    case SpecialFunctions.IsNull => parameters(0) + " IS NULL"
+    case SpecialFunctions.IsNotNull => parameters(0) + " IS NOT NULL"
+    case other => parameters.mkString(other + "(", ",", ")")
+  }
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
 
   def functionNameAt(p: Position): this.type = {
@@ -199,7 +210,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
 case class Cast(expression: Expression, targetType: TypeName) extends Expression {
   var operatorPosition: Position = NoPosition
   var targetTypePosition: Position = NoPosition
-  protected def asString = "::("+targetType+")"
+  protected def asString = expression + " :: " + targetType
   def allColumnRefs = expression.allColumnRefs
   def removeParens = copy(expression = expression.removeParens).positionedAt(position).operatorAndTypeAt(operatorPosition, targetTypePosition)
 
