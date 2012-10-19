@@ -33,7 +33,7 @@ abstract class Typechecker[Type] extends (Expression => typed.TypedFF[Type]) { s
             case Some(typ) =>
               typed.ColumnRef(col, typ).positionedAt(r.position)
             case None =>
-              throw new UnknownColumn(r.position)
+              throw new UnknownColumn(col, r.position)
           }
       }
     case c@Cast(expr, targetTypeName) =>

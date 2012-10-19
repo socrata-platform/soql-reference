@@ -33,7 +33,7 @@ class EndToEnd(val aliases: OrderedMap[ColumnName, typed.TypedFF[SoQLType]], val
   def typeFor(name: TypeName, position: Position) =
     SoQLType.typesByName.get(name) match {
       case Some(typ) => typ
-      case None => throw new UnknownType(position)
+      case None => throw new UnknownType(name, position)
     }
 
   def getCastFunction(from: SoQLType, to: SoQLType, position: Position) = {
