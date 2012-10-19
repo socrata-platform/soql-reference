@@ -7,7 +7,7 @@ import com.socrata.soql.names._
 import com.socrata.collection.OrderedSet
 
 class TypeMismatchError[Type](val name: FunctionName, val actual: Type, position: Position) extends Exception("Cannot pass a value of type " + actual + " to " + name + ":\n" + position.longString)
-class AmbiguousCall[Type](val name: FunctionName, position: Position) extends Exception("Ambiguous call to " + name + ":\n" + position.longString)
+class AmbiguousCall(val name: FunctionName, position: Position) extends Exception("Ambiguous call to " + name + ":\n" + position.longString)
 
 abstract class Typechecker[Type] extends (Expression => typed.TypedFF[Type]) { self =>
   def aliases: Map[ColumnName, typed.TypedFF[Type]]
