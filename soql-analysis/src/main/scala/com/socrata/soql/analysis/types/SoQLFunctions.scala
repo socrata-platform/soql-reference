@@ -22,6 +22,7 @@ object SoQLFunctions {
   val Min = Function(FunctionName("min"), Seq(VariableType("a")), VariableType("a"), isAggregate = true)
   val Max = Function(FunctionName("max"), Seq(VariableType("a")), VariableType("a"), isAggregate = true)
   val CountStar = Function(SpecialFunctions.StarFunc("count"), Seq(), FixedType(SoQLNumber), isAggregate = true)
+  val Count = Function(FunctionName("count"), Seq(VariableType("a")), FixedType(SoQLNumber), isAggregate = true)
   val SumNum = new MonomorphicFunction(FunctionName("sum"), Seq(SoQLNumber), SoQLNumber, isAggregate = true).function
   val SumMoney = new MonomorphicFunction(FunctionName("sum"), Seq(SoQLMoney), SoQLMoney, isAggregate = true).function
   val SumDouble = new MonomorphicFunction(FunctionName("sum"), Seq(SoQLDouble), SoQLDouble, isAggregate = true).function
