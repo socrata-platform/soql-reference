@@ -211,18 +211,3 @@ object AliasAnalysis extends AliasAnalysis {
     selfRefs.keys.toSeq ++ topoSort(graph)
   }
 }
-
-object AA {
-  import AliasAnalysis._
-  def main(args: Array[String]) {
-    implicit val datasetCtx = new DatasetContext {
-      implicit val ctx = this
-      val locale = com.ibm.icu.util.ULocale.ENGLISH
-      val columns = com.socrata.collection.OrderedSet(":id", ":created_at", "a", "b", "c", "d").map(ColumnName(_))
-    }
-    val p = new com.socrata.soql.parsing.Parser
-    println(datasetCtx.columns)
-    val aliased = apply(p.selection(":*, * (except b,c), a + c as b, d as c"))
-    println(aliased)
-  }
-}
