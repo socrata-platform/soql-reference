@@ -18,8 +18,16 @@ object SoQLFunctions {
   val LatitudeField = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("latitude")), SoQLDouble).function
   val LongitudeField = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("longitude")), SoQLDouble).function
   val IsNotNull = Function(SpecialFunctions.IsNotNull, Seq(VariableType("a")), FixedType(SoQLBoolean))
+
+  val Min = Function(FunctionName("min"), Seq(VariableType("a")), VariableType("a"), isAggregate = true)
   val Max = Function(FunctionName("max"), Seq(VariableType("a")), VariableType("a"), isAggregate = true)
   val CountStar = Function(SpecialFunctions.StarFunc("count"), Seq(), FixedType(SoQLNumber), isAggregate = true)
+  val SumNum = new MonomorphicFunction(FunctionName("sum"), Seq(SoQLNumber), SoQLNumber, isAggregate = true).function
+  val SumMoney = new MonomorphicFunction(FunctionName("sum"), Seq(SoQLMoney), SoQLMoney, isAggregate = true).function
+  val SumDouble = new MonomorphicFunction(FunctionName("sum"), Seq(SoQLDouble), SoQLDouble, isAggregate = true).function
+  val AvgNum = new MonomorphicFunction(FunctionName("avg"), Seq(SoQLNumber), SoQLNumber, isAggregate = true).function
+  val AvgMoney = new MonomorphicFunction(FunctionName("avg"), Seq(SoQLMoney), SoQLMoney, isAggregate = true).function
+  val AvgDouble = new MonomorphicFunction(FunctionName("avg"), Seq(SoQLDouble), SoQLDouble, isAggregate = true).function
 
   val PlusNum = new MonomorphicFunction(SpecialFunctions.Operator("+"), Seq(SoQLNumber), SoQLNumber).function
   val PlusMoney = new MonomorphicFunction(SpecialFunctions.Operator("+"), Seq(SoQLMoney), SoQLMoney).function
