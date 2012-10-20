@@ -77,7 +77,7 @@ abstract class FunctionCallTypechecker[Type] { self =>
     def loop(remaining: List[String], bindings: Map[String, Type]): Iterator[(MFunc, CandidateEvaluation[Type])] = {
       remaining match {
         case hd :: tl =>
-          typeParameterUniverse.iterator.flatMap { typ =>
+          typeParameterUniverse.filter(candidate.constraints.getOrElse(hd, typeParameterUniverse)).iterator.flatMap { typ =>
             loop(tl, bindings + (hd -> typ))
           }
         case Nil =>
@@ -215,11 +215,11 @@ abstract class FunctionCallTypechecker[Type] { self =>
 
     import com.socrata.soql.names.FunctionName
 
-    val TimesNumNum = Function(FunctionName("*"), Seq(FixedType(Number), FixedType(Number)), FixedType(Number))
-    val TimesNumMoney = Function(FunctionName("*"), Seq(FixedType(Number), FixedType(Money)), FixedType(Money))
-    val TimesMoneyNum = Function(FunctionName("*"), Seq(FixedType(Money), FixedType(Number)), FixedType(Money))
+    val TimesNumNum = Function(FunctionName("*"), Map.empty, Seq(FixedType(Number), FixedType(Number)), FixedType(Number))
+    val TimesNumMoney = Function(FunctionName("*"), Map.empty, Seq(FixedType(Number), FixedType(Money)), FixedType(Money))
+    val TimesMoneyNum = Function(FunctionName("*"), Map.empty, Seq(FixedType(Money), FixedType(Number)), FixedType(Money))
 
-    val LessThan = Function[Type](FunctionName("a"), Seq(VariableType("a"), VariableType("a")), FixedType(Bool))
+    val LessThan = Function[Type](FunctionName("a"), Map.empty, Seq(VariableType("a"), VariableType("a")), FixedType(Bool))
 
     val NumToMoney = new MonomorphicFunction(FunctionName("number_to_money"), Seq(Number), Money)
     val NumToDouble = new MonomorphicFunction(FunctionName("number_to_double"), Seq(Number), Double)
@@ -278,11 +278,11 @@ abstract class FunctionCallTypechecker[Type] { self =>
       p(Set(TimesNumMoney, TimesMoneyNum), Seq(ValueOfType(NumberLiteral), ValueOfType(NumberLiteral)))
       p(Set(LessThan), Seq(ValueOfType(Null), ValueOfType(Null)))
 
-      val X = Function[Type](FunctionName("x"), Seq(VariableType("a"), VariableType("a")), FixedType(Text))
+      val X = Function[Type](FunctionName("x"), Map.empty, Seq(VariableType("a"), VariableType("a")), FixedType(Text))
       println(r.evaluateCandidate(X, Seq(ValueOfType(NumberLiteral), ValueOfType(Money))).toIndexedSeq)
       p(Set(X), Seq(ValueOfType(Number), ValueOfType(Text)))
 
-      val Y = Function[Type](FunctionName("x"), Seq(FixedType(Text), FixedType(FloatingTimestamp), VariableType("a")), FixedType(Text))
+      val Y = Function[Type](FunctionName("x"), Map.empty, Seq(FixedType(Text), FixedType(FloatingTimestamp), VariableType("a")), FixedType(Text))
       p(Set(Y), Seq(ValueOfType(Text), ValueOfType(FloatingTimestamp), ValueOfType(Null)))
     }
   }

@@ -5,18 +5,7 @@ import com.socrata.collection.OrderedSet
 import java.util.regex.Pattern
 
 trait SoQLTypeConversions {
-  val typeParameterUniverse: OrderedSet[SoQLType] = OrderedSet(
-    SoQLText,
-    SoQLNumber,
-    SoQLDouble,
-    SoQLMoney,
-    SoQLBoolean,
-    SoQLFixedTimestamp,
-    SoQLFloatingTimestamp,
-    SoQLLocation,
-    SoQLObject,
-    SoQLArray
-  )
+  def typeParameterUniverse = SoQLTypeConversions.typeParameterUniverse
 
   val FixedTimestampRegex = Pattern.compile("""(?i)^[0-9]{4,}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:,[0-9]{1,3})?Z$""")
   def isFixedTimestampLiteral(text: String) =
@@ -43,4 +32,19 @@ trait SoQLTypeConversions {
 
   def canBePassedToWithoutConversion(actual: SoQLType, expected: SoQLType) =
     actual.isPassableTo(expected)
+}
+
+object SoQLTypeConversions {
+  val typeParameterUniverse: OrderedSet[SoQLType] = OrderedSet(
+    SoQLText,
+    SoQLNumber,
+    SoQLDouble,
+    SoQLMoney,
+    SoQLBoolean,
+    SoQLFixedTimestamp,
+    SoQLFloatingTimestamp,
+    SoQLLocation,
+    SoQLObject,
+    SoQLArray
+  )
 }

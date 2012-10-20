@@ -4,7 +4,7 @@ import com.socrata.soql.names.FunctionName
 
 case class MonomorphicFunction[+Type](function: Function[Type], bindings: Map[String, Type]) {
   def this(name: FunctionName, parameters: Seq[Type], result: Type, isAggregate: Boolean = false) =
-    this(Function(name, parameters.map(FixedType(_)), FixedType(result), isAggregate), Map.empty)
+    this(Function(name, Map.empty, parameters.map(FixedType(_)), FixedType(result), isAggregate), Map.empty)
 
   require(bindings.keySet == function.parameters.collect { case VariableType(n) => n }.toSet, "bindings do not match")
 

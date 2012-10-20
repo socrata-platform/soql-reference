@@ -6,7 +6,7 @@ sealed trait TypeLike[+Type]
 case class FixedType[Type](typ: Type) extends TypeLike[Type]
 case class VariableType(name: String) extends TypeLike[Nothing]
 
-case class Function[+Type](name: FunctionName, parameters: Seq[TypeLike[Type]], result: TypeLike[Type], isAggregate: Boolean = false) {
+case class Function[+Type](name: FunctionName, constraints: Map[String, Any => Boolean /* ick, but without Set being covariant... */], parameters: Seq[TypeLike[Type]], result: TypeLike[Type], isAggregate: Boolean = false) {
   val arity = parameters.length
 
   lazy val typeParameters: Set[String] =

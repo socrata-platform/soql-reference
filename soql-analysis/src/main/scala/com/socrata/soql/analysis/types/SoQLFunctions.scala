@@ -6,50 +6,46 @@ import java.lang.reflect.Modifier
 import com.socrata.soql.ast.SpecialFunctions
 
 object SoQLFunctions {
+  private val Ordered = SoQLTypeConversions.typeParameterUniverse.toSet[Any] // might want to narrow this down
+  private val NumLike = Set[Any](SoQLNumber, SoQLDouble, SoQLMoney)
+
   val TextToFixedTimestamp = new MonomorphicFunction(FunctionName("to_fixed_timestamp"), Seq(SoQLText), SoQLFixedTimestamp).function
   val TextToFloatingTimestamp = new MonomorphicFunction(FunctionName("to_floating_timestamp"), Seq(SoQLText), SoQLFloatingTimestamp).function
-  val Concat = Function(SpecialFunctions.Operator("||"), Seq(VariableType("a"), VariableType("b")), FixedType(SoQLText))
-  val Gte = Function(SpecialFunctions.Operator(">="), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
-  val Gt = Function(SpecialFunctions.Operator(">"), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
-  val Lt = Function(SpecialFunctions.Operator("<"), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
-  val Lte = Function(SpecialFunctions.Operator("<="), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
-  val Eq = Function(SpecialFunctions.Operator("="), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
-  val Neq = Function(SpecialFunctions.Operator("<>"), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
+  val Concat = Function(SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), FixedType(SoQLText))
+  val Gte = Function(SpecialFunctions.Operator(">="), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
+  val Gt = Function(SpecialFunctions.Operator(">"), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
+  val Lt = Function(SpecialFunctions.Operator("<"), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
+  val Lte = Function(SpecialFunctions.Operator("<="), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
+  val Eq = Function(SpecialFunctions.Operator("="), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
+  val Neq = Function(SpecialFunctions.Operator("<>"), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
+
   val LatitudeField = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("latitude")), SoQLDouble).function
   val LongitudeField = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("longitude")), SoQLDouble).function
-  val IsNotNull = Function(SpecialFunctions.IsNotNull, Seq(VariableType("a")), FixedType(SoQLBoolean))
 
-  val Min = Function(FunctionName("min"), Seq(VariableType("a")), VariableType("a"), isAggregate = true)
-  val Max = Function(FunctionName("max"), Seq(VariableType("a")), VariableType("a"), isAggregate = true)
-  val CountStar = Function(SpecialFunctions.StarFunc("count"), Seq(), FixedType(SoQLNumber), isAggregate = true)
-  val Count = Function(FunctionName("count"), Seq(VariableType("a")), FixedType(SoQLNumber), isAggregate = true)
-  val SumNum = new MonomorphicFunction(FunctionName("sum"), Seq(SoQLNumber), SoQLNumber, isAggregate = true).function
-  val SumMoney = new MonomorphicFunction(FunctionName("sum"), Seq(SoQLMoney), SoQLMoney, isAggregate = true).function
-  val SumDouble = new MonomorphicFunction(FunctionName("sum"), Seq(SoQLDouble), SoQLDouble, isAggregate = true).function
-  val AvgNum = new MonomorphicFunction(FunctionName("avg"), Seq(SoQLNumber), SoQLNumber, isAggregate = true).function
-  val AvgMoney = new MonomorphicFunction(FunctionName("avg"), Seq(SoQLMoney), SoQLMoney, isAggregate = true).function
-  val AvgDouble = new MonomorphicFunction(FunctionName("avg"), Seq(SoQLDouble), SoQLDouble, isAggregate = true).function
+  val IsNotNull = Function(SpecialFunctions.IsNotNull, Map.empty, Seq(VariableType("a")), FixedType(SoQLBoolean))
 
-  val PlusNum = new MonomorphicFunction(SpecialFunctions.Operator("+"), Seq(SoQLNumber), SoQLNumber).function
-  val PlusMoney = new MonomorphicFunction(SpecialFunctions.Operator("+"), Seq(SoQLMoney), SoQLMoney).function
-  val PlusDouble = new MonomorphicFunction(SpecialFunctions.Operator("+"), Seq(SoQLDouble), SoQLDouble).function
+  val Min = Function(FunctionName("min"), Map("a"->Ordered), Seq(VariableType("a")), VariableType("a"), isAggregate = true)
+  val Max = Function(FunctionName("max"), Map("a"->Ordered), Seq(VariableType("a")), VariableType("a"), isAggregate = true)
+  val CountStar = new MonomorphicFunction(SpecialFunctions.StarFunc("count"), Seq(), SoQLNumber, isAggregate = true).function
+  val Count = Function(FunctionName("count"), Map.empty, Seq(VariableType("a")), FixedType(SoQLNumber), isAggregate = true)
+  val Sum = Function(FunctionName("sum"), Map("a"->NumLike), Seq(VariableType("a")), VariableType("a"), isAggregate = true)
+  val Avg = Function(FunctionName("avg"), Map("a"->NumLike), Seq(VariableType("a")), VariableType("a"), isAggregate = true)
 
-  val MinusNum = new MonomorphicFunction(SpecialFunctions.Operator("-"), Seq(SoQLNumber), SoQLNumber).function
-  val MinusMoney = new MonomorphicFunction(SpecialFunctions.Operator("-"), Seq(SoQLMoney), SoQLMoney).function
-  val MinusDouble = new MonomorphicFunction(SpecialFunctions.Operator("-"), Seq(SoQLDouble), SoQLDouble).function
+  val UnaryPlus = Function(SpecialFunctions.Operator("+"), Map("a"->NumLike), Seq(VariableType("a")), VariableType("a"))
+  val UnaryMinus = Function(SpecialFunctions.Operator("-"), Map("a"->NumLike), Seq(VariableType("a")), VariableType("a"))
 
-  val PlusNumNum = new MonomorphicFunction(SpecialFunctions.Operator("+"), Seq(SoQLNumber, SoQLNumber), SoQLNumber).function
-  val PlusMoneyMoney = new MonomorphicFunction(SpecialFunctions.Operator("+"), Seq(SoQLMoney, SoQLMoney), SoQLMoney).function
-  val PlusDoubleDouble = new MonomorphicFunction(SpecialFunctions.Operator("+"), Seq(SoQLDouble, SoQLDouble), SoQLDouble).function
-
-  val MinusNumNum = new MonomorphicFunction(SpecialFunctions.Operator("-"), Seq(SoQLNumber, SoQLNumber), SoQLNumber).function
-  val MinusMoneyMoney = new MonomorphicFunction(SpecialFunctions.Operator("-"), Seq(SoQLMoney, SoQLMoney), SoQLMoney).function
-  val MinusDoubleDouble = new MonomorphicFunction(SpecialFunctions.Operator("-"), Seq(SoQLDouble, SoQLDouble), SoQLDouble).function
+  val BinaryPlus = Function(SpecialFunctions.Operator("+"), Map("a"->NumLike), Seq(VariableType("a"), VariableType("a")), VariableType("a"))
+  val BinaryMinus = Function(SpecialFunctions.Operator("-"), Map("a"->NumLike), Seq(VariableType("a"), VariableType("a")), VariableType("a"))
 
   val TimesNumNum = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLNumber, SoQLNumber), SoQLNumber).function
   val TimesDoubleDouble = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLDouble, SoQLDouble), SoQLDouble).function
   val TimesNumMoney = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLNumber, SoQLMoney), SoQLMoney).function
   val TimesMoneyNum = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLMoney, SoQLNumber), SoQLMoney).function
+
+  val DivNumNum = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLNumber, SoQLNumber), SoQLNumber).function
+  val DivDoubleDouble = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLDouble, SoQLDouble), SoQLDouble).function
+  val DivMoneyNum = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLMoney, SoQLNumber), SoQLMoney).function
+  val DivMoneyMoney = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLMoney, SoQLMoney), SoQLNumber).function
 
   val NumberToMoney = new MonomorphicFunction(SpecialFunctions.Operator("to_money"), Seq(SoQLNumber), SoQLMoney).function
   val NumberToDouble = new MonomorphicFunction(SpecialFunctions.Operator("to_double"), Seq(SoQLNumber), SoQLDouble).function
