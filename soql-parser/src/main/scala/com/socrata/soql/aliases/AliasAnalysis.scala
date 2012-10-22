@@ -4,13 +4,13 @@ import scala.util.parsing.input.Position
 import scala.collection.mutable
 
 import com.socrata.soql.ast._
-import com.socrata.soql.DatasetContext
+import com.socrata.soql.UntypedDatasetContext
 import com.socrata.soql.names._
 import com.socrata.collection.{OrderedMap, OrderedSet}
 
 trait AliasAnalysis {
   case class Analysis(expressions: OrderedMap[ColumnName, Expression], evaluationOrder: Seq[ColumnName])
-  def apply(selection: Selection)(implicit ctx: DatasetContext): Analysis
+  def apply(selection: Selection)(implicit ctx: UntypedDatasetContext): Analysis
 }
 
 object AliasAnalysis extends AliasAnalysis {
@@ -26,7 +26,7 @@ object AliasAnalysis extends AliasAnalysis {
     * @throws DuplicateAliasException if duplicate aliases are detected
     * @throws CircularAliasDefinitionException if an alias is defined in terms of itself
     */
-  def apply(selection: Selection)(implicit ctx: DatasetContext): Analysis = {
+  def apply(selection: Selection)(implicit ctx: UntypedDatasetContext): Analysis = {
     log.debug("Input: {}", selection)
     val starsExpanded = expandSelection(selection)
     log.debug("After expanding stars: {}", starsExpanded)
@@ -47,7 +47,7 @@ object AliasAnalysis extends AliasAnalysis {
    * @throws RepeatedExceptionException if the same column is excepted more than once
    * @throws NoSuchColumnException if a column not on the dataset is excepted
    */
-  def expandSelection(selection: Selection)(implicit ctx: DatasetContext): Seq[SelectedExpression] = {
+  def expandSelection(selection: Selection)(implicit ctx: UntypedDatasetContext): Seq[SelectedExpression] = {
     val Selection(systemStar, userStar, expressions) = selection
     val (systemColumns, userColumns) = ctx.columns.partition(_.canonicalName.startsWith(":"))
     systemStar.toSeq.flatMap(processStar(_, systemColumns)) ++
@@ -69,7 +69,7 @@ object AliasAnalysis extends AliasAnalysis {
    * @throws RepeatedExceptionException if the same column is EXCEPTed more than once
    * @throws NoSuchColumnException if a column not on the dataset is excepted.
    */
-  def processStar(starSelection: StarSelection, columns: OrderedSet[ColumnName])(implicit ctx: DatasetContext): Seq[SelectedExpression] = {
+  def processStar(starSelection: StarSelection, columns: OrderedSet[ColumnName])(implicit ctx: UntypedDatasetContext): Seq[SelectedExpression] = {
     val StarSelection(exceptions) = starSelection
     val exceptedColumnNames = new mutable.HashSet[ColumnName]
     for((column, position) <- exceptions) {
@@ -95,7 +95,7 @@ object AliasAnalysis extends AliasAnalysis {
    *         aliases assigned.
    * @throws DuplicateAliasException if a duplicate alias is detected
    */
-  def assignExplicitAndSemiExplicit(selections: Seq[SelectedExpression])(implicit ctx: DatasetContext): Seq[SelectedExpression] = {
+  def assignExplicitAndSemiExplicit(selections: Seq[SelectedExpression])(implicit ctx: UntypedDatasetContext): Seq[SelectedExpression] = {
     selections.foldLeft((Set.empty[ColumnName], Vector.empty[SelectedExpression])) { (results, selection) =>
       val (assigned, mapped) = results
 
@@ -121,7 +121,7 @@ object AliasAnalysis extends AliasAnalysis {
    * @param selections The selection-list, with semi-explicit and explicit aliases already assigned
    * @return The fully-aliased selections, in the same order as they arrived
    */
-  def assignImplicit(selections: Seq[SelectedExpression])(implicit ctx: DatasetContext): OrderedMap[ColumnName, Expression] = {
+  def assignImplicit(selections: Seq[SelectedExpression])(implicit ctx: UntypedDatasetContext): OrderedMap[ColumnName, Expression] = {
     val assignedAliases: Set[ColumnName] = selections.collect {
       case SelectedExpression(_, Some((alias, _))) => alias
     } (scala.collection.breakOut)
@@ -145,7 +145,7 @@ object AliasAnalysis extends AliasAnalysis {
    * @param selection The expression for which to generate an alias
    * @param existingAliases The set of already-present aliases
    * @return A new name for the expression */
-  def implicitAlias(selection: Expression, existingAliases: Set[ColumnName])(implicit ctx: DatasetContext): ColumnName = {
+  def implicitAlias(selection: Expression, existingAliases: Set[ColumnName])(implicit ctx: UntypedDatasetContext): ColumnName = {
     def inUse(name: ColumnName) = existingAliases.contains(name) || ctx.columns.contains(name)
 
     val base = selection.toSyntheticIdentifierBase
@@ -186,7 +186,7 @@ object AliasAnalysis extends AliasAnalysis {
     *
     * @return the aliases in evaluation order
     * @throws CircularAliasDefinitionException if an alias's expansion refers to itself, even indirectly. */
-  def orderAliasesForEvaluation(in: OrderedMap[ColumnName, Expression])(implicit ctx: DatasetContext): Seq[ColumnName] = {
+  def orderAliasesForEvaluation(in: OrderedMap[ColumnName, Expression])(implicit ctx: UntypedDatasetContext): Seq[ColumnName] = {
     // We'll divide all the aliases up into two categories -- aliases which refer
     // to a column of the same name ("selfRefs") and everything else ("otherRefs").
     val (selfRefs, otherRefs) = in.partition {

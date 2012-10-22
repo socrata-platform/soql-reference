@@ -3,9 +3,9 @@ package com.socrata.soql.names
 import com.ibm.icu.lang.UCharacter
 import com.ibm.icu.text.Normalizer
 
-import com.socrata.soql.DatasetContext
+import com.socrata.soql.SchemalessDatasetContext
 
-final class ColumnName(val name: String)(implicit val datasetContext: DatasetContext) extends Ordered[ColumnName] {
+final class ColumnName(val name: String)(implicit val datasetContext: SchemalessDatasetContext) extends Ordered[ColumnName] {
   val canonicalName = Normalizer.normalize(UCharacter.toLowerCase(datasetContext.locale, name).replaceAll("-","_"), Normalizer.DEFAULT)
 
   override def hashCode = canonicalName.hashCode ^ datasetContext.hashCode ^ 0x342a3466
@@ -29,5 +29,5 @@ final class ColumnName(val name: String)(implicit val datasetContext: DatasetCon
 }
 
 object ColumnName {
-  def apply(columnName: String)(implicit datasetContext: DatasetContext) = new ColumnName(columnName)(datasetContext)
+  def apply(columnName: String)(implicit datasetContext: SchemalessDatasetContext) = new ColumnName(columnName)(datasetContext)
 }

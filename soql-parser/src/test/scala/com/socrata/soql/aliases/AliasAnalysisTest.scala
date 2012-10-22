@@ -7,20 +7,20 @@ import org.scalatest.matchers.MustMatchers
 
 import com.socrata.soql.parsing.{LexerReader, Parser}
 
-import com.socrata.soql.DatasetContext
+import com.socrata.soql.{SchemalessDatasetContext, UntypedDatasetContext}
 import com.socrata.soql.names.ColumnName
 import com.socrata.soql.ast._
 import com.socrata.collection.{OrderedMap, OrderedSet}
 
 class AliasAnalysisTest extends WordSpec with MustMatchers {
-  def columnName(name: String)(implicit ctx: DatasetContext) =
+  def columnName(name: String)(implicit ctx: SchemalessDatasetContext) =
     ColumnName(name)
 
-  def columnNames(names: String*)(implicit ctx: DatasetContext) =
+  def columnNames(names: String*)(implicit ctx: SchemalessDatasetContext) =
     OrderedSet(names.map(columnName): _*)
 
   def fixtureContext(cols: String*) =
-    new DatasetContext {
+    new UntypedDatasetContext {
       private implicit def dsc = this
       val locale = com.ibm.icu.util.ULocale.US
       lazy val columns = columnNames(cols: _*)
@@ -32,29 +32,29 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     def lineContents = " " * c
   }
 
-  def se(e: String)(implicit ctx: DatasetContext): SelectedExpression =
+  def se(e: String)(implicit ctx: SchemalessDatasetContext): SelectedExpression =
     SelectedExpression(expr(e), None)
 
-  def se(e: String, name: String, position: Position)(implicit ctx: DatasetContext): SelectedExpression =
+  def se(e: String, name: String, position: Position)(implicit ctx: SchemalessDatasetContext): SelectedExpression =
     SelectedExpression(expr(e), Some((ColumnName(name), position)))
 
-  implicit def selections(e: String)(implicit ctx: DatasetContext): Selection = {
+  implicit def selections(e: String)(implicit ctx: SchemalessDatasetContext): Selection = {
     val parser = new Parser
     parser.selection(e)
   }
-  def selectionsNoPos(e: String)(implicit ctx: DatasetContext): Selection = selections(e)
-  def expr(e: String)(implicit ctx: DatasetContext): Expression = {
+  def selectionsNoPos(e: String)(implicit ctx: SchemalessDatasetContext): Selection = selections(e)
+  def expr(e: String)(implicit ctx: SchemalessDatasetContext): Expression = {
     val parser = new Parser
     parser.expression(e)
   }
-  def ident(e: String)(implicit ctx: DatasetContext): ColumnName = {
+  def ident(e: String)(implicit ctx: SchemalessDatasetContext): ColumnName = {
     val parser = new Parser
     parser.identifier(new LexerReader(e)) match {
       case parser.Success(parsed, _) => ColumnName(parsed._1)
       case failure => fail("Unable to parse expression fixture " + e + ": " + failure)
     }
   }
-  def unaliased(names: String*)(pos: Position)(implicit ctx: DatasetContext) = names.map { i => SelectedExpression(ColumnOrAliasRef(columnName(i)), None) }
+  def unaliased(names: String*)(pos: Position)(implicit ctx: SchemalessDatasetContext) = names.map { i => SelectedExpression(ColumnOrAliasRef(columnName(i)), None) }
 
   "processing a star" should {
     implicit val ctx = fixtureContext()

@@ -14,10 +14,10 @@ object SoqlToy extends (Array[String] => Unit) {
     sys.exit(1)
   }
 
-  implicit val datasetCtx = new DatasetContext {
-    implicit val ctx = this
+  implicit val datasetCtx = new DatasetContext[SoQLType] {
+    private implicit def ctx = this
     val locale = com.ibm.icu.util.ULocale.ENGLISH
-    val columnTypes = com.socrata.collection.OrderedMap(
+    val schema = com.socrata.collection.OrderedMap(
       ColumnName(":id") -> SoQLNumber,
       ColumnName(":updated_at") -> SoQLFixedTimestamp,
       ColumnName(":created_at") -> SoQLFixedTimestamp,
@@ -28,13 +28,11 @@ object SoqlToy extends (Array[String] => Unit) {
       ColumnName("address") -> SoQLLocation,
       ColumnName("balance") -> SoQLMoney
     )
-
-    val columns = columnTypes.keySet
   }
 
   def menu() {
     println("Columns:")
-    for((k,v) <- datasetCtx.columnTypes) {
+    for((k,v) <- datasetCtx.schema) {
       println("  " + k + ("." * (15 - k.toString.length)) + v)
     }
   }
@@ -59,9 +57,9 @@ object SoqlToy extends (Array[String] => Unit) {
 
           val afterAliasAnalysis = System.nanoTime()
 
-          val e2e = aliasesUntyped.evaluationOrder.foldLeft(new EndToEnd(OrderedMap.empty, datasetCtx.columnTypes)) { (e2e, alias) =>
+          val e2e = aliasesUntyped.evaluationOrder.foldLeft(new SoQLTypechecker(OrderedMap.empty, datasetCtx.schema)) { (e2e, alias) =>
             val r = e2e(aliasesUntyped.expressions(alias))
-            new EndToEnd(e2e.aliases + (alias -> r), datasetCtx.columnTypes)
+            new SoQLTypechecker(e2e.aliases + (alias -> r), datasetCtx.schema)
           }
 
           val afterAliasTypechecking = System.nanoTime()

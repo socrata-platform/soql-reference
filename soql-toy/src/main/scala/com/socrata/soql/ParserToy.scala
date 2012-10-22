@@ -25,9 +25,8 @@ object ParserToy extends (Array[String] => Unit) {
   }
 
   def apply(args: Array[String]) {
-    implicit val dstctx = new DatasetContext {
+    implicit val dstctx = new SchemalessDatasetContext {
       val locale = ULocale.ENGLISH
-      val columns = OrderedSet.empty[ColumnName]
     }
     var last = -1
     menu()

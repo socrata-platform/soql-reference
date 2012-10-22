@@ -3,14 +3,14 @@ package com.socrata.soql.parsing
 import scala.util.parsing.combinator.{Parsers, PackratParsers}
 import util.parsing.input.{Position, Reader, NoPosition}
 
-import com.socrata.soql.DatasetContext
+import com.socrata.soql.SchemalessDatasetContext
 import com.socrata.soql.names._
 import com.socrata.soql.tokens
 import com.socrata.soql.tokens._
 import com.socrata.soql.ast
 import com.socrata.soql.ast._
 
-class Parser(implicit ctx: DatasetContext) extends Parsers with PackratParsers {
+class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with PackratParsers {
   type Elem = Token
 
   /*
@@ -313,9 +313,8 @@ class Parser(implicit ctx: DatasetContext) extends Parsers with PackratParsers {
 }
 
 object Parser extends App {
-  implicit val ctx = new DatasetContext {
+  implicit val ctx = new SchemalessDatasetContext {
     val locale = com.ibm.icu.util.ULocale.ENGLISH
-    val columns = com.socrata.collection.OrderedSet.empty[ColumnName]
   }
   def p = new Parser
 

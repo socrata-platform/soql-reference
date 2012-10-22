@@ -5,13 +5,11 @@ import org.scalatest.matchers.MustMatchers
 
 import com.socrata.soql.ast._
 import com.socrata.soql.names.ColumnName
-import com.socrata.soql.DatasetContext
-import com.socrata.collection.OrderedSet
+import com.socrata.soql.SchemalessDatasetContext
 
 class ParserTest extends WordSpec with MustMatchers {
-  implicit val ctx = new DatasetContext {
-    def locale = com.ibm.icu.util.ULocale.ENGLISH
-    def columns = OrderedSet.empty[ColumnName]
+  implicit val ctx = new SchemalessDatasetContext {
+    val locale = com.ibm.icu.util.ULocale.ENGLISH
   }
   def parseExpression(soql: String) = {
     val p = new Parser

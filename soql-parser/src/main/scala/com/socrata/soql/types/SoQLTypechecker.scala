@@ -9,7 +9,7 @@ import com.socrata.soql.functions._
 import com.socrata.soql.typechecker._
 import com.socrata.soql.typed
 
-class EndToEnd(val aliases: OrderedMap[ColumnName, typed.TypedFF[SoQLType]], val columns: Map[ColumnName, SoQLType])(implicit ctx: DatasetContext) extends Typechecker[SoQLType] with SoQLTypeConversions {
+class SoQLTypechecker(val aliases: OrderedMap[ColumnName, typed.TypedFF[SoQLType]], val columns: Map[ColumnName, SoQLType])(implicit ctx: DatasetContext[SoQLType]) extends Typechecker[SoQLType] with SoQLTypeConversions {
   def booleanLiteralType(b: Boolean) = SoQLBoolean
 
   def stringLiteralType(s: String) = SoQLTextLiteral(s)
