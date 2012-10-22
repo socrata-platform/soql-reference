@@ -22,7 +22,11 @@ object SoQLFunctions {
   val LatitudeField = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("latitude")), SoQLDouble).function
   val LongitudeField = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("longitude")), SoQLDouble).function
 
+  val IsNull = Function(SpecialFunctions.IsNull, Map.empty, Seq(VariableType("a")), FixedType(SoQLBoolean))
   val IsNotNull = Function(SpecialFunctions.IsNotNull, Map.empty, Seq(VariableType("a")), FixedType(SoQLBoolean))
+
+  val Between = Function(SpecialFunctions.Between, Map("a"->Ordered), Seq(VariableType("a"),VariableType("a"),VariableType("a")), FixedType(SoQLBoolean))
+  val NotBetween = Function(SpecialFunctions.NotBetween, Map("a"->Ordered), Seq(VariableType("a"),VariableType("a"),VariableType("a")), FixedType(SoQLBoolean))
 
   val Min = Function(FunctionName("min"), Map("a"->Ordered), Seq(VariableType("a")), VariableType("a"), isAggregate = true)
   val Max = Function(FunctionName("max"), Map("a"->Ordered), Seq(VariableType("a")), VariableType("a"), isAggregate = true)
