@@ -177,7 +177,7 @@ object AliasAnalysis extends AliasAnalysis {
         result += n
       }
     }
-    for(k <- graph.keys) visit(k, Set.empty)
+    for(k <- graph.keys) visit(k, Set(k))
     result.toList
   }
 
