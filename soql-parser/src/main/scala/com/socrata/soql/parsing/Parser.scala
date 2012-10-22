@@ -10,8 +10,6 @@ import com.socrata.soql.tokens._
 import com.socrata.soql.ast
 import com.socrata.soql.ast._
 
-class BadParseException(val message: String, val position: Position) extends Exception(message + "\n" + position.longString)
-
 class Parser(implicit ctx: DatasetContext) extends Parsers with PackratParsers {
   type Elem = Token
 
@@ -31,7 +29,7 @@ class Parser(implicit ctx: DatasetContext) extends Parsers with PackratParsers {
   private def parseFull[T](parser: Parser[T], soql: String): T = {
     phrase(parser <~ eof)(new LexerReader(soql)) match {
       case Success(result, _) => result
-      case Failure(msg, next) => throw new BadParseException(msg, next.pos)
+      case Failure(msg, next) => throw new ParseException(msg, next.pos)
     }
   }
 

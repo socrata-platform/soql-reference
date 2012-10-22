@@ -24,7 +24,7 @@ class ParserTest extends WordSpec with MustMatchers {
       p.expression(soql)
       fail("Unexpected success")
     } catch {
-      case e: BadParseException => e.message must equal (expectedMsg)
+      case e: ParseException => e.message must equal (expectedMsg)
     }
   }
 

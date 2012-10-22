@@ -4,13 +4,12 @@ import org.scalatest._
 import org.scalatest.matchers.MustMatchers
 
 import com.socrata.soql.tokens._
-import com.socrata.soql.Position
 
 class LexerTest extends WordSpec with MustMatchers {
   def lexTest(s: String, ts: (Token, Int, Int, Int)*) = {
     val tokens = new LexerReader(s).toStream
     tokens must equal (ts.map(_._1))
-    tokens.map(_.position) must equal (ts.map { case (_, r,c,o) => new Position(r, c, s, o) })
+    tokens.map(_.position) must equal (ts.map { case (_, r,c,o) => new SoQLPosition(r, c, s, o) })
   }
 
   def lex(s: String) {

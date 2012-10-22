@@ -1,10 +1,13 @@
-package com.socrata.soql.analysis
+package com.socrata.soql.types
 
-import types._
+import scala.util.parsing.input.Position
+
 import com.socrata.soql.names._
 import com.socrata.soql.DatasetContext
-import util.parsing.input.Position
 import com.socrata.collection.OrderedMap
+import com.socrata.soql.functions._
+import com.socrata.soql.typechecker._
+import com.socrata.soql.typed
 
 class EndToEnd(val aliases: OrderedMap[ColumnName, typed.TypedFF[SoQLType]], val columns: Map[ColumnName, SoQLType])(implicit ctx: DatasetContext) extends Typechecker[SoQLType] with SoQLTypeConversions {
   def booleanLiteralType(b: Boolean) = SoQLBoolean
@@ -36,7 +39,9 @@ class EndToEnd(val aliases: OrderedMap[ColumnName, typed.TypedFF[SoQLType]], val
       case None => throw new UnknownType(name, position)
     }
 
+  def typeNameFor(typ: SoQLType): TypeName = typ.name
+
   def getCastFunction(from: SoQLType, to: SoQLType, position: Position) = {
-    throw new IncompatibleType(position)
+    throw new ImpossibleCast(typeNameFor(from), typeNameFor(to), position)
   }
 }

@@ -1,11 +1,14 @@
-package com.socrata.soql.analysis
+package com.socrata.soql.typechecker
+
+import com.socrata.collection.OrderedSet
+import com.socrata.soql.functions._
+import com.socrata.soql.typed.Typable
 
 object UtilTypes {
   type ConversionSet[Type] = Seq[Option[MonomorphicFunction[Type]]]
 }
 
 import UtilTypes._
-import com.socrata.collection.OrderedSet
 
 sealed abstract class OverloadResult[+Type]
 case object NoMatch extends OverloadResult[Nothing]

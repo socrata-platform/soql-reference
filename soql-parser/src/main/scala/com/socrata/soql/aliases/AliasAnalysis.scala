@@ -1,17 +1,12 @@
-package com.socrata.soql.analysis
+package com.socrata.soql.aliases
 
-import util.parsing.input.Position
+import scala.util.parsing.input.Position
+import scala.collection.mutable
 
 import com.socrata.soql.ast._
 import com.socrata.soql.DatasetContext
 import com.socrata.soql.names._
-import collection.mutable
 import com.socrata.collection.{OrderedMap, OrderedSet}
-
-class RepeatedExceptionException(val name: ColumnName, val position: Position) extends Exception("Column `" + name + "' has already been excluded:\n" + position.longString)
-class DuplicateAliasException(val name: ColumnName, val position: Position) extends Exception("There is already a column named `" + name + "' selected:\n" + position.longString)
-class NoSuchColumnException(val name: ColumnName, val position: Position) extends Exception("No such column `" + name + "':\n" + position.longString)
-class CircularAliasDefinitionException(val name: ColumnName, val position: Position) extends Exception("Circular reference while defining alias " + name + ":\n" + position.longString)
 
 trait AliasAnalysis {
   case class Analysis(expressions: OrderedMap[ColumnName, Expression], evaluationOrder: Seq[ColumnName])
@@ -94,7 +89,7 @@ object AliasAnalysis extends AliasAnalysis {
    *
    * @note This relies on any columns from :* and/or * appearing first
    * in the input sequence in order to ensure that the position of any
-   * [[com.socrata.soql.analysis.DuplicateAliasException]] is correct.
+   * [[com.socrata.soql.aliases.DuplicateAliasException]] is correct.
    *
    * @return A new selection list in the same order but with semi-explicit
    *         aliases assigned.

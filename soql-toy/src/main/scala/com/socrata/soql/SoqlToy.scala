@@ -1,11 +1,11 @@
 package com.socrata.soql
 
-import ast.Select
-import com.socrata.soql.analysis._
-import com.socrata.soql.analysis.types._
-
+import com.socrata.soql.aggregates.AggregateChecker
+import com.socrata.soql.aliases.AliasAnalysis
+import com.socrata.soql.ast.Select
+import com.socrata.soql.types._
 import com.socrata.soql.names.ColumnName
-import com.socrata.soql.parsing.{BadParseException, LexerError, Parser}
+import com.socrata.soql.parsing.Parser
 import com.socrata.collection.OrderedMap
 
 object SoqlToy extends (Array[String] => Unit) {
@@ -119,17 +119,7 @@ object SoqlToy extends (Array[String] => Unit) {
           }
           println("Total analysis time: " + ((end - start) / 1000000) + "ms")
         } catch {
-          case e: LexerError => println(e.getMessage)
-          case e: BadParseException => println(e.getMessage)
-          case e: RepeatedExceptionException => println(e.getMessage)
-          case e: NoSuchColumnException => println(e.getMessage)
-          case e: TypeCheckException => println(e.getMessage)
-          case e: DuplicateAliasException => println(e.getMessage)
-          case e: CircularAliasDefinitionException => println(e.getMessage)
-          case e: TypeMismatchError[_] => println(e.getMessage)
-          case e: AmbiguousCall => println(e.getMessage)
-          case e: ColumnNotInGroupBys => println(e.getMessage)
-          case e: AggregateInUngroupedContext => println(e.getMessage)
+          case e: SoQLException => println(e.getMessage)
         }
       }
     }

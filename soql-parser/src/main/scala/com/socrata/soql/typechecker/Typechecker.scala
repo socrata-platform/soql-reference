@@ -1,13 +1,12 @@
-package com.socrata.soql.analysis
+package com.socrata.soql.typechecker
 
 import scala.util.parsing.input.{NoPosition, Position}
 
 import com.socrata.soql.ast._
 import com.socrata.soql.names._
 import com.socrata.collection.OrderedSet
-
-class TypeMismatchError[Type](val name: FunctionName, val actual: Type, position: Position) extends Exception("Cannot pass a value of type " + actual + " to " + name + ":\n" + position.longString)
-class AmbiguousCall(val name: FunctionName, position: Position) extends Exception("Ambiguous call to " + name + ":\n" + position.longString)
+import com.socrata.soql.typed
+import com.socrata.soql.functions.{Function, MonomorphicFunction}
 
 abstract class Typechecker[Type] extends (Expression => typed.TypedFF[Type]) { self =>
   def aliases: Map[ColumnName, typed.TypedFF[Type]]
@@ -56,7 +55,7 @@ abstract class Typechecker[Type] extends (Expression => typed.TypedFF[Type]) { s
           typed.FunctionCall(f, realParameterList.toSeq).positionedAt(fc.position).functionNameAt(fc.functionNamePosition)
         case NoMatch =>
           val failure = functionCallTypechecker.narrowDownFailure(options, typedParameters)
-          throw new TypeMismatchError(name, typedParameters(failure.idx).typ, typedParameters(failure.idx).position)
+          throw new TypeMismatchError(name, typeNameFor(typedParameters(failure.idx).typ), typedParameters(failure.idx).position)
         case Ambiguous(_) | NoMatch =>
           // when reporting this, remember to convert special functions back to their syntactic form
           // also TODO: better error reporting in the "no match" case
@@ -85,7 +84,9 @@ abstract class Typechecker[Type] extends (Expression => typed.TypedFF[Type]) { s
   // throws UnknownType exception
   def typeFor(name: TypeName, position: Position): Type
 
-  // throws IncompatibleType exception
+  def typeNameFor(typ: Type): TypeName
+
+  // throws ImpoosibleCast exception
   def getCastFunction(from: Type, to: Type, position: Position): MonomorphicFunction[Type]
 
   def typeParameterUniverse: OrderedSet[Type]

@@ -1,8 +1,10 @@
 package com.socrata.soql.parsing
 
-import com.socrata.soql.Position
+import scala.util.parsing.input.Position
 
-sealed abstract class LexerError(val message: String, val position: Position) extends Exception(message + "\n" + position.longString)
+import com.socrata.soql.SoQLException
+
+sealed abstract class LexerError(message: String, position: Position) extends SoQLException(message, position)
 
 class UnexpectedEscape(val char: Char, position: Position) extends LexerError("Unexpected escape character", position)
 

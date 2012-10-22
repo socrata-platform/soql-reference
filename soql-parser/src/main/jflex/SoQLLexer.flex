@@ -1,7 +1,8 @@
 package com.socrata.soql.parsing;
 
+import scala.util.parsing.input.Position;
+
 import com.socrata.soql.tokens.*;
-import com.socrata.soql.Position;
 
 %%
 
@@ -36,7 +37,7 @@ import com.socrata.soql.Position;
   }
 
   public Position pos() {
-    return new Position(1 + yyline, 1 + yycolumn, sourceString, yychar);
+    return new SoQLPosition(1 + yyline, 1 + yycolumn, sourceString, yychar);
   }
 
   public Token token(Token t) {

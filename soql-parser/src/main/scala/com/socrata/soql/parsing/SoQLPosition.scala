@@ -1,10 +1,12 @@
-package com.socrata.soql
+package com.socrata.soql.parsing
 
-final case class Position(line: Int, column: Int, sourceText: String, offset: Int) extends scala.util.parsing.input.Position {
-  protected def lineContents = Position.findLineFor(sourceText, offset)
+import scala.util.parsing.input.Position
+
+final case class SoQLPosition(line: Int, column: Int, sourceText: String, offset: Int) extends Position {
+  protected def lineContents = SoQLPosition.findLineFor(sourceText, offset)
 }
 
-object Position {
+object SoQLPosition {
   def findLineFor(source: String, offset: Int): String = {
     val pre = source.substring(0, offset)
     val post = source.substring(offset)

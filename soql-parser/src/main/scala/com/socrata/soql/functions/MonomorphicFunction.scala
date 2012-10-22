@@ -1,4 +1,4 @@
-package com.socrata.soql.analysis
+package com.socrata.soql.functions
 
 import com.socrata.soql.names.FunctionName
 

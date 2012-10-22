@@ -1,7 +1,8 @@
-package com.socrata.soql.analysis.types
+package com.socrata.soql.types
+
+import com.ibm.icu.util.CaseInsensitiveString
 
 import com.socrata.soql.names.TypeName
-import com.ibm.icu.util.CaseInsensitiveString
 
 sealed abstract class SoQLType(val name: TypeName) {
   def this(name: String) = this(TypeName(name))

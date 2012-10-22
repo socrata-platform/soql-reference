@@ -1,12 +1,6 @@
-package com.socrata.soql.analysis
+package com.socrata.soql.aggregates
 
-import scala.util.parsing.input.Position
-
-import com.socrata.soql.names.{ColumnName, FunctionName}
-import com.socrata.soql.analysis.typed._
-
-class AggregateInUngroupedContext(val function: FunctionName, clause: String, val position: Position) extends Exception("Cannot use an aggregate function in " + clause + ":\n" + position.longString)
-class ColumnNotInGroupBys(val column: ColumnName, val position: Position) extends Exception("Column not in group bys:\n" + position.longString)
+import com.socrata.soql.typed._
 
 class AggregateChecker[Type] {
   type Expr = TypedFF[Type]

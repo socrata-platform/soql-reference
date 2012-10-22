@@ -1,4 +1,4 @@
-package com.socrata.soql.analysis
+package com.socrata.soql.aliases
 
 import scala.util.parsing.input.{Position, NoPosition}
 

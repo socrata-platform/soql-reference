@@ -51,7 +51,7 @@ sealed abstract class Expression extends Product {
 }
 
 object Expression {
-  val pretty = true
+  val pretty = AST.pretty
 
   private def collapseRuns[T](in: Seq[T], v: T): Seq[T] = {
     val r = new scala.collection.immutable.VectorBuilder[T]

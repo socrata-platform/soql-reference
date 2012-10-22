@@ -6,7 +6,7 @@ object Build extends sbt.Build {
     "build",
     file("."),
     settings = BuildSettings.buildSettings
-  ) aggregate (soqlParser, soqlAnalysis, soqlToy)
+  ) aggregate (soqlParser, soqlToy)
 
   lazy val soqlParser = Project(
     "soql-parser",
@@ -14,15 +14,9 @@ object Build extends sbt.Build {
     settings = SoqlParser.settings
   )
 
-  lazy val soqlAnalysis = Project(
-    "soql-analysis",
-    file("soql-analysis"),
-    settings = SoqlAnalysis.settings
-  ) dependsOn(soqlParser)
-
   lazy val soqlToy = Project(
     "soql-toy",
     file("soql-toy"),
     settings = SoqlToy.settings
-  ) dependsOn(soqlAnalysis)
+  ) dependsOn(soqlParser)
 }

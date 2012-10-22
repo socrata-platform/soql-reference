@@ -1,10 +1,10 @@
-package com.socrata.soql.analysis.typed
+package com.socrata.soql.typed
 
 import scala.util.parsing.input.{Position, NoPosition}
 import scala.runtime.ScalaRunTime
 
 import com.socrata.soql.names.ColumnName
-import com.socrata.soql.analysis.{Typable, MonomorphicFunction}
+import com.socrata.soql.functions.MonomorphicFunction
 
 /** Typed Function Form -- fully expanded and with types ascripted at each node. */
 sealed abstract class TypedFF[+Type] extends Product with Typable[Type] {

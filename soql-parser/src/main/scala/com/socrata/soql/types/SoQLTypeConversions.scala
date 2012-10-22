@@ -1,8 +1,9 @@
-package com.socrata.soql.analysis.types
+package com.socrata.soql.types
 
-import com.socrata.soql.analysis.MonomorphicFunction
-import com.socrata.collection.OrderedSet
 import java.util.regex.Pattern
+
+import com.socrata.soql.functions.MonomorphicFunction
+import com.socrata.collection.OrderedSet
 
 trait SoQLTypeConversions {
   def typeParameterUniverse = SoQLTypeConversions.typeParameterUniverse

@@ -1,9 +1,9 @@
 package com.socrata.soql
 
-import com.socrata.soql.analysis._
+import com.socrata.soql.aliases._
 
 import com.socrata.soql.names.ColumnName
-import com.socrata.soql.parsing.{BadParseException, LexerError, Parser}
+import com.socrata.soql.parsing.Parser
 
 object AliasToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -36,12 +36,7 @@ object AliasToy extends (Array[String] => Unit) {
         }
         println(analysis.evaluationOrder.mkString("Typecheck in this order:\n  ", ", ", ""))
       } catch {
-        case e: LexerError => println(e.getMessage)
-        case e: BadParseException => println(e.getMessage)
-        case e: RepeatedExceptionException => println(e.getMessage)
-        case e: NoSuchColumnException => println(e.getMessage)
-        case e: DuplicateAliasException => println(e.getMessage)
-        case e: CircularAliasDefinitionException => println(e.getMessage)
+        case e: SoQLException => println(e.getMessage)
       }
     }
   }

@@ -5,7 +5,7 @@ import scala.util.control.Breaks._
 import com.ibm.icu.util.ULocale
 
 import com.socrata.soql.names.ColumnName
-import com.socrata.soql.parsing.{BadParseException, LexerError, Parser}
+import com.socrata.soql.parsing.Parser
 import com.socrata.collection.OrderedSet
 
 object ParserToy extends (Array[String] => Unit) {
@@ -52,8 +52,7 @@ object ParserToy extends (Array[String] => Unit) {
         try {
           println(f(input))
         } catch {
-          case e: LexerError => println(e.getMessage)
-          case e: BadParseException => println(e.getMessage)
+          case e: SoQLException => println(e.getMessage)
         }
       }
     }

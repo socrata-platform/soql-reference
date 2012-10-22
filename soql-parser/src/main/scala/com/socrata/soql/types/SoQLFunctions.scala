@@ -1,7 +1,7 @@
-package com.socrata.soql.analysis.types
+package com.socrata.soql.types
 
 import com.socrata.soql.names.FunctionName
-import com.socrata.soql.analysis.{FixedType, VariableType, MonomorphicFunction, Function}
+import com.socrata.soql.functions.{FixedType, VariableType, MonomorphicFunction, Function}
 import java.lang.reflect.Modifier
 import com.socrata.soql.ast.SpecialFunctions
 
