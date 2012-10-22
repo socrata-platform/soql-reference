@@ -269,7 +269,7 @@ class Parser(implicit ctx: DatasetContext) extends Parsers with PackratParsers {
     }
 
   val order_op =
-    EQUALS() | LESSGREATER() | LESSTHAN() | LESSTHANOREQUALS() | GREATERTHAN() | GREATERTHANOREQUALS()
+    EQUALS() | LESSGREATER() | LESSTHAN() | LESSTHANOREQUALS() | GREATERTHAN() | GREATERTHANOREQUALS() | EQUALSEQUALS() | BANGEQUALS()
 
   lazy val order: PackratParser[Expression] =
     opt(order ~ order_op) ~ term ^^ {

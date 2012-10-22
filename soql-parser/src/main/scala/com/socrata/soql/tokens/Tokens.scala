@@ -72,6 +72,8 @@ case class EQUALS() extends FormattedToken("=")
 case class GREATERTHANOREQUALS() extends FormattedToken(">=")
 case class GREATERTHAN() extends FormattedToken(">")
 case class LESSGREATER() extends FormattedToken("<>")
+case class EQUALSEQUALS() extends FormattedToken("==")
+case class BANGEQUALS() extends FormattedToken("!=")
 
 // Other primitive Boolean operators
 case class IS() extends Token

@@ -92,11 +92,11 @@ QuotedSystemIdentifier = ":" ("-" | [:jletterdigit:])+
   "<"   { return token(new LESSTHAN()); }
   "<="  { return token(new LESSTHANOREQUALS()); }
   "="   { return token(new EQUALS()); }
-  "=="  { return token(new EQUALS()); }
+  "=="  { return token(new EQUALSEQUALS()); }
   ">="  { return token(new GREATERTHANOREQUALS()); }
   ">"   { return token(new GREATERTHAN()); }
   "<>"  { return token(new LESSGREATER()); }
-  "!="  { return token(new LESSGREATER()); }
+  "!="  { return token(new BANGEQUALS()); }
 
   "!"   { return token(new BANG()); }
 

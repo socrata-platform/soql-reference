@@ -17,7 +17,9 @@ object SoQLFunctions {
   val Lt = Function(SpecialFunctions.Operator("<"), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
   val Lte = Function(SpecialFunctions.Operator("<="), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
   val Eq = Function(SpecialFunctions.Operator("="), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
+  val EqEq = Eq.copy(name = SpecialFunctions.Operator("=="))
   val Neq = Function(SpecialFunctions.Operator("<>"), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
+  val BangEq = Neq.copy(name = SpecialFunctions.Operator("!="))
 
   val LatitudeField = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("latitude")), SoQLDouble).function
   val LongitudeField = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("longitude")), SoQLDouble).function
