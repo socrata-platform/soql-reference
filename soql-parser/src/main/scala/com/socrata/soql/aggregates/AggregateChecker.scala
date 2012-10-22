@@ -13,7 +13,12 @@ class AggregateChecker[Type] {
     * @param groupBy The GROUP BY expressions, if the clause is present
     * @param having The HAVING clause for the query, if present
     * @param orderBy The ORDER BY expressions for the query, minus sorting options
+    *
     * @return `true` if this was a grouped query or `false` otherwise.
+    * @throws AggregateInUngroupedContext if an aggregate function occurred in an illegal position
+    * @throws ColumnNotInGroupBys if a reference to a column is found in an expression that is ''not''
+    *                             in the GROUP BY expressions in a location where only aggregate expressions
+    *                             are allowed.
     */
   def apply(outputs: Seq[Expr], where: Option[Expr], groupBy: Option[Seq[Expr]], having: Option[Expr], orderBy: Seq[Expr]): Boolean = {
     if(groupBy.isDefined || having.isDefined) { // ok, definitely a grouped query
@@ -24,19 +29,13 @@ class AggregateChecker[Type] {
       // query if there are aggregate calls in outputs or order by though...
       try {
         outputs.foreach(checkPregroupExpression("selected columns", _))
-      } catch {
-        case _: AggregateInUngroupedContext =>
-          checkGrouped(outputs, where, Nil, None, orderBy)
-          return true
-      }
-      where.foreach(checkPregroupExpression("WHERE", _))
-      try {
         orderBy.foreach(checkPregroupExpression("ORDER BY", _))
       } catch {
         case _: AggregateInUngroupedContext =>
           checkGrouped(outputs, where, Nil, None, orderBy)
           return true
       }
+      where.foreach(checkPregroupExpression("WHERE", _))
       false
     }
   }

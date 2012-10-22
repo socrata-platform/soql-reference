@@ -25,7 +25,7 @@ case class TypeMismatch[Type](expected: Set[Type], found: Type, idx: Int) extend
 case class UnificationFailure[Type](found: Type, idx: Int) extends CandidateEvaluation[Type]
 case class Passed[Type](conversionSet: ConversionSet[Type]) extends CandidateEvaluation[Type]
 
-abstract class FunctionCallTypechecker[Type] { self =>
+class FunctionCallTypechecker[Type](typeInfo: FunctionTypeInfo[Type]) {
   val log = org.slf4j.LoggerFactory.getLogger(classOf[FunctionCallTypechecker[_]])
 
   type Func = Function[Type]
@@ -33,15 +33,7 @@ abstract class FunctionCallTypechecker[Type] { self =>
   type Val = Typable[Type]
   type ConvSet = ConversionSet[Type]
 
-  /** The set of all types a function can be declared to accept.  That is,
-    * every real type except null.  It should be ordered by most-preferred
-    * to least-preferred for null-disambiguation purposes.
-    *
-    * @note even though the type of this is Seq, it's really an ordered
-    *       set.  The order is more important than the setness, though. */
-  def typeParameterUniverse: OrderedSet[Type]
-  def implicitConversions(from: Type, to: Type): Option[MFunc]
-  def canBePassedToWithoutConversion(actual: Type, expected: Type): Boolean // this accepts at least a->a and null->a
+  import typeInfo._
 
   /** Resolve a set of overloads into a single candidate.  If you have only one, you should use
     * `evaluateCandidate` directly, as this loses type mismatch information. */
@@ -162,11 +154,12 @@ abstract class FunctionCallTypechecker[Type] { self =>
     // typeParameterUniverse (WITHOUT implicit conversions) until we
     // find one that succeeds.
     if(paramsByType.contains(nullType) && paramsByType(nullType).size == 1) {
-      val withoutImplicitConversions = new FunctionCallTypechecker[Type] {
-        def typeParameterUniverse = self.typeParameterUniverse
+      val typeInfoWithoutImplicitConversions = new FunctionTypeInfo[Type] {
+        def typeParameterUniverse = typeInfo.typeParameterUniverse
         def implicitConversions(from: Type, to: Type) = None
-        def canBePassedToWithoutConversion(actual: Type, expected: Type): Boolean = self.canBePassedToWithoutConversion(actual, expected)
+        def canBePassedToWithoutConversion(actual: Type, expected: Type): Boolean = typeInfo.canBePassedToWithoutConversion(actual, expected)
       }
+      val withoutImplicitConversions = new FunctionCallTypechecker[Type](typeInfoWithoutImplicitConversions)
       for(t <- typeParameterUniverse) {
         withoutImplicitConversions.resolveOverload(failure.map(_._1.function).toSet, parameters.map { p => if(p.typ == nullType) SimpleValue(t) else p }) match {
           case Matched(f,c) => return Some(("one null parameter", f, c))
@@ -185,107 +178,3 @@ abstract class FunctionCallTypechecker[Type] { self =>
     else None
   }
 }
-
-  object TestItAll {
-    object Types extends Enumeration {
-      val Number, Money, Double = Value
-      val Text = Value
-      val Bool = Value
-      val FixedTimestamp = Value
-      val FloatingTimestamp = Value
-
-      val Null = Value
-      // fake literal types; these are used to tag literals since they
-      // can be used more permissively than real types.  In particular,
-      // using them can induce implicit conversions that would not occur
-      // otherwise.  A FooLiteral can always be passed to a function
-      // that expects a Foo without any conversion.
-      val NumberLiteral = Value
-      val numberLiterals = Set(NumberLiteral)
-      val TextLiteral, TextFixedTSLiteral, TextFloatingTSLiteral = Value
-      val textLiterals = Set(TextLiteral, TextFixedTSLiteral, TextFloatingTSLiteral)
-
-      val realTypes = OrderedSet(
-        Number, Money, Double,
-        Text,
-        Bool,
-        FixedTimestamp,
-        FloatingTimestamp
-      )
-    }
-
-    import Types._
-
-    import com.socrata.soql.names.FunctionName
-
-    val TimesNumNum = Function(FunctionName("*"), Map.empty, Seq(FixedType(Number), FixedType(Number)), FixedType(Number))
-    val TimesNumMoney = Function(FunctionName("*"), Map.empty, Seq(FixedType(Number), FixedType(Money)), FixedType(Money))
-    val TimesMoneyNum = Function(FunctionName("*"), Map.empty, Seq(FixedType(Money), FixedType(Number)), FixedType(Money))
-
-    val LessThan = Function[Type](FunctionName("a"), Map.empty, Seq(VariableType("a"), VariableType("a")), FixedType(Bool))
-
-    val NumToMoney = new MonomorphicFunction(FunctionName("number_to_money"), Seq(Number), Money)
-    val NumToDouble = new MonomorphicFunction(FunctionName("number_to_double"), Seq(Number), Double)
-
-    val MoneyToNum = new MonomorphicFunction(FunctionName("money_to_number"), Seq(Money), Number)
-    val DoubleToNum = new MonomorphicFunction(FunctionName("double_to_number"), Seq(Double), Number)
-
-    val TextToFixedTS = new MonomorphicFunction(FunctionName("text_to_fixed_ts"), Seq(Text), FixedTimestamp)
-    val TextToFloatTS = new MonomorphicFunction(FunctionName("text_to_float_ts"), Seq(Text), FloatingTimestamp)
-
-    type Type = Types.Value
-    case class ValueOfType(typ: Type) extends Typable[Type]
-
-    def main(args: Array[String]) {
-      val r = new FunctionCallTypechecker[Type] {
-        val typeParameterUniverse = realTypes
-
-        val implicits = Map(
-          NumberLiteral -> Map(
-            Money -> NumToMoney,
-            Double -> NumToDouble),
-          TextFixedTSLiteral -> Map(
-            FixedTimestamp -> TextToFixedTS),
-          TextFloatingTSLiteral -> Map(
-            FloatingTimestamp -> TextToFloatTS),
-          Money -> Map(
-            Number -> MoneyToNum),
-          Double -> Map(
-            Number -> DoubleToNum))
-
-        def implicitConversions(from: Type, to: Type) = {
-          implicits.get(from).flatMap(_.get(to))
-        }
-        def canBePassedToWithoutConversion(actual: Type, expected: Type) =
-          actual == expected || actual == Null || (numberLiterals.contains(actual) && expected == Number) || (textLiterals.contains(actual) && expected == Text)
-      }
-
-      def p(fs: Set[Function[Type]], params: Seq[Typable[Type]]) {
-        r.resolveOverload(fs, params) match {
-          case Ambiguous(candidates) =>
-            r.disambiguateNulls(candidates, params, Null) match {
-              case Some((rule, f, c)) =>
-                println("Disambiguated via " + rule + ": " + Matched(f, c))
-              case _ =>
-                println(Ambiguous(candidates))
-            }
-          case result =>
-            println(result)
-        }
-      }
-
-      p(Set(TimesNumNum, TimesNumMoney, TimesMoneyNum), Seq(ValueOfType(NumberLiteral), ValueOfType(NumberLiteral)))
-      p(Set(TimesNumNum, TimesNumMoney, TimesMoneyNum), Seq(ValueOfType(NumberLiteral), ValueOfType(Money)))
-      p(Set(TimesNumNum, TimesNumMoney, TimesMoneyNum), Seq(ValueOfType(Number), ValueOfType(Number)))
-      p(Set(TimesNumNum, TimesNumMoney, TimesMoneyNum), Seq(ValueOfType(Number), ValueOfType(Null)))
-      p(Set(TimesNumMoney, TimesMoneyNum), Seq(ValueOfType(NumberLiteral), ValueOfType(NumberLiteral)))
-      p(Set(LessThan), Seq(ValueOfType(Null), ValueOfType(Null)))
-
-      val X = Function[Type](FunctionName("x"), Map.empty, Seq(VariableType("a"), VariableType("a")), FixedType(Text))
-      println(r.evaluateCandidate(X, Seq(ValueOfType(NumberLiteral), ValueOfType(Money))).toIndexedSeq)
-      p(Set(X), Seq(ValueOfType(Number), ValueOfType(Text)))
-
-      val Y = Function[Type](FunctionName("x"), Map.empty, Seq(FixedType(Text), FixedType(FloatingTimestamp), VariableType("a")), FixedType(Text))
-      p(Set(Y), Seq(ValueOfType(Text), ValueOfType(FloatingTimestamp), ValueOfType(Null)))
-    }
-  }

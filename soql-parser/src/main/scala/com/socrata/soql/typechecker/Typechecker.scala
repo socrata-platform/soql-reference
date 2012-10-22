@@ -1,28 +1,23 @@
 package com.socrata.soql.typechecker
 
-import scala.util.parsing.input.{NoPosition, Position}
+import scala.util.parsing.input.NoPosition
 
 import com.socrata.soql.ast._
 import com.socrata.soql.names._
 import com.socrata.collection.OrderedSet
-import com.socrata.soql.typed
+import com.socrata.soql.{DatasetContext, typed}
 import com.socrata.soql.functions.{Function, MonomorphicFunction}
 
-abstract class Typechecker[Type] extends (Expression => typed.TypedFF[Type]) { self =>
-  def aliases: Map[ColumnName, typed.TypedFF[Type]]
-  def columns: Map[ColumnName, Type]
+class Typechecker[Type](typeInfo: TypeInfo[Type])(implicit ctx: DatasetContext[Type]) extends ((Expression, Map[ColumnName, typed.TypedFF[Type]]) => typed.TypedFF[Type]) { self =>
+  import typeInfo._
 
-  val functionCallTypechecker = new FunctionCallTypechecker[Type] {
-    def typeParameterUniverse = self.typeParameterUniverse
+  val columns = ctx.schema
 
-    def implicitConversions(from: Type, to: Type) = self.implicitConversions(from, to)
+  val functionCallTypechecker = new FunctionCallTypechecker[Type](typeInfo)
 
-    def canBePassedToWithoutConversion(actual: Type, expected: Type) = self.canBePassedToWithoutConversion(actual, expected)
-  }
+  def apply(e: Expression, aliases: Map[ColumnName, typed.TypedFF[Type]]) = typecheck(e.removeParens, aliases)
 
-  def apply(e: Expression) = typecheck(e.removeParens)
-
-  private def typecheck(e: Expression): typed.TypedFF[Type] = e match {
+  private def typecheck(e: Expression, aliases: Map[ColumnName, typed.TypedFF[Type]]): typed.TypedFF[Type] = e match {
     case r@ColumnOrAliasRef(col) =>
       aliases.get(col) match {
         case Some(tree) =>
@@ -36,14 +31,19 @@ abstract class Typechecker[Type] extends (Expression => typed.TypedFF[Type]) { s
           }
       }
     case c@Cast(expr, targetTypeName) =>
-      val typedExpr = typecheck(expr)
-      val targetType = typeFor(targetTypeName, c.targetTypePosition)
-      val cast = getCastFunction(typedExpr.typ, targetType, c.targetTypePosition)
+      val typedExpr = typecheck(expr, aliases)
+      val targetType = typeFor(targetTypeName).getOrElse {
+        throw new UnknownType(targetTypeName, c.targetTypePosition)
+      }
+      val cast = getCastFunction(typedExpr.typ, targetType).getOrElse {
+        throw new ImpossibleCast(typeNameFor(typedExpr.typ), typeNameFor(targetType), c.targetTypePosition)
+      }
       typed.FunctionCall(cast, Seq(typedExpr)).positionedAt(c.position).functionNameAt(c.operatorPosition)
     case fc@FunctionCall(name, parameters) =>
-      val typedParameters = parameters.map(typecheck(_))
+      val typedParameters = parameters.map(typecheck(_, aliases))
 
-      val options = functionsWithArity(name, typedParameters.length, fc.functionNamePosition)
+      val options = functionsWithArity(name, typedParameters.length)
+      if(options.isEmpty) throw new NoSuchFunction(name, typedParameters.length, fc.functionNamePosition)
       functionCallTypechecker.resolveOverload(options, typedParameters) match {
         case Matched(f, cs) =>
           val realParameterList = (typedParameters, cs).zipped.map { (param, converter) =>
@@ -70,28 +70,4 @@ abstract class Typechecker[Type] extends (Expression => typed.TypedFF[Type]) { s
     case nl@NullLiteral() =>
       typed.NullLiteral(nullLiteralType).positionedAt(nl.position)
   }
-
-  def booleanLiteralType(b: Boolean): Type
-  def stringLiteralType(s: String): Type
-  def numberLiteralType(n: BigDecimal): Type
-  def nullLiteralType: Type
-
-  def isAggregate(function: MonomorphicFunction[Type]): Boolean
-
-  // throws NoSuchFunction exception
-  def functionsWithArity(name: FunctionName, n: Int, position: Position): Set[Function[Type]]
-
-  // throws UnknownType exception
-  def typeFor(name: TypeName, position: Position): Type
-
-  def typeNameFor(typ: Type): TypeName
-
-  // throws ImpoosibleCast exception
-  def getCastFunction(from: Type, to: Type, position: Position): MonomorphicFunction[Type]
-
-  def typeParameterUniverse: OrderedSet[Type]
-
-  def implicitConversions(from: Type, to: Type): Option[MonomorphicFunction[Type]]
-
-  def canBePassedToWithoutConversion(actual: Type, expected: Type): Boolean
 }

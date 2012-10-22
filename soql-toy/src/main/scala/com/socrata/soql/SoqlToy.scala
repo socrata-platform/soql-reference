@@ -39,7 +39,7 @@ object SoqlToy extends (Array[String] => Unit) {
 
   def apply(args: Array[String]) {
     menu()
-    val p = new Parser
+
     while(true) {
       val selection = readLine("> ")
       if(selection == null) return;
@@ -49,7 +49,7 @@ object SoqlToy extends (Array[String] => Unit) {
         try {
           val start = System.nanoTime()
 
-          val ast: Select = p.selectStatement(selection)
+          val ast: Select = new Parser().selectStatement(selection)
 
           val afterParse = System.nanoTime()
 
@@ -57,27 +57,28 @@ object SoqlToy extends (Array[String] => Unit) {
 
           val afterAliasAnalysis = System.nanoTime()
 
-          val e2e = aliasesUntyped.evaluationOrder.foldLeft(new SoQLTypechecker(OrderedMap.empty, datasetCtx.schema)) { (e2e, alias) =>
-            val r = e2e(aliasesUntyped.expressions(alias))
-            new SoQLTypechecker(e2e.aliases + (alias -> r), datasetCtx.schema)
+          val typechecker = new SoQLTypecheckerProvider().typechecker
+
+          val aliases = aliasesUntyped.evaluationOrder.foldLeft(OrderedMap.empty[ColumnName, typed.TypedFF[SoQLType]]) { (aliases, alias) =>
+            val r = typechecker(aliasesUntyped.expressions(alias), aliases)
+            aliases + (alias -> r)
           }
 
           val afterAliasTypechecking = System.nanoTime()
 
-          val aliases = e2e.aliases
-          val where = ast.where.map(e2e)
+          val where = ast.where.map(typechecker(_, aliases))
 
           val afterWhereTypechecking = System.nanoTime()
 
-          val groupBys = ast.groupBy.map(_.map(e2e))
+          val groupBys = ast.groupBy.map(_.map(typechecker(_, aliases)))
 
           val afterGroupByTypechecking = System.nanoTime()
 
-          val having = ast.having.map(e2e)
+          val having = ast.having.map(typechecker(_, aliases))
 
           val afterHavingTypechecking = System.nanoTime()
 
-          val orderBys = ast.orderBy.map { obs => obs.zip(obs.map { ob => e2e(ob.expression) }) }
+          val orderBys = ast.orderBy.map { obs => obs.zip(obs.map { ob => typechecker(ob.expression, aliases) }) }
 
           val afterOrderByTypechecking = System.nanoTime()
 
