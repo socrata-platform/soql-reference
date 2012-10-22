@@ -49,23 +49,46 @@ object SoqlToy extends (Array[String] => Unit) {
         menu()
       } else {
         try {
+          val start = System.nanoTime()
+
           val ast: Select = p.selectStatement(selection)
 
+          val afterParse = System.nanoTime()
+
           val aliasesUntyped = AliasAnalysis(ast.selection)
+
+          val afterAliasAnalysis = System.nanoTime()
 
           val e2e = aliasesUntyped.evaluationOrder.foldLeft(new EndToEnd(OrderedMap.empty, datasetCtx.columnTypes)) { (e2e, alias) =>
             val r = e2e(aliasesUntyped.expressions(alias))
             new EndToEnd(e2e.aliases + (alias -> r), datasetCtx.columnTypes)
           }
 
+          val afterAliasTypechecking = System.nanoTime()
+
           val aliases = e2e.aliases
           val where = ast.where.map(e2e)
+
+          val afterWhereTypechecking = System.nanoTime()
+
           val groupBys = ast.groupBy.map(_.map(e2e))
+
+          val afterGroupByTypechecking = System.nanoTime()
+
           val having = ast.having.map(e2e)
+
+          val afterHavingTypechecking = System.nanoTime()
+
           val orderBys = ast.orderBy.map { obs => obs.zip(obs.map { ob => e2e(ob.expression) }) }
+
+          val afterOrderByTypechecking = System.nanoTime()
 
           val aggregateChecker = new AggregateChecker[SoQLType]
           val hasAggregates = aggregateChecker(aliases.values.toSeq, where, groupBys, having, orderBys.getOrElse(Nil).map(_._2))
+
+          val afterAggregateChecking = System.nanoTime()
+
+          val end = System.nanoTime()
 
           println("Outputs:")
           for((k,v) <- aliases) {
@@ -90,6 +113,11 @@ object SoqlToy extends (Array[String] => Unit) {
             }
           }
           println("has aggregates: " + hasAggregates)
+          val timings = OrderedMap("parse" -> (afterParse - start), "alias" -> (afterAliasAnalysis - afterParse), "aliasType" -> (afterAliasTypechecking - afterAliasAnalysis), "where" -> (afterWhereTypechecking - afterAliasTypechecking), "groupBy" -> (afterGroupByTypechecking - afterWhereTypechecking), "having" -> (afterHavingTypechecking - afterGroupByTypechecking), "orderBy" -> (afterOrderByTypechecking - afterHavingTypechecking), "aggregate" -> (afterAggregateChecking - afterOrderByTypechecking))
+          for((k, v) <- timings) {
+            println("after " + k + ": " + (v / 1000000))
+          }
+          println("Total analysis time: " + ((end - start) / 1000000) + "ms")
         } catch {
           case e: LexerError => println(e.getMessage)
           case e: BadParseException => println(e.getMessage)
