@@ -172,7 +172,7 @@ object AliasAnalysis extends AliasAnalysis {
         visited += n
         val newSeen = seen + n
         for(m <- graph.getOrElse(n, Set.empty)) {
-          if(seen contains n) throw CircularAliasDefinition(m.column, m.position)
+          if(seen contains m.column) throw CircularAliasDefinition(m.column, m.position)
           visit(m.column, newSeen)
         }
         result += n

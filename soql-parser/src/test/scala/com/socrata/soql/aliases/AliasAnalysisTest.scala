@@ -11,7 +11,7 @@ import com.socrata.soql.{SchemalessDatasetContext, UntypedDatasetContext}
 import com.socrata.soql.names.ColumnName
 import com.socrata.soql.ast._
 import com.socrata.collection.{OrderedMap, OrderedSet}
-import com.socrata.soql.exceptions.{NoSuchColumn, RepeatedException, DuplicateAlias}
+import com.socrata.soql.exceptions.{CircularAliasDefinition, NoSuchColumn, RepeatedException, DuplicateAlias}
 
 class AliasAnalysisTest extends WordSpec with MustMatchers {
   def columnName(name: String)(implicit ctx: SchemalessDatasetContext) =
@@ -204,6 +204,47 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
 
     "reject assigning to a straight identifier" in {
       evaluating { AliasAnalysis.assignImplicit(Seq(se("q"))) } must produce[AssertionError]
+    }
+  }
+
+  "ordering aliases for evaluation" should {
+    implicit val ctx = fixtureContext()
+
+    "accept directly-circular aliases with simple expressions" in {
+      AliasAnalysis.orderAliasesForEvaluation(OrderedMap(ColumnName("x") -> expr("x"))) must equal (Seq(ColumnName("x")))
+    }
+
+    "reject directly-circular aliases with complex expressions" in {
+      evaluating { AliasAnalysis.orderAliasesForEvaluation(OrderedMap(ColumnName("x") -> expr("x + x"))) } must produce[CircularAliasDefinition]
+    }
+
+    "reject indirectly-circular aliases" in {
+      val aliasMap = OrderedMap(
+        ColumnName("x") -> expr("y * 2"),
+        ColumnName("b") -> expr("x+1"),
+        ColumnName("z") -> expr("5"),
+        ColumnName("y") -> expr("a / b")
+      )
+      evaluating { AliasAnalysis.orderAliasesForEvaluation(aliasMap) } must produce[CircularAliasDefinition]
+    }
+
+    "produce a valid linearization" in {
+      val aliasMap = OrderedMap(
+        ColumnName("a") -> expr("b + c"),
+        ColumnName("z") -> expr("5"),
+        ColumnName("b") -> expr("7"),
+        ColumnName("o") -> expr("b * d"),
+        ColumnName("y") -> expr("a / b"),
+        ColumnName("d") -> expr("sqrt(z)")
+      )
+      val order = AliasAnalysis.orderAliasesForEvaluation(aliasMap)
+      order.sorted must equal (Seq("a","b","d","o","y","z").map(ColumnName(_)))
+      order.indexOf(ColumnName("y")) must be > (order.indexOf(ColumnName("a")))
+      order.indexOf(ColumnName("y")) must be > (order.indexOf(ColumnName("b")))
+      order.indexOf(ColumnName("a")) must be > (order.indexOf(ColumnName("b")))
+      order.indexOf(ColumnName("d")) must be > (order.indexOf(ColumnName("z")))
+      order.indexOf(ColumnName("o")) must be > (order.indexOf(ColumnName("b")))
+      order.indexOf(ColumnName("o")) must be > (order.indexOf(ColumnName("d")))
     }
   }
 
