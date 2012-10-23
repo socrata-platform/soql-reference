@@ -4,9 +4,8 @@ import scala.util.control.Breaks._
 
 import com.ibm.icu.util.ULocale
 
-import com.socrata.soql.names.ColumnName
+import com.socrata.soql.exceptions.SoQLException
 import com.socrata.soql.parsing.Parser
-import com.socrata.collection.OrderedSet
 
 object ParserToy extends (Array[String] => Unit) {
   def fail(msg: String) = {

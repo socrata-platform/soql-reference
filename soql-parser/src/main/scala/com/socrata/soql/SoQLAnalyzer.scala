@@ -201,3 +201,27 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type]) {
       offset)
   }
 }
+
+object SoQLAnalyzer extends App {
+  import types._
+  implicit val datasetCtx = new DatasetContext[SoQLType] {
+    private implicit def ctx = this
+    val locale = com.ibm.icu.util.ULocale.ENGLISH
+    val schema = com.socrata.collection.OrderedMap(
+      ColumnName(":id") -> SoQLNumber,
+      ColumnName(":updated_at") -> SoQLFixedTimestamp,
+      ColumnName(":created_at") -> SoQLFixedTimestamp,
+      ColumnName("name_last") -> SoQLText,
+      ColumnName("name_first") -> SoQLText,
+      ColumnName("visits") -> SoQLNumber,
+      ColumnName("last_visit") -> SoQLFixedTimestamp,
+      ColumnName("address") -> SoQLLocation,
+      ColumnName("balance") -> SoQLMoney
+    )
+  }
+
+  val analyzer = new SoQLAnalyzer(SoQLTypeInfo)
+  println(analyzer.analyzeFullQuery("select name_first || ' ' || name_last as name, sum(visits) where last_visit between '2011-01-01T00:00:00Z' and '2012-01-01T00:00:00Z' group by name order by sum_visits desc limit 5"))
+  println(analyzer.analyzeSplitQuery(None, None, None, None, None, None, None))
+  println(analyzer.analyzeSplitQuery(None, None, Some("name_last || ' ' || name_first"), None, Some("max(visits) desc"), None, None))
+}

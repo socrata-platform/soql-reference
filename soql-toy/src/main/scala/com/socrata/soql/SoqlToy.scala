@@ -1,12 +1,8 @@
 package com.socrata.soql
 
-import com.socrata.soql.aggregates.AggregateChecker
-import com.socrata.soql.aliases.AliasAnalysis
-import com.socrata.soql.ast.Select
+import com.socrata.soql.exceptions.SoQLException
 import com.socrata.soql.types._
 import com.socrata.soql.names.ColumnName
-import com.socrata.soql.parsing.Parser
-import com.socrata.collection.OrderedMap
 
 object SoqlToy extends (Array[String] => Unit) {
   def fail(msg: String) = {

@@ -1,6 +1,5 @@
 package com.socrata.soql.typechecker
 
-import com.socrata.collection.OrderedSet
 import com.socrata.soql.functions._
 import com.socrata.soql.typed.Typable
 
@@ -19,7 +18,7 @@ case class Ambiguous[Type](candidates: Map[MonomorphicFunction[Type], Conversion
 case class Matched[Type](function: MonomorphicFunction[Type], conversions: ConversionSet[Type]) extends OverloadResult[Type]
 
 sealed abstract class CandidateEvaluation[Type]
-case class TypeMismatch[Type](expected: Set[Type], found: Type, idx: Int) extends CandidateEvaluation[Type] {
+case class TypeMismatchFailure[Type](expected: Set[Type], found: Type, idx: Int) extends CandidateEvaluation[Type] {
   require(!expected.contains(found), "type mismatch but found in expected")
 }
 case class UnificationFailure[Type](found: Type, idx: Int) extends CandidateEvaluation[Type]
@@ -98,7 +97,7 @@ class FunctionCallTypechecker[Type](typeInfo: FunctionTypeInfo[Type]) {
             assert(canBePassedToWithoutConversion(value.typ, f.parameters(0)), "conversion does not take the type to be converted")
           case None =>
             log.debug("Type mismatch, and there is no usable implicit conversion from {} to {}", value.typ:Any, expectedTyp:Any)
-            return TypeMismatch(Set(expectedTyp), value.typ, idx)
+            return TypeMismatchFailure(Set(expectedTyp), value.typ, idx)
         }
         maybeConv
       }

@@ -4,6 +4,7 @@ import com.socrata.soql.aliases._
 
 import com.socrata.soql.names.ColumnName
 import com.socrata.soql.parsing.Parser
+import com.socrata.soql.exceptions.SoQLException
 
 object AliasToy extends (Array[String] => Unit) {
   def fail(msg: String) = {

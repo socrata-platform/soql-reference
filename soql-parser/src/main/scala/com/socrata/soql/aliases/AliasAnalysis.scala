@@ -7,6 +7,7 @@ import com.socrata.soql.ast._
 import com.socrata.soql.UntypedDatasetContext
 import com.socrata.soql.names._
 import com.socrata.collection.{OrderedMap, OrderedSet}
+import com.socrata.soql.exceptions.{CircularAliasDefinition, DuplicateAlias, NoSuchColumn, RepeatedException}
 
 trait AliasAnalysis {
   case class Analysis(expressions: OrderedMap[ColumnName, Expression], evaluationOrder: Seq[ColumnName])
@@ -21,10 +22,10 @@ object AliasAnalysis extends AliasAnalysis {
     * @return an Analysis object which contains an ordered map from each alias to its expansion
     *         and a list of the aliases in the order they should be typechecked/evaluated.
     *
-    * @throws RepeatedExceptionException if the same column is excepted more than once
-    * @throws NoSuchColumnException if a column not on the dataset is excepted
-    * @throws DuplicateAliasException if duplicate aliases are detected
-    * @throws CircularAliasDefinitionException if an alias is defined in terms of itself
+    * @throws com.socrata.soql.exceptions.RepeatedException if the same column is excepted more than once
+    * @throws com.socrata.soql.exceptions.NoSuchColumn if a column not on the dataset is excepted
+    * @throws com.socrata.soql.exceptions.DuplicateAlias if duplicate aliases are detected
+    * @throws com.socrata.soql.exceptions.CircularAliasDefinition if an alias is defined in terms of itself
     */
   def apply(selection: Selection)(implicit ctx: UntypedDatasetContext): Analysis = {
     log.debug("Input: {}", selection)
@@ -44,8 +45,8 @@ object AliasAnalysis extends AliasAnalysis {
    * @param selection A selection-list to desugar.
    * @return The same list with any stars expanded
    *
-   * @throws RepeatedExceptionException if the same column is excepted more than once
-   * @throws NoSuchColumnException if a column not on the dataset is excepted
+   * @throws com.socrata.soql.exceptions.RepeatedException if the same column is excepted more than once
+   * @throws com.socrata.soql.exceptions.NoSuchColumn if a column not on the dataset is excepted
    */
   def expandSelection(selection: Selection)(implicit ctx: UntypedDatasetContext): Seq[SelectedExpression] = {
     val Selection(systemStar, userStar, expressions) = selection
@@ -66,15 +67,15 @@ object AliasAnalysis extends AliasAnalysis {
    * @return A list of [[com.socrata.soql.ast.SelectedExpression]]s equivalent to
    *         this star, in the same order as they appear in `columns`
    *
-   * @throws RepeatedExceptionException if the same column is EXCEPTed more than once
-   * @throws NoSuchColumnException if a column not on the dataset is excepted.
+   * @throws com.socrata.soql.exceptions.RepeatedException if the same column is EXCEPTed more than once
+   * @throws com.socrata.soql.exceptions.NoSuchColumn if a column not on the dataset is excepted.
    */
   def processStar(starSelection: StarSelection, columns: OrderedSet[ColumnName])(implicit ctx: UntypedDatasetContext): Seq[SelectedExpression] = {
     val StarSelection(exceptions) = starSelection
     val exceptedColumnNames = new mutable.HashSet[ColumnName]
     for((column, position) <- exceptions) {
-      if(exceptedColumnNames.contains(column)) throw new RepeatedExceptionException(column, position)
-      if(!columns.contains(column)) throw new NoSuchColumnException(column, position)
+      if(exceptedColumnNames.contains(column)) throw RepeatedException(column, position)
+      if(!columns.contains(column)) throw NoSuchColumn(column, position)
       exceptedColumnNames += column
     }
     for {
@@ -89,18 +90,18 @@ object AliasAnalysis extends AliasAnalysis {
    *
    * @note This relies on any columns from :* and/or * appearing first
    * in the input sequence in order to ensure that the position of any
-   * [[com.socrata.soql.aliases.DuplicateAliasException]] is correct.
+   * [[com.socrata.soql.exceptions.DuplicateAlias]] is correct.
    *
    * @return A new selection list in the same order but with semi-explicit
    *         aliases assigned.
-   * @throws DuplicateAliasException if a duplicate alias is detected
+   * @throws com.socrata.soql.exceptions.DuplicateAlias if a duplicate alias is detected
    */
   def assignExplicitAndSemiExplicit(selections: Seq[SelectedExpression])(implicit ctx: UntypedDatasetContext): Seq[SelectedExpression] = {
     selections.foldLeft((Set.empty[ColumnName], Vector.empty[SelectedExpression])) { (results, selection) =>
       val (assigned, mapped) = results
 
       def register(alias: ColumnName, position: Position, expr: Expression) = {
-        if(assigned.contains(alias)) throw new DuplicateAliasException(alias, position)
+        if(assigned.contains(alias)) throw DuplicateAlias(alias, position)
         (assigned + alias, mapped :+ SelectedExpression(expr, Some((alias, position))))
       }
 
@@ -171,7 +172,7 @@ object AliasAnalysis extends AliasAnalysis {
         visited += n
         val newSeen = seen + n
         for(m <- graph.getOrElse(n, Set.empty)) {
-          if(seen contains n) throw new CircularAliasDefinitionException(m.column, m.position)
+          if(seen contains n) throw CircularAliasDefinition(m.column, m.position)
           visit(m.column, newSeen)
         }
         result += n
@@ -185,7 +186,8 @@ object AliasAnalysis extends AliasAnalysis {
     * evaluated, based on their references to other aliases.
     *
     * @return the aliases in evaluation order
-    * @throws CircularAliasDefinitionException if an alias's expansion refers to itself, even indirectly. */
+    * @throws com.socrata.soql.exceptions.CircularAliasDefinition if an alias's expansion refers to itself,
+    *                                                             even indirectly. */
   def orderAliasesForEvaluation(in: OrderedMap[ColumnName, Expression])(implicit ctx: UntypedDatasetContext): Seq[ColumnName] = {
     // We'll divide all the aliases up into two categories -- aliases which refer
     // to a column of the same name ("selfRefs") and everything else ("otherRefs").

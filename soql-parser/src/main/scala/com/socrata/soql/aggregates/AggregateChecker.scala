@@ -1,6 +1,7 @@
 package com.socrata.soql.aggregates
 
 import com.socrata.soql.typed._
+import com.socrata.soql.exceptions.{AggregateInUngroupedContext, ColumnNotInGroupBys}
 
 class AggregateChecker[Type] {
   type Expr = TypedFF[Type]
@@ -51,7 +52,7 @@ class AggregateChecker[Type] {
   def checkPregroupExpression(clause: String, e: Expr) {
     e match {
       case FunctionCall(function, _) if function.isAggregate =>
-        throw new AggregateInUngroupedContext(function.name, clause, e.position)
+        throw AggregateInUngroupedContext(function.name, clause, e.position)
       case FunctionCall(_, params) =>
         params.foreach(checkPregroupExpression(clause, _))
       case _: ColumnRef[_] | _: TypedLiteral[_] =>
@@ -69,7 +70,7 @@ class AggregateChecker[Type] {
         case _: TypedLiteral[_] =>
           // ok, this is always good
         case col: ColumnRef[_] =>
-          throw new ColumnNotInGroupBys(col.column, col.position)
+          throw ColumnNotInGroupBys(col.column, col.position)
       }
     }
   }

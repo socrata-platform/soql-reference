@@ -6,6 +6,7 @@ import org.scalatest.matchers.MustMatchers
 import com.socrata.soql.ast._
 import com.socrata.soql.names.ColumnName
 import com.socrata.soql.SchemalessDatasetContext
+import com.socrata.soql.exceptions.BadParse
 
 class ParserTest extends WordSpec with MustMatchers {
   implicit val ctx = new SchemalessDatasetContext {
@@ -22,7 +23,7 @@ class ParserTest extends WordSpec with MustMatchers {
       p.expression(soql)
       fail("Unexpected success")
     } catch {
-      case e: ParseException => e.message must equal (expectedMsg)
+      case e: BadParse => e.message must equal (expectedMsg)
     }
   }
 

@@ -4,6 +4,7 @@ import org.scalatest._
 import org.scalatest.matchers.MustMatchers
 
 import com.socrata.soql.tokens._
+import com.socrata.soql.exceptions.UnterminatedString
 
 class LexerTest extends WordSpec with MustMatchers {
   def lexTest(s: String, ts: (Token, Int, Int, Int)*) = {

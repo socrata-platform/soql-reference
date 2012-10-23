@@ -4,6 +4,13 @@ import scala.util.parsing.input.Position;
 
 import com.socrata.soql.tokens.*;
 
+import com.socrata.soql.exceptions.UnexpectedEscape;
+import com.socrata.soql.exceptions.BadUnicodeEscapeCharacter;
+import com.socrata.soql.exceptions.UnicodeCharacterOutOfRange;
+import com.socrata.soql.exceptions.UnexpectedCharacter;
+import com.socrata.soql.exceptions.UnexpectedEOF;
+import com.socrata.soql.exceptions.UnterminatedString;
+
 %%
 
 %class Lexer
@@ -14,7 +21,6 @@ import com.socrata.soql.tokens.*;
 %line
 %column
 %caseless
-%yylexthrow LexerError
 
 %{
   String sourceString;
@@ -45,7 +51,7 @@ import com.socrata.soql.tokens.*;
     return t;
   }
 
-  public java.util.List<Token> all() throws java.io.IOException, LexerError {
+  public java.util.List<Token> all() throws java.io.IOException {
     java.util.ArrayList<Token> results = new java.util.ArrayList<Token>();
     for(Token t = yylex(); t != null; t = yylex()) results.add(t);
     return results;
@@ -185,7 +191,7 @@ QuotedSystemIdentifier = ":" ("-" | [:jletterdigit:])+
     yybegin(DOUBLEQUOTESTRING);
   }
   [0-9a-fA-F]{1,3} { yybegin(PARTIALESCAPEDUNICODE); }
-  (.|\n)  { throw new BadUnicodeEscape(pos()); }
+  (.|\n)  { throw new BadUnicodeEscapeCharacter(yytext().charAt(0), pos()); }
   <<EOF>> { throw new UnexpectedEOF(pos()); }
 }
 
@@ -202,12 +208,12 @@ QuotedSystemIdentifier = ":" ("-" | [:jletterdigit:])+
   [0-9a-fA-F]{6} { throw new UnicodeCharacterOutOfRange(dehex(yytext()), pos()); }
 
   [0-9a-fA-F]{1,5} { yybegin(PARTIALESCAPEDUNICODE); }
-  (.|\n)  { throw new BadUnicodeEscape(pos()); }
+  (.|\n)  { throw new BadUnicodeEscapeCharacter(yytext().charAt(0), pos()); }
   <<EOF>> { throw new UnexpectedEOF(pos()); }
 }
 
 <PARTIALESCAPEDUNICODE> {
-  (.|\n)  { throw new BadUnicodeEscape(pos()); }
+  (.|\n)  { throw new BadUnicodeEscapeCharacter(yytext().charAt(0), pos()); }
   <<EOF>> { throw new UnexpectedEOF(pos()); }
 }
 

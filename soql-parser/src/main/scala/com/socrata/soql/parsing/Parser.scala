@@ -1,9 +1,10 @@
 package com.socrata.soql.parsing
 
 import scala.util.parsing.combinator.{Parsers, PackratParsers}
-import util.parsing.input.{Position, Reader, NoPosition}
+import util.parsing.input.Position
 
 import com.socrata.soql.SchemalessDatasetContext
+import com.socrata.soql.exceptions.BadParse
 import com.socrata.soql.names._
 import com.socrata.soql.tokens
 import com.socrata.soql.tokens._
@@ -29,7 +30,7 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
   private def parseFull[T](parser: Parser[T], soql: String): T = {
     phrase(parser <~ eof)(new LexerReader(soql)) match {
       case Success(result, _) => result
-      case Failure(msg, next) => throw new ParseException(msg, next.pos)
+      case Failure(msg, next) => throw BadParse(msg, next.pos)
     }
   }
 
@@ -311,131 +312,3 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
 
   def expr = disjunction | failure(errors.missingExpr)
 }
-
-object Parser extends App {
-  implicit val ctx = new SchemalessDatasetContext {
-    val locale = com.ibm.icu.util.ULocale.ENGLISH
-  }
-  def p = new Parser
-
-  def show[T](x: => T) {
-    try {
-      println(x)
-    } catch {
-      case l: LexerError =>
-        val p = l.position
-        println("[" + p.line + "." + p.column + "] failure: "+ l.getClass.getSimpleName)
-        println()
-        println(p.longString)
-    }
-  }
-
-  try {
-    show(new LexerReader("").toStream.force)
-    show(new LexerReader("- -1*a(1,b)*(3)==2 or x between 1 and 3").toStream.force)
-    show(p.expression("- -1*a(1,b)*(3)==2 or x not between 1 and 3"))
-    show(p.expression("x between a is null and a between 5 and 6 or f(x x"))
-    show(p.expression("x between a"))
-    show(p.expression("x is"))
-    show(p.expression("x is not 5"))
-    show(p.expression("x is x"))
-    show(p.expression("x is not gnu"))
-    show(p.expression("x is not"))
-    show(p.expression("x between"))
-    show(p.expression("x is not between"))
-    show(p.expression("x not 5"))
-    show(p.expression("x between"))
-    show(p.expression("x not between"))
-    show(p.expression("not"))
-    show(p.expression("x x"))
-    show(p.expression("étäøîn"))
-    show(p.expression("_abc + -- hello world!\n123 -- gnu"))
-    show(p.expression("\"gnu\""))
-    show(p.expression("\"\\U01D000\""))
-    show(p.expression("* 8"))
-    show(p.expression(""))
-    show(p.orderings("a,b desc,c + d/e"))
-    show(p.orderings(""))
-    show(p.orderings("a,"))
-    show(p.orderings("a ascdesc"))
-    show(p.selection(""))
-    show(p.selection("a,b,c,"))
-    show(p.selection("a,b as,c"))
-    show(p.selection("a,b as x,c"))
-    show(p.selection("a,b as x,c as y"))
-    show(p.selection("a,b as x,c as"))
-    show(p.selectStatement(""))
-    show(p.selectStatement("x"))
-    show(p.selectStatement("select"))
-    show(p.selectStatement("select a, b where"))
-    show(p.selectStatement("select a, b group"))
-    show(p.selectStatement("select a, b order"))
-    show(p.selectStatement("select a, b having"))
-    show(p.selectStatement("select * where x group by y having z order by w"))
-    show(p.selectStatement("select *"))
-    show(p.selectStatement("select *("))
-    show(p.selectStatement("select *(except"))
-    show(p.selectStatement("select *(except a"))
-    show(p.selectStatement("select *(except a)"))
-    show(p.selectStatement("select *(except a,"))
-    show(p.selectStatement("select *(except a,b)"))
-    show(p.expression("a"))
-    show(p.expression("a."))
-    show(p.expression("a.b"))
-    show(p.expression("a.b."))
-    show(p.expression("a[b"))
-    show(p.expression("a[b]"))
-    show(p.expression("a[b]."))
-    show(p.expression("a[b].c"))
-    show(p.expression("a[b].c[d]"))
-    show(p.orderings("x, y asc null last"))
-    show(p.selectStatement("select * order by x, y gnu,"))
-    show(p.expression("-a :: b :: c"))
-    show(p.selectStatement("select * order by x, y limit 5"))
-    show(p.limit("12e1"))
-    show(p.selectStatement("SELECT x AS `where`, y AS `hither-thither`"))
-    show(p.identifier(new LexerReader("__gnu__")))
-    show(p.expression("a(1) || 'blah'"))
-    show(p.expression("`hello world`"))
-    show(p.selectStatement("select x"))
-
-    show(p.expression("count(__gnu__)+a+b"))
-    show(p.expression("count(__gnu__)+a+b").asInstanceOf[Parsers#Success[Expression]].result.toSyntheticIdentifierBase)
-    show(p.expression("count(a) == 'hello, world!  This is a smiling gnu.'").asInstanceOf[Parsers#Success[Expression]].result.toSyntheticIdentifierBase)
-    show(p.expression("count(a) == `hello-world`").asInstanceOf[Parsers#Success[Expression]].result.toSyntheticIdentifierBase)
-    show(p.expression("`-world` + 2").asInstanceOf[Parsers#Success[Expression]].result.toSyntheticIdentifierBase)
-    show(p.expression("world is not null").asInstanceOf[Parsers#Success[Expression]].result.toSyntheticIdentifierBase)
-    show(p.expression("1 + `-world` = `a-` - 1").asInstanceOf[Parsers#Success[Expression]].result.toSyntheticIdentifierBase)
-    show(p.expression(":id - 1").asInstanceOf[Parsers#Success[Expression]].result.toSyntheticIdentifierBase)
-    show(p.expression("count(a) == 'hello, world!  This is a smiling gnu.'"))
-    show(p.selectStatement("select x as :x"))
-
-    show(p.selectStatement("select :*"))
-    show(p.selectStatement("select *"))
-    show(p.selectStatement("select :*,"))
-    show(p.selectStatement("select :*,a"))
-    show(p.selectStatement("select *,"))
-    show(p.selectStatement("select *,a"))
-    show(p.selectStatement("select :*,*"))
-    show(p.selectStatement("select :*,*,"))
-    show(p.selectStatement("select :*,*,a"))
-    show(p.selectStatement("select :*(except a)"))
-    show(p.selectStatement("select :*(except :a)"))
-    show(p.selectStatement("select *(except :a)"))
-    show(p.selectStatement("select *(except a)"))
-  } catch {
-    case e: Exception =>
-      e.printStackTrace()
-  }
-}
-
-/*
-
-unary_!
-* /
-+ -
-< <= == >= > IS IS_NOT
-&&
-||
-
-*/
