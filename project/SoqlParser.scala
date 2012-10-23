@@ -18,8 +18,11 @@ object SoqlParser {
       className.setAccessible(true)
       Seq(new File(outputDir.get(task).asInstanceOf[File], className.get(task).asInstanceOf[String] + ".java"))
     },
-    libraryDependencies ++= Seq(
-      "com.ibm.icu" % "icu4j" % "49.1"
-    )
+    libraryDependencies <++= (slf4jVersion) { slf4jVersion =>
+      Seq(
+        "com.ibm.icu" % "icu4j" % "49.1",
+        "org.slf4j" % "slf4j-simple" % slf4jVersion % "test"
+      )
+    }
   )
 }
