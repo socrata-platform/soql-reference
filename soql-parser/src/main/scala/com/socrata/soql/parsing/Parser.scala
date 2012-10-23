@@ -141,6 +141,7 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
   def ordering = expr ~ opt(ascDesc) ~ opt(nullPlacement) ^^ {
     case e ~ None ~ None => OrderBy(e, true, true)
     case e ~ Some(order) ~ None => OrderBy(e, order == ASC(), true)
+    case e ~ None ~ Some(firstLast) => OrderBy(e, true, firstLast == LAST())
     case e ~ Some(order) ~ Some(firstLast) => OrderBy(e, order == ASC(), firstLast == LAST())
   }
 
