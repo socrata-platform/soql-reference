@@ -1,13 +1,10 @@
 package com.socrata.soql.types
 
 import com.socrata.soql.names._
-import com.socrata.soql.DatasetContext
 import com.socrata.soql.functions._
 import com.socrata.soql.typechecker._
 
-class SoQLTypecheckerProvider(implicit ctx: DatasetContext[SoQLType]) extends TypeInfo[SoQLType] {
-  def typechecker = new Typechecker[SoQLType](this)
-
+object SoQLTypeInfo extends TypeInfo[SoQLType] {
   def booleanLiteralType(b: Boolean) = SoQLBoolean
 
   def stringLiteralType(s: String) = SoQLTextLiteral(s)

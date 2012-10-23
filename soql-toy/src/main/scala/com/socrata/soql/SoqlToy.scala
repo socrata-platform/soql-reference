@@ -40,6 +40,8 @@ object SoqlToy extends (Array[String] => Unit) {
   def apply(args: Array[String]) {
     menu()
 
+    val analyzer = new SoQLAnalyzer(SoQLTypeInfo)
+
     while(true) {
       val selection = readLine("> ")
       if(selection == null) return;
@@ -47,76 +49,31 @@ object SoqlToy extends (Array[String] => Unit) {
         menu()
       } else {
         try {
-          val start = System.nanoTime()
-
-          val ast: Select = new Parser().selectStatement(selection)
-
-          val afterParse = System.nanoTime()
-
-          val aliasesUntyped = AliasAnalysis(ast.selection)
-
-          val afterAliasAnalysis = System.nanoTime()
-
-          val typechecker = new SoQLTypecheckerProvider().typechecker
-
-          val aliases = aliasesUntyped.evaluationOrder.foldLeft(OrderedMap.empty[ColumnName, typed.TypedFF[SoQLType]]) { (aliases, alias) =>
-            val r = typechecker(aliasesUntyped.expressions(alias), aliases)
-            aliases + (alias -> r)
-          }
-
-          val afterAliasTypechecking = System.nanoTime()
-
-          val where = ast.where.map(typechecker(_, aliases))
-
-          val afterWhereTypechecking = System.nanoTime()
-
-          val groupBys = ast.groupBy.map(_.map(typechecker(_, aliases)))
-
-          val afterGroupByTypechecking = System.nanoTime()
-
-          val having = ast.having.map(typechecker(_, aliases))
-
-          val afterHavingTypechecking = System.nanoTime()
-
-          val orderBys = ast.orderBy.map { obs => obs.zip(obs.map { ob => typechecker(ob.expression, aliases) }) }
-
-          val afterOrderByTypechecking = System.nanoTime()
-
-          val aggregateChecker = new AggregateChecker[SoQLType]
-          val hasAggregates = aggregateChecker(aliases.values.toSeq, where, groupBys, having, orderBys.getOrElse(Nil).map(_._2))
-
-          val afterAggregateChecking = System.nanoTime()
-
-          val end = System.nanoTime()
+          val analysis = analyzer.analyzeFullQuery(selection)
 
           println("Outputs:")
-          for((k,v) <- aliases) {
+          for((k,v) <- analysis.selection) {
             println("  " + k + ("." * math.max(1, 15 - k.toString.length)) + v)
           }
-          where.foreach { w =>
+          analysis.where.foreach { w =>
             println("where:\n  " + w)
           }
-          groupBys.foreach { gbs =>
+          analysis.groupBy.foreach { gbs =>
             println("group bys:")
             for(gb <- gbs) {
               println("  " + gb)
             }
           }
-          having.foreach { h =>
+          analysis.having.foreach { h =>
             println("having:\n  " + h)
           }
-          orderBys.map { obs =>
+          analysis.orderBy.map { obs =>
             println("order bys:")
-            for((ob, e) <- obs) {
-              println("  " + e + " (" + (if(ob.ascending) "ascending" else "descending") + ", nulls " + (if(ob.nullLast) "last" else "first") + ")")
+            for(ob <- obs) {
+              println("  " + ob.expression + " (" + (if(ob.ascending) "ascending" else "descending") + ", nulls " + (if(ob.nullLast) "last" else "first") + ")")
             }
           }
-          println("has aggregates: " + hasAggregates)
-          val timings = OrderedMap("parse" -> (afterParse - start), "alias" -> (afterAliasAnalysis - afterParse), "aliasType" -> (afterAliasTypechecking - afterAliasAnalysis), "where" -> (afterWhereTypechecking - afterAliasTypechecking), "groupBy" -> (afterGroupByTypechecking - afterWhereTypechecking), "having" -> (afterHavingTypechecking - afterGroupByTypechecking), "orderBy" -> (afterOrderByTypechecking - afterHavingTypechecking), "aggregate" -> (afterAggregateChecking - afterOrderByTypechecking))
-          for((k, v) <- timings) {
-            println("after " + k + ": " + (v / 1000000))
-          }
-          println("Total analysis time: " + ((end - start) / 1000000) + "ms")
+          println("has aggregates: " + analysis.isGrouped)
         } catch {
           case e: SoQLException => println(e.getMessage)
         }

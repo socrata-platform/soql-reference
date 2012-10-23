@@ -11,13 +11,15 @@ import com.socrata.soql.functions.{Function, MonomorphicFunction}
 class Typechecker[Type](typeInfo: TypeInfo[Type])(implicit ctx: DatasetContext[Type]) extends ((Expression, Map[ColumnName, typed.TypedFF[Type]]) => typed.TypedFF[Type]) { self =>
   import typeInfo._
 
+  type Expr = typed.TypedFF[Type]
+
   val columns = ctx.schema
 
-  val functionCallTypechecker = new FunctionCallTypechecker[Type](typeInfo)
+  val functionCallTypechecker = new FunctionCallTypechecker(typeInfo)
 
-  def apply(e: Expression, aliases: Map[ColumnName, typed.TypedFF[Type]]) = typecheck(e.removeParens, aliases)
+  def apply(e: Expression, aliases: Map[ColumnName, Expr]) = typecheck(e.removeParens, aliases)
 
-  private def typecheck(e: Expression, aliases: Map[ColumnName, typed.TypedFF[Type]]): typed.TypedFF[Type] = e match {
+  private def typecheck(e: Expression, aliases: Map[ColumnName, Expr]): Expr = e match {
     case r@ColumnOrAliasRef(col) =>
       aliases.get(col) match {
         case Some(tree) =>

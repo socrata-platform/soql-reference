@@ -18,13 +18,13 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
    *               * ENDPOINTS *
    *               *************
    */
-  def selection(soql: String) = parseFull(selectList, soql)
-  def expression(soql: String) = parseFull(expr, soql)
-  def orderings(soql: String) = parseFull(orderingList, soql)
-  def groupBys(soql: String) = parseFull(groupByList, soql)
-  def selectStatement(soql: String) = parseFull(fullSelect, soql)
-  def limit(soql: String) = parseFull(integer, soql)
-  def offset(soql: String) = parseFull(integer, soql)
+  def selection(soql: String): Selection = parseFull(selectList, soql)
+  def expression(soql: String): Expression = parseFull(expr, soql)
+  def orderings(soql: String): Seq[OrderBy] = parseFull(orderingList, soql)
+  def groupBys(soql: String): Seq[Expression] = parseFull(groupByList, soql)
+  def selectStatement(soql: String): Select = parseFull(fullSelect, soql)
+  def limit(soql: String): BigInt = parseFull(integer, soql)
+  def offset(soql: String): BigInt = parseFull(integer, soql)
 
   private def parseFull[T](parser: Parser[T], soql: String): T = {
     phrase(parser <~ eof)(new LexerReader(soql)) match {

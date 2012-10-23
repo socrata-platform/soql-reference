@@ -6,7 +6,7 @@ import scala.runtime.ScalaRunTime
 import com.socrata.soql.names.ColumnName
 import com.socrata.soql.functions.MonomorphicFunction
 
-/** Typed Function Form -- fully expanded and with types ascripted at each node. */
+/** Typed Function Form -- fully expanded and with types ascribed at each node. */
 sealed abstract class TypedFF[+Type] extends Product with Typable[Type] {
   var position: Position = NoPosition
   protected def asString: String
