@@ -15,6 +15,10 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type]) {
   def ns2ms(ns: Long) = ns / 1000000
   val aggregateChecker = new AggregateChecker[Type]
 
+  /** Turn a SoQL SELECT statement into a typed `Analysis` object.
+    * @param query The SELECT to parse and analyze
+    * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
+    * @return The analysis of the query */
   def analyzeFullQuery(query: String)(implicit ctx: DatasetContext[Type]): Analysis = {
     log.debug("Analyzing full query {}", query)
     val start = System.nanoTime()
@@ -25,6 +29,21 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type]) {
     analyzeWithSelection(parsed)
   }
 
+  /** Turn framents of a SoQL SELECT statement into a typed `Analysis` object.  If no `selection` is provided,
+    * one is generated based on whether the rest of the parameters indicate an aggregate query or not.  If it
+    * is not an aggregate query, a selection list equivalent to `*` (i.e., every non-system column) is generated.
+    * If it is an aggregate query, a selection list made up of the expressions from `groupBy` (if provided) together
+    * with "`count(*)`" is generated.
+    *
+    * @param selection A selection list.
+    * @param where An expression to be used as the query's WHERE clause.
+    * @param groupBy A comma-separated list of expressions to be used as the query's GROUP BY cluase.
+    * @param having An expression to be used as the query's HAVING clause.
+    * @param orderBy A comma-separated list of expressions and sort-order specifiers to be uesd as the query's ORDER BY clause.
+    * @param limit A non-negative integer to be used as the query's LIMIT parameter
+    * @param offset A non-negative integer to be used as the query's OFFSET parameter
+    * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous.
+    * @return The analysis of the query. */
   def analyzeSplitQuery(selection: Option[String],
                         where: Option[String],
                         groupBy: Option[String],
