@@ -3,7 +3,7 @@ package com.socrata.collection
 import collection.immutable.{MapLike, HashMap}
 import collection.generic.{CanBuildFrom, ImmutableMapFactory}
 
-class OrderedMap[A, +B](val underlying: HashMap[A, (Int, B)], ordering: Vector[A]) extends Map[A,B] with MapLike[A, B, OrderedMap[A, B]] with Serializable  {
+class OrderedMap[A, +B](underlying: HashMap[A, (Int, B)], ordering: Vector[A]) extends Map[A,B] with MapLike[A, B, OrderedMap[A, B]] with Serializable {
 
   override def size: Int = underlying.size
 
@@ -35,7 +35,15 @@ class OrderedMap[A, +B](val underlying: HashMap[A, (Int, B)], ordering: Vector[A
   def - (key: A): OrderedMap[A, B] =
     underlying.get(key) match {
       case Some((idx, _)) =>
-        new OrderedMap(underlying - key, ordering.take(idx) ++ ordering.drop(idx + 1))
+        // hmm.
+        val newOrdering = ordering.take(idx) ++ ordering.drop(idx + 1)
+        var i = 0
+        var result = new HashMap[A, (Int, B)]
+        for(elem <- newOrdering) {
+          result = result.updated(elem, (i, underlying(elem)._2))
+          i += 1
+        }
+        new OrderedMap(result, newOrdering)
       case None =>
         this
     }

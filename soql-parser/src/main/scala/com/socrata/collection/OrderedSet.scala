@@ -32,8 +32,18 @@ class OrderedSet[A](underlying: Map[A, Int], order: Vector[A])
 
   def - (e: A): OrderedSet[A] =
     underlying.get(e) match {
-      case Some(i) => new OrderedSet(underlying - e, order.take(i) ++ order.drop(i + 1))
-      case None => this
+      case Some(idx) =>
+        // hmm.
+        val newOrdering = order.take(idx) ++ order.drop(idx + 1)
+        var i = 0
+        var result = new HashMap[A, Int]
+        for(elem <- newOrdering) {
+          result = result.updated(elem, i)
+          i += 1
+        }
+        new OrderedSet(result, newOrdering)
+      case None =>
+        this
     }
 
   override def toSeq = order
