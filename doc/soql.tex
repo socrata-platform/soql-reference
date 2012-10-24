@@ -337,6 +337,8 @@ The full algorithm for naming things is:
   aliased expressions to have the same alias.  Explicitly aliased
   expressions can hide columns that exist on the dataset but are not
   referred to in the selection list.
+\item It is an error for an explicitly aliased identifier to refer to
+  itself, directly or indirectly.
 \item After semi-explicit and explicit aliases are assigned, the
   complex expressions have their aliases assigned according to the
   paragraph below.  Note that simply wrapping a simple expression in
@@ -381,6 +383,10 @@ Examples:
 \item \lstinline|select a, (a)| is not an error.  The second column
   will be implicitly aliased to \lstinline|a_1| (assuming there is no
   exisiting \lstinline|a_1| column in the dataset context).
+\item \lstinline|select a as a| is an error because ``a'' is
+  explicitly defined in terms of itself.
+\item \lstinline|select count_a as a, count(a)| is also an error
+  because ``a'' is indirectly defined in terms of itself.
 \item \lstinline|select 1 + num| is not an error.  The selected
   column will be implicitly aliased to \lstinline|_1_num| if there
   is no such column in the dataset, or \lstinline|_1_num_1| if there is.
@@ -406,85 +412,138 @@ Examples:
 Usually, expressions are evaluated in a context referred to as
 ``ungrouped'', where each expression refers to a single value.  A
 second execution context, the ``grouped'' context, is introduced by
-either using an aggregation function in the selection list or by the
-presence of a \code{GROUP BY} clause.  In this context, expressions
-refer to collections of values.  Only literals, expressions which are
+either using an aggregation function in the selection list or
+\code{ORDER BY} clause, or by the presence of a \code{GROUP BY} or
+\code{HAVING} clause.  In this context, expressions refer to
+collections of values.  Only literals, expressions which are
 structurally equal (see section~\vref{structuralequality}) to
 expressions which appear in the \code{GROUP BY} clause, applications
 of aggregation functions, and expressions built from these categories
-are valid in the grouped contex.  Within the argument list of
-aggregation functions, the ungrouped context is used.
+are valid in the grouped contex.  Within the \code{WHERE} clause and
+the argument list of aggregation functions, the ungrouped context is
+used and aggregation functions may not be.
 
-If a grouped context exists in the query, all aliases are introduced
-into the grouped namespace\footnote{An implementation should give a
-  useful error when an out-of-scope but nonetheless existing alias is
-  referred to in an ungrouped context.}.  Examples, given a table with
-columns \code{x} and \code{y}:
 \begin{itemize}
 \item \lstinline|select x as a where a > 3| is legal.
-\item \lstinline|select x as a where a > 3 group by x| is illegal---the
-  alias is not in scope.
-\item \lstinline|select x as a where x > 3 group by x| is legal.
-\item \lstinline|select x where x > 3 group by x| is legal because the
-  semi-explicit alias is not in scope, but the column itself is.
-\item \lstinline|select x+7 as y, count(y) group by y| is legal but
-  has what may be a surprising meaning---the parameter of the
-  \code{count} function refers to the column~\code{y}, not the value
-  \code{x+7}.  On the other hand, the \code{y} in the \code{GROUP BY}
-  clause \emph{does} refer to the alias.  It is legal because the
-  \code{x+7} is structurally equal to its alias~\code{y}.
+\item \lstinline|select x as a where a > 3 group by x| is legal---the
+  alias expands to an expression which is legal in an ungrouped context.
+\item \lstinline|select x, sum(y) as total where total > 3 group by x| is
+  illegal because the alias expands to an aggregate function.
+\item \lstinline|select x, y group by x| is illegal because the ``y''
+  is not structurally equal to one of the \code{GROUP BY} expressions.
+\item \lstinline|select x + y group by x + y| is legal because the selected
+  expression is in the \code{GROUP BY} list.
 \end{itemize}
-Another way of saying this is that the \code{WHERE} clause always
-exists in the ungrouped context, but the other clauses depend on
-whether or not the grouped context has been introduced\footnote{An
-  implementation should warn if a column which happens to share the
-  name of an explicit alias is referred to in an ungrouped context
-  when a grouped context is present on the query.}.  The \code{GROUP
-  BY} clause itself is special; it may contain references to aliases
-that themselves do not contain (even indirectly) aggregate functions.
+
+\section{Typechecking}
+
+Typechecking proceeds in several phases.  First, the selection list is
+sorted to provide a typechecking order in which any aliases referred
+to by an expression are typechecked before it.  Each is typechecked in
+this order, making the earlier aliases available to later ones.  After
+all aliases are typechecked, all other expressions are
+typechecked\footnote{No particular order is required.} with the typed
+aliases also in scope.
+
+Within a single expression, typechecking proceeds depending on what
+kind of expression is seen.  Expressions fall into the following
+categories: literal, identifier, function call, cast.  All operators
+except \code{::} are considered to be ordinary function calls.
+
+\subsection{Function calls}
+
+Functions may be overloaded.  In order to typecheck a function call,
+the set of functions with the same name and arity of the expression
+under consideration is found.  Each candidate function is examined in
+turn.  For each parameter, if the exact type of the corresponding
+argument cannot be passed in without conversion, then if an implicit
+conversion is available it is applied to the argument.  Otherwise, the
+function is incompatible with the argument list and is discarded.
+
+At the end of the whole process of looking up implicit conversions and
+discarding functions which cannot be called, if there is a single
+function with the fewest implicit conversions applied, that function
+is the one selected and the type of the whole expression is the type
+of the resulting function.  Otherwise, the function call is ambiguous
+and, if none of the arguments is a literal \code{NULL}, typechecking
+fails.
+
+If there is an ambiguity and at least one argument is a literal
+\code{NULL}, a series of heuristics are applied to attempt to narrow
+down the result.  TODO
+
+\subsection{Literals}
+
+Literals may be subject to a greater degree of implicit conversion
+than their parent type.  The typechecker is allowed to use the values
+of literals to provide more options for implicit conversions---for
+example, allowing string literals which look like dates to have a
+``\code{to_date}'' function applied to them when used in a context
+that expects a date.  An alias is never considered to have a literal
+type, even when it refers to a literal expression.
+
+\subsection{Identifiers}
+
+Identifiers are resolved by first looking the indentifier up in the
+set of aliases.  If an alias with the same name is defined,
+typechecking is finished (since it may use the result of the previous
+typechecking pass without modification).  Otherwise, it is looked up
+in the dataset context's set of columns.  If it is found there, the
+type is the type of the found column.  Otherwise, it is an error.
+
+\subsection{Casts}
+
+Casts are syntactic sugar for ordinary function calls with the
+exception that implicit conversions are not consulted in order to find
+a valid conversion function.  For example, given types A, B, and C,
+with A implicitly convertable to B and a cast function \code{b_to_c}
+from B to C, \lstinline|a :: C| would fail as uncastable, but
+\lstinline|b :: C| would succeed and result in the expression
+\lstinline|b_to_c(b)|.  Whereas explicitly typechecking
+\lstinline|b_to_c(a)| would find and apply the implicit conversion
+from \code{A} to \code{B}.
 
 \section{Structure equality}\label{structuralequality}
 
 Two expressions are considered structurally equal if their ``normal
 form'' representations are the same.
 
-\SoQL{} normal form is a notional alternate syntax for \SoQL{} which defines
-an unambiguous textual representation of a \SoQL{} expression.  Normal
-Form \SoQL{} consists only of literals, column references, and function
-calls.  A \SoQL{} query is transformed in the following manner:
+\SoQL{} normal form is a notional alternate syntax for \SoQL{} which
+defines an unambiguous textual representation of a \SoQL{} expression.
+Normal Form \SoQL{} exists only for well-typed expressions and
+consists only of literals, column references, and function calls.  A
+\SoQL{} query is transformed in the following manner:
 \begin{enumerate}
 \item All comments are replaced by whitespace.
 \item All aliases are expanded into their source expressions.
-\item All keywords are normalized to upper-case.
 \item All identifiers except for those used as the ``argument'' to the
   \lit{.} operator are case-canonicalized (and not backtick-quoted).
 \item All string literals are rendered as SQL-style strings.
-\item Syntactic operators except for \lit{.} are translated into
-  function calls by placing the operator before a parameter list as if
-  it were a normal function.  \lit{.} is desugared into an application
-  of \code{[]}.
+\item Operators except for \lit{.} are translated into function calls
+  by placing the operator before a parameter list as if it were a
+  normal function, preceded by \code{op\$}.  \lit{.} is desugared into
+  an application of \code{op\$[]}.
 \item \code{\synt{expression} IS NULL} is translated into
-  \code{IS_NULL(\synt{expression})}.
+  \code{\#is_null(\synt{expression})}.
 \item \code{\synt{expression} IS NOT NULL} is translated into
-  \code{NOT(IS_NULL(\synt{expression}))}.
+  \code{\#is_not_null(\synt{expression})}.
 \item \code{\synt{e1} BETWEEN \synt{e2} AND \synt{e3}} is translated
-  into \code{BETWEEN(\synt{e1},\synt{e2},\synt{e3})}.
+  into \code{\#between(\synt{e1},\synt{e2},\synt{e3})}.
 \item \code{\synt{e1} NOT BETWEEN \synt{e2} AND \synt{e3}} is translated
-  into \code{NOT(BETWEEN(\synt{e1},\synt{e2},\synt{e3}))}.
+  into \code{\#not_between(\synt{e1},\synt{e2},\synt{e3})}.
 \item All parentheses that do not denote function application are removed.
 \item All whitespace outside string literals is removed.
 \end{enumerate}
 
 Examples:
 \begin{itemize}
-\item \code{1+1}\transformsTo\code{+(1,1)}
-\item \code{`where` between 1 and 10}\transformsTo\code{BETWEEN(where,1,10)}
-\item \code{(a or b) and c}\transformsTo\code{AND(OR(a,b),c)}
-\item \code{a or b and c}\transformsTo\code{OR(a,AND(b,c))}
+\item \code{1+1}\transformsTo\code{op\$+(1,1)}
+\item \code{`where` between 1 and 10}\transformsTo\code{\#between(where,1,10)}
+\item \code{(a or b) and c}\transformsTo\code{op\$and(op\$or(a,b),c)}
+\item \code{a or b and c}\transformsTo\code{op\$or(a,op\$and(b,c))}
 \item \code{count(*)}\transformsTo\code{count(*)}
-\item \code{a::foo}\transformsTo\code{::(a,foo)}
-\item \code{a[foo]}\transformsTo\code{[](a,foo)}
-\item \code{a.Foo}\transformsTo\code{[](a,'Foo')}
+\item \code{a[foo]}\transformsTo\code{op\$[](a,foo)}
+\item \code{a.Foo}\transformsTo\code{op\$[](a,'Foo')}
 \end{itemize}
 
 \end{document}
