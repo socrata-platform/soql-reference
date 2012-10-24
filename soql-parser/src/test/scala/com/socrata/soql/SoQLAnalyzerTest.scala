@@ -46,7 +46,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     analysis.isGrouped must be (false)
   }
 
-  test("analysis succeeds in a maximal query") {
+  test("analysis succeeds in a maximal group-by query") {
     val analysis = analyzer.analyzeFullQuery("select :id as i, sum(balance) where visits > 0 group by i having sum_balance < 5 order by i desc, sum(balance) null first limit 5 offset 10")
     analysis.selection.toSeq must equal (Seq(ColumnName("i") -> typedExpression(":id"), ColumnName("sum_balance") -> typedExpression("sum(balance)")))
     analysis.selection(ColumnName("i")).position.column must equal (8)
@@ -62,6 +62,31 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     analysis.having.get.asInstanceOf[typed.FunctionCall[_]].functionNamePosition.column must equal (78)
     analysis.orderBy must equal (Some(Seq(typed.OrderBy(typedExpression(":id"), false, true), typed.OrderBy(typedExpression("sum(balance)"), true, false))))
     analysis.orderBy.get.map(_.expression.position.column) must equal (Seq(8, 99))
+    analysis.limit must equal (Some(BigInt(5)))
+    analysis.offset must equal (Some(BigInt(10)))
+  }
+
+  test("analysis succeeds in a maximal ungrouped query") {
+    val analysis = analyzer.analyzeFullQuery("select :*, *(except name_first, name_last), nf || ' ' || nl as name, name_first as nf, name_last as nl where nl < 'm' order by name desc, visits limit 5 offset 10")
+    analysis.selection.toSeq must equal (datasetCtx.schema.toSeq.filterNot(_._1.name.startsWith("name_")).map { case (n, t) => n -> typed.ColumnRef(n, t) } ++ Seq(ColumnName("name") -> typedExpression("name_first || ' ' || name_last"), ColumnName("nf") -> typedExpression("name_first"), ColumnName("nl") -> typedExpression("name_last")))
+    analysis.selection(ColumnName(":id")).position.column must equal (8)
+    analysis.selection(ColumnName(":updated_at")).position.column must equal (8)
+    analysis.selection(ColumnName(":created_at")).position.column must equal (8)
+    analysis.selection(ColumnName("visits")).position.column must equal (12)
+    analysis.selection(ColumnName("last_visit")).position.column must equal (12)
+    analysis.selection(ColumnName("address")).position.column must equal (12)
+    analysis.selection(ColumnName("balance")).position.column must equal (12)
+    analysis.selection(ColumnName("name")).position.column must equal (45)
+    analysis.selection(ColumnName("nf")).position.column must equal (70)
+    analysis.selection(ColumnName("nl")).position.column must equal (88)
+    analysis.where must equal (Some(typedExpression("name_last < 'm'")))
+    analysis.where.get.position.column must equal (110)
+    analysis.where.get.asInstanceOf[typed.FunctionCall[_]].functionNamePosition.column must equal (113)
+    analysis.where.get.asInstanceOf[typed.FunctionCall[_]].parameters(0).position.column must equal (88)
+    analysis.groupBy must equal (None)
+    analysis.having must equal (None)
+    analysis.orderBy must equal (Some(Seq(typed.OrderBy(typedExpression("name_first || ' ' || name_last"), false, true), typed.OrderBy(typedExpression("visits"), true, true))))
+    analysis.orderBy.get.map(_.expression.position.column) must equal (Seq(45, 139))
     analysis.limit must equal (Some(BigInt(5)))
     analysis.offset must equal (Some(BigInt(10)))
   }

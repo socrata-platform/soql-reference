@@ -156,9 +156,10 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type]) {
     val t0 = System.nanoTime()
     val aliasAnalysis = AliasAnalysis(query.selection)
     val t1 = System.nanoTime()
-    val typedAliases = aliasAnalysis.evaluationOrder.foldLeft(OrderedMap.empty[ColumnName, typed.TypedFF[Type]]) { (acc, alias) =>
+    val typedAliases = aliasAnalysis.evaluationOrder.foldLeft(Map.empty[ColumnName, typed.TypedFF[Type]]) { (acc, alias) =>
       acc + (alias -> typechecker(aliasAnalysis.expressions(alias), acc))
     }
+    val outputs = OrderedMap(aliasAnalysis.expressions.keys.map { k => k -> typedAliases(k) }.toSeq : _*)
     val t2 = System.nanoTime()
     val checkedWhere = query.where.map(typechecker(_, typedAliases))
     val t3 = System.nanoTime()
@@ -169,7 +170,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type]) {
     val checkedOrderBy = query.orderBy.map { obs => obs.zip(obs.map { ob => typechecker(ob.expression, typedAliases) }) }
     val t6 = System.nanoTime()
     val isGrouped = aggregateChecker(
-      typedAliases.values.toSeq,
+      outputs.values.toSeq,
       checkedWhere,
       checkedGroupBy,
       checkedHaving,
@@ -186,7 +187,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type]) {
       log.trace("checking for aggregation took {}ms", ns2ms(t7 - t6))
     }
 
-    finishAnalysis(isGrouped, typedAliases, checkedWhere, checkedGroupBy, checkedHaving, checkedOrderBy, query.limit, query.offset)
+    finishAnalysis(isGrouped, outputs, checkedWhere, checkedGroupBy, checkedHaving, checkedOrderBy, query.limit, query.offset)
   }
 
   case class Analysis(isGrouped: Boolean,

@@ -21,6 +21,11 @@ class Typechecker[Type](typeInfo: TypeInfo[Type])(implicit ctx: DatasetContext[T
   private def typecheck(e: Expression, aliases: Map[ColumnName, Expr]): Expr = e match {
     case r@ColumnOrAliasRef(col) =>
       aliases.get(col) match {
+        case Some(typed.ColumnRef(name, typ)) if name == col =>
+          // special case: if this is an alias that refers directly to itself, position the typed tree _here_
+          // (as if there were no alias at all) to make error messages that much clearer.  This will only catch
+          // semi-implicitly assigned aliases, so it's better anyway.
+          typed.ColumnRef(col, typ).positionedAt(r.position)
         case Some(tree) =>
           tree
         case None =>
