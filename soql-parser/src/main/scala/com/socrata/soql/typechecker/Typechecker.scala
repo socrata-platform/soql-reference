@@ -16,7 +16,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type])(implicit ctx: DatasetContext[T
 
   val functionCallTypechecker = new FunctionCallTypechecker(typeInfo)
 
-  def apply(e: Expression, aliases: Map[ColumnName, Expr]) = typecheck(e.removeParens, aliases)
+  def apply(e: Expression, aliases: Map[ColumnName, Expr]) = typecheck(e, aliases)
 
   private def typecheck(e: Expression, aliases: Map[ColumnName, Expr]): Expr = e match {
     case r@ColumnOrAliasRef(col) =>
@@ -45,6 +45,9 @@ class Typechecker[Type](typeInfo: TypeInfo[Type])(implicit ctx: DatasetContext[T
         throw ImpossibleCast(typeNameFor(typedExpr.typ), typeNameFor(targetType), c.targetTypePosition)
       }
       typed.FunctionCall(cast, Seq(typedExpr)).positionedAt(c.position).functionNameAt(c.operatorPosition)
+    case FunctionCall(SpecialFunctions.Parens, params) =>
+      assert(params.length == 1, "Parens with more than one parameter?!")
+      typecheck(params(0), aliases)
     case fc@FunctionCall(name, parameters) =>
       val typedParameters = parameters.map(typecheck(_, aliases))
 

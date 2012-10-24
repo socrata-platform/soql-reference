@@ -17,8 +17,6 @@ sealed abstract class Expression extends Product {
     this
   }
 
-  def removeParens: Expression
-
   def toSyntheticIdentifierBase: String = {
     // This is clearly not optimized, but the inputs are small and it
     // mirrors the prose spec closely.
@@ -155,19 +153,17 @@ object SpecialFunctions {
   val Subscript = Operator("[]")
 
   // this exists only so that selecting "(foo)" is never semi-explicitly aliased.
-  // it's stripped out by the typechecker with removeParens.
+  // it's stripped out by the typechecker.
   val Parens = Operator("()")
 }
 
 case class ColumnOrAliasRef(column: ColumnName) extends Expression {
   protected def asString = column.toString
   def allColumnRefs = Set(this)
-  def removeParens = this
 }
 
 sealed abstract class Literal extends Expression {
   def allColumnRefs = Set.empty
-  def removeParens = this
 }
 case class NumberLiteral(value: BigDecimal) extends Literal {
   protected def asString = value.toString
@@ -202,9 +198,6 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
     functionNamePosition = p
     this
   }
-  def removeParens =
-    if(functionName == SpecialFunctions.Parens) parameters(0).removeParens
-    else copy(parameters = parameters.map(_.removeParens)).positionedAt(position).functionNameAt(functionNamePosition)
 }
 
 case class Cast(expression: Expression, targetType: TypeName) extends Expression {
@@ -212,7 +205,6 @@ case class Cast(expression: Expression, targetType: TypeName) extends Expression
   var targetTypePosition: Position = NoPosition
   protected def asString = expression + " :: " + targetType
   def allColumnRefs = expression.allColumnRefs
-  def removeParens = copy(expression = expression.removeParens).positionedAt(position).operatorAndTypeAt(operatorPosition, targetTypePosition)
 
   def operatorAndTypeAt(opPos: Position, typePos: Position): this.type = {
     operatorPosition = opPos
