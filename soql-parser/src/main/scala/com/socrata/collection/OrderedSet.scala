@@ -1,8 +1,8 @@
 package com.socrata.collection
 
-import collection.immutable._
-import collection.generic.{ImmutableSetFactory, CanBuildFrom, GenericCompanion, GenericSetTemplate}
-import collection.SetLike
+import scala.collection.immutable._
+import scala.collection.generic.{ImmutableSetFactory, CanBuildFrom, GenericCompanion, GenericSetTemplate}
+import scala.collection.SetLike
 
 class OrderedSet[A](underlying: Map[A, Int], order: Vector[A])
   extends Set[A] with GenericSetTemplate[A, OrderedSet] with SetLike[A, OrderedSet[A]] with Serializable

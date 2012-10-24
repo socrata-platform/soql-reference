@@ -1,7 +1,7 @@
 package com.socrata.collection
 
-import collection.immutable.{MapLike, HashMap}
-import collection.generic.{CanBuildFrom, ImmutableMapFactory}
+import scala.collection.immutable.{MapLike, HashMap}
+import scala.collection.generic.{CanBuildFrom, ImmutableMapFactory}
 
 class OrderedMap[A, +B](underlying: HashMap[A, (Int, B)], ordering: Vector[A]) extends Map[A,B] with MapLike[A, B, OrderedMap[A, B]] with Serializable {
 
