@@ -11,6 +11,7 @@ sealed abstract class SoQLType(val name: TypeName) {
   def real = true
 
   def isPassableTo(that: SoQLType): Boolean = (this == that)
+  def canonical: SoQLType = this
 }
 
 object SoQLType {
@@ -39,10 +40,13 @@ case object SoQLNull extends SoQLType("null") {
 
 sealed abstract class FakeSoQLType(name: String) extends SoQLType(name) {
   override def real = false
+  def realType: SoQLType
+  override def canonical = realType
 }
 
 case class SoQLTextLiteral(text: CaseInsensitiveString) extends FakeSoQLType("*text") {
   override def isPassableTo(that: SoQLType) = super.isPassableTo(that) || that == SoQLText
+  def realType = SoQLText
 }
 object SoQLTextLiteral {
   def apply(s: String): SoQLTextLiteral = apply(new CaseInsensitiveString(s))
@@ -50,4 +54,5 @@ object SoQLTextLiteral {
 
 case class SoQLNumberLiteral(number: BigDecimal) extends FakeSoQLType("*number") {
   override def isPassableTo(that: SoQLType) = super.isPassableTo(that) || that == SoQLNumber
+  def realType = SoQLNumber
 }

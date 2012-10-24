@@ -16,7 +16,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type])(implicit ctx: DatasetContext[T
 
   val functionCallTypechecker = new FunctionCallTypechecker(typeInfo)
 
-  def apply(e: Expression, aliases: Map[ColumnName, Expr]) = typecheck(e, aliases)
+  def apply(e: Expression, aliases: Map[ColumnName, Expr]) = canonicalizeType(typecheck(e, aliases))
 
   private def typecheck(e: Expression, aliases: Map[ColumnName, Expr]): Expr = e match {
     case r@ColumnOrAliasRef(col) =>
@@ -44,7 +44,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type])(implicit ctx: DatasetContext[T
       val cast = getCastFunction(typedExpr.typ, targetType).getOrElse {
         throw ImpossibleCast(typeNameFor(typedExpr.typ), typeNameFor(targetType), c.targetTypePosition)
       }
-      typed.FunctionCall(cast, Seq(typedExpr)).positionedAt(c.position).functionNameAt(c.operatorPosition)
+      typed.FunctionCall(cast, Seq(canonicalizeType(typedExpr))).positionedAt(c.position).functionNameAt(c.operatorPosition)
     case FunctionCall(SpecialFunctions.Parens, params) =>
       assert(params.length == 1, "Parens with more than one parameter?!")
       typecheck(params(0), aliases)
@@ -58,10 +58,10 @@ class Typechecker[Type](typeInfo: TypeInfo[Type])(implicit ctx: DatasetContext[T
           val realParameterList = (typedParameters, cs).zipped.map { (param, converter) =>
             converter match {
               case None => param
-              case Some(conv) => typed.FunctionCall(conv, Seq(param)).positionedAt(NoPosition).functionNameAt(NoPosition)
+              case Some(conv) => typed.FunctionCall(conv, Seq(canonicalizeType(param))).positionedAt(NoPosition).functionNameAt(NoPosition)
             }
           }
-          typed.FunctionCall(f, realParameterList.toSeq).positionedAt(fc.position).functionNameAt(fc.functionNamePosition)
+          typed.FunctionCall(f, realParameterList.toSeq.map(canonicalizeType)).positionedAt(fc.position).functionNameAt(fc.functionNamePosition)
         case NoMatch =>
           val failure = functionCallTypechecker.narrowDownFailure(options, typedParameters)
           throw TypeMismatch(name, typeNameFor(typedParameters(failure.idx).typ), typedParameters(failure.idx).position)
@@ -78,5 +78,14 @@ class Typechecker[Type](typeInfo: TypeInfo[Type])(implicit ctx: DatasetContext[T
       typed.NumberLiteral(n, numberLiteralType(n)).positionedAt(nl.position)
     case nl@NullLiteral() =>
       typed.NullLiteral(nullLiteralType).positionedAt(nl.position)
+  }
+
+  def canonicalizeType(expr: Expr): Expr = expr match {
+    case fc@typed.FunctionCall(_, _) => fc // a functioncall's type is intrinsic, so it shouldn't need canonicalizing
+    case cr@typed.ColumnRef(c, t) => typed.ColumnRef(c, typeInfo.canonicalize(t)).positionedAt(cr.position)
+    case bl@typed.BooleanLiteral(b, t) => typed.BooleanLiteral(b, typeInfo.canonicalize(t)).positionedAt(bl.position)
+    case nl@typed.NumberLiteral(n, t) => typed.NumberLiteral(n, typeInfo.canonicalize(t)).positionedAt(nl.position)
+    case sl@typed.StringLiteral(s, t) => typed.StringLiteral(s, typeInfo.canonicalize(t)).positionedAt(sl.position)
+    case nl@typed.NullLiteral(t) => typed.NullLiteral(typeInfo.canonicalize(t)).positionedAt(nl.position)
   }
 }

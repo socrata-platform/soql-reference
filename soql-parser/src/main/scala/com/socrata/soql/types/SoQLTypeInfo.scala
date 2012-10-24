@@ -35,6 +35,8 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
 
   def getCastFunction(from: SoQLType, to: SoQLType) = None
 
+  def canonicalize(typ: SoQLType) = typ.canonical
+
   def typeParameterUniverse = SoQLTypeConversions.typeParameterUniverse
 
   def implicitConversions(from: SoQLType, to: SoQLType) = SoQLTypeConversions.implicitConversions(from, to)
