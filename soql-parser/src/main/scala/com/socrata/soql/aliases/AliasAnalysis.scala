@@ -31,11 +31,11 @@ object AliasAnalysis extends AliasAnalysis {
     log.debug("Input: {}", selection)
     val starsExpanded = expandSelection(selection)
     log.debug("After expanding stars: {}", starsExpanded)
-    val explicitAndSemiExplicitAssigned = assignExplicitAndSemiExplicit(starsExpanded)
+    val (semiExplicit, explicitAndSemiExplicitAssigned) = assignExplicitAndSemiExplicit(starsExpanded)
     log.debug("After assigning explicit and semi-explicit: {}", explicitAndSemiExplicitAssigned)
     val allAliasesAssigned = assignImplicit(explicitAndSemiExplicitAssigned)
     log.debug("After assigning implicit aliases: {}", allAliasesAssigned)
-    Analysis(allAliasesAssigned, orderAliasesForEvaluation(allAliasesAssigned))
+    Analysis(allAliasesAssigned, orderAliasesForEvaluation(allAliasesAssigned, semiExplicit))
   }
 
   /**
@@ -92,28 +92,30 @@ object AliasAnalysis extends AliasAnalysis {
    * in the input sequence in order to ensure that the position of any
    * [[com.socrata.soql.exceptions.DuplicateAlias]] is correct.
    *
-   * @return A new selection list in the same order but with semi-explicit
-   *         aliases assigned.
+   * @return The set of column names which were semi-explicitly assigned aliases together with
+   *         a new selection list in the same order but with semi-explicit aliases assigned.
    * @throws com.socrata.soql.exceptions.DuplicateAlias if a duplicate alias is detected
    */
-  def assignExplicitAndSemiExplicit(selections: Seq[SelectedExpression])(implicit ctx: UntypedDatasetContext): Seq[SelectedExpression] = {
-    selections.foldLeft((Set.empty[ColumnName], Vector.empty[SelectedExpression])) { (results, selection) =>
-      val (assigned, mapped) = results
+  def assignExplicitAndSemiExplicit(selections: Seq[SelectedExpression])(implicit ctx: UntypedDatasetContext): (Set[ColumnName], Seq[SelectedExpression]) = {
+    val (_, semiExplicit, newSelected) = selections.foldLeft((Set.empty[ColumnName], Set.empty[ColumnName], Vector.empty[SelectedExpression])) { (results, selection) =>
+      val (assigned, semiExplicit, mapped) = results
 
-      def register(alias: ColumnName, position: Position, expr: Expression) = {
+      def register(alias: ColumnName, position: Position, expr: Expression, isExplicit: Boolean) = {
         if(assigned.contains(alias)) throw DuplicateAlias(alias, position)
-        (assigned + alias, mapped :+ SelectedExpression(expr, Some((alias, position))))
+        val newSemiExplicit = if(isExplicit) semiExplicit else semiExplicit + alias
+        (assigned + alias, newSemiExplicit, mapped :+ SelectedExpression(expr, Some((alias, position))))
       }
 
       selection match {
         case SelectedExpression(expr, Some((alias, position))) =>
-          register(alias, position, expr)
+          register(alias, position, expr, isExplicit = true)
         case SelectedExpression(expr: ColumnOrAliasRef, None) =>
-          register(expr.column, expr.position, expr)
+          register(expr.column, expr.position, expr, isExplicit = false)
         case other =>
-          (assigned, mapped :+ other)
+          (assigned, semiExplicit, mapped :+ other)
       }
-    }._2
+    }
+    (semiExplicit, newSelected)
   }
 
   /**
@@ -188,23 +190,23 @@ object AliasAnalysis extends AliasAnalysis {
     * @return the aliases in evaluation order
     * @throws com.socrata.soql.exceptions.CircularAliasDefinition if an alias's expansion refers to itself,
     *                                                             even indirectly. */
-  def orderAliasesForEvaluation(in: OrderedMap[ColumnName, Expression])(implicit ctx: UntypedDatasetContext): Seq[ColumnName] = {
+  def orderAliasesForEvaluation(in: OrderedMap[ColumnName, Expression], semiExplicit: Set[ColumnName])(implicit ctx: UntypedDatasetContext): Seq[ColumnName] = {
     // We'll divide all the aliases up into two categories -- aliases which refer
     // to a column of the same name ("selfRefs") and everything else ("otherRefs").
-    val (selfRefs, otherRefs) = in.partition {
-      case (aliasName, ColumnOrAliasRef(colOrAliasName)) if aliasName == colOrAliasName => true
+    val (semiExplicitRefs, otherRefs) = in.partition {
+      case (alias, _) if semiExplicit(alias) => true
       case _ => false
     }
 
     val graph = otherRefs.mapValues { expr =>
-      // selfRefs are non-circular, but since they _look_ circular we want to exclude them.
-      // This also excludes references to columns which don't exist at all, but that'll be
-      // caught at type-checking time.
-      expr.allColumnRefs.filter { cr =>
-        otherRefs.contains(cr.column)
+      // semi-explicit refs are non-circular, but since they _look_ circular we want to exclude them.
+      // We also want to exclude references to things that are not aliased at all (either they're columns
+      // on the dataset or they're not -- either way it'll be handled at typechecking).
+      expr.allColumnRefs.filterNot { cr =>
+        semiExplicit.contains(cr.column) || !in.contains(cr.column)
       }
     }
 
-    selfRefs.keys.toSeq ++ topoSort(graph)
+    semiExplicitRefs.keys.toSeq ++ topoSort(graph)
   }
 }
