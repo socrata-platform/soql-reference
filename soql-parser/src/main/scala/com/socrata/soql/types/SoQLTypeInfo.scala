@@ -33,7 +33,10 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
 
   def typeNameFor(typ: SoQLType): TypeName = typ.name
 
-  def getCastFunction(from: SoQLType, to: SoQLType) = None
+  def getCastFunction(from: SoQLType, to: SoQLType) = {
+    if(canBePassedToWithoutConversion(from, to)) Some(MonomorphicFunction(SoQLFunctions.identity, Map("a" -> to)))
+    else None
+  }
 
   def canonicalize(typ: SoQLType) = typ.canonical
 
