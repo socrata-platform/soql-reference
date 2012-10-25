@@ -65,9 +65,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type])(implicit ctx: DatasetContext[T
         case NoMatch =>
           val failure = functionCallTypechecker.narrowDownFailure(options, typedParameters)
           throw TypeMismatch(name, typeNameFor(typedParameters(failure.idx).typ), typedParameters(failure.idx).position)
-        case Ambiguous(_) | NoMatch =>
-          // when reporting this, remember to convert special functions back to their syntactic form
-          // also TODO: better error reporting in the "no match" case
+        case Ambiguous(_) =>
           throw AmbiguousCall(name, fc.functionNamePosition)
       }
     case bl@BooleanLiteral(b) =>
