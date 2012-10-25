@@ -48,10 +48,10 @@ object SoQLFunctions {
   val TimesNumMoney = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLNumber, SoQLMoney), SoQLMoney).function
   val TimesMoneyNum = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLMoney, SoQLNumber), SoQLMoney).function
 
-  val DivNumNum = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLNumber, SoQLNumber), SoQLNumber).function
-  val DivDoubleDouble = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLDouble, SoQLDouble), SoQLDouble).function
-  val DivMoneyNum = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLMoney, SoQLNumber), SoQLMoney).function
-  val DivMoneyMoney = new MonomorphicFunction(SpecialFunctions.Operator("*"), Seq(SoQLMoney, SoQLMoney), SoQLNumber).function
+  val DivNumNum = new MonomorphicFunction(SpecialFunctions.Operator("/"), Seq(SoQLNumber, SoQLNumber), SoQLNumber).function
+  val DivDoubleDouble = new MonomorphicFunction(SpecialFunctions.Operator("/"), Seq(SoQLDouble, SoQLDouble), SoQLDouble).function
+  val DivMoneyNum = new MonomorphicFunction(SpecialFunctions.Operator("/"), Seq(SoQLMoney, SoQLNumber), SoQLMoney).function
+  val DivMoneyMoney = new MonomorphicFunction(SpecialFunctions.Operator("/"), Seq(SoQLMoney, SoQLMoney), SoQLNumber).function
 
   val NumberToMoney = new MonomorphicFunction(SpecialFunctions.Operator("to_money"), Seq(SoQLNumber), SoQLMoney).function
   val NumberToDouble = new MonomorphicFunction(SpecialFunctions.Operator("to_double"), Seq(SoQLNumber), SoQLDouble).function
