@@ -36,7 +36,5 @@ trait TypeInfo[Type] extends FunctionTypeInfo[Type] {
 
   def typeNameFor(typ: Type): TypeName
 
-  def getCastFunction(from: Type, to: Type): Option[MonomorphicFunction[Type]]
-
   def canonicalize(typ: Type): Type
 }

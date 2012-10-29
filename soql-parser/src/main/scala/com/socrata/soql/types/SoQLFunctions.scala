@@ -9,8 +9,6 @@ object SoQLFunctions {
   private val Ordered = SoQLTypeConversions.typeParameterUniverse.toSet[Any] // might want to narrow this down
   private val NumLike = Set[Any](SoQLNumber, SoQLDouble, SoQLMoney)
 
-  val identity = Function(FunctionName("identity"), Map.empty, Seq(VariableType("a")), VariableType("a"))
-
   val TextToFixedTimestamp = new MonomorphicFunction(FunctionName("to_fixed_timestamp"), Seq(SoQLText), SoQLFixedTimestamp).function
   val TextToFloatingTimestamp = new MonomorphicFunction(FunctionName("to_floating_timestamp"), Seq(SoQLText), SoQLFloatingTimestamp).function
   val Concat = Function(SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), FixedType(SoQLText))
@@ -62,11 +60,16 @@ object SoQLFunctions {
   val Or = new MonomorphicFunction(SpecialFunctions.Operator("or"), Seq(SoQLBoolean, SoQLBoolean), SoQLBoolean).function
   val Not = new MonomorphicFunction(SpecialFunctions.Operator("not"), Seq(SoQLBoolean), SoQLBoolean).function
 
-  lazy val allFunctions = {
-    for {
+  val castIdentities = for((n, t) <- SoQLType.typesByName.toSeq) yield {
+    Function(SpecialFunctions.Cast(n), Map.empty, Seq(FixedType(t)), FixedType(t))
+  }
+
+  lazy val allFunctions: Seq[Function[SoQLType]] = {
+    val reflectedFunctions = for {
       method <- getClass.getMethods
       if Modifier.isPublic(method.getModifiers) && method.getParameterTypes.length == 0 && method.getReturnType == classOf[Function[_]]
     } yield method.invoke(this).asInstanceOf[Function[SoQLType]]
+    castIdentities ++ reflectedFunctions
   }
 
   lazy val functionsByNameThenArity = SoQLFunctions.allFunctions.groupBy(_.name).mapValues { fs =>

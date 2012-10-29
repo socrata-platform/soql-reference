@@ -101,7 +101,9 @@ object Expression {
         case FunctionCall(SpecialFunctions.Operator("-"), args) => args.flatMap(findIdentsAndLiterals) // otherwise minus looks like a non-synthetic underscore
         case FunctionCall(SpecialFunctions.Operator(op), Seq(arg)) => op +: findIdentsAndLiterals(arg)
         case FunctionCall(SpecialFunctions.Operator(op), Seq(arg1, arg2)) => findIdentsAndLiterals(arg1) ++ Vector(op) ++ findIdentsAndLiterals(arg2)
-        case FunctionCall(SpecialFunctions.Operator(op), _) => sys.error("Found a non-unary, non-binary operator: " + op)
+        case FunctionCall(SpecialFunctions.Operator(_), _) => sys.error("Found a non-unary, non-binary operator: " + fc)
+        case FunctionCall(SpecialFunctions.Cast(typ), Seq(arg)) => findIdentsAndLiterals(arg) :+ typ.canonicalName
+        case FunctionCall(SpecialFunctions.Cast(_), _) => sys.error("Found a non-unary cast: " + fc)
         case FunctionCall(SpecialFunctions.IsNull, args) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "null")
         case FunctionCall(SpecialFunctions.IsNotNull, args) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "not", "null")
         case FunctionCall(SpecialFunctions.Between, Seq(a,b,c)) =>
@@ -110,8 +112,6 @@ object Expression {
           findIdentsAndLiterals(a) ++ Vector("not", "between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
         case FunctionCall(other, args) => Vector(other.canonicalName) ++ args.flatMap(findIdentsAndLiterals)
       }
-    case Cast(expr, targetType) =>
-      findIdentsAndLiterals(expr) :+ targetType.canonicalName
   }
 
   private def joinWith[T](xs: Seq[Seq[T]], i: T): Seq[T] = {
@@ -155,6 +155,15 @@ object SpecialFunctions {
   // this exists only so that selecting "(foo)" is never semi-explicitly aliased.
   // it's stripped out by the typechecker.
   val Parens = Operator("()")
+
+  object Cast {
+    def apply(op: TypeName) = FunctionName("cast$" + op.name)
+    def unapply(f: FunctionName) = f.name match {
+      case Regex(x) => Some(TypeName(x))
+      case _ => None
+    }
+    val Regex = """^cast\$(.*)$""".r
+  }
 }
 
 case class ColumnOrAliasRef(column: ColumnName) extends Expression {
@@ -186,6 +195,9 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
     case SpecialFunctions.StarFunc(f) => f + "(*)"
     case SpecialFunctions.Operator(op) if parameters.size == 1 => op + parameters(0)
     case SpecialFunctions.Operator(op) if parameters.size == 2 => parameters(0) + " " + op + " " + parameters(1)
+    case SpecialFunctions.Operator(op) => sys.error("Found a non-unary, non-binary operator: " + op + " at " + position)
+    case SpecialFunctions.Cast(typ) if parameters.size == 1 => parameters(0) + " :: " + typ
+    case SpecialFunctions.Cast(_) => sys.error("Found a non-unary cast at " + position)
     case SpecialFunctions.Between => parameters(0) + " BETWEEN " + parameters(1) + " AND " + parameters(2)
     case SpecialFunctions.NotBetween => parameters(0) + " NOT BETWEEN " + parameters(1) + " AND " + parameters(2)
     case SpecialFunctions.IsNull => parameters(0) + " IS NULL"
@@ -196,19 +208,6 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
 
   def functionNameAt(p: Position): this.type = {
     functionNamePosition = p
-    this
-  }
-}
-
-case class Cast(expression: Expression, targetType: TypeName) extends Expression {
-  var operatorPosition: Position = NoPosition
-  var targetTypePosition: Position = NoPosition
-  protected def asString = expression + " :: " + targetType
-  def allColumnRefs = expression.allColumnRefs
-
-  def operatorAndTypeAt(opPos: Position, typePos: Position): this.type = {
-    operatorPosition = opPos
-    targetTypePosition = typePos
     this
   }
 }

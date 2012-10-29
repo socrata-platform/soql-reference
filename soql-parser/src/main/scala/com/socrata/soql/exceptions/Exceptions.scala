@@ -30,8 +30,6 @@ case class BadParse(message: String, position: Position) extends SoQLException(m
 
 sealed trait TypecheckException extends SoQLException
 case class NoSuchFunction(name: FunctionName, arity: Int, position: Position) extends SoQLException("No such function `" + name + "/" + arity + "'", position) with TypecheckException
-case class UnknownType(name: TypeName, position: Position) extends SoQLException("Unknown type `" + name + "'", position) with TypecheckException
-case class ImpossibleCast(from: TypeName, to: TypeName, position: Position) extends SoQLException("Cannot convert a value of type `"+ from + "' to `" + to + "'" , position) with TypecheckException
 case class TypeMismatch(name: FunctionName, actual: TypeName, position: Position) extends SoQLException("Cannot pass a value of type `" + actual + "' to function `" + name + "'", position) with TypecheckException
 case class AmbiguousCall(name: FunctionName, position: Position) extends SoQLException("Ambiguous call to `" + name + "'", position) with TypecheckException
 

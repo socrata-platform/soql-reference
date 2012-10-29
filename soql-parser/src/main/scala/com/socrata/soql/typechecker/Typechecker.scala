@@ -3,7 +3,7 @@ package com.socrata.soql.typechecker
 import scala.util.parsing.input.NoPosition
 
 import com.socrata.soql.ast._
-import com.socrata.soql.exceptions.{NoSuchColumn, UnknownType, ImpossibleCast, NoSuchFunction, TypeMismatch, AmbiguousCall}
+import com.socrata.soql.exceptions.{NoSuchColumn, NoSuchFunction, TypeMismatch, AmbiguousCall}
 import com.socrata.soql.names._
 import com.socrata.soql.{DatasetContext, typed}
 
@@ -36,15 +36,6 @@ class Typechecker[Type](typeInfo: TypeInfo[Type])(implicit ctx: DatasetContext[T
               throw NoSuchColumn(col, r.position)
           }
       }
-    case c@Cast(expr, targetTypeName) =>
-      val typedExpr = typecheck(expr, aliases)
-      val targetType = typeFor(targetTypeName).getOrElse {
-        throw UnknownType(targetTypeName, c.targetTypePosition)
-      }
-      val cast = getCastFunction(typedExpr.typ, targetType).getOrElse {
-        throw ImpossibleCast(typeNameFor(typedExpr.typ), typeNameFor(targetType), c.targetTypePosition)
-      }
-      typed.FunctionCall(cast, Seq(canonicalizeType(typedExpr))).positionedAt(c.position).functionNameAt(c.operatorPosition)
     case FunctionCall(SpecialFunctions.Parens, params) =>
       assert(params.length == 1, "Parens with more than one parameter?!")
       typecheck(params(0), aliases)

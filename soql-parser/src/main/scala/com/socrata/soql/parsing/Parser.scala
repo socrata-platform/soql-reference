@@ -236,7 +236,7 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
   lazy val cast: PackratParser[Expression] =
     cast ~ COLONCOLON() ~ identifier ^^ {
       case a ~ colcol ~ ((b, bPos)) =>
-        Cast(a, TypeName(b)).positionedAt(a.position).operatorAndTypeAt(colcol.position, bPos)
+        FunctionCall(SpecialFunctions.Cast(TypeName(b)), Seq(a)).positionedAt(a.position).functionNameAt(bPos)
     } |
     dereference
 
