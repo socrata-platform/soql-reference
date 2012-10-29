@@ -28,9 +28,7 @@ object SoqlToy extends (Array[String] => Unit) {
 
   def menu() {
     println("Columns:")
-    for((k,v) <- datasetCtx.schema) {
-      println("  " + k + ("." * (15 - k.toString.length)) + v)
-    }
+    Util.printList(datasetCtx.schema)
   }
 
   def apply(args: Array[String]) {
@@ -48,9 +46,7 @@ object SoqlToy extends (Array[String] => Unit) {
           val analysis = analyzer.analyzeFullQuery(selection)
 
           println("Outputs:")
-          for((k,v) <- analysis.selection) {
-            println("  " + k + ("." * math.max(1, 15 - k.toString.length)) + v)
-          }
+          Util.printList(analysis.selection)
           analysis.where.foreach { w =>
             println("where:\n  " + w)
           }

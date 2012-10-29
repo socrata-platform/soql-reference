@@ -32,9 +32,7 @@ object AliasToy extends (Array[String] => Unit) {
       try {
         val analysis = AliasAnalysis(p.selection(selection))
         println("Resulting aliases:")
-        for((k,v) <- analysis.expressions) {
-          println("  " + k + ("." * math.max(1, 15 - k.toString.length)) + v)
-        }
+        Util.printList(analysis.expressions, "  ")
         println(analysis.evaluationOrder.mkString("Typecheck in this order:\n  ", ", ", ""))
       } catch {
         case e: SoQLException => println(e.getMessage)
