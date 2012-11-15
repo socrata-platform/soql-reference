@@ -17,6 +17,11 @@ class ParserTest extends WordSpec with MustMatchers {
     p.expression(soql)
   }
 
+  def parseFull(soql: String) = {
+    val p = new Parser
+    p.selectStatement(soql)
+  }
+
   def expectFailure(expectedMsg: String, soql: String) = {
     val p = new Parser
     try {
@@ -125,6 +130,30 @@ class ParserTest extends WordSpec with MustMatchers {
                   ident("b"))))),
             StringLiteral("c"))),
         NumberLiteral(3))))
+    }
+
+    "allow offset/limit" in {
+      val x = parseFull("select * offset 6 limit 5")
+      x.offset must be (Some(BigInt(6)))
+      x.limit must be (Some(BigInt(5)))
+    }
+
+    "allow limit/offset" in {
+      val x = parseFull("select * limit 6 offset 5")
+      x.limit must be (Some(BigInt(6)))
+      x.offset must be (Some(BigInt(5)))
+    }
+
+    "allow only limit" in {
+      val x = parseFull("select * limit 32")
+      x.limit must be (Some(BigInt(32)))
+      x.offset must be (None)
+    }
+
+    "allow only offset" in {
+      val x = parseFull("select * offset 7")
+      x.limit must be (None)
+      x.offset must be (Some(BigInt(7)))
     }
 
   // def show[T](x: => T) {

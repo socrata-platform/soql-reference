@@ -79,9 +79,18 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
    */
 
   def fullSelect =
-    (SELECT() ~> selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ opt(orderByClause) ~ opt(limitClause) ~ opt(offsetClause) ^^ {
-      case s ~ w ~ gb ~ h ~ ord ~ lim ~ off => Select(s, w, gb, h, ord, lim, off)
+    (SELECT() ~> selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ opt(orderByClause) ~ limitOffset ^^ {
+      case s ~ w ~ gb ~ h ~ ord ~ ((lim, off)) => Select(s, w, gb, h, ord, lim, off)
     })
+
+  def limitOffset: Parser[(Option[BigInt], Option[BigInt])] =
+    limitClause ~ opt(offsetClause) ^^ {
+      case l ~ o => (Some(l), o)
+    } |
+    opt(offsetClause ~ opt(limitClause)) ^^ {
+      case Some(o ~ l) => (l, Some(o))
+      case None => (None, None)
+    }
 
   def whereClause = WHERE() ~> expr
   def groupByClause = GROUP() ~ BY() ~> groupByList
