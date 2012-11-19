@@ -8,6 +8,8 @@ import com.socrata.soql.ast.SpecialFunctions
 object SoQLFunctions {
   private val Ordered = SoQLTypeConversions.typeParameterUniverse.toSet[Any] // might want to narrow this down
   private val NumLike = Set[Any](SoQLNumber, SoQLDouble, SoQLMoney)
+  private val RealNumLike = Set[Any](SoQLNumber, SoQLDouble)
+  private val GeospatialLike = Set[Any](SoQLLocation)
 
   val TextToFixedTimestamp = new MonomorphicFunction(FunctionName("to_fixed_timestamp"), Seq(SoQLText), SoQLFixedTimestamp).function
   val TextToFloatingTimestamp = new MonomorphicFunction(FunctionName("to_floating_timestamp"), Seq(SoQLText), SoQLFloatingTimestamp).function
@@ -20,6 +22,13 @@ object SoQLFunctions {
   val EqEq = Eq.copy(name = SpecialFunctions.Operator("=="))
   val Neq = Function(SpecialFunctions.Operator("<>"), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), FixedType(SoQLBoolean))
   val BangEq = Neq.copy(name = SpecialFunctions.Operator("!="))
+
+  // arguments: lat, lon, distance in meter
+  val WithinCircle = Function(FunctionName("within_circle"), Map ("a"-> GeospatialLike, "b" -> RealNumLike),
+    Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b")), FixedType(SoQLBoolean))
+  // arguments: nwLat, nwLon, seLat, seLon (yMax,  xMin , yMin,  xMax)
+  val WithinBox = Function(FunctionName("within_box"), Map ("a"-> GeospatialLike, "b" -> RealNumLike),
+    Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b"), VariableType("b")), FixedType(SoQLBoolean))
 
   val LatitudeField = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("latitude")), SoQLDouble).function
   val LongitudeField = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("longitude")), SoQLDouble).function

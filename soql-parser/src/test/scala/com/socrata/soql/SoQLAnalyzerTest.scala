@@ -109,4 +109,19 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     analysis must equal (analyzer.analyzeFullQuery("SELECT "+computed+", "+uncomputed+", count(*) GROUP BY "+computed+", "+uncomputed))
     analysis.selection(ColumnName("visits")).position.column must equal (1 + computed.length + sep.length)
   }
+
+  test("analysis succeeds in geo spatial query") {
+    val analysis = analyzer.analyzeFullQuery("select name_last, address where within_circle(address, 1, 2, 1000) or within_box(address, 40.1, -87.1, 39.2, -86.2)")
+    analysis.selection.toSeq must equal (Seq(ColumnName("name_last") -> typedExpression("name_last"), ColumnName("address") -> typedExpression("address")))
+    analysis.selection(ColumnName("name_last")).position.column must equal (8)
+    analysis.selection(ColumnName("address")).position.column must equal (19)
+    analysis.where must equal (Some(typedExpression("within_circle(address, 1, 2, 1000) or within_box(address, 40.1, -87.1, 39.2, -86.2)")))
+    val withinCircle = analysis.where.get.asInstanceOf[typed.FunctionCall[_]].parameters(0).asInstanceOf[typed.FunctionCall[_]]
+    withinCircle.functionNamePosition.column must equal (33)
+    withinCircle.function.function must equal (SoQLFunctions.WithinCircle)
+    val withinBox = analysis.where.get.asInstanceOf[typed.FunctionCall[_]].parameters(1).asInstanceOf[typed.FunctionCall[_]]
+    withinBox.functionNamePosition.column must equal (71)
+    withinBox.function.function must equal (SoQLFunctions.WithinBox)
+  }
 }
+
