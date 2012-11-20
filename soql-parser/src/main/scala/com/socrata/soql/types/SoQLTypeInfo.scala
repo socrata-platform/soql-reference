@@ -16,17 +16,35 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
   def isAggregate(function: MonomorphicFunction[SoQLType]) = false
 
   def functionsWithArity(name: FunctionName, n: Int) =
-    SoQLFunctions.functionsByNameThenArity.get(name) match {
+    SoQLFunctions.nAdicFunctionsByNameThenArity.get(name) match {
       case Some(funcsByArity) =>
         funcsByArity.get(n) match {
           case Some(fs) =>
             fs
           case None =>
-            Set.empty
+            variadicFunctionsWithArity(name ,n)
         }
+      case None =>
+        variadicFunctionsWithArity(name, n)
+    }
+
+  def variadicFunctionsWithArity(name: FunctionName, n: Int): Set[Function[SoQLType]] = {
+    SoQLFunctions.variadicFunctionsByNameThenMinArity.get(name) match {
+      case Some(funcsByArity) =>
+        var result = Set.empty[Function[SoQLType]]
+        var i = n
+        while(i >= 0) {
+          funcsByArity.get(i) match {
+            case Some(fs) => result ++= fs
+            case None => // nothing
+          }
+          i -= 1
+        }
+        result
       case None =>
         Set.empty
     }
+  }
 
   def typeFor(name: TypeName) =
     SoQLType.typesByName.get(name)

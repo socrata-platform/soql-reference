@@ -42,7 +42,13 @@ case class NullLiteral[Type](typ: Type) extends TypedLiteral[Type] {
 }
 case class FunctionCall[Type](function: MonomorphicFunction[Type], parameters: Seq[TypedFF[Type]]) extends TypedFF[Type] {
   var functionNamePosition: Position = NoPosition
-  require(parameters.length == function.arity, "parameter/arity mismatch")
+
+  if(function.isVariadic) {
+    require(parameters.length >= function.minArity, "parameter/arity mismatch")
+  } else {
+    require(parameters.length == function.minArity, "parameter/arity mismatch")
+  }
+
   // require((function.parameters, parameters).zipped.forall { (formal, actual) => formal == actual.typ })
   protected def asString = parameters.mkString(function.name.toString + "(", ",", ")")
   def typ = function.result

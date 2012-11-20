@@ -141,6 +141,8 @@ object SpecialFunctions {
   // distinguish between "not (x is null)" and "x is not null" when generating them.
   val IsNotNull = FunctionName("#IS_NOT_NULL")
   val NotBetween = FunctionName("#NOT_BETWEEN")
+  val In = FunctionName("#IN")
+  val NotIn = FunctionName("#NOT_IN")
 
   object Operator {
     def apply(op: String) = FunctionName("op$" + op)

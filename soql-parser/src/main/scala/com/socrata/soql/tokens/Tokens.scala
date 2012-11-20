@@ -39,7 +39,6 @@ case class LAST() extends Token with NullPlacement
 case class DISTINCT() extends Token
 case class FROM() extends Token
 case class FULL() extends Token
-case class IN() extends Token
 case class INNER() extends Token
 case class JOIN() extends Token
 case class LEFT() extends Token
@@ -78,6 +77,7 @@ case class BANGEQUALS() extends FormattedToken("!=")
 // Other primitive Boolean operators
 case class IS() extends Token
 case class BETWEEN() extends Token
+case class IN() extends Token
 
 // Boolean combinators -- except for "BANG" these are all actual words
 case class AND() extends Token

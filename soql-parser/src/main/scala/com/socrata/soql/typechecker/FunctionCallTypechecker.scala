@@ -34,12 +34,20 @@ class FunctionCallTypechecker[Type](typeInfo: FunctionTypeInfo[Type]) {
 
   import typeInfo._
 
+  def goodArity(function: Func, parameters: Seq[Val]): Boolean = {
+    if(function.isVariadic) {
+      function.minArity <= parameters.length
+    } else {
+      function.minArity == parameters.length
+    }
+  }
+
   /** Resolve a set of overloads into a single candidate.  If you have only one, you should use
     * `evaluateCandidate` directly, as this loses type mismatch information. */
   def resolveOverload(candidates: Set[Func], parameters: Seq[Val]): OverloadResult[Type] = {
     require(candidates.nonEmpty, "empty candidate set")
     require(candidates.forall { candidate => candidate.name == candidates.iterator.next().name }, "differently-named functions") // this is _overload_ resolution!
-    require(candidates.forall(_.arity == parameters.length), "bad candidate arity")
+    require(candidates.forall(goodArity(_, parameters)), "bad candidate arity")
 
     // "good" will be a list of pairs of functions together with the
     // conversions necessary to call those functions with these
@@ -65,7 +73,7 @@ class FunctionCallTypechecker[Type](typeInfo: FunctionTypeInfo[Type]) {
   }
 
   def evaluateCandidate(candidate: Func, parameters: Seq[Val]): Iterator[(MFunc, CandidateEvaluation[Type])] = {
-    require(candidate.arity == parameters.length)
+    require(goodArity(candidate, parameters))
 
     // yay combinatorial explosion!  Fortunately in practice we'll only ever have one or _maybe_ two type parameters.
     def loop(remaining: List[String], bindings: Map[String, Type]): Iterator[(MFunc, CandidateEvaluation[Type])] = {
@@ -83,8 +91,8 @@ class FunctionCallTypechecker[Type](typeInfo: FunctionTypeInfo[Type]) {
   }
 
   def evaluateMonomorphicCandidate(candidate: MFunc, parameters: Seq[Val]): CandidateEvaluation[Type] = {
-    require(candidate.arity == parameters.length)
-    val parameterConversions: ConvSet = (candidate.parameters, parameters, Stream.from(0)).zipped.map { (expectedTyp, value, idx) =>
+    require(goodArity(candidate.function, parameters))
+    val parameterConversions: ConvSet = (candidate.allParameters, parameters, Stream.from(0)).zipped.map { (expectedTyp, value, idx) =>
       if(canBePassedToWithoutConversion(value.typ, expectedTyp)) {
         None
       } else {
@@ -93,7 +101,7 @@ class FunctionCallTypechecker[Type](typeInfo: FunctionTypeInfo[Type]) {
           case Some(f) =>
             log.debug("Conversion found: {}", f.name)
             assert(f.result == expectedTyp, "conversion result is not what's expected")
-            assert(f.arity == 1, "conversion is not an arity-1 function")
+            assert(f.minArity == 1, "conversion is not an arity-1 function")
             assert(canBePassedToWithoutConversion(value.typ, f.parameters(0)), "conversion does not take the type to be converted")
           case None =>
             log.debug("Type mismatch, and there is no usable implicit conversion from {} to {}", value.typ:Any, expectedTyp:Any)
