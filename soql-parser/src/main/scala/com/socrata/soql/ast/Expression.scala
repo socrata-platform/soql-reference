@@ -204,6 +204,8 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
     case SpecialFunctions.NotBetween => parameters(0) + " NOT BETWEEN " + parameters(1) + " AND " + parameters(2)
     case SpecialFunctions.IsNull => parameters(0) + " IS NULL"
     case SpecialFunctions.IsNotNull => parameters(0) + " IS NOT NULL"
+    case SpecialFunctions.In => parameters.drop(1).mkString(parameters(0) + " IN (", ",", ")")
+    case SpecialFunctions.NotIn => parameters.drop(1).mkString(parameters(0) + " NOT IN (", ",", ")")
     case other => parameters.mkString(other + "(", ",", ")")
   }
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
