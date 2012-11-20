@@ -52,8 +52,9 @@ Level~0, but are still reserved for compatibility with higher levels.
 \begin{center}
 \begin{tabular}{l l l l l l}
 AND   & ASC    & BETWEEN & BY    & DESC   & EXCEPT \\
-FIRST & GROUP  & IS      & LAST  & LIMIT  & NOT    \\
-NULL  & OFFSET & OR      & ORDER & SELECT & WHERE  \\
+FIRST & GROUP  & IN      & IS    & LAST   & LIMIT  \\
+NOT   & NULL   & OFFSET  & OR    & ORDER & SELECT  \\
+WHERE                                              \\
 \end{tabular}
 \end{center}
 \caption{Reserved words}
@@ -63,8 +64,8 @@ NULL  & OFFSET & OR      & ORDER & SELECT & WHERE  \\
 \begin{figure}
 \begin{center}
 \begin{tabular}{l l l l l l}
-DISTINCT & FROM & FULL & IN & INNER \\
-JOIN & LEFT & ON & OUTER & RIGHT \\
+DISTINCT & FROM & FULL  & INNER & JOIN \\
+LEFT     & ON   & OUTER & RIGHT        \\
 \end{tabular}
 \end{center}
 \caption{Not presently used, but still reserved}
@@ -286,12 +287,13 @@ therefor it is case-canonicalized in that locale.
 
 <order> ::= [<order> (`=' | `==' | `!=' | `<>' | `<' | `<=' | `=>' | `>')] <term>
 
-<is-between> ::= <is-between> `IS' [`NOT'] `NULL'
- \alt <is-between> [`NOT'] `BETWEEN' <is-between> `AND' <is-between>
+<is-between-in> ::= <is-between-in> `IS' [`NOT'] `NULL'
+ \alt <is-between-in> [`NOT'] `BETWEEN' <is-between-in> `AND' <is-between-in>
+ \alt <is-between-in> [`NOT'] `IN' `(' <expression>  [ `,' <expression> ]* `)'
  \alt <order>
 
 <negation> ::= `NOT' <negation>
- \alt <is-between>
+ \alt <is-between-in>
 
 <conjunction> ::= [<conjunction> `AND'] <negation>
 
@@ -531,6 +533,10 @@ consists only of literals, column references, and function calls.  A
   into \code{\#between(\synt{e1},\synt{e2},\synt{e3})}.
 \item \code{\synt{e1} NOT BETWEEN \synt{e2} AND \synt{e3}} is translated
   into \code{\#not_between(\synt{e1},\synt{e2},\synt{e3})}.
+\item \code{\synt{e} IN \synt{e2} (\synt{es...})} is translated
+  into \code{\#in(\synt{e1},\synt{es...})}.
+\item \code{\synt{e} NOT IN \synt{e2} (\synt{es...})} is translated
+  into \code{\#not_in(\synt{e1},\synt{es...})}.
 \item All parentheses that do not denote function application are removed.
 \item All whitespace outside string literals is removed.
 \end{enumerate}
