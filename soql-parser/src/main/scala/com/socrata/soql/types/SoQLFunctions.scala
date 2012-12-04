@@ -80,6 +80,9 @@ object SoQLFunctions {
     Function(SpecialFunctions.Cast(n), Map.empty, Seq(FixedType(t)), None, FixedType(t))
   }
 
+  val NumberToText = new MonomorphicFunction(SpecialFunctions.Cast(SoQLText.name), Seq(SoQLNumber), None, SoQLText).function
+  val TextToNumber = new MonomorphicFunction(SpecialFunctions.Cast(SoQLNumber.name), Seq(SoQLText), None, SoQLNumber).function
+
   def potentialAccessors = for {
     method <- getClass.getMethods
     if Modifier.isPublic(method.getModifiers) && method.getParameterTypes.length == 0

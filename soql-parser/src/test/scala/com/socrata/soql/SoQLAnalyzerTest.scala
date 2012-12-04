@@ -123,5 +123,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     withinBox.functionNamePosition.column must equal (71)
     withinBox.function.function must equal (SoQLFunctions.WithinBox)
   }
+
+  test("analysis succeeds in cast") {
+    val analysis = analyzer.analyzeFullQuery("select name_last::number as c1, '123'::number as c2, 456::text as c3")
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName("c1") -> typedExpression("name_last::number"),
+      ColumnName("c2") -> typedExpression("'123'::number"),
+      ColumnName("c3") -> typedExpression("456::text")
+    ))
+  }
 }
 
