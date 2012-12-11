@@ -6,6 +6,11 @@ sealed trait TypeLike[+Type]
 case class FixedType[Type](typ: Type) extends TypeLike[Type]
 case class VariableType(name: String) extends TypeLike[Nothing]
 
+/**
+ * @note This class has identity equality semantics even though it's a case class.  This
+ *       is for performance reasons, as there should somewhere be a static list of supported
+ *       functions which are re-used for all instances in the entire system.
+ */
 case class Function[+Type](name: FunctionName, constraints: Map[String, Any => Boolean /* ick, but without Set being covariant... */], parameters: Seq[TypeLike[Type]], repeated: Option[TypeLike[Type]], result: TypeLike[Type], isAggregate: Boolean = false) {
   val minArity = parameters.length
   def isVariadic = repeated.isDefined
@@ -33,5 +38,7 @@ case class Function[+Type](name: FunctionName, constraints: Map[String, Any => B
     })
     sb.toString
   }
-}
 
+  override final def hashCode = System.identityHashCode(this)
+  override final def equals(that: Any) = this eq that.asInstanceOf[AnyRef]
+}
