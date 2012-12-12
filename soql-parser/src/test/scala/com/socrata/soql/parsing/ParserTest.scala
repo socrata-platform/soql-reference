@@ -39,7 +39,7 @@ class ParserTest extends WordSpec with MustMatchers {
       expectFailure("Expression expected", "x between")
       expectFailure("`AND' expected", "x between a")
       expectFailure("Expression expected", "x between a and")
-      expectFailure("`BETWEEN' or `IN' expected", "x not")
+      expectFailure("`BETWEEN', `IN', or `LIKE' expected", "x not")
       expectFailure("Expression expected", "x not between")
       expectFailure("`AND' expected", "x not between a")
     }

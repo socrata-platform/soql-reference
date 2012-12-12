@@ -75,9 +75,10 @@ object LexerReader {
     OR,
     NOT,
 
-    // Weird boolean-valued functios with special syntax
+    // Weird boolean-valued functions with special syntax
     IS,
     BETWEEN,
+    LIKE,
 
     // Literals
     () => BooleanLiteral(true),

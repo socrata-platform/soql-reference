@@ -78,6 +78,7 @@ case class BANGEQUALS() extends FormattedToken("!=")
 case class IS() extends Token
 case class BETWEEN() extends Token
 case class IN() extends Token
+case class LIKE() extends Token
 
 // Boolean combinators -- except for "BANG" these are all actual words
 case class AND() extends Token

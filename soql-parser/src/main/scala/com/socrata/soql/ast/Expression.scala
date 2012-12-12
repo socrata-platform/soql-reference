@@ -136,6 +136,7 @@ object SpecialFunctions {
   }
   val IsNull = FunctionName("#IS_NULL")
   val Between = FunctionName("#BETWEEN")
+  val Like = FunctionName("#LIKE")
 
   // both of these are redundant but needed for synthetic identifiers because we need to
   // distinguish between "not (x is null)" and "x is not null" when generating them.
@@ -143,6 +144,7 @@ object SpecialFunctions {
   val NotBetween = FunctionName("#NOT_BETWEEN")
   val In = FunctionName("#IN")
   val NotIn = FunctionName("#NOT_IN")
+  val NotLike = FunctionName("#NOT_LIKE")
 
   object Operator {
     def apply(op: String) = FunctionName("op$" + op)

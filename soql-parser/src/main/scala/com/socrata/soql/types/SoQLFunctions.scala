@@ -76,6 +76,9 @@ object SoQLFunctions {
   val In = new Function(SpecialFunctions.In, Map.empty, Seq(VariableType("a")), Some(VariableType("a")), FixedType(SoQLBoolean))
   val NotIn = new Function(SpecialFunctions.NotIn, Map.empty, Seq(VariableType("a")), Some(VariableType("a")), FixedType(SoQLBoolean))
 
+  val Like = new MonomorphicFunction(SpecialFunctions.Like, Seq(SoQLText, SoQLText), None, SoQLBoolean).function
+  val NotLike = new MonomorphicFunction(SpecialFunctions.NotLike, Seq(SoQLText, SoQLText), None, SoQLBoolean).function
+
   val castIdentities = for((n, t) <- SoQLType.typesByName.toSeq) yield {
     Function(SpecialFunctions.Cast(n), Map.empty, Seq(FixedType(t)), None, FixedType(t))
   }
