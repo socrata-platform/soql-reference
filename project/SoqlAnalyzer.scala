@@ -4,7 +4,7 @@ import Keys._
 import com.socrata.socratasbt.SocrataSbt._
 import SocrataSbtKeys._
 
-object SoqlParser {
+object SoqlAnalyzer {
   lazy val settings: Seq[Setting[_]] = BuildSettings.buildSettings ++ socrataProjectSettings() ++ BuildSettings.overrides ++ Seq(
     sourceGenerators in Compile <+= (sourceManaged in Compile, sourceDirectory in Compile) map { (sourceManaged, sourceDir) =>
       val task = new JFlex.anttask.JFlexTask
