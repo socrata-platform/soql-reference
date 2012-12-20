@@ -6,11 +6,12 @@ import scala.runtime.ScalaRunTime
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.environment.ColumnName
 
-/** Typed Function Form -- fully expanded and with types ascribed at each node. */
-sealed abstract class TypedFF[+Type] extends Product with Typable[Type] {
+/** A "core expression" -- nothing but literals, column references, and function calls,
+  * with aliases fully expanded and with types ascribed at each node. */
+sealed abstract class CoreExpr[+Type] extends Product with Typable[Type] {
   var position: Position = NoPosition
   protected def asString: String
-  override final def toString = if(TypedFF.pretty) (asString + " :: " + typ) else ScalaRunTime._toString(this)
+  override final def toString = if(CoreExpr.pretty) (asString + " :: " + typ) else ScalaRunTime._toString(this)
   override final lazy val hashCode = ScalaRunTime._hashCode(this)
 
   def positionedAt(p: Position): this.type = {
@@ -19,15 +20,15 @@ sealed abstract class TypedFF[+Type] extends Product with Typable[Type] {
   }
 }
 
-object TypedFF {
+object CoreExpr {
   val pretty = true
 }
 
-case class ColumnRef[Type](column: ColumnName, typ: Type) extends TypedFF[Type] {
+case class ColumnRef[Type](column: ColumnName, typ: Type) extends CoreExpr[Type] {
   protected def asString = column.toString
 }
 
-sealed abstract class TypedLiteral[Type] extends TypedFF[Type]
+sealed abstract class TypedLiteral[Type] extends CoreExpr[Type]
 case class NumberLiteral[Type](value: BigDecimal, typ: Type) extends TypedLiteral[Type] {
   protected def asString = value.toString
 }
@@ -40,7 +41,7 @@ case class BooleanLiteral[Type](value: Boolean, typ: Type) extends TypedLiteral[
 case class NullLiteral[Type](typ: Type) extends TypedLiteral[Type] {
   override final def asString = "NULL"
 }
-case class FunctionCall[Type](function: MonomorphicFunction[Type], parameters: Seq[TypedFF[Type]]) extends TypedFF[Type] {
+case class FunctionCall[Type](function: MonomorphicFunction[Type], parameters: Seq[CoreExpr[Type]]) extends CoreExpr[Type] {
   var functionNamePosition: Position = NoPosition
 
   if(function.isVariadic) {

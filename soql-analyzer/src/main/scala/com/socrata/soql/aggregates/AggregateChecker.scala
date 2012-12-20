@@ -4,7 +4,7 @@ import com.socrata.soql.typed._
 import com.socrata.soql.exceptions.{AggregateInUngroupedContext, ColumnNotInGroupBys}
 
 class AggregateChecker[Type] {
-  type Expr = TypedFF[Type]
+  type Expr = CoreExpr[Type]
 
   /** Check that aggregates and column-names are used as appropriate for
     * the query.
@@ -75,7 +75,7 @@ class AggregateChecker[Type] {
     }
   }
 
-  def isGroupExpression(e: TypedFF[Type], groupExpressions: Iterable[TypedFF[Type]]): Boolean =
+  def isGroupExpression(e: Expr, groupExpressions: Iterable[Expr]): Boolean =
     // This function doesn't take a Set because, while we're doing set-membership, we don't want to
     // re-compute our hashcodes over and over and over.  This should also be a "small" set.  So let's
     // just do a linear probe.

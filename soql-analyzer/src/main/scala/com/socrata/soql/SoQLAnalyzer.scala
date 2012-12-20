@@ -9,7 +9,7 @@ import com.socrata.soql.typechecker._
 import environment.{ColumnName, DatasetContext}
 
 class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type]) {
-  type Expr = typed.TypedFF[Type]
+  type Expr = typed.CoreExpr[Type]
 
   val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLAnalyzer[_]])
   def ns2ms(ns: Long) = ns / 1000000
@@ -156,7 +156,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
     val t0 = System.nanoTime()
     val aliasAnalysis = AliasAnalysis(query.selection)
     val t1 = System.nanoTime()
-    val typedAliases = aliasAnalysis.evaluationOrder.foldLeft(Map.empty[ColumnName, typed.TypedFF[Type]]) { (acc, alias) =>
+    val typedAliases = aliasAnalysis.evaluationOrder.foldLeft(Map.empty[ColumnName, Expr]) { (acc, alias) =>
       acc + (alias -> typechecker(aliasAnalysis.expressions(alias), acc))
     }
     val outputs = OrderedMap(aliasAnalysis.expressions.keys.map { k => k -> typedAliases(k) }.toSeq : _*)

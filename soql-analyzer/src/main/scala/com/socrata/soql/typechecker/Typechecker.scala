@@ -7,10 +7,10 @@ import com.socrata.soql.exceptions.{NoSuchColumn, NoSuchFunction, TypeMismatch, 
 import com.socrata.soql.typed
 import com.socrata.soql.environment.{ColumnName, DatasetContext}
 
-class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: DatasetContext[Type]) extends ((Expression, Map[ColumnName, typed.TypedFF[Type]]) => typed.TypedFF[Type]) { self =>
+class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: DatasetContext[Type]) extends ((Expression, Map[ColumnName, typed.CoreExpr[Type]]) => typed.CoreExpr[Type]) { self =>
   import typeInfo._
 
-  type Expr = typed.TypedFF[Type]
+  type Expr = typed.CoreExpr[Type]
 
   val columns = ctx.schema
   val functionCallTypechecker = new FunctionCallTypechecker(typeInfo, functionInfo)
