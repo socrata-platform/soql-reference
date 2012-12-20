@@ -1,20 +1,10 @@
-package com.socrata.soql.types
+package com.socrata.soql.functions
 
-import com.socrata.soql.names._
-import com.socrata.soql.functions._
-import com.socrata.soql.typechecker._
+import com.socrata.soql.typechecker.FunctionInfo
+import com.socrata.soql.types.SoQLType
+import com.socrata.soql.environment.FunctionName
 
-object SoQLTypeInfo extends TypeInfo[SoQLType] {
-  def booleanLiteralType(b: Boolean) = SoQLBoolean
-
-  def stringLiteralType(s: String) = SoQLTextLiteral(s)
-
-  def numberLiteralType(n: BigDecimal) = SoQLNumberLiteral(n)
-
-  def nullLiteralType = SoQLNull
-
-  def isAggregate(function: MonomorphicFunction[SoQLType]) = false
-
+object SoQLFunctionInfo extends FunctionInfo[SoQLType] {
   def functionsWithArity(name: FunctionName, n: Int) =
     SoQLFunctions.nAdicFunctionsByNameThenArity.get(name) match {
       case Some(funcsByArity) =>
@@ -46,16 +36,5 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
     }
   }
 
-  def typeFor(name: TypeName) =
-    SoQLType.typesByName.get(name)
-
-  def typeNameFor(typ: SoQLType): TypeName = typ.name
-
-  def canonicalize(typ: SoQLType) = typ.canonical
-
-  def typeParameterUniverse = SoQLTypeConversions.typeParameterUniverse
-
   def implicitConversions(from: SoQLType, to: SoQLType) = SoQLTypeConversions.implicitConversions(from, to)
-
-  def canBePassedToWithoutConversion(actual: SoQLType, expected: SoQLType) = SoQLTypeConversions.canBePassedToWithoutConversion(actual, expected)
 }

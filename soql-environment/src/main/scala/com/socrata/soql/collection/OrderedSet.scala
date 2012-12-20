@@ -1,4 +1,4 @@
-package com.socrata.collection
+package com.socrata.soql.collection
 
 import scala.collection.immutable._
 import scala.collection.generic.{ImmutableSetFactory, CanBuildFrom, GenericCompanion, GenericSetTemplate}

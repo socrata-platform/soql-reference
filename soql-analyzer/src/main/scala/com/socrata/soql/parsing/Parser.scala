@@ -3,13 +3,12 @@ package com.socrata.soql.parsing
 import scala.util.parsing.combinator.{Parsers, PackratParsers}
 import util.parsing.input.Position
 
-import com.socrata.soql.SchemalessDatasetContext
 import com.socrata.soql.exceptions.BadParse
-import com.socrata.soql.names._
 import com.socrata.soql.tokens
 import com.socrata.soql.tokens._
 import com.socrata.soql.ast
 import com.socrata.soql.ast._
+import com.socrata.soql.environment.{TypeName, FunctionName, ColumnName, SchemalessDatasetContext}
 
 class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with PackratParsers {
   type Elem = Token

@@ -4,10 +4,9 @@ import scala.util.parsing.input.Position
 import scala.collection.mutable
 
 import com.socrata.soql.ast._
-import com.socrata.soql.UntypedDatasetContext
-import com.socrata.soql.names._
-import com.socrata.collection.{OrderedMap, OrderedSet}
 import com.socrata.soql.exceptions.{CircularAliasDefinition, DuplicateAlias, NoSuchColumn, RepeatedException}
+import com.socrata.soql.environment.{ColumnName, UntypedDatasetContext}
+import com.socrata.soql.collection.{OrderedSet, OrderedMap}
 
 trait AliasAnalysis {
   case class Analysis(expressions: OrderedMap[ColumnName, Expression], evaluationOrder: Seq[ColumnName])

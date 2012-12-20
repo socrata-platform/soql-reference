@@ -3,8 +3,8 @@ package com.socrata.soql.typed
 import scala.util.parsing.input.{Position, NoPosition}
 import scala.runtime.ScalaRunTime
 
-import com.socrata.soql.names.ColumnName
 import com.socrata.soql.functions.MonomorphicFunction
+import com.socrata.soql.environment.ColumnName
 
 /** Typed Function Form -- fully expanded and with types ascribed at each node. */
 sealed abstract class TypedFF[+Type] extends Product with Typable[Type] {

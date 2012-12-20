@@ -1,10 +1,11 @@
 package com.socrata.soql
 
+import collection.OrderedSet
 import com.socrata.soql.aliases._
 
-import com.socrata.soql.names.ColumnName
 import com.socrata.soql.parsing.Parser
 import com.socrata.soql.exceptions.SoQLException
+import environment.{ColumnName, UntypedDatasetContext}
 
 object AliasToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -15,7 +16,7 @@ object AliasToy extends (Array[String] => Unit) {
   implicit val datasetCtx = new UntypedDatasetContext {
     implicit val ctx = this
     val locale = com.ibm.icu.util.ULocale.ENGLISH
-    val columns = com.socrata.collection.OrderedSet(":id", ":created_at", "a", "b", "c", "d").map(ColumnName(_))
+    val columns = com.socrata.soql.collection.OrderedSet(":id", ":created_at", "a", "b", "c", "d").map(ColumnName(_))
   }
 
   def menu() {

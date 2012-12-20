@@ -1,4 +1,4 @@
-package com.socrata.collection
+package com.socrata.soql.collection
 
 import scala.collection.immutable.{MapLike, HashMap}
 import scala.collection.generic.{CanBuildFrom, ImmutableMapFactory}

@@ -1,4 +1,4 @@
-package com.socrata.soql.names
+package com.socrata.soql.environment
 
 import com.ibm.icu.text.{Normalizer, Collator}
 import com.ibm.icu.util.ULocale

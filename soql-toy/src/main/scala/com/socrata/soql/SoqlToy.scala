@@ -2,7 +2,8 @@ package com.socrata.soql
 
 import com.socrata.soql.exceptions.SoQLException
 import com.socrata.soql.types._
-import com.socrata.soql.names.ColumnName
+import environment.{ColumnName, DatasetContext}
+import functions.{SoQLTypeInfo, SoQLFunctionInfo}
 
 object SoqlToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -13,7 +14,7 @@ object SoqlToy extends (Array[String] => Unit) {
   implicit val datasetCtx = new DatasetContext[SoQLType] {
     private implicit def ctx = this
     val locale = com.ibm.icu.util.ULocale.ENGLISH
-    val schema = com.socrata.collection.OrderedMap(
+    val schema = com.socrata.soql.collection.OrderedMap(
       ColumnName(":id") -> SoQLNumber,
       ColumnName(":updated_at") -> SoQLFixedTimestamp,
       ColumnName(":created_at") -> SoQLFixedTimestamp,
@@ -34,7 +35,7 @@ object SoqlToy extends (Array[String] => Unit) {
   def apply(args: Array[String]) {
     menu()
 
-    val analyzer = new SoQLAnalyzer(SoQLTypeInfo)
+    val analyzer = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo)
 
     while(true) {
       val selection = readLine("> ")

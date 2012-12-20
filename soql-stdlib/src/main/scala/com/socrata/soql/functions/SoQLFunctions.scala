@@ -1,9 +1,9 @@
-package com.socrata.soql.types
+package com.socrata.soql.functions
 
-import com.socrata.soql.names.FunctionName
-import com.socrata.soql.functions.{FixedType, VariableType, MonomorphicFunction, Function}
-import java.lang.reflect.Modifier
+import com.socrata.soql.types._
 import com.socrata.soql.ast.SpecialFunctions
+import com.socrata.soql.environment.FunctionName
+import java.lang.reflect.Modifier
 
 sealed abstract class SoQLFunctions
 

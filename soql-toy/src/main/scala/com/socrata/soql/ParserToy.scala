@@ -1,5 +1,6 @@
 package com.socrata.soql
 
+import environment.SchemalessDatasetContext
 import scala.util.control.Breaks._
 
 import com.ibm.icu.util.ULocale

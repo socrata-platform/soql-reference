@@ -1,10 +1,8 @@
-package com.socrata.soql
+package com.socrata.soql.environment
 
 import com.ibm.icu.util.ULocale
 import com.ibm.icu.text.Collator
-
-import com.socrata.soql.names.ColumnName
-import com.socrata.collection.{OrderedMap, OrderedSet}
+import com.socrata.soql.collection.{OrderedMap, OrderedSet}
 
 trait SchemalessDatasetContext {
   val locale: ULocale

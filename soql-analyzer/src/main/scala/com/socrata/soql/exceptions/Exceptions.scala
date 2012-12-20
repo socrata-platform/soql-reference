@@ -2,7 +2,7 @@ package com.socrata.soql.exceptions
 
 import scala.util.parsing.input.Position
 
-import com.socrata.soql.names.{ColumnName, FunctionName, TypeName}
+import com.socrata.soql.environment.{TypeName, FunctionName, ColumnName}
 
 sealed abstract class SoQLException(m: String, p: Position) extends RuntimeException(m + ":\n" + p.longString) {
   def position: Position

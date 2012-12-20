@@ -1,7 +1,7 @@
 package com.socrata.soql.ast
 
 import scala.util.parsing.input.{Position, NoPosition}
-import com.socrata.soql.names.ColumnName
+import com.socrata.soql.environment.ColumnName
 
 case class Select(selection: Selection, where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt]) {
   override def toString = {

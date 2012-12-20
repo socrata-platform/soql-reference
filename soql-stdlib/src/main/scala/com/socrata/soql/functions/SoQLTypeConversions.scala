@@ -1,9 +1,10 @@
-package com.socrata.soql.types
+package com.socrata.soql.functions
 
 import java.util.regex.Pattern
 
-import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.collection.OrderedSet
+import com.socrata.soql.collection.OrderedSet
+import com.socrata.soql.types._
+import com.socrata.soql.types.SoQLNumberLiteral
 
 object SoQLTypeConversions {
   val typeParameterUniverse: OrderedSet[SoQLType] = OrderedSet(

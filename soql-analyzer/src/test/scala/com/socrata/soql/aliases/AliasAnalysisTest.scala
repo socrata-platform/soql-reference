@@ -7,11 +7,10 @@ import org.scalatest.matchers.MustMatchers
 
 import com.socrata.soql.parsing.{LexerReader, Parser}
 
-import com.socrata.soql.{SchemalessDatasetContext, UntypedDatasetContext}
-import com.socrata.soql.names.ColumnName
 import com.socrata.soql.ast._
-import com.socrata.collection.{OrderedMap, OrderedSet}
 import com.socrata.soql.exceptions.{CircularAliasDefinition, NoSuchColumn, RepeatedException, DuplicateAlias}
+import com.socrata.soql.environment.{ColumnName, UntypedDatasetContext, SchemalessDatasetContext}
+import com.socrata.soql.collection.{OrderedSet, OrderedMap}
 
 class AliasAnalysisTest extends WordSpec with MustMatchers {
   def columnName(name: String)(implicit ctx: SchemalessDatasetContext) =

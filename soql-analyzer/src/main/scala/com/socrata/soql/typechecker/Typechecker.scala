@@ -4,17 +4,16 @@ import scala.util.parsing.input.NoPosition
 
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions.{NoSuchColumn, NoSuchFunction, TypeMismatch, AmbiguousCall}
-import com.socrata.soql.names._
-import com.socrata.soql.{DatasetContext, typed}
+import com.socrata.soql.typed
+import com.socrata.soql.environment.{ColumnName, DatasetContext}
 
-class Typechecker[Type](typeInfo: TypeInfo[Type])(implicit ctx: DatasetContext[Type]) extends ((Expression, Map[ColumnName, typed.TypedFF[Type]]) => typed.TypedFF[Type]) { self =>
+class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: DatasetContext[Type]) extends ((Expression, Map[ColumnName, typed.TypedFF[Type]]) => typed.TypedFF[Type]) { self =>
   import typeInfo._
 
   type Expr = typed.TypedFF[Type]
 
   val columns = ctx.schema
-
-  val functionCallTypechecker = new FunctionCallTypechecker(typeInfo)
+  val functionCallTypechecker = new FunctionCallTypechecker(typeInfo, functionInfo)
 
   def apply(e: Expression, aliases: Map[ColumnName, Expr]) = canonicalizeType(typecheck(e, aliases))
 
@@ -42,7 +41,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type])(implicit ctx: DatasetContext[T
     case fc@FunctionCall(name, parameters) =>
       val typedParameters = parameters.map(typecheck(_, aliases))
 
-      val options = functionsWithArity(name, typedParameters.length)
+      val options = functionInfo.functionsWithArity(name, typedParameters.length)
       if(options.isEmpty) throw NoSuchFunction(name, typedParameters.length, fc.functionNamePosition)
       functionCallTypechecker.resolveOverload(options, typedParameters) match {
         case Matched(f, cs) =>

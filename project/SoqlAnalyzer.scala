@@ -20,7 +20,6 @@ object SoqlAnalyzer {
     },
     libraryDependencies <++= (slf4jVersion) { slf4jVersion =>
       Seq(
-        "com.ibm.icu" % "icu4j" % "49.1",
         "org.slf4j" % "slf4j-simple" % slf4jVersion % "test"
       )
     }

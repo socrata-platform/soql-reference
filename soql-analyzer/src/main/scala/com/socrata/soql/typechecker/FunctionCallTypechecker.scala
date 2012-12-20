@@ -2,6 +2,7 @@ package com.socrata.soql.typechecker
 
 import com.socrata.soql.functions._
 import com.socrata.soql.typed.Typable
+import com.socrata.soql.environment.FunctionName
 
 object UtilTypes {
   type ConversionSet[Type] = Seq[Option[MonomorphicFunction[Type]]]
@@ -24,7 +25,7 @@ case class TypeMismatchFailure[Type](expected: Set[Type], found: Type, idx: Int)
 case class UnificationFailure[Type](found: Type, idx: Int) extends CandidateEvaluation[Type]
 case class Passed[Type](conversionSet: ConversionSet[Type]) extends CandidateEvaluation[Type]
 
-class FunctionCallTypechecker[Type](typeInfo: FunctionTypeInfo[Type]) {
+class FunctionCallTypechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type]) {
   val log = org.slf4j.LoggerFactory.getLogger(classOf[FunctionCallTypechecker[_]])
 
   type Func = Function[Type]
@@ -33,6 +34,7 @@ class FunctionCallTypechecker[Type](typeInfo: FunctionTypeInfo[Type]) {
   type ConvSet = ConversionSet[Type]
 
   import typeInfo._
+  import functionInfo._
 
   def goodArity(function: Func, parameters: Seq[Val]): Boolean = {
     if(function.isVariadic) {
@@ -161,12 +163,11 @@ class FunctionCallTypechecker[Type](typeInfo: FunctionTypeInfo[Type]) {
     // typeParameterUniverse (WITHOUT implicit conversions) until we
     // find one that succeeds.
     if(paramsByType.contains(nullType) && paramsByType(nullType).size == 1) {
-      val typeInfoWithoutImplicitConversions = new FunctionTypeInfo[Type] {
-        def typeParameterUniverse = typeInfo.typeParameterUniverse
+      val functionInfoWithoutImplicitConversions = new FunctionInfo[Type] {
         def implicitConversions(from: Type, to: Type) = None
-        def canBePassedToWithoutConversion(actual: Type, expected: Type): Boolean = typeInfo.canBePassedToWithoutConversion(actual, expected)
+        def functionsWithArity(name: FunctionName, n: Int) = functionInfo.functionsWithArity(name, n)
       }
-      val withoutImplicitConversions = new FunctionCallTypechecker[Type](typeInfoWithoutImplicitConversions)
+      val withoutImplicitConversions = new FunctionCallTypechecker[Type](typeInfo, functionInfoWithoutImplicitConversions)
       for(t <- typeParameterUniverse) {
         withoutImplicitConversions.resolveOverload(failure.map(_._1.function).toSet, parameters.map { p => if(p.typ == nullType) SimpleValue(t) else p }) match {
           case Matched(f,c) => return Some(("one null parameter", f, c))

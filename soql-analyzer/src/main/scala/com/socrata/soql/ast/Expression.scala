@@ -3,7 +3,7 @@ package com.socrata.soql.ast
 import scala.util.parsing.input.{Position, NoPosition}
 import scala.runtime.ScalaRunTime
 
-import com.socrata.soql.names.{FunctionName, ColumnName, TypeName}
+import com.socrata.soql.environment.{TypeName, FunctionName, ColumnName}
 
 sealed abstract class Expression extends Product {
   var position: Position = NoPosition

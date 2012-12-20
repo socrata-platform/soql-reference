@@ -1,6 +1,6 @@
 package com.socrata.soql.functions
 
-import com.socrata.soql.names.FunctionName
+import com.socrata.soql.environment.FunctionName
 
 case class MonomorphicFunction[+Type](function: Function[Type], bindings: Map[String, Type]) {
   def this(name: FunctionName, parameters: Seq[Type], repeated: Option[Type], result: Type, isAggregate: Boolean = false) =

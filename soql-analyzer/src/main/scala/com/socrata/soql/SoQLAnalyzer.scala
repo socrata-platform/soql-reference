@@ -1,14 +1,14 @@
 package com.socrata.soql
 
+import collection.OrderedMap
 import com.socrata.soql.aliases.AliasAnalysis
 import com.socrata.soql.aggregates.AggregateChecker
 import com.socrata.soql.ast._
-import com.socrata.soql.names.ColumnName
 import com.socrata.soql.parsing.Parser
-import com.socrata.soql.typechecker.{Typechecker, TypeInfo}
-import com.socrata.collection.OrderedMap
+import com.socrata.soql.typechecker._
+import environment.{ColumnName, DatasetContext}
 
-class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type]) {
+class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type]) {
   type Expr = typed.TypedFF[Type]
 
   val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLAnalyzer[_]])
@@ -86,7 +86,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type]) {
     //   1. If there are groupBys, having, or aggregates in orderBy, then selection should be the equivalent of
     //      selecting the group-by clauses together with "count(*)".
     //   2. Otherwise, it should be the equivalent of selecting "*".
-    val typechecker = new Typechecker(typeInfo)
+    val typechecker = new Typechecker(typeInfo, functionInfo)
     val t0 = System.nanoTime()
     val checkedWhere = where.map(typechecker(_, Map.empty))
     val t1 = System.nanoTime()
@@ -151,7 +151,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type]) {
   def analyzeWithSelection(query: Select)(implicit ctx: DatasetContext[Type]): Analysis = {
     log.debug("There is a selection; typechecking all parts")
 
-    val typechecker = new Typechecker(typeInfo)
+    val typechecker = new Typechecker(typeInfo, functionInfo)
 
     val t0 = System.nanoTime()
     val aliasAnalysis = AliasAnalysis(query.selection)

@@ -1,6 +1,6 @@
 package com.socrata.soql.functions
 
-import com.socrata.soql.names.FunctionName
+import com.socrata.soql.environment.FunctionName
 
 sealed trait TypeLike[+Type]
 case class FixedType[Type](typ: Type) extends TypeLike[Type]

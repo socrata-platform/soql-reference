@@ -1,9 +1,7 @@
-package com.socrata.soql.names
+package com.socrata.soql.environment
 
 import com.ibm.icu.lang.UCharacter
 import com.ibm.icu.text.Normalizer
-
-import com.socrata.soql.SchemalessDatasetContext
 
 final class ColumnName(val name: String)(implicit val datasetContext: SchemalessDatasetContext) extends Ordered[ColumnName] {
   val canonicalName = Normalizer.normalize(UCharacter.toLowerCase(datasetContext.locale, name).replaceAll("-","_"), Normalizer.DEFAULT)

@@ -4,9 +4,8 @@ import org.scalatest._
 import org.scalatest.matchers.MustMatchers
 
 import com.socrata.soql.ast._
-import com.socrata.soql.names.ColumnName
-import com.socrata.soql.SchemalessDatasetContext
 import com.socrata.soql.exceptions.BadParse
+import com.socrata.soql.environment.{ColumnName, SchemalessDatasetContext}
 
 class ParserTest extends WordSpec with MustMatchers {
   implicit val ctx = new SchemalessDatasetContext {
