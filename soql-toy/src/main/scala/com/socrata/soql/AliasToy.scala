@@ -14,7 +14,6 @@ object AliasToy extends (Array[String] => Unit) {
   }
 
   implicit val datasetCtx = new UntypedDatasetContext {
-    implicit val ctx = this
     val locale = com.ibm.icu.util.ULocale.ENGLISH
     val columns = com.socrata.soql.collection.OrderedSet(":id", ":created_at", "a", "b", "c", "d").map(ColumnName(_))
   }

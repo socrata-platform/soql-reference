@@ -7,7 +7,11 @@ import com.ibm.icu.util.ULocale
 
 import com.socrata.soql.tokens._
 
-class LexerReader(lexer: Lexer) extends Reader[Token] { self =>
+trait StreamableReader[T] extends Reader[T] {
+  def toStream: Stream[T]
+}
+
+class LexerReader(lexer: Lexer) extends StreamableReader[Token] { self =>
   import LexerReader._
 
   def this(soql: String) = this(new Lexer(soql))
@@ -17,14 +21,22 @@ class LexerReader(lexer: Lexer) extends Reader[Token] { self =>
     case other => other
   }
 
-  def atEnd = first.isInstanceOf[EOF]
+  def atEnd = false
   def pos = first.position
 
-  def toStream: Stream[Token] = if(atEnd) Stream.empty else first #:: rest.toStream
+  def toStream: Stream[Token] = first #:: rest.toStream
 
-  lazy val rest = {
+  lazy val rest: StreamableReader[Token] = {
     if(atEnd) this
-    else new LexerReader(lexer)
+    else if(first.isInstanceOf[EOF]) {
+      new StreamableReader[Token] {
+        def first = self.first
+        def rest = this
+        def atEnd = true
+        def pos = first.position
+        def toStream = Stream.empty
+      }
+    } else new LexerReader(lexer)
   }
 }
 

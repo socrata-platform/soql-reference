@@ -7,7 +7,7 @@ externalResolvers <<= resolvers map { rs =>
   Resolver.withDefaultResolvers(rs, mavenCentral = false)
 }
 
-addSbtPlugin("com.socrata" % "socrata-sbt" % "0.2.3")
+addSbtPlugin("com.socrata" % "socrata-sbt" % "0.2.6")
 
 libraryDependencies ++= Seq(
   "de.jflex" % "jflex" % "1.4.3",

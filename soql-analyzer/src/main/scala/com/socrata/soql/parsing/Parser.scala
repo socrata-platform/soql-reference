@@ -30,6 +30,7 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
     phrase(parser <~ eof)(new LexerReader(soql)) match {
       case Success(result, _) => result
       case Failure(msg, next) => throw BadParse(msg, next.pos)
+      case Error(msg, next) => throw BadParse(msg, next.pos)
     }
   }
 
@@ -69,7 +70,13 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
   def accept[T <: Elem](implicit mfst: ClassManifest[T]): Parser[T] =
     elem(mfst.erasure.getName, mfst.erasure.isInstance _) ^^(_.asInstanceOf[T])
 
-  def eof = EOF() | acceptIf(_ => false)(errors.missingEOF)
+  val eof = new Parser[Unit] {
+    def apply(in: Input) =
+      if(in.first == EOF())
+        Success((), in.rest)
+      else
+        Failure(errors.missingEOF(in.first), in)
+  }
 
   /*
    *               *************************

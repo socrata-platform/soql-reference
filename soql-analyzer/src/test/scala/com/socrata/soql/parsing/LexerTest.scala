@@ -9,8 +9,14 @@ import com.socrata.soql.exceptions.UnterminatedString
 class LexerTest extends WordSpec with MustMatchers {
   def lexTest(s: String, ts: (Token, Int, Int, Int)*) = {
     val tokens = new LexerReader(s).toStream
-    tokens must equal (ts.map(_._1))
-    tokens.map(_.position) must equal (ts.map { case (_, r,c,o) => new SoQLPosition(r, c, s, o) })
+
+    val eof = EOF()
+    val eofPos = new SoQLPosition(s.count('\n'==_)+1, s.length - s.lastIndexOf('\n'), s, s.length)
+    eof.position = eofPos
+    val fixture = ts :+ ((eof, eofPos.line, eofPos.column, eofPos.offset))
+
+    tokens must equal (fixture.map(_._1))
+    tokens.map(_.position) must equal (fixture.map { case (_, r,c,o) => new SoQLPosition(r, c, s, o) })
   }
 
   def lex(s: String) {

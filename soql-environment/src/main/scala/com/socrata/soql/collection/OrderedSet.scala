@@ -5,7 +5,7 @@ import scala.collection.generic.{ImmutableSetFactory, CanBuildFrom, GenericCompa
 import scala.collection.SetLike
 
 class OrderedSet[A](underlying: Map[A, Int], order: Vector[A])
-  extends Set[A] with GenericSetTemplate[A, OrderedSet] with SetLike[A, OrderedSet[A]] with Serializable
+  extends Set[A] with GenericSetTemplate[A, OrderedSet] with SetLike[A, OrderedSet[A]] with Serializable with IndexedSeqShim[A]
 {
   override def companion: GenericCompanion[OrderedSet] = OrderedSet
 
@@ -47,7 +47,6 @@ class OrderedSet[A](underlying: Map[A, Int], order: Vector[A])
     }
 
   override def toSeq = order
-  override def toIndexedSeq[B >: A] = order
 }
 
 object OrderedSet extends ImmutableSetFactory[OrderedSet] {
