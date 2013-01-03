@@ -17,12 +17,13 @@ sealed abstract class SoQLType(val name: TypeName) {
 object SoQLType {
   // FIXME: Figure out a way to DRY this
   val typesByName = Seq(
-    SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp, SoQLObject, SoQLArray, SoQLLocation
+    SoQLID, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp, SoQLObject, SoQLArray, SoQLLocation
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
   }
 }
 
+case object SoQLID extends SoQLType("row_identifier")
 case object SoQLText extends SoQLType("text")
 case object SoQLBoolean extends SoQLType("boolean")
 case object SoQLNumber extends SoQLType("number")
