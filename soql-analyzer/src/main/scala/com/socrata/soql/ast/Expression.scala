@@ -24,47 +24,6 @@ sealed abstract class Expression extends Product {
 object Expression {
   val pretty = AST.pretty
 
-  private def collapseRuns[T](in: Seq[T], v: T): Seq[T] = {
-    val r = new scala.collection.immutable.VectorBuilder[T]
-    val it = in.iterator.buffered
-    while(it.hasNext) {
-      val here = it.next()
-      if(here == v) {
-        while(it.hasNext && it.head == v) it.next()
-      }
-      r += here
-    }
-    r.result
-  }
-
-  private def removeAdjacent[T](in: Seq[T], toRemove: T, ifAdjacentToThese: Set[T]): Seq[T] = {
-    val r = new scala.collection.immutable.VectorBuilder[T]
-    val it = in.iterator.buffered
-    var lastWasAdjacentTarget = false
-    while(it.hasNext) {
-      val here = it.next()
-      if(lastWasAdjacentTarget && here == toRemove) {
-        // do nothing; lastWasAdjacentTarget will remain true
-      } else {
-        if(here == toRemove && it.hasNext && ifAdjacentToThese(it.head)) {
-          // still do nothing because the next thing is the neighbor
-        } else {
-          lastWasAdjacentTarget = ifAdjacentToThese(here)
-          r += here
-        }
-      }
-    }
-    r.result
-  }
-
-  private def replaceBadChars(s: String, replacement: Int): IndexedSeq[Int] = {
-    s.map {
-      case c if Character.isJavaIdentifierPart(c) => c
-      case c@'-' => c
-      case _ => replacement
-    }
-  }
-
   private def findIdentsAndLiterals(e: Expression): Seq[String] = e match {
     case v: Literal => Vector(v.asString)
     case ColumnOrAliasRef(name) => Vector(name.canonicalName)
@@ -85,16 +44,6 @@ object Expression {
           findIdentsAndLiterals(a) ++ Vector("not", "between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
         case FunctionCall(other, args) => Vector(other.canonicalName) ++ args.flatMap(findIdentsAndLiterals)
       }
-  }
-
-  private def joinWith[T](xs: Seq[Seq[T]], i: T): Seq[T] = {
-    val r = new scala.collection.immutable.VectorBuilder[T]
-    val it = xs.iterator
-    while(it.hasNext) {
-      r ++= it.next()
-      if(it.hasNext) r += i
-    }
-    r.result
   }
 }
 
