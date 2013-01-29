@@ -17,35 +17,8 @@ sealed abstract class Expression extends Product {
     this
   }
 
-  def toSyntheticIdentifierBase: String = {
-    // This is clearly not optimized, but the inputs are small and it
-    // mirrors the prose spec closely.
-
-    import Expression._
-    val SyntheticUnderscore = Int.MaxValue
-    val StartOfString = Int.MaxValue - 1
-    val EndOfString = Int.MaxValue - 2
-
-    // First find all tokens to keep and replace "bad" characters with synthetic underscores
-    val good_chars_only = findIdentsAndLiterals(this).map(replaceBadChars(_, SyntheticUnderscore))
-    // Join them up with synthetic underscores
-    val separated_by_underscores = joinWith(good_chars_only, SyntheticUnderscore)
-    // Collapse runs of adjacent synthetic underscores
-    val not_so_many = collapseRuns(separated_by_underscores, SyntheticUnderscore)
-    // Remove ones that are next to real underscores or the ends
-    val not_next_to = removeAdjacent(StartOfString +: not_so_many :+ EndOfString, SyntheticUnderscore, Set('_'.toInt, '-'.toInt, StartOfString, EndOfString))
-    // Remove the start/end markers
-    val trimmed = not_next_to.slice(1, not_next_to.length - 1)
-    // Convert synthetic underscores to real ones
-    val asString: String = trimmed.map {
-      case SyntheticUnderscore => '_'
-      case other => other.toChar
-    } (scala.collection.breakOut)
-    // make sure the result is a valid identifier and return it
-    if(asString.isEmpty) "_"
-    else if(!Character.isJavaIdentifierStart(asString.charAt(0)) && asString.charAt(0) != '-') "_" + asString
-    else asString
-  }
+  def toSyntheticIdentifierBase: String =
+    com.socrata.soql.brita.Brita(Expression.findIdentsAndLiterals(this))
 }
 
 object Expression {
