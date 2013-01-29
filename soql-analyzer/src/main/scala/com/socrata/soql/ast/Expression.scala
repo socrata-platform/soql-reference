@@ -18,7 +18,7 @@ sealed abstract class Expression extends Product {
   }
 
   def toSyntheticIdentifierBase: String =
-    com.socrata.soql.brita.Brita(Expression.findIdentsAndLiterals(this))
+    com.socrata.soql.brita.IdentifierFilter(Expression.findIdentsAndLiterals(this))
 }
 
 object Expression {
