@@ -86,6 +86,17 @@ object TestFunctions {
   val NumberToText = new MonomorphicFunction(SpecialFunctions.Cast(TestText.name), Seq(TestNumber), None, TestText).function
   val TextToNumber = new MonomorphicFunction(SpecialFunctions.Cast(TestNumber.name), Seq(TestText), None, TestNumber).function
 
+  val Prop = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(TestObject, TestText), None, TestJson).function
+  val Index = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(TestArray, TestNumber), None, TestJson).function
+  val JsonProp = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(TestJson, TestText), None, TestJson).function
+  val JsonIndex = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(TestJson, TestNumber), None, TestJson).function
+
+  val JsonToText = new MonomorphicFunction(SpecialFunctions.Cast(TestText.name), Seq(TestJson), None, TestText).function
+  val JsonToNumber = new MonomorphicFunction(SpecialFunctions.Cast(TestNumber.name), Seq(TestJson), None, TestNumber).function
+  val JsonToBool = new MonomorphicFunction(SpecialFunctions.Cast(TestBoolean.name), Seq(TestJson), None, TestBoolean).function
+  val JsonToObject = new MonomorphicFunction(SpecialFunctions.Cast(TestObject.name), Seq(TestJson), None, TestObject).function
+  val JsonToArray = new MonomorphicFunction(SpecialFunctions.Cast(TestArray.name), Seq(TestJson), None, TestArray).function
+
   def potentialAccessors = for {
     method <- getClass.getMethods
     if Modifier.isPublic(method.getModifiers) && method.getParameterTypes.length == 0

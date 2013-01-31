@@ -86,6 +86,17 @@ object SoQLFunctions {
   val NumberToText = new MonomorphicFunction(SpecialFunctions.Cast(SoQLText.name), Seq(SoQLNumber), None, SoQLText).function
   val TextToNumber = new MonomorphicFunction(SpecialFunctions.Cast(SoQLNumber.name), Seq(SoQLText), None, SoQLNumber).function
 
+  val Prop = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLObject, SoQLText), None, SoQLJson).function
+  val Index = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLArray, SoQLNumber), None, SoQLJson).function
+  val JsonProp = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLJson, SoQLText), None, SoQLJson).function
+  val JsonIndex = new MonomorphicFunction(SpecialFunctions.Subscript, Seq(SoQLJson, SoQLNumber), None, SoQLJson).function
+
+  val JsonToText = new MonomorphicFunction(SpecialFunctions.Cast(SoQLText.name), Seq(SoQLJson), None, SoQLText).function
+  val JsonToNumber = new MonomorphicFunction(SpecialFunctions.Cast(SoQLNumber.name), Seq(SoQLJson), None, SoQLNumber).function
+  val JsonToBool = new MonomorphicFunction(SpecialFunctions.Cast(SoQLBoolean.name), Seq(SoQLJson), None, SoQLBoolean).function
+  val JsonToObject = new MonomorphicFunction(SpecialFunctions.Cast(SoQLObject.name), Seq(SoQLJson), None, SoQLObject).function
+  val JsonToArray = new MonomorphicFunction(SpecialFunctions.Cast(SoQLArray.name), Seq(SoQLJson), None, SoQLArray).function
+
   def potentialAccessors = for {
     method <- getClass.getMethods
     if Modifier.isPublic(method.getModifiers) && method.getParameterTypes.length == 0

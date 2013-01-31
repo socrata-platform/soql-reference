@@ -17,7 +17,8 @@ sealed abstract class SoQLType(val name: TypeName) {
 object SoQLType {
   // FIXME: Figure out a way to DRY this
   val typesByName = Seq(
-    SoQLID, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp, SoQLObject, SoQLArray, SoQLLocation
+    SoQLID, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
+    SoQLObject, SoQLArray, SoQLLocation, SoQLJson
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
   }
@@ -34,6 +35,7 @@ case object SoQLFloatingTimestamp extends SoQLType("floating_timestamp")
 case object SoQLObject extends SoQLType("object")
 case object SoQLArray extends SoQLType("array")
 case object SoQLLocation extends SoQLType("location")
+case object SoQLJson extends SoQLType("json")
 
 case object SoQLNull extends SoQLType("null") {
   override def isPassableTo(that: SoQLType) = true

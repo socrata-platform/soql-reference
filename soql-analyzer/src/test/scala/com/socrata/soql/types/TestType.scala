@@ -33,6 +33,7 @@ case object TestFloatingTimestamp extends TestType("floating_timestamp")
 case object TestObject extends TestType("object")
 case object TestArray extends TestType("array")
 case object TestLocation extends TestType("location")
+case object TestJson extends TestType("json")
 
 case object TestNull extends TestType("null") {
   override def isPassableTo(that: TestType) = true

@@ -23,7 +23,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
       ColumnName("visits") -> TestNumber,
       ColumnName("last_visit") -> TestFixedTimestamp,
       ColumnName("address") -> TestLocation,
-      ColumnName("balance") -> TestMoney
+      ColumnName("balance") -> TestMoney,
+      ColumnName("object") -> TestObject,
+      ColumnName("array") -> TestArray
     )
   }
 
@@ -118,6 +120,16 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
       ColumnName("c1") -> typedExpression("name_last::number"),
       ColumnName("c2") -> typedExpression("'123'::number"),
       ColumnName("c3") -> typedExpression("456::text")
+    ))
+  }
+
+  test("json property and index") {
+    val analysis = analyzer.analyzeFullQuery("select object.xxxx as c1, array[123] as c2, object.yyyy::text as c3, array[123]::number as c4")
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName("c1") -> typedExpression("object.xxxx"),
+      ColumnName("c2") -> typedExpression("array[123]"),
+      ColumnName("c3") -> typedExpression("object.yyyy::text"),
+      ColumnName("c4") -> typedExpression("array[123]::number")
     ))
   }
 }
