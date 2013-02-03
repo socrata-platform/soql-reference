@@ -1,13 +1,14 @@
 package com.socrata.soql
 
-import environment.{ColumnName, DatasetContext}
+import scala.util.parsing.input.NoPosition
+
 import org.scalatest.FunSuite
 import org.scalatest.matchers.MustMatchers
 
+import com.socrata.soql.environment.{ColumnName, DatasetContext}
 import com.socrata.soql.parsing.Parser
-import typechecker.{FunctionCallTypechecker, Typechecker}
-import types._
-import util.parsing.input.NoPosition
+import com.socrata.soql.typechecker.Typechecker
+import com.socrata.soql.types._
 
 class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   implicit val datasetCtx = new DatasetContext[TestType] {

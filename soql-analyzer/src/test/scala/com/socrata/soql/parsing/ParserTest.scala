@@ -1,12 +1,13 @@
 package com.socrata.soql.parsing
 
+import scala.util.parsing.input.NoPosition
+
 import org.scalatest._
 import org.scalatest.matchers.MustMatchers
 
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions.BadParse
 import com.socrata.soql.environment.{FunctionName, ColumnName, SchemalessDatasetContext}
-import util.parsing.input.NoPosition
 
 class ParserTest extends WordSpec with MustMatchers {
   implicit val ctx = new SchemalessDatasetContext {

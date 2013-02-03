@@ -1,6 +1,6 @@
 package com.socrata.soql.typed
 
-import scala.util.parsing.input.{Position, NoPosition}
+import scala.util.parsing.input.Position
 import scala.runtime.ScalaRunTime
 
 import com.socrata.soql.functions.MonomorphicFunction

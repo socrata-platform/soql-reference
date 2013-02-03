@@ -1,13 +1,14 @@
 package com.socrata.soql
 
-import collection.OrderedMap
+import scala.util.parsing.input.NoPosition
+
 import com.socrata.soql.aliases.AliasAnalysis
 import com.socrata.soql.aggregates.AggregateChecker
 import com.socrata.soql.ast._
 import com.socrata.soql.parsing.Parser
 import com.socrata.soql.typechecker._
-import environment.{ColumnName, DatasetContext}
-import util.parsing.input.NoPosition
+import com.socrata.soql.environment.{ColumnName, DatasetContext}
+import com.socrata.soql.collection.OrderedMap
 
 class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type]) {
   type Expr = typed.CoreExpr[Type]
