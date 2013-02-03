@@ -132,7 +132,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
       log.trace("alias analysis took {}ms", ns2ms(afterAliasAnalyis - beforeAliasAnalysis))
 
       val typedSelectedExpressions = names.map { column =>
-        typed.ColumnRef(column, ctx.schema(column))
+        typed.ColumnRef(column, ctx.schema(column))(NoPosition)
       }
 
       (names, typedSelectedExpressions)

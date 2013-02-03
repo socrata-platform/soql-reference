@@ -24,13 +24,13 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
           // special case: if this is an alias that refers directly to itself, position the typed tree _here_
           // (as if there were no alias at all) to make error messages that much clearer.  This will only catch
           // semi-implicitly assigned aliases, so it's better anyway.
-          typed.ColumnRef(col, typ).positionedAt(r.position)
+          typed.ColumnRef(col, typ)(r.position)
         case Some(tree) =>
           tree
         case None =>
           columns.get(col) match {
             case Some(typ) =>
-              typed.ColumnRef(col, typ).positionedAt(r.position)
+              typed.ColumnRef(col, typ)(r.position)
             case None =>
               throw NoSuchColumn(col, r.position)
           }
@@ -48,10 +48,10 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
           val realParameterList = (typedParameters, cs).zipped.map { (param, converter) =>
             converter match {
               case None => param
-              case Some(conv) => typed.FunctionCall(conv, Seq(canonicalizeType(param))).positionedAt(NoPosition).functionNameAt(NoPosition)
+              case Some(conv) => typed.FunctionCall(conv, Seq(canonicalizeType(param)))(NoPosition, NoPosition)
             }
           }
-          typed.FunctionCall(f, realParameterList.toSeq.map(canonicalizeType)).positionedAt(fc.position).functionNameAt(fc.functionNamePosition)
+          typed.FunctionCall(f, realParameterList.toSeq.map(canonicalizeType))(fc.position, fc.functionNamePosition)
         case NoMatch =>
           val failure = functionCallTypechecker.narrowDownFailure(options, typedParameters)
           throw TypeMismatch(name, typeNameFor(typedParameters(failure.idx).typ), typedParameters(failure.idx).position)
@@ -59,21 +59,21 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
           throw AmbiguousCall(name, fc.functionNamePosition)
       }
     case bl@BooleanLiteral(b) =>
-      typed.BooleanLiteral(b, booleanLiteralType(b)).positionedAt(bl.position)
+      typed.BooleanLiteral(b, booleanLiteralType(b))(bl.position)
     case sl@StringLiteral(s) =>
-      typed.StringLiteral(s, stringLiteralType(s)).positionedAt(sl.position)
+      typed.StringLiteral(s, stringLiteralType(s))(sl.position)
     case nl@NumberLiteral(n) =>
-      typed.NumberLiteral(n, numberLiteralType(n)).positionedAt(nl.position)
+      typed.NumberLiteral(n, numberLiteralType(n))(nl.position)
     case nl@NullLiteral() =>
-      typed.NullLiteral(nullLiteralType).positionedAt(nl.position)
+      typed.NullLiteral(nullLiteralType)(nl.position)
   }
 
   def canonicalizeType(expr: Expr): Expr = expr match {
     case fc@typed.FunctionCall(_, _) => fc // a functioncall's type is intrinsic, so it shouldn't need canonicalizing
-    case cr@typed.ColumnRef(c, t) => typed.ColumnRef(c, typeInfo.canonicalize(t)).positionedAt(cr.position)
-    case bl@typed.BooleanLiteral(b, t) => typed.BooleanLiteral(b, typeInfo.canonicalize(t)).positionedAt(bl.position)
-    case nl@typed.NumberLiteral(n, t) => typed.NumberLiteral(n, typeInfo.canonicalize(t)).positionedAt(nl.position)
-    case sl@typed.StringLiteral(s, t) => typed.StringLiteral(s, typeInfo.canonicalize(t)).positionedAt(sl.position)
-    case nl@typed.NullLiteral(t) => typed.NullLiteral(typeInfo.canonicalize(t)).positionedAt(nl.position)
+    case cr@typed.ColumnRef(c, t) => typed.ColumnRef(c, typeInfo.canonicalize(t))(cr.position)
+    case bl@typed.BooleanLiteral(b, t) => typed.BooleanLiteral(b, typeInfo.canonicalize(t))(bl.position)
+    case nl@typed.NumberLiteral(n, t) => typed.NumberLiteral(n, typeInfo.canonicalize(t))(nl.position)
+    case sl@typed.StringLiteral(s, t) => typed.StringLiteral(s, typeInfo.canonicalize(t))(sl.position)
+    case nl@typed.NullLiteral(t) => typed.NullLiteral(typeInfo.canonicalize(t))(nl.position)
   }
 }

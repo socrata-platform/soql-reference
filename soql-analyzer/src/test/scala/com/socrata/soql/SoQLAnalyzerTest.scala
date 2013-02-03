@@ -7,6 +7,7 @@ import org.scalatest.matchers.MustMatchers
 import com.socrata.soql.parsing.Parser
 import typechecker.{FunctionCallTypechecker, Typechecker}
 import types._
+import util.parsing.input.NoPosition
 
 class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   implicit val datasetCtx = new DatasetContext[TestType] {
@@ -68,7 +69,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
 
   test("analysis succeeds in a maximal ungrouped query") {
     val analysis = analyzer.analyzeFullQuery("select :*, *(except name_first, name_last), nf || (' ' || nl) as name, name_first as nf, name_last as nl where nl < 'm' order by name desc, visits limit 5 offset 10")
-    analysis.selection.toSeq must equal (datasetCtx.schema.toSeq.filterNot(_._1.name.startsWith("name_")).map { case (n, t) => n -> typed.ColumnRef(n, t) } ++ Seq(ColumnName("name") -> typedExpression("name_first || (' ' || name_last)"), ColumnName("nf") -> typedExpression("name_first"), ColumnName("nl") -> typedExpression("name_last")))
+    analysis.selection.toSeq must equal (datasetCtx.schema.toSeq.filterNot(_._1.name.startsWith("name_")).map { case (n, t) => n -> typed.ColumnRef(n, t)(NoPosition) } ++ Seq(ColumnName("name") -> typedExpression("name_first || (' ' || name_last)"), ColumnName("nf") -> typedExpression("name_first"), ColumnName("nl") -> typedExpression("name_last")))
     analysis.selection(ColumnName(":id")).position.column must equal (8)
     analysis.selection(ColumnName(":updated_at")).position.column must equal (8)
     analysis.selection(ColumnName(":created_at")).position.column must equal (8)
