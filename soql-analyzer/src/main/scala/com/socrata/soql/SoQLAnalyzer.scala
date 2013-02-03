@@ -7,6 +7,7 @@ import com.socrata.soql.ast._
 import com.socrata.soql.parsing.Parser
 import com.socrata.soql.typechecker._
 import environment.{ColumnName, DatasetContext}
+import util.parsing.input.NoPosition
 
 class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type]) {
   type Expr = typed.CoreExpr[Type]
@@ -111,7 +112,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
       log.debug("It is grouped; selecting the group bys plus count(*)")
 
       val beforeAliasAnalysis = System.nanoTime()
-      val count_* = FunctionCall(SpecialFunctions.StarFunc("count"), Nil)
+      val count_* = FunctionCall(SpecialFunctions.StarFunc("count"), Nil)(NoPosition, NoPosition)
       val untypedSelectedExpressions = groupBy.getOrElse(Nil) :+ count_*
       val names = AliasAnalysis(Selection(None, None, untypedSelectedExpressions.map(SelectedExpression(_, None)))).expressions.keys.toSeq
       val afterAliasAnalysis = System.nanoTime()

@@ -80,7 +80,7 @@ object AliasAnalysis extends AliasAnalysis {
     for {
       col <- columns.toIndexedSeq
       if !exceptedColumnNames(col)
-    } yield SelectedExpression(ColumnOrAliasRef(col).positionedAt(starSelection.starPosition), None)
+    } yield SelectedExpression(ColumnOrAliasRef(col)(starSelection.starPosition), None)
   }
 
   /**

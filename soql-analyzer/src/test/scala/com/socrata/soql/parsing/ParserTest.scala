@@ -5,7 +5,8 @@ import org.scalatest.matchers.MustMatchers
 
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions.BadParse
-import com.socrata.soql.environment.{ColumnName, SchemalessDatasetContext}
+import com.socrata.soql.environment.{FunctionName, ColumnName, SchemalessDatasetContext}
+import util.parsing.input.NoPosition
 
 class ParserTest extends WordSpec with MustMatchers {
   implicit val ctx = new SchemalessDatasetContext {
@@ -31,7 +32,10 @@ class ParserTest extends WordSpec with MustMatchers {
     }
   }
 
-  def ident(name: String) = ColumnOrAliasRef(ColumnName(name))
+  def ident(name: String) = ColumnOrAliasRef(ColumnName(name))(NoPosition)
+  def functionCall(name: FunctionName, args: Seq[Expression]) = FunctionCall(name, args)(NoPosition, NoPosition)
+  def stringLiteral(s: String) = StringLiteral(s)(NoPosition)
+  def numberLiteral(num: BigDecimal) = NumberLiteral(num)(NoPosition)
 
   "Parsing" should {
     "require a full `between' clause" in {
@@ -71,7 +75,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "accept expr.identifier" in {
-      parseExpression("a.b") must equal (FunctionCall(SpecialFunctions.Subscript, Seq(ident("a"), StringLiteral("b"))))
+      parseExpression("a.b") must equal (functionCall(SpecialFunctions.Subscript, Seq(ident("a"), stringLiteral("b"))))
     }
 
     "reject expr.identifier." in {
@@ -88,14 +92,14 @@ class ParserTest extends WordSpec with MustMatchers {
 
     "accept expr[expr]" in {
       parseExpression("a[2 * b]") must equal (
-        FunctionCall(
+        functionCall(
           SpecialFunctions.Subscript,
           Seq(
             ident("a"),
-            FunctionCall(
+            functionCall(
               SpecialFunctions.Operator("*"),
               Seq(
-                NumberLiteral(2),
+                numberLiteral(2),
                 ident("b"))))))
     }
 
@@ -104,31 +108,31 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "accept expr[expr].ident" in {
-      parseExpression("a[2 * b].c") must equal (FunctionCall(SpecialFunctions.Subscript, Seq(
-        FunctionCall(
+      parseExpression("a[2 * b].c") must equal (functionCall(SpecialFunctions.Subscript, Seq(
+        functionCall(
           SpecialFunctions.Subscript,
           Seq(
             ident("a"),
-            FunctionCall(SpecialFunctions.Operator("*"), Seq(
-              NumberLiteral(2),
+            functionCall(SpecialFunctions.Operator("*"), Seq(
+              numberLiteral(2),
               ident("b"))))),
-        StringLiteral("c"))))
+        stringLiteral("c"))))
     }
 
     "accept expr[expr].ident[expr]" in {
-      parseExpression("a[2 * b].c[3]") must equal (FunctionCall(SpecialFunctions.Subscript, Seq(
-        FunctionCall(
+      parseExpression("a[2 * b].c[3]") must equal (functionCall(SpecialFunctions.Subscript, Seq(
+        functionCall(
           SpecialFunctions.Subscript,
           Seq(
-            FunctionCall(
+            functionCall(
               SpecialFunctions.Subscript,
               Seq(
                 ident("a"),
-                FunctionCall(SpecialFunctions.Operator("*"), Seq(
-                  NumberLiteral(2),
+                functionCall(SpecialFunctions.Operator("*"), Seq(
+                  numberLiteral(2),
                   ident("b"))))),
-            StringLiteral("c"))),
-        NumberLiteral(3))))
+            stringLiteral("c"))),
+        numberLiteral(3))))
     }
 
     "allow offset/limit" in {

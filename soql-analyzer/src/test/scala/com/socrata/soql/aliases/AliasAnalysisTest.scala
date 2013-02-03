@@ -54,7 +54,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
       case failure => fail("Unable to parse expression fixture " + e + ": " + failure)
     }
   }
-  def unaliased(names: String*)(pos: Position)(implicit ctx: SchemalessDatasetContext) = names.map { i => SelectedExpression(ColumnOrAliasRef(columnName(i)), None) }
+  def unaliased(names: String*)(pos: Position)(implicit ctx: SchemalessDatasetContext) = names.map { i => SelectedExpression(ColumnOrAliasRef(columnName(i))(pos), None) }
 
   "processing a star" should {
     implicit val ctx = fixtureContext()

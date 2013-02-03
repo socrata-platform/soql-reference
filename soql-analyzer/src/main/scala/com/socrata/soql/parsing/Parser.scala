@@ -189,10 +189,10 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
 
   val literal =
     accept[LiteralToken] ^^ {
-      case n: tokens.NumberLiteral => ast.NumberLiteral(n.value).positionedAt(n.position)
-      case s: tokens.StringLiteral => ast.StringLiteral(s.value).positionedAt(s.position)
-      case b: tokens.BooleanLiteral => ast.BooleanLiteral(b.value).positionedAt(b.position)
-      case n: NULL => NullLiteral().positionedAt(n.position)
+      case n: tokens.NumberLiteral => ast.NumberLiteral(n.value)(n.position)
+      case s: tokens.StringLiteral => ast.StringLiteral(s.value)(s.position)
+      case b: tokens.BooleanLiteral => ast.BooleanLiteral(b.value)(b.position)
+      case n: NULL => NullLiteral()(n.position)
     }
 
 
@@ -220,15 +220,15 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
   def identifier_or_funcall: Parser[Expression] =
     identifier ~ opt(params) ^^ {
       case ((ident, identPos)) ~ None =>
-        ColumnOrAliasRef(ColumnName(ident)).positionedAt(identPos)
+        ColumnOrAliasRef(ColumnName(ident))(identPos)
       case ((ident, identPos)) ~ Some(Right(params)) =>
-        FunctionCall(FunctionName(ident), params).positionedAt(identPos).functionNameAt(identPos)
+        FunctionCall(FunctionName(ident), params)(identPos, identPos)
       case ((ident, identPos)) ~ Some(Left(position)) =>
-        FunctionCall(SpecialFunctions.StarFunc(ident), Seq.empty).positionedAt(identPos).functionNameAt(identPos)
+        FunctionCall(SpecialFunctions.StarFunc(ident), Seq.empty)(identPos, identPos)
     }
 
   def paren: Parser[Expression] =
-    LPAREN() ~> expr <~ RPAREN() ^^ { e => FunctionCall(SpecialFunctions.Parens, Seq(e)).positionedAt(e.position).functionNameAt(e.position) }
+    LPAREN() ~> expr <~ RPAREN() ^^ { e => FunctionCall(SpecialFunctions.Parens, Seq(e))(e.position, e.position) }
 
   def atom =
     literal | identifier_or_funcall | paren | failure(errors.missingExpr)
@@ -236,22 +236,18 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
   lazy val dereference: PackratParser[Expression] =
     dereference ~ DOT() ~ identifier ^^ {
       case a ~ dot ~ ((b, bPos)) =>
-        FunctionCall(SpecialFunctions.Subscript, Seq(a, ast.StringLiteral(b).positionedAt(bPos))).
-          positionedAt(a.position).
-          functionNameAt(dot.position)
+        FunctionCall(SpecialFunctions.Subscript, Seq(a, ast.StringLiteral(b)(bPos)))(a.position, dot.position)
     } |
     dereference ~ LBRACKET() ~ expr ~ RBRACKET() ^^ {
       case a ~ lbrak ~ b ~ _ =>
-        FunctionCall(SpecialFunctions.Subscript, Seq(a, b)).
-          positionedAt(a.position).
-          functionNameAt(lbrak.position)
+        FunctionCall(SpecialFunctions.Subscript, Seq(a, b))(a.position, lbrak.position)
     } |
     atom
 
   lazy val cast: PackratParser[Expression] =
     cast ~ COLONCOLON() ~ identifier ^^ {
       case a ~ colcol ~ ((b, bPos)) =>
-        FunctionCall(SpecialFunctions.Cast(TypeName(b)), Seq(a)).positionedAt(a.position).functionNameAt(bPos)
+        FunctionCall(SpecialFunctions.Cast(TypeName(b)), Seq(a))(a.position, bPos)
     } |
     dereference
 
@@ -261,7 +257,7 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
   lazy val unary: PackratParser[Expression] =
     opt(unary_op) ~ unary ^^ {
       case None ~ b => b
-      case Some(f) ~ b => FunctionCall(SpecialFunctions.Operator(f.printable), Seq(b)).positionedAt(f.position).functionNameAt(f.position)
+      case Some(f) ~ b => FunctionCall(SpecialFunctions.Operator(f.printable), Seq(b))(f.position, f.position)
     } |
     cast
 
@@ -271,7 +267,7 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
   lazy val factor: PackratParser[Expression] =
     opt(factor ~ factor_op) ~ unary ^^ {
       case None ~ a => a
-      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b)).positionedAt(a.position).functionNameAt(op.position)
+      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b))(a.position, op.position)
     }
 
   val term_op =
@@ -280,7 +276,7 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
   lazy val term: PackratParser[Expression] =
     opt(term ~ term_op) ~ factor ^^ {
       case None ~ a => a
-      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b)).positionedAt(a.position).functionNameAt(op.position)
+      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b))(a.position, op.position)
     }
 
   val order_op =
@@ -289,55 +285,55 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
   lazy val order: PackratParser[Expression] =
     opt(order ~ order_op) ~ term ^^ {
       case None ~ a => a
-      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b)).positionedAt(a.position).functionNameAt(op.position)
+      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b))(a.position, op.position)
     }
 
   lazy val isLikeBetweenIn: PackratParser[Expression] =
     isLikeBetweenIn ~ IS() ~ NULL() ^^ {
-      case a ~ is ~ _ => FunctionCall(SpecialFunctions.IsNull, Seq(a)).positionedAt(a.position).functionNameAt(is.position)
+      case a ~ is ~ _ => FunctionCall(SpecialFunctions.IsNull, Seq(a))(a.position, is.position)
     } |
     isLikeBetweenIn ~ IS() ~ (NOT() | failure(errors.missingKeywords(NOT(), NULL()))) ~ NULL() ^^ {
       case a ~ is ~ not ~ _ =>
-        FunctionCall(SpecialFunctions.IsNotNull, Seq(a)).positionedAt(a.position).functionNameAt(is.position)
+        FunctionCall(SpecialFunctions.IsNotNull, Seq(a))(a.position, is.position)
     } |
     isLikeBetweenIn ~ LIKE() ~ isLikeBetweenIn ^^ {
-      case a ~ like ~ b => FunctionCall(SpecialFunctions.Like, Seq(a, b)).positionedAt(a.position).functionNameAt(like.position)
+      case a ~ like ~ b => FunctionCall(SpecialFunctions.Like, Seq(a, b))(a.position, like.position)
     } |
     isLikeBetweenIn ~ BETWEEN() ~ isLikeBetweenIn ~ AND() ~ isLikeBetweenIn ^^ {
       case a ~ between ~ b ~ _ ~ c =>
-        FunctionCall(SpecialFunctions.Between, Seq(a, b, c)).positionedAt(a.position).functionNameAt(between.position)
+        FunctionCall(SpecialFunctions.Between, Seq(a, b, c))(a.position, between.position)
     } |
     isLikeBetweenIn ~ NOT() ~ BETWEEN() ~ isLikeBetweenIn ~ AND() ~ isLikeBetweenIn ^^ {
       case a ~ not ~ _ ~ b ~ _ ~ c =>
-        FunctionCall(SpecialFunctions.NotBetween, Seq(a, b, c)).positionedAt(a.position).functionNameAt(not.position)
+        FunctionCall(SpecialFunctions.NotBetween, Seq(a, b, c))(a.position, not.position)
     } |
     isLikeBetweenIn ~ NOT() ~ IN() ~ LPAREN() ~ rep1sep(expr, COMMA()) ~ RPAREN() ^^  {
       case a ~ not ~ _ ~ _ ~ es ~ _ =>
-        FunctionCall(SpecialFunctions.NotIn, a +: es).positionedAt(a.position).functionNameAt(not.position)
+        FunctionCall(SpecialFunctions.NotIn, a +: es)(a.position, not.position)
     } |
     isLikeBetweenIn ~ NOT() ~ (LIKE() | failure(errors.missingKeywords(BETWEEN(), IN(), LIKE()))) ~ isLikeBetweenIn ^^ {
       case a ~ not ~ _ ~ b =>
-        FunctionCall(SpecialFunctions.NotLike, Seq(a, b)).positionedAt(a.position).functionNameAt(not.position)
+        FunctionCall(SpecialFunctions.NotLike, Seq(a, b))(a.position, not.position)
     } |
     isLikeBetweenIn ~ (IN() | failure(errors.missingKeywords(NOT(), BETWEEN(), IN(), LIKE()))) ~ LPAREN() ~ rep1sep(expr, COMMA()) ~ RPAREN() ^^  {
-      case a ~ in ~ _ ~ es ~ _ => FunctionCall(SpecialFunctions.In, a +: es).positionedAt(a.position).functionNameAt(in.position)
+      case a ~ in ~ _ ~ es ~ _ => FunctionCall(SpecialFunctions.In, a +: es)(a.position, in.position)
     } |
     order
 
   lazy val negation: PackratParser[Expression] =
-    NOT() ~ negation ^^ { case op ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(b)).positionedAt(op.position).functionNameAt(op.position) } |
+    NOT() ~ negation ^^ { case op ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(b))(op.position, op.position) } |
     isLikeBetweenIn
 
   lazy val conjunction: PackratParser[Expression] =
     opt(conjunction ~ AND()) ~ negation ^^ {
       case None ~ b => b
-      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b)).positionedAt(a.position).functionNameAt(op.position)
+      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b))(a.position, op.position)
     }
 
   lazy val disjunction: PackratParser[Expression] =
     opt(disjunction ~ OR()) ~ conjunction ^^ {
       case None ~ b => b
-      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b)).positionedAt(a.position).functionNameAt(op.position)
+      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b))(a.position, op.position)
     }
 
   def expr = disjunction | failure(errors.missingExpr)

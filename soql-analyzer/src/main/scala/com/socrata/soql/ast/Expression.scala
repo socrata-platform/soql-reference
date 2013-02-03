@@ -1,21 +1,16 @@
 package com.socrata.soql.ast
 
-import scala.util.parsing.input.{Position, NoPosition}
+import scala.util.parsing.input.Position
 import scala.runtime.ScalaRunTime
 
 import com.socrata.soql.environment.{TypeName, FunctionName, ColumnName}
 
 sealed abstract class Expression extends Product {
-  var position: Position = NoPosition
+  val position: Position
   protected def asString: String
   override final def toString = if(Expression.pretty) asString else ScalaRunTime._toString(this)
   override final lazy val hashCode = ScalaRunTime._hashCode(this)
   def allColumnRefs: Set[ColumnOrAliasRef]
-
-  def positionedAt(p: Position): this.type = {
-    position = p
-    this
-  }
 
   def toSyntheticIdentifierBase: String =
     com.socrata.soql.brita.IdentifierFilter(Expression.findIdentsAndLiterals(this))
@@ -92,7 +87,7 @@ object SpecialFunctions {
   }
 }
 
-case class ColumnOrAliasRef(column: ColumnName) extends Expression {
+case class ColumnOrAliasRef(column: ColumnName)(val position: Position) extends Expression {
   protected def asString = column.toString
   def allColumnRefs = Set(this)
 }
@@ -100,21 +95,20 @@ case class ColumnOrAliasRef(column: ColumnName) extends Expression {
 sealed abstract class Literal extends Expression {
   def allColumnRefs = Set.empty
 }
-case class NumberLiteral(value: BigDecimal) extends Literal {
+case class NumberLiteral(value: BigDecimal)(val position: Position) extends Literal {
   protected def asString = value.toString
 }
-case class StringLiteral(value: String) extends Literal {
+case class StringLiteral(value: String)(val position: Position) extends Literal {
   protected def asString = "'" + value.replaceAll("'", "''") + "'"
 }
-case class BooleanLiteral(value: Boolean) extends Literal {
+case class BooleanLiteral(value: Boolean)(val position: Position) extends Literal {
   protected def asString = value.toString.toUpperCase
 }
-case class NullLiteral() extends Literal {
+case class NullLiteral()(val position: Position) extends Literal {
   override final def asString = "null"
 }
 
-case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression]) extends Expression {
-  var functionNamePosition: Position = NoPosition
+case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])(val position: Position, val functionNamePosition: Position) extends Expression {
   protected def asString = functionName match {
     case SpecialFunctions.Parens => "(" + parameters(0) + ")"
     case SpecialFunctions.Subscript => parameters(0) + "[" + parameters(1) + "]"
@@ -133,9 +127,4 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
     case other => parameters.mkString(other + "(", ",", ")")
   }
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
-
-  def functionNameAt(p: Position): this.type = {
-    functionNamePosition = p
-    this
-  }
 }
