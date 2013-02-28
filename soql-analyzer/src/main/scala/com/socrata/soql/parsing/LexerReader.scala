@@ -64,6 +64,7 @@ object LexerReader {
     ORDER,
     LIMIT,
     OFFSET,
+    SEARCH,
     ASC,
     DESC,
     FIRST,

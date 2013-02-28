@@ -25,6 +25,7 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
   def selectStatement(soql: String): Select = parseFull(fullSelect, soql)
   def limit(soql: String): BigInt = parseFull(integer, soql)
   def offset(soql: String): BigInt = parseFull(integer, soql)
+  def search(soql: String): String = parseFull(stringLiteral, soql)
 
   private def parseFull[T](parser: Parser[T], soql: String): T = {
     phrase(parser <~ eof)(new LexerReader(soql)) match {
@@ -85,8 +86,8 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
    */
 
   def fullSelect =
-    (SELECT() ~> selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ opt(orderByClause) ~ limitOffset ^^ {
-      case s ~ w ~ gb ~ h ~ ord ~ ((lim, off)) => Select(s, w, gb, h, ord, lim, off)
+    (SELECT() ~> selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ opt(orderByClause) ~ limitOffset ~ opt(searchClause) ^^ {
+      case s ~ w ~ gb ~ h ~ ord ~ ((lim, off)) ~ sr => Select(s, w, gb, h, ord, lim, off, sr)
     })
 
   def limitOffset: Parser[(Option[BigInt], Option[BigInt])] =
@@ -104,6 +105,7 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
   def orderByClause = ORDER() ~ BY() ~> orderingList
   def limitClause = LIMIT() ~> integer
   def offsetClause = OFFSET() ~> integer
+  def searchClause = SEARCH() ~> stringLiteral
 
   /*
    *               ********************
@@ -180,6 +182,9 @@ class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with Packra
 
   val integer =
     accept[IntegerLiteral] ^^ (_.asInt) | failure(errors.missingInteger)
+
+  val stringLiteral =
+    accept[tokens.StringLiteral] ^^ (_.value)
 
   /*
    *               ***************

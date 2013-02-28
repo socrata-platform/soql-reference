@@ -52,16 +52,17 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
                         having: Option[String],
                         orderBy: Option[String],
                         limit: Option[String],
-                        offset: Option[String])(implicit ctx: DatasetContext[Type]): Analysis =
+                        offset: Option[String],
+                        search: Option[String])(implicit ctx: DatasetContext[Type]): Analysis =
   {
     log.debug("analyzing split query")
 
     val p = new Parser
 
-    def dispatch(selection: Option[Selection], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt]) =
+    def dispatch(selection: Option[Selection], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) =
       selection match {
-        case None => analyzeNoSelection(where, groupBy, having, orderBy, limit, offset)
-        case Some(s) => analyzeWithSelection(Select(s, where, groupBy, having, orderBy, limit, offset))
+        case None => analyzeNoSelection(where, groupBy, having, orderBy, limit, offset, search)
+        case Some(s) => analyzeWithSelection(Select(s, where, groupBy, having, orderBy, limit, offset, search))
       }
 
     dispatch(
@@ -71,7 +72,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
       having.map(p.expression),
       orderBy.map(p.orderings),
       limit.map(p.limit),
-      offset.map(p.offset)
+      offset.map(p.offset),
+      search.map(p.search)
     )
   }
 
@@ -80,7 +82,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
                          having: Option[Expression],
                          orderBy: Option[Seq[OrderBy]],
                          limit: Option[BigInt],
-                         offset: Option[BigInt])(implicit ctx: DatasetContext[Type]): Analysis =
+                         offset: Option[BigInt],
+                         search: Option[String])(implicit ctx: DatasetContext[Type]): Analysis =
   {
     log.debug("No selection; doing typechecking of the other parts then deciding what to make the selection")
 
@@ -147,7 +150,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
       checkedHaving,
       checkedOrderBy,
       limit,
-      offset)
+      offset,
+      search)
   }
 
   def analyzeWithSelection(query: Select)(implicit ctx: DatasetContext[Type]): Analysis = {
@@ -189,7 +193,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
       log.trace("checking for aggregation took {}ms", ns2ms(t7 - t6))
     }
 
-    finishAnalysis(isGrouped, outputs, checkedWhere, checkedGroupBy, checkedHaving, checkedOrderBy, query.limit, query.offset)
+    finishAnalysis(isGrouped, outputs, checkedWhere, checkedGroupBy, checkedHaving, checkedOrderBy, query.limit, query.offset, query.search)
   }
 
   case class Analysis(isGrouped: Boolean,
@@ -199,7 +203,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
                       having: Option[Expr],
                       orderBy: Option[Seq[typed.OrderBy[Type]]],
                       limit: Option[BigInt],
-                      offset: Option[BigInt])
+                      offset: Option[BigInt],
+                      search: Option[String])
 
   def finishAnalysis(isGrouped: Boolean,
                      output: OrderedMap[ColumnName, Expr],
@@ -208,7 +213,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
                      having: Option[Expr],
                      orderBy: Option[Seq[(OrderBy, Expr)]],
                      limit: Option[BigInt],
-                     offset: Option[BigInt]): Analysis =
+                     offset: Option[BigInt],
+                     search: Option[String]): Analysis =
   {
     // todo: check that the types of the order-bys are Orderable
 
@@ -220,6 +226,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
       having,
       orderBy.map { obs => obs.map { case (ob, e) => typed.OrderBy(e, ob.ascending, ob.nullLast) } },
       limit,
-      offset)
+      offset,
+      search)
   }
 }

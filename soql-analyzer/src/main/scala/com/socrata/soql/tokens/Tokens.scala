@@ -26,6 +26,7 @@ case class HAVING() extends Token
 case class ORDER() extends Token
 case class LIMIT() extends Token
 case class OFFSET() extends Token
+case class SEARCH() extends Token
 
 sealed trait OrderDirection
 case class ASC() extends Token with OrderDirection

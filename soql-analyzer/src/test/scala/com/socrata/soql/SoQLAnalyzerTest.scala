@@ -96,12 +96,12 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   }
 
   test("Giving no values to the split-query analyzer returns the equivalent of `SELECT *'") {
-    val analysis = analyzer.analyzeSplitQuery(None, None, None, None, None, None, None)
+    val analysis = analyzer.analyzeSplitQuery(None, None, None, None, None, None, None, None)
     analysis must equal (analyzer.analyzeFullQuery("SELECT *"))
   }
 
   test("Putting an aggregate in the order-by slot causes aggregation to occur") {
-    val analysis = analyzer.analyzeSplitQuery(None, None, None, None, Some("max(visits)"), None, None)
+    val analysis = analyzer.analyzeSplitQuery(None, None, None, None, Some("max(visits)"), None, None, None)
     analysis must equal (analyzer.analyzeFullQuery("SELECT count(*) ORDER BY max(visits)"))
   }
 
@@ -109,7 +109,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     val computed = "name_first || ' ' || name_last"
     val sep = ", "
     val uncomputed = "visits"
-    val analysis = analyzer.analyzeSplitQuery(None, None, Some(computed + sep + uncomputed), None, None, None, None)
+    val analysis = analyzer.analyzeSplitQuery(None, None, Some(computed + sep + uncomputed), None, None, None, None, None)
     analysis must equal (analyzer.analyzeFullQuery("SELECT "+computed+", "+uncomputed+", count(*) GROUP BY "+computed+", "+uncomputed))
     analysis.selection(ColumnName("visits")).position.column must equal (1 + computed.length + sep.length)
   }

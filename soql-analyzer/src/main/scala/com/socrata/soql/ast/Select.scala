@@ -3,7 +3,7 @@ package com.socrata.soql.ast
 import scala.util.parsing.input.{Position, NoPosition}
 import com.socrata.soql.environment.ColumnName
 
-case class Select(selection: Selection, where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt]) {
+case class Select(selection: Selection, where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) {
   override def toString = {
     if(AST.pretty) {
       val sb = new StringBuilder("SELECT " + selection)
@@ -13,6 +13,7 @@ case class Select(selection: Selection, where: Option[Expression], groupBy: Opti
       orderBy.foreach { ob => sb.append(ob.mkString(" ORDER BY ", ", ", "")) }
       limit.foreach(sb.append(" LIMIT ").append(_))
       offset.foreach(sb.append(" OFFSET ").append(_))
+      search.foreach(sb.append(" SEARCH ").append(_))
       sb.toString
     } else {
       AST.unpretty(this)

@@ -160,6 +160,12 @@ class ParserTest extends WordSpec with MustMatchers {
       x.offset must be (Some(BigInt(7)))
     }
 
+    "allow search" in {
+      val x = parseFull("select * search 'WEather'")
+      x.search.get must be ("WEather")
+    }
+
+
   // def show[T](x: => T) {
   //   try {
   //     println(x)
