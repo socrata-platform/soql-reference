@@ -8,9 +8,12 @@ import com.socrata.soql.tokens
 import com.socrata.soql.tokens._
 import com.socrata.soql.ast
 import com.socrata.soql.ast._
-import com.socrata.soql.environment.{TypeName, FunctionName, ColumnName, SchemalessDatasetContext}
+import com.socrata.soql.environment.{TypeName, FunctionName, ColumnName}
 
-class Parser(implicit ctx: SchemalessDatasetContext) extends Parsers with PackratParsers {
+// This can't be an "object" because parsers are not thread safe at least
+// through 2.9.2.  Might revisit when we drop 2.9 support, but it's hardly
+// critical.
+class Parser extends Parsers with PackratParsers {
   type Elem = Token
 
   /*

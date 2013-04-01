@@ -3,10 +3,9 @@ package com.socrata.soql.environment
 import com.ibm.icu.lang.UCharacter
 import com.ibm.icu.text.Normalizer
 
-final class ColumnName(val name: String)(implicit val datasetContext: SchemalessDatasetContext) extends Ordered[ColumnName] {
-  val canonicalName = Normalizer.normalize(UCharacter.toLowerCase(datasetContext.locale, name).replaceAll("-","_"), Normalizer.DEFAULT)
-
-  override def hashCode = canonicalName.hashCode ^ datasetContext.hashCode ^ 0x342a3466
+final class ColumnName(val name: String) extends Ordered[ColumnName] {
+  private lazy val canonicalName = UCharacter.foldCase(name.replaceAll("-", "_"), UCharacter.FOLD_CASE_DEFAULT)
+  override lazy val hashCode = canonicalName.hashCode ^ 0x342a3466
 
   // two column names are the same if they share the same dataset
   // context (which any two names under comparison ought to) and if
@@ -14,18 +13,16 @@ final class ColumnName(val name: String)(implicit val datasetContext: Schemaless
   // locale's rules.
   override def equals(o: Any) = o match {
     case that: ColumnName =>
-      this.datasetContext == that.datasetContext && datasetContext.collator.compare(this.canonicalName, that.canonicalName) == 0
+      this.canonicalName.equals(that.canonicalName)
     case _ => false
   }
 
-  def compare(that: ColumnName) = {
-    if(this.datasetContext != that.datasetContext) throw new IllegalArgumentException("Cannot compare two columns from different dataset contexts")
-    datasetContext.collator.compare(this.canonicalName, that.canonicalName)
-  }
+  def compare(that: ColumnName) =
+    this.canonicalName.compareTo(that.canonicalName)
 
-  override def toString = canonicalName
+  override def toString = name
 }
 
-object ColumnName {
-  def apply(columnName: String)(implicit datasetContext: SchemalessDatasetContext) = new ColumnName(columnName)(datasetContext)
+object ColumnName extends (String => ColumnName) {
+  def apply(columnName: String) = new ColumnName(columnName)
 }

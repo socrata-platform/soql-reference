@@ -1,6 +1,5 @@
 package com.socrata.soql
 
-import environment.SchemalessDatasetContext
 import scala.util.control.Breaks._
 
 import com.ibm.icu.util.ULocale
@@ -25,14 +24,10 @@ object ParserToy extends (Array[String] => Unit) {
   }
 
   def apply(args: Array[String]) {
-    implicit val dstctx = new SchemalessDatasetContext {
-      val locale = ULocale.ENGLISH
-    }
-    var last = -1
     menu()
     val p = new Parser
     while(true) {
-      val cmd = readLine(if(last != -1) "["+last+"]> " else "> ")
+      val cmd = readLine("> ")
       if(cmd == null) return;
       breakable {
         val f = cmd match {

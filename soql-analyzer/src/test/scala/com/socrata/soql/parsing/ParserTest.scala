@@ -7,31 +7,20 @@ import org.scalatest.matchers.MustMatchers
 
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions.BadParse
-import com.socrata.soql.environment.{FunctionName, ColumnName, SchemalessDatasetContext}
+import com.socrata.soql.environment.{FunctionName, ColumnName}
 
 class ParserTest extends WordSpec with MustMatchers {
-  implicit val ctx = new SchemalessDatasetContext {
-    val locale = com.ibm.icu.util.ULocale.ENGLISH
-  }
-  def parseExpression(soql: String) = {
-    val p = new Parser
-    p.expression(soql)
-  }
+  def parseExpression(soql: String) = new Parser().expression(soql)
 
-  def parseFull(soql: String) = {
-    val p = new Parser
-    p.selectStatement(soql)
-  }
+  def parseFull(soql: String) = new Parser().selectStatement(soql)
 
-  def expectFailure(expectedMsg: String, soql: String) = {
-    val p = new Parser
+  def expectFailure(expectedMsg: String, soql: String) =
     try {
-      p.expression(soql)
+      new Parser().expression(soql)
       fail("Unexpected success")
     } catch {
       case e: BadParse => e.message must equal (expectedMsg)
     }
-  }
 
   def ident(name: String) = ColumnOrAliasRef(ColumnName(name))(NoPosition)
   def functionCall(name: FunctionName, args: Seq[Expression]) = FunctionCall(name, args)(NoPosition, NoPosition)

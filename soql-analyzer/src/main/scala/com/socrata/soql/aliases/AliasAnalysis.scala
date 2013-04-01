@@ -49,7 +49,7 @@ object AliasAnalysis extends AliasAnalysis {
    */
   def expandSelection(selection: Selection)(implicit ctx: UntypedDatasetContext): Seq[SelectedExpression] = {
     val Selection(systemStar, userStar, expressions) = selection
-    val (systemColumns, userColumns) = ctx.columns.partition(_.canonicalName.startsWith(":"))
+    val (systemColumns, userColumns) = ctx.columns.partition(_.name.startsWith(":"))
     systemStar.toSeq.flatMap(processStar(_, systemColumns)) ++
       userStar.toSeq.flatMap(processStar(_, userColumns)) ++
       expressions

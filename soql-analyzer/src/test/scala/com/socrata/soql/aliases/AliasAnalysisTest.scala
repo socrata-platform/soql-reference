@@ -9,15 +9,12 @@ import com.socrata.soql.parsing.{LexerReader, Parser}
 
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions.{CircularAliasDefinition, NoSuchColumn, RepeatedException, DuplicateAlias}
-import com.socrata.soql.environment.{ColumnName, UntypedDatasetContext, SchemalessDatasetContext}
+import com.socrata.soql.environment.{ColumnName, UntypedDatasetContext}
 import com.socrata.soql.collection.{OrderedSet, OrderedMap}
 
 class AliasAnalysisTest extends WordSpec with MustMatchers {
-  def columnName(name: String)(implicit ctx: SchemalessDatasetContext) =
-    ColumnName(name)
-
-  def columnNames(names: String*)(implicit ctx: SchemalessDatasetContext) =
-    OrderedSet(names.map(columnName): _*)
+  def columnNames(names: String*) =
+    OrderedSet(names.map(ColumnName): _*)
 
   def fixtureContext(cols: String*) =
     new UntypedDatasetContext {
@@ -32,29 +29,27 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     def lineContents = " " * c
   }
 
-  def se(e: String)(implicit ctx: SchemalessDatasetContext): SelectedExpression =
+  def se(e: String): SelectedExpression =
     SelectedExpression(expr(e), None)
 
-  def se(e: String, name: String, position: Position)(implicit ctx: SchemalessDatasetContext): SelectedExpression =
+  def se(e: String, name: String, position: Position): SelectedExpression =
     SelectedExpression(expr(e), Some((ColumnName(name), position)))
 
-  implicit def selections(e: String)(implicit ctx: SchemalessDatasetContext): Selection = {
-    val parser = new Parser
-    parser.selection(e)
+  implicit def selections(e: String): Selection = {
+    new Parser().selection(e)
   }
-  def selectionsNoPos(e: String)(implicit ctx: SchemalessDatasetContext): Selection = selections(e)
-  def expr(e: String)(implicit ctx: SchemalessDatasetContext): Expression = {
-    val parser = new Parser
-    parser.expression(e)
+  def selectionsNoPos(e: String): Selection = selections(e)
+  def expr(e: String): Expression = {
+    new Parser().expression(e)
   }
-  def ident(e: String)(implicit ctx: SchemalessDatasetContext): ColumnName = {
-    val parser = new Parser
-    parser.identifier(new LexerReader(e)) match {
-      case parser.Success(parsed, _) => ColumnName(parsed._1)
+  def ident(e: String): ColumnName = {
+    val p = new Parser()
+    p.identifier(new LexerReader(e)) match {
+      case p.Success(parsed, _) => ColumnName(parsed._1)
       case failure => fail("Unable to parse expression fixture " + e + ": " + failure)
     }
   }
-  def unaliased(names: String*)(pos: Position)(implicit ctx: SchemalessDatasetContext) = names.map { i => SelectedExpression(ColumnOrAliasRef(columnName(i))(pos), None) }
+  def unaliased(names: String*)(pos: Position) = names.map { i => SelectedExpression(ColumnOrAliasRef(ColumnName(i))(pos), None) }
 
   "processing a star" should {
     implicit val ctx = fixtureContext()
@@ -158,19 +153,19 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     implicit val ctx = fixtureContext(":a",":b","c","d","e")
 
     "select a name" in {
-      AliasAnalysis.implicitAlias(expr("a"), Set()) must equal (columnName("a"))
-      AliasAnalysis.implicitAlias(expr("a + b"), Set()) must equal (columnName("a_b"))
+      AliasAnalysis.implicitAlias(expr("a"), Set()) must equal (ColumnName("a"))
+      AliasAnalysis.implicitAlias(expr("a + b"), Set()) must equal (ColumnName("a_b"))
     }
 
     "select a name not in use" in {
-      AliasAnalysis.implicitAlias(expr("a + b"), columnNames("a_b")) must equal (columnName("a_b_1"))
-      AliasAnalysis.implicitAlias(expr("c"), Set()) must equal (columnName("c_1")) // checking against the dataset context
-      AliasAnalysis.implicitAlias(expr("a + b"), columnNames("a_b", "a_b_1", "a_b_2")) must equal (columnName("a_b_3"))
+      AliasAnalysis.implicitAlias(expr("a + b"), columnNames("a_b")) must equal (ColumnName("a_b_1"))
+      AliasAnalysis.implicitAlias(expr("c"), Set()) must equal (ColumnName("c_1")) // checking against the dataset context
+      AliasAnalysis.implicitAlias(expr("a + b"), columnNames("a_b", "a_b_1", "a_b_2")) must equal (ColumnName("a_b_3"))
     }
 
     "not add unnecessary underscores when suffixing a disambiguator" in {
-      AliasAnalysis.implicitAlias(expr("a + b_"), Set(columnName("a_b_"))) must equal (columnName("a_b_1"))
-      AliasAnalysis.implicitAlias(expr("a + `b-`"), Set(columnName("a_b-"))) must equal (columnName("a_b-1"))
+      AliasAnalysis.implicitAlias(expr("a + b_"), Set(ColumnName("a_b_"))) must equal (ColumnName("a_b_1"))
+      AliasAnalysis.implicitAlias(expr("a + `b-`"), Set(ColumnName("a_b-"))) must equal (ColumnName("a_b-1"))
     }
   }
 
@@ -180,11 +175,11 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     "assign non-conflicting aliases" in {
       AliasAnalysis.assignImplicit(Seq(se(":a + 1", "c", NoPosition), se(":a + 1"), se("-c"), se("-d"), se("e", "d_1", NoPosition))) must equal (
         Map(
-          columnName("c") -> expr(":a + 1"),
-          columnName("a_1") -> expr(":a + 1"),
-          columnName("c_1") -> expr("-c"),
-          columnName("d_2") -> expr("-d"),
-          columnName("d_1") -> expr("e")
+          ColumnName("c") -> expr(":a + 1"),
+          ColumnName("a_1") -> expr(":a + 1"),
+          ColumnName("c_1") -> expr("-c"),
+          ColumnName("d_2") -> expr("-d"),
+          ColumnName("d_1") -> expr("e")
         )
       )
     }
@@ -192,11 +187,11 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     "preserve ordering" in {
       AliasAnalysis.assignImplicit(Seq(se(":a + 1", "c", NoPosition), se(":a + 1"), se("-c"), se("-d"), se("e", "d_1", NoPosition))).toSeq must equal (
         Seq(
-          columnName("c") -> expr(":a + 1"),
-          columnName("a_1") -> expr(":a + 1"),
-          columnName("c_1") -> expr("-c"),
-          columnName("d_2") -> expr("-d"),
-          columnName("d_1") -> expr("e")
+          ColumnName("c") -> expr(":a + 1"),
+          ColumnName("a_1") -> expr(":a + 1"),
+          ColumnName("c_1") -> expr("-c"),
+          ColumnName("d_2") -> expr("-d"),
+          ColumnName("d_1") -> expr("e")
         )
       )
     }
@@ -255,72 +250,72 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     "expand *" in {
       AliasAnalysis(selections("*")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          columnName("c") -> expr("c"),
-          columnName("d") -> expr("d"),
-          columnName("e") -> expr("e")
+          ColumnName("c") -> expr("c"),
+          ColumnName("d") -> expr("d"),
+          ColumnName("e") -> expr("e")
         ),
-        Seq("c","d","e").map(columnName)
+        Seq("c","d","e").map(ColumnName)
       ))
     }
 
     "expand :*" in {
       AliasAnalysis(selections(":*")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          columnName(":a") -> expr(":a"),
-          columnName(":b") -> expr(":b")
+          ColumnName(":a") -> expr(":a"),
+          ColumnName(":b") -> expr(":b")
         ),
-        Seq(":a", ":b").map(columnName)
+        Seq(":a", ":b").map(ColumnName)
       ))
     }
 
     "expand :*,*" in {
       AliasAnalysis(selections(":*,*")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          columnName(":a") -> expr(":a"),
-          columnName(":b") -> expr(":b"),
-          columnName("c") -> expr("c"),
-          columnName("d") -> expr("d"),
-          columnName("e") -> expr("e")
+          ColumnName(":a") -> expr(":a"),
+          ColumnName(":b") -> expr(":b"),
+          ColumnName("c") -> expr("c"),
+          ColumnName("d") -> expr("d"),
+          ColumnName("e") -> expr("e")
         ),
-        Seq(":a", ":b", "c", "d", "e").map(columnName)
+        Seq(":a", ":b", "c", "d", "e").map(ColumnName)
       ))
     }
 
     "not select an alias the same as a column in the dataset context" in {
       AliasAnalysis(selections("(c)")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          columnName("c_1") -> expr("(c)")
+          ColumnName("c_1") -> expr("(c)")
         ),
-        Seq("c_1").map(columnName)
+        Seq("c_1").map(ColumnName)
       ))
     }
 
     "not select an alias the same as an expression in the dataset context" in {
       AliasAnalysis(selections("c as c_d, c - d")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          columnName("c_d") -> expr("c"),
-          columnName("c_d_1") -> expr("c - d")
+          ColumnName("c_d") -> expr("c"),
+          ColumnName("c_d_1") -> expr("c - d")
         ),
-        Seq("c_d", "c_d_1").map(columnName)
+        Seq("c_d", "c_d_1").map(ColumnName)
       ))
     }
 
     "never infer the same alias twice" in {
       AliasAnalysis(selections("c + d, c - d")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          columnName("c_d") -> expr("c + d"),
-          columnName("c_d_1") -> expr("c - d")
+          ColumnName("c_d") -> expr("c + d"),
+          ColumnName("c_d_1") -> expr("c - d")
         ),
-        Seq("c_d", "c_d_1").map(columnName)
+        Seq("c_d", "c_d_1").map(ColumnName)
       ))
     }
 
     "allow hiding a column if it's not selected" in {
       AliasAnalysis(selections("c as d")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          columnName("d") -> expr("c")
+          ColumnName("d") -> expr("c")
         ),
-        Seq(columnName("d"))
+        Seq(ColumnName("d"))
       ))
     }
 
@@ -339,11 +334,11 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     "allow hiding a column if it's excluded via *" in {
       AliasAnalysis(selections("* (except d), c as d")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          columnName("c") -> expr("c"),
-          columnName("d") -> expr("c"),
-          columnName("e") -> expr("e")
+          ColumnName("c") -> expr("c"),
+          ColumnName("d") -> expr("c"),
+          ColumnName("e") -> expr("e")
         ),
-        Seq("c", "e", "d").map(columnName)
+        Seq("c", "e", "d").map(ColumnName)
       ))
     }
 
