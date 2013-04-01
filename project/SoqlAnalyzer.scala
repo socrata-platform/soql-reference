@@ -20,7 +20,7 @@ object SoqlAnalyzer {
     },
     libraryDependencies <++= (slf4jVersion) { slf4jVersion =>
       Seq(
-        "com.socrata" %% "soql-brita" % "1.2.0",
+        "com.socrata" %% "soql-brita" % "[1.2.0,2.0.0)",
         "org.slf4j" % "slf4j-simple" % slf4jVersion % "test"
       )
     }
