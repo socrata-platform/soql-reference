@@ -1,13 +1,5 @@
-resolvers := Seq(
-  "socrata maven" at "https://repo.socrata.com/artifactory/libs-release",
-  Resolver.url("socrata ivy", new URL("https://repo.socrata.com/artifactory/ivy-libs-release"))(Resolver.ivyStylePatterns)
-)
 
-externalResolvers <<= resolvers map { rs =>
-  Resolver.withDefaultResolvers(rs, mavenCentral = false)
-}
-
-addSbtPlugin("com.socrata" % "socrata-sbt" % "0.2.6")
+addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.8.7")
 
 libraryDependencies ++= Seq(
   "de.jflex" % "jflex" % "1.4.3",
