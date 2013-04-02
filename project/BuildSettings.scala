@@ -1,10 +1,15 @@
 import sbt._
 import Keys._
 
+import com.typesafe.tools.mima.plugin.MimaPlugin.mimaDefaultSettings
+import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
+
 object BuildSettings {
-  val buildSettings: Seq[Setting[_]] = Defaults.defaultSettings ++ Seq(
+  val buildSettings: Seq[Setting[_]] = Defaults.defaultSettings ++ mimaDefaultSettings ++ Seq(
     organization := "com.socrata",
     version := "0.0.15-SNAPSHOT",
+    // Haven't made a stable release of this yet
+    // previousArtifact <<= (scalaBinaryVersion,name) { sv => Some("com.socrata" % (name + "_" + sv) % "0.1.0") }
     scalaVersion := "2.10.0",
     crossScalaVersions := Seq("2.9.2", "2.10.0"),
     testOptions in Test ++= Seq(
