@@ -7,7 +7,7 @@ import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
 object BuildSettings {
   val buildSettings: Seq[Setting[_]] = Defaults.defaultSettings ++ mimaDefaultSettings ++ Seq(
     organization := "com.socrata",
-    version := "0.0.15",
+    version := "0.0.16-SNAPSHOT",
     // Haven't made a stable release of this yet
     // previousArtifact <<= (scalaBinaryVersion,name) { sv => Some("com.socrata" % (name + "_" + sv) % "0.1.0") }
     scalaVersion := "2.10.0",
