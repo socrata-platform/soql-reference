@@ -29,7 +29,7 @@ object Build extends sbt.Build {
   lazy val soqlStdlib = Project(
     "soql-stdlib",
     file("soql-stdlib"),
-    settings = SoqlTypes.settings
+    settings = SoqlStdlib.settings
   ) dependsOn (soqlAnalyzer, soqlTypes)
 
   lazy val soqlToy = Project(
