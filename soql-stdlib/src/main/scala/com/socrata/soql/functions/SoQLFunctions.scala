@@ -17,6 +17,8 @@ object SoQLFunctions {
 
   val TextToFixedTimestamp = new MonomorphicFunction(FunctionName("to_fixed_timestamp"), Seq(SoQLText), None, SoQLFixedTimestamp).function
   val TextToFloatingTimestamp = new MonomorphicFunction(FunctionName("to_floating_timestamp"), Seq(SoQLText), None, SoQLFloatingTimestamp).function
+  val TextToDate = new MonomorphicFunction(FunctionName("to_date"), Seq(SoQLText), None, SoQLDate).function
+  val TextToTime = new MonomorphicFunction(FunctionName("to_time"), Seq(SoQLText), None, SoQLTime).function
   val Concat = Function(SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), None, FixedType(SoQLText))
   val Gte = Function(SpecialFunctions.Operator(">="), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), None, FixedType(SoQLBoolean))
   val Gt = Function(SpecialFunctions.Operator(">"), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), None, FixedType(SoQLBoolean))

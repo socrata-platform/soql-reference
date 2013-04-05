@@ -5,6 +5,7 @@ import java.util.regex.Pattern
 import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.types._
 import com.socrata.soql.types.SoQLNumberLiteral
+import org.joda.time.format.ISODateTimeFormat
 
 object SoQLTypeConversions {
   val typeParameterUniverse: OrderedSet[SoQLType] = OrderedSet(
@@ -15,18 +16,29 @@ object SoQLTypeConversions {
     SoQLBoolean,
     SoQLFixedTimestamp,
     SoQLFloatingTimestamp,
+    SoQLDate,
+    SoQLTime,
     SoQLLocation,
     SoQLObject,
     SoQLArray
   )
 
-  val FixedTimestampRegex = Pattern.compile("""(?i)^[0-9]{4,}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:,[0-9]{1,3})?Z$""")
+  private val fixedParser = ISODateTimeFormat.dateTimeParser.withZoneUTC
   def isFixedTimestampLiteral(text: String) =
-    FixedTimestampRegex.matcher(text).matches()
+    try { fixedParser.parseDateTime(text); true }
+    catch { case _: IllegalArgumentException => false }
 
-  val FloatingTimestampRegex = Pattern.compile("""(?i)^[0-9]{4,}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:,[0-9]{1,3})?$""")
+  def isDateLiteral(text: String) =
+    try { ISODateTimeFormat.dateElementParser.parseLocalDate(text); true }
+    catch { case _: IllegalArgumentException => false }
+
+  def isTimeLiteral(text: String) =
+    try { ISODateTimeFormat.timeElementParser.parseLocalTime(text); true }
+    catch { case _: IllegalArgumentException => false }
+
   def isFloatingTimestampLiteral(text: String) =
-    FloatingTimestampRegex.matcher(text).matches()
+    try { ISODateTimeFormat.localDateOptionalTimeParser.parseLocalDateTime(text); true }
+    catch { case _: IllegalArgumentException => false }
 
   def implicitConversions(from: SoQLType, to: SoQLType): Option[MonomorphicFunction[SoQLType]] = {
     (from,to) match {
@@ -34,6 +46,10 @@ object SoQLTypeConversions {
         Some(SoQLFunctions.TextToFixedTimestamp.monomorphic.getOrElse(sys.error("text to fixed_timestamp conversion not monomorphic?")))
       case (SoQLTextLiteral(text), SoQLFloatingTimestamp) if isFloatingTimestampLiteral(text.getString) =>
         Some(SoQLFunctions.TextToFloatingTimestamp.monomorphic.getOrElse(sys.error("text to floating_timestamp conversion not monomorphic?")))
+      case (SoQLTextLiteral(text), SoQLDate) if isDateLiteral(text.getString) =>
+        Some(SoQLFunctions.TextToDate.monomorphic.getOrElse(sys.error("text to date conversion not monomorphic?")))
+      case (SoQLTextLiteral(text), SoQLTime) if isTimeLiteral(text.getString) =>
+        Some(SoQLFunctions.TextToTime.monomorphic.getOrElse(sys.error("text to time conversion not monomorphic?")))
       case (SoQLNumberLiteral(num), SoQLMoney) =>
         Some(SoQLFunctions.NumberToMoney.monomorphic.getOrElse(sys.error("text to money conversion not monomorphic?")))
       case (SoQLNumberLiteral(num), SoQLDouble) =>

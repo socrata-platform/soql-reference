@@ -18,7 +18,7 @@ object SoQLType {
   // FIXME: Figure out a way to DRY this
   val typesByName = Seq(
     SoQLID, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
-    SoQLObject, SoQLArray, SoQLLocation, SoQLJson
+    SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLLocation, SoQLJson
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
   }
@@ -32,6 +32,8 @@ case object SoQLMoney extends SoQLType("money")
 case object SoQLDouble extends SoQLType("double")
 case object SoQLFixedTimestamp extends SoQLType("fixed_timestamp")
 case object SoQLFloatingTimestamp extends SoQLType("floating_timestamp")
+case object SoQLDate extends SoQLType("date")
+case object SoQLTime extends SoQLType("time")
 case object SoQLObject extends SoQLType("object")
 case object SoQLArray extends SoQLType("array")
 case object SoQLLocation extends SoQLType("location")
