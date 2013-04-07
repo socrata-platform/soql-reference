@@ -127,11 +127,15 @@ object SoQLFunctions {
     }
   }
 
-  val nAdicFunctionsByNameThenArity = nAdicFunctions.groupBy(_.name).mapValues { fs =>
-    fs.groupBy(_.minArity).mapValues(_.toSet).toMap
-  }.toMap
+  private def analysisify(f: Function[SoQLType]): Function[SoQLAnalysisType] = f
 
-  val variadicFunctionsByNameThenMinArity = variadicFunctions.groupBy(_.name).mapValues { fs =>
-    fs.groupBy(_.minArity).mapValues(_.toSet).toMap
-  }.toMap
+  val nAdicFunctionsByNameThenArity: Map[FunctionName, Map[Int, Set[Function[SoQLAnalysisType]]]] =
+    nAdicFunctions.groupBy(_.name).mapValues { fs =>
+      fs.groupBy(_.minArity).mapValues(_.map(analysisify).toSet).toMap
+    }.toMap
+
+  val variadicFunctionsByNameThenMinArity: Map[FunctionName, Map[Int, Set[Function[SoQLAnalysisType]]]] =
+    variadicFunctions.groupBy(_.name).mapValues { fs =>
+      fs.groupBy(_.minArity).mapValues(_.map(analysisify).toSet).toMap
+    }.toMap
 }

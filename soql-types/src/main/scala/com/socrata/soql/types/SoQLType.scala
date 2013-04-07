@@ -4,18 +4,24 @@ import com.ibm.icu.util.CaseInsensitiveString
 
 import com.socrata.soql.environment.TypeName
 
-sealed abstract class SoQLType(val name: TypeName) {
-  def this(name: String) = this(TypeName(name))
+sealed abstract class SoQLAnalysisType(n: String) {
+  val name = TypeName(n)
+
   override final def toString = name.toString
+  def isPassableTo(that: SoQLAnalysisType): Boolean = (this == that)
 
+  def real: Boolean
+  def canonical: SoQLType
+}
+
+sealed abstract class SoQLType(n: String) extends SoQLAnalysisType(n) {
   def real = true
-
-  def isPassableTo(that: SoQLType): Boolean = (this == that)
   def canonical: SoQLType = this
 }
 
 object SoQLType {
-  // FIXME: Figure out a way to DRY this
+  // FIXME: Figure out a way to DRY this.  It's pretty easy in Scala 2.10, but
+  // I still want to retain pre-2.10 compat.
   val typesByName = Seq(
     SoQLID, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
     SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLLocation, SoQLJson
@@ -40,24 +46,22 @@ case object SoQLLocation extends SoQLType("location")
 case object SoQLJson extends SoQLType("json")
 
 case object SoQLNull extends SoQLType("null") {
-  override def isPassableTo(that: SoQLType) = true
+  override def isPassableTo(that: SoQLAnalysisType) = true
 }
 
-sealed abstract class FakeSoQLType(name: String) extends SoQLType(name) {
-  override def real = false
-  def realType: SoQLType
-  override def canonical = realType
+sealed abstract class FakeSoQLType(name: String) extends SoQLAnalysisType(name) {
+  def real = false
+  override def isPassableTo(that: SoQLAnalysisType) =
+    super.isPassableTo(that) || canonical.isPassableTo(that)
 }
 
 case class SoQLTextLiteral(text: CaseInsensitiveString) extends FakeSoQLType("*text") {
-  override def isPassableTo(that: SoQLType) = super.isPassableTo(that) || that == SoQLText
-  def realType = SoQLText
+  def canonical = SoQLText
 }
 object SoQLTextLiteral {
   def apply(s: String): SoQLTextLiteral = apply(new CaseInsensitiveString(s))
 }
 
 case class SoQLNumberLiteral(number: BigDecimal) extends FakeSoQLType("*number") {
-  override def isPassableTo(that: SoQLType) = super.isPassableTo(that) || that == SoQLNumber
-  def realType = SoQLNumber
+  def canonical = SoQLNumber
 }

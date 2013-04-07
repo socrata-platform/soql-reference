@@ -1,10 +1,10 @@
 package com.socrata.soql.functions
 
 import com.socrata.soql.typechecker.FunctionInfo
-import com.socrata.soql.types.SoQLType
+import com.socrata.soql.types.{SoQLAnalysisType, SoQLType}
 import com.socrata.soql.environment.FunctionName
 
-object SoQLFunctionInfo extends FunctionInfo[SoQLType] {
+object SoQLFunctionInfo extends FunctionInfo[SoQLAnalysisType] {
   def functionsWithArity(name: FunctionName, n: Int) =
     SoQLFunctions.nAdicFunctionsByNameThenArity.get(name) match {
       case Some(funcsByArity) =>
@@ -18,10 +18,10 @@ object SoQLFunctionInfo extends FunctionInfo[SoQLType] {
         variadicFunctionsWithArity(name, n)
     }
 
-  def variadicFunctionsWithArity(name: FunctionName, n: Int): Set[Function[SoQLType]] = {
+  def variadicFunctionsWithArity(name: FunctionName, n: Int): Set[Function[SoQLAnalysisType]] = {
     SoQLFunctions.variadicFunctionsByNameThenMinArity.get(name) match {
       case Some(funcsByArity) =>
-        var result = Set.empty[Function[SoQLType]]
+        var result = Set.empty[Function[SoQLAnalysisType]]
         var i = n
         while(i >= 0) {
           funcsByArity.get(i) match {
@@ -36,5 +36,5 @@ object SoQLFunctionInfo extends FunctionInfo[SoQLType] {
     }
   }
 
-  def implicitConversions(from: SoQLType, to: SoQLType) = SoQLTypeConversions.implicitConversions(from, to)
+  def implicitConversions(from: SoQLAnalysisType, to: SoQLAnalysisType) = SoQLTypeConversions.implicitConversions(from, to)
 }

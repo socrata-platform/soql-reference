@@ -11,7 +11,7 @@ object SoqlToy extends (Array[String] => Unit) {
     sys.exit(1)
   }
 
-  implicit val datasetCtx = new DatasetContext[SoQLType] {
+  implicit val datasetCtx = new DatasetContext[SoQLAnalysisType] {
     private implicit def ctx = this
     val locale = com.ibm.icu.util.ULocale.ENGLISH
     val schema = com.socrata.soql.collection.OrderedMap(
