@@ -3,6 +3,9 @@ package com.socrata.soql.types
 import com.ibm.icu.util.CaseInsensitiveString
 
 import com.socrata.soql.environment.TypeName
+import org.joda.time.{LocalTime, LocalDate, LocalDateTime, DateTime}
+import org.joda.time.format.ISODateTimeFormat
+import com.rojoma.json.ast.{JValue, JArray, JObject}
 
 sealed abstract class SoQLAnalysisType(n: String) {
   val name = TypeName(n)
@@ -30,23 +33,146 @@ object SoQLType {
   }
 }
 
+sealed trait SoQLValue {
+  def typ: SoQLType
+}
+
+case class SoQLID(value: Long) extends SoQLValue {
+  def typ = SoQLID
+}
 case object SoQLID extends SoQLType("row_identifier")
+
+case class SoQLText(value: String) extends SoQLValue {
+  def typ = SoQLText
+}
 case object SoQLText extends SoQLType("text")
-case object SoQLBoolean extends SoQLType("boolean")
+
+case class SoQLBoolean(value: Boolean) extends SoQLValue {
+  def typ = SoQLBoolean
+}
+case object SoQLBoolean extends SoQLType("boolean") {
+  val canonicalTrue = SoQLBoolean(true)
+  val canonicalFalse = SoQLBoolean(false)
+  def canonicalValue(b: Boolean) = if(b) canonicalTrue else canonicalFalse
+}
+
+case class SoQLNumber(value: java.math.BigDecimal) extends SoQLValue {
+  def typ = SoQLNumber
+}
 case object SoQLNumber extends SoQLType("number")
+
+case class SoQLMoney(value: java.math.BigDecimal) extends SoQLValue {
+  def typ = SoQLMoney
+}
 case object SoQLMoney extends SoQLType("money")
+
+case class SoQLDouble(value: Double) extends SoQLValue {
+  def typ = SoQLDouble
+}
 case object SoQLDouble extends SoQLType("double")
-case object SoQLFixedTimestamp extends SoQLType("fixed_timestamp")
-case object SoQLFloatingTimestamp extends SoQLType("floating_timestamp")
-case object SoQLDate extends SoQLType("date")
-case object SoQLTime extends SoQLType("time")
+
+case class SoQLFixedTimestamp(value: DateTime) extends SoQLValue {
+  def typ = SoQLFixedTimestamp
+}
+case object SoQLFixedTimestamp extends SoQLType("fixed_timestamp") {
+  object StringRep {
+    private val fixedParser = ISODateTimeFormat.dateTimeParser.withZoneUTC
+    private val fixedRenderer = ISODateTimeFormat.dateTime.withZoneUTC
+
+    def unapply(text: String): Option[DateTime] =
+      try { Some(fixedParser.parseDateTime(text)) }
+      catch { case _: IllegalArgumentException => None }
+
+    def unapply(text: CaseInsensitiveString): Option[DateTime] = unapply(text.getString)
+
+    def apply(dateTime: DateTime) =
+      fixedRenderer.print(dateTime)
+
+    def printTo(appendable: Appendable, dateTime: DateTime) =
+      fixedRenderer.printTo(appendable, dateTime)
+  }
+}
+
+case class SoQLFloatingTimestamp(value: LocalDateTime) extends SoQLValue {
+  def typ = SoQLFloatingTimestamp
+}
+case object SoQLFloatingTimestamp extends SoQLType("floating_timestamp") {
+  object StringRep {
+    def unapply(text: String): Option[LocalDateTime] =
+      try { Some(ISODateTimeFormat.localDateOptionalTimeParser.parseLocalDateTime(text)) }
+      catch { case _: IllegalArgumentException => None }
+
+    def unapply(text: CaseInsensitiveString): Option[LocalDateTime] = unapply(text.getString)
+
+    def apply(dateTime: LocalDateTime) =
+      ISODateTimeFormat.dateTime.print(dateTime)
+
+    def printTo(appendable: Appendable, dateTime: LocalDateTime) =
+      ISODateTimeFormat.dateTime.printTo(appendable, dateTime)
+  }
+}
+
+case class SoQLDate(value: LocalDate) extends SoQLValue {
+  def typ = SoQLDate
+}
+case object SoQLDate extends SoQLType("date") {
+  object StringRep {
+    def unapply(text: String): Option[LocalDate] =
+      try { Some(ISODateTimeFormat.localDateParser.parseLocalDate(text)) }
+      catch { case _: IllegalArgumentException => None }
+
+    def unapply(text: CaseInsensitiveString): Option[LocalDate] = unapply(text.getString)
+
+    def apply(date: LocalDate) =
+      ISODateTimeFormat.date.print(date)
+
+    def printTo(appendable: Appendable, date: LocalDate) =
+      ISODateTimeFormat.dateTime.printTo(appendable, date)
+  }
+}
+
+case class SoQLTime(value: LocalTime) extends SoQLValue {
+  def typ = SoQLTime
+}
+case object SoQLTime extends SoQLType("time") {
+  object StringRep {
+    def unapply(text: String): Option[LocalTime] =
+      try { Some(ISODateTimeFormat.localTimeParser.parseLocalTime(text)) }
+      catch { case _: IllegalArgumentException => None }
+
+    def unapply(text: CaseInsensitiveString): Option[LocalTime] = unapply(text.getString)
+
+    def apply(time: LocalTime) =
+      ISODateTimeFormat.time.print(time)
+
+    def printTo(appendable: Appendable, time: LocalTime) =
+      ISODateTimeFormat.dateTime.printTo(appendable, time)
+  }
+}
+
+case class SoQLObject(value: JObject) extends SoQLValue {
+  def typ = SoQLObject
+}
 case object SoQLObject extends SoQLType("object")
+
+case class SoQLArray(value: JArray) extends SoQLValue {
+  def typ = SoQLArray
+}
 case object SoQLArray extends SoQLType("array")
+
+case class SoQLLocation(latitude: Double, longitude: Double) extends SoQLValue {
+  def typ = SoQLLocation
+}
 case object SoQLLocation extends SoQLType("location")
+
+case class SoQLJson(value: JValue) extends SoQLValue {
+  def typ = SoQLJson
+}
 case object SoQLJson extends SoQLType("json")
 
-case object SoQLNull extends SoQLType("null") {
+case object SoQLNull extends SoQLType("null") with SoQLValue {
   override def isPassableTo(that: SoQLAnalysisType) = true
+  def typ = this
 }
 
 sealed abstract class FakeSoQLType(name: String) extends SoQLAnalysisType(name) {
