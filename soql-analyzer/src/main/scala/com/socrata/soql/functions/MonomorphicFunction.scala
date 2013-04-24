@@ -3,8 +3,8 @@ package com.socrata.soql.functions
 import com.socrata.soql.environment.FunctionName
 
 case class MonomorphicFunction[+Type](function: Function[Type], bindings: Map[String, Type]) {
-  def this(name: FunctionName, parameters: Seq[Type], repeated: Option[Type], result: Type, isAggregate: Boolean = false) =
-    this(Function(name, Map.empty, parameters.map(FixedType(_)), repeated.map(FixedType(_)), FixedType(result), isAggregate), Map.empty)
+  def this(identity: String, name: FunctionName, parameters: Seq[Type], repeated: Option[Type], result: Type, isAggregate: Boolean = false) =
+    this(Function(identity, name, Map.empty, parameters.map(FixedType(_)), repeated.map(FixedType(_)), FixedType(result), isAggregate), Map.empty)
 
   require(bindings.keySet == function.parameters.collect { case VariableType(n) => n }.toSet, "bindings do not match")
 
