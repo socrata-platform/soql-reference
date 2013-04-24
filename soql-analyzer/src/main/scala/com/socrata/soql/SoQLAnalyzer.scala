@@ -11,6 +11,7 @@ import com.socrata.soql.environment.{ColumnName, DatasetContext}
 import com.socrata.soql.collection.OrderedMap
 
 class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type]) {
+  type Analysis = SoQLAnalysis[Type]
   type Expr = typed.CoreExpr[Type]
 
   val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLAnalyzer[_]])
@@ -196,16 +197,6 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
     finishAnalysis(isGrouped, outputs, checkedWhere, checkedGroupBy, checkedHaving, checkedOrderBy, query.limit, query.offset, query.search)
   }
 
-  case class Analysis(isGrouped: Boolean,
-                      selection: OrderedMap[ColumnName, Expr],
-                      where: Option[Expr],
-                      groupBy: Option[Seq[Expr]],
-                      having: Option[Expr],
-                      orderBy: Option[Seq[typed.OrderBy[Type]]],
-                      limit: Option[BigInt],
-                      offset: Option[BigInt],
-                      search: Option[String])
-
   def finishAnalysis(isGrouped: Boolean,
                      output: OrderedMap[ColumnName, Expr],
                      where: Option[Expr],
@@ -218,7 +209,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
   {
     // todo: check that the types of the order-bys are Orderable
 
-    Analysis(
+    SoQLAnalysis(
       isGrouped,
       output,
       where,
@@ -230,3 +221,13 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
       search)
   }
 }
+
+case class SoQLAnalysis[Type](isGrouped: Boolean,
+                              selection: OrderedMap[ColumnName, typed.CoreExpr[Type]],
+                              where: Option[typed.CoreExpr[Type]],
+                              groupBy: Option[Seq[typed.CoreExpr[Type]]],
+                              having: Option[typed.CoreExpr[Type]],
+                              orderBy: Option[Seq[typed.OrderBy[Type]]],
+                              limit: Option[BigInt],
+                              offset: Option[BigInt],
+                              search: Option[String])
