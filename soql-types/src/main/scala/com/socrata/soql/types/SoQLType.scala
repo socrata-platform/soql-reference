@@ -6,15 +6,27 @@ import com.socrata.soql.environment.TypeName
 import org.joda.time.{LocalTime, LocalDate, LocalDateTime, DateTime}
 import org.joda.time.format.ISODateTimeFormat
 import com.rojoma.json.ast.{JValue, JArray, JObject}
+import com.google.protobuf.{CodedInputStream, CodedOutputStream}
 
-sealed abstract class SoQLAnalysisType(n: String) {
-  val name = TypeName(n)
+sealed abstract class SoQLAnalysisType(val name: TypeName) {
+  def this(name: String) = this(TypeName(name))
 
   override final def toString = name.toString
   def isPassableTo(that: SoQLAnalysisType): Boolean = (this == that)
 
   def real: Boolean
   def canonical: SoQLType
+}
+
+object SoQLAnalysisType {
+  object Serialization {
+    def serialize(out: CodedOutputStream, t: SoQLAnalysisType) =
+      out.writeStringNoTag(t.name.name)
+    def deserialize(in: CodedInputStream): SoQLType = {
+      val name = TypeName(in.readString())
+      SoQLType.typesByName(name) // post-analysis, the fake types are gone
+    }
+  }
 }
 
 sealed abstract class SoQLType(n: String) extends SoQLAnalysisType(n) {
@@ -175,19 +187,23 @@ case object SoQLNull extends SoQLType("null") with SoQLValue {
   def typ = this
 }
 
-sealed abstract class FakeSoQLType(name: String) extends SoQLAnalysisType(name) {
+sealed abstract class FakeSoQLType(name: TypeName) extends SoQLAnalysisType(name) {
   def real = false
   override def isPassableTo(that: SoQLAnalysisType) =
     super.isPassableTo(that) || canonical.isPassableTo(that)
 }
 
-case class SoQLTextLiteral(text: CaseInsensitiveString) extends FakeSoQLType("*text") {
+case class SoQLTextLiteral(text: CaseInsensitiveString) extends FakeSoQLType(SoQLTextLiteral.typeName) {
   def canonical = SoQLText
 }
 object SoQLTextLiteral {
+  val typeName = TypeName("*text")
   def apply(s: String): SoQLTextLiteral = apply(new CaseInsensitiveString(s))
 }
 
-case class SoQLNumberLiteral(number: BigDecimal) extends FakeSoQLType("*number") {
+case class SoQLNumberLiteral(number: BigDecimal) extends FakeSoQLType(SoQLNumberLiteral.typeName) {
   def canonical = SoQLNumber
+}
+object SoQLNumberLiteral {
+  val typeName = TypeName("*number")
 }

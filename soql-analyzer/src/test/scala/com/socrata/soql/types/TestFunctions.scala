@@ -54,7 +54,10 @@ object TestFunctions {
     castIdentities ++ reflectedFunctions
   }
 
-  assert(allFunctions.size == allFunctions.map(_.identity).toSet.size)
+  val functionsByIdentity = allFunctions.foldLeft(Map.empty[String, Function[TestType]]) { (acc, func) =>
+    acc + (func.identity -> func)
+  }
+  assert(allFunctions.size == functionsByIdentity.size)
 
   val nAdicFunctions = TestFunctions.allFunctions.filterNot(_.isVariadic)
   val variadicFunctions = TestFunctions.allFunctions.filter(_.isVariadic)

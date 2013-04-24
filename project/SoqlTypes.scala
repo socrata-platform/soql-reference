@@ -6,7 +6,10 @@ object SoqlTypes {
     libraryDependencies ++= Seq(
       "joda-time" % "joda-time" % "2.1",
       "org.joda" % "joda-convert" % "1.2",
-      "com.rojoma" %% "rojoma-json" % "[2.0.0,3.0.0)"
+      "com.rojoma" %% "rojoma-json" % "[2.0.0,3.0.0)",
+
+      // Only used by serialization
+      "com.google.protobuf" % "protobuf-java" % "2.4.1" % "optional"
     )
   )
 }

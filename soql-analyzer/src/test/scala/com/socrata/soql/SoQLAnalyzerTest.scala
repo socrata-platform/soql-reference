@@ -12,8 +12,6 @@ import com.socrata.soql.types._
 
 class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   implicit val datasetCtx = new DatasetContext[TestType] {
-    private implicit def ctx = this
-    val locale = com.ibm.icu.util.ULocale.ENGLISH
     val schema = com.socrata.soql.collection.OrderedMap(
       ColumnName(":id") -> TestNumber,
       ColumnName(":updated_at") -> TestFixedTimestamp,
