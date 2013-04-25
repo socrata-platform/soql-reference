@@ -16,6 +16,8 @@ import com.socrata.soql.collection.OrderedMap
 
 private case class SimplePosition(line: Int, column: Int, lineContents: String) extends Position
 
+class UnknownAnalysisSerializationVersion(val version: Int) extends Exception("Unknown analysis serialization version " + version)
+
 private trait DeserializationDictionary[T] {
   def types(i: Int): T
   def columns(i: Int): ColumnName
@@ -124,7 +126,7 @@ class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionM
       }
     }
 
-    def readIsGrouped() =
+    def readIsGrouped(): Boolean =
       in.readBool()
 
     def maybeRead[A](f: => A): Option[A] =
@@ -180,6 +182,7 @@ class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionM
         in.readString()
       }
 
+
     def read(): SoQLAnalysis[T] = {
       val isGrouped = readIsGrouped()
       val selection = readSelection()
@@ -205,8 +208,13 @@ class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionM
 
   def apply(in: InputStream): SoQLAnalysis[T] = {
     val cis = CodedInputStream.newInstance(in)
-    val dictionary = DeserializationDictionaryImpl.fromInput(cis)
-    val deserializer = new Deserializer(cis, dictionary)
-    deserializer.read()
+    cis.readRawByte() match {
+      case 0 =>
+        val dictionary = DeserializationDictionaryImpl.fromInput(cis)
+        val deserializer = new Deserializer(cis, dictionary)
+        deserializer.read()
+      case other =>
+        throw new UnknownAnalysisSerializationVersion(other)
+    }
   }
 }

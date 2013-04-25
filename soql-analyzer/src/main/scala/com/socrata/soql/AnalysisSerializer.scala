@@ -259,6 +259,7 @@ class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) exten
     out.flush()
 
     val codedOutputStream = CodedOutputStream.newInstance(outputStream)
+    codedOutputStream.writeRawByte(0) // version number
     dictionary.save(codedOutputStream)
     codedOutputStream.flush()
     postDictionaryData.writeTo(outputStream)
