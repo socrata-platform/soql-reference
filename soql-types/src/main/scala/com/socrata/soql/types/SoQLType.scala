@@ -38,7 +38,7 @@ object SoQLType {
   // FIXME: Figure out a way to DRY this.  It's pretty easy in Scala 2.10, but
   // I still want to retain pre-2.10 compat.
   val typesByName = Seq(
-    SoQLID, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
+    SoQLID, SoQLVersion, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
     SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLLocation, SoQLJson
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
@@ -53,6 +53,11 @@ case class SoQLID(value: Long) extends SoQLValue {
   def typ = SoQLID
 }
 case object SoQLID extends SoQLType("row_identifier")
+
+case class SoQLVersion(value: Long) extends SoQLValue {
+  def typ = SoQLVersion
+}
+case object SoQLVersion extends SoQLType("row_version")
 
 case class SoQLText(value: String) extends SoQLValue {
   def typ = SoQLText
