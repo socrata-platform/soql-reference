@@ -112,7 +112,7 @@ object SoQLFunctions {
     castIdentities ++ reflectedFunctions
   }
 
-  val functionsByIdentity = allFunctions.map(_.identity).toSet
+  val functionsByIdentity = allFunctions.map { f => f.identity -> f }.toMap
 
   val nAdicFunctions = SoQLFunctions.allFunctions.filterNot(_.isVariadic)
   val variadicFunctions = SoQLFunctions.allFunctions.filter(_.isVariadic)
