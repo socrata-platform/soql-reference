@@ -17,7 +17,9 @@ object SoQLTypeConversions {
     SoQLTime,
     SoQLLocation,
     SoQLObject,
-    SoQLArray
+    SoQLArray,
+    SoQLID,
+    SoQLVersion
   )
 
   def implicitConversions(from: SoQLAnalysisType, to: SoQLAnalysisType): Option[MonomorphicFunction[SoQLType]] = {

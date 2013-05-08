@@ -15,9 +15,10 @@ object SoqlToy extends (Array[String] => Unit) {
     private implicit def ctx = this
     val locale = com.ibm.icu.util.ULocale.ENGLISH
     val schema = com.socrata.soql.collection.OrderedMap(
-      ColumnName(":id") -> SoQLNumber,
+      ColumnName(":id") -> SoQLID,
       ColumnName(":updated_at") -> SoQLFixedTimestamp,
       ColumnName(":created_at") -> SoQLFixedTimestamp,
+      ColumnName(":version") -> SoQLVersion,
       ColumnName("name_last") -> SoQLText,
       ColumnName("name_first") -> SoQLText,
       ColumnName("visits") -> SoQLNumber,
