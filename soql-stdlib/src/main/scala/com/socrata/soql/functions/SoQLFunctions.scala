@@ -99,6 +99,9 @@ object SoQLFunctions {
   val JsonToObject = new MonomorphicFunction("json to obj", SpecialFunctions.Cast(SoQLObject.name), Seq(SoQLJson), None, SoQLObject).function
   val JsonToArray = new MonomorphicFunction("json to array", SpecialFunctions.Cast(SoQLArray.name), Seq(SoQLJson), None, SoQLArray).function
 
+  val TextToRowIdentifier = new MonomorphicFunction("text to rid", SpecialFunctions.Cast(SoQLID.name), Seq(SoQLText), None, SoQLID).function
+  val TextToRowVersion = new MonomorphicFunction("text to rowver", SpecialFunctions.Cast(SoQLVersion.name), Seq(SoQLText), None, SoQLVersion).function
+
   def potentialAccessors = for {
     method <- getClass.getMethods
     if Modifier.isPublic(method.getModifiers) && method.getParameterTypes.length == 0

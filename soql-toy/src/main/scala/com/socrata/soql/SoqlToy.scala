@@ -38,7 +38,7 @@ object SoqlToy extends (Array[String] => Unit) {
   def apply(args: Array[String]) {
     menu()
 
-    val analyzer = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo)
+    val analyzer = new SoQLAnalyzer(SoQLTypeInfo, new SoQLFunctionInfo)
 
     while(true) {
       val selection = readLine("> ")

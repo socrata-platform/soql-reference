@@ -4,7 +4,7 @@ import com.socrata.soql.typechecker.FunctionInfo
 import com.socrata.soql.types.{SoQLAnalysisType, SoQLType}
 import com.socrata.soql.environment.FunctionName
 
-object SoQLFunctionInfo extends FunctionInfo[SoQLAnalysisType] {
+class SoQLFunctionInfo extends FunctionInfo[SoQLAnalysisType] {
   def functionsWithArity(name: FunctionName, n: Int) =
     SoQLFunctions.nAdicFunctionsByNameThenArity.get(name) match {
       case Some(funcsByArity) =>
