@@ -3,7 +3,8 @@ package com.socrata.soql
 import com.socrata.soql.exceptions.SoQLException
 import com.socrata.soql.types._
 import environment.{ColumnName, DatasetContext}
-import functions.{SoQLTypeInfo, SoQLFunctionInfo}
+import com.socrata.soql.functions.{SoQLTypeConversions, SoQLTypeInfo, SoQLFunctionInfo}
+import com.socrata.soql.types.obfuscation.CryptProvider
 
 object SoqlToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -38,7 +39,7 @@ object SoqlToy extends (Array[String] => Unit) {
   def apply(args: Array[String]) {
     menu()
 
-    val analyzer = new SoQLAnalyzer(SoQLTypeInfo, new SoQLFunctionInfo)
+    val analyzer = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo)
 
     while(true) {
       val selection = readLine("> ")

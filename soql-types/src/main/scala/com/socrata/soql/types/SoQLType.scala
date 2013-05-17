@@ -7,6 +7,7 @@ import org.joda.time.{LocalTime, LocalDate, LocalDateTime, DateTime}
 import org.joda.time.format.ISODateTimeFormat
 import com.rojoma.json.ast.{JValue, JArray, JObject}
 import com.google.protobuf.{CodedInputStream, CodedOutputStream}
+import com.socrata.soql.types.obfuscation.{Obfuscator, CryptProvider}
 
 sealed abstract class SoQLAnalysisType(val name: TypeName) {
   def this(name: String) = this(TypeName(name))
@@ -52,12 +53,58 @@ sealed trait SoQLValue {
 case class SoQLID(value: Long) extends SoQLValue {
   def typ = SoQLID
 }
-case object SoQLID extends SoQLType("row_identifier")
+case object SoQLID extends SoQLType("row_identifier") {
+  private def prefix = "row-"
+
+  class StringRep(cryptProvider: CryptProvider) {
+    private class IdObfuscator extends Obfuscator(prefix, cryptProvider) {
+      def obfuscate(soqlId: SoQLID): String =
+        encrypt(soqlId.value)
+      def deobfuscate(obfuscatedId: String): Option[SoQLID] =
+        decrypt(obfuscatedId).map(new SoQLID(_))
+    }
+    private val obfuscator = new IdObfuscator
+
+    def unapply(text: String): Option[SoQLID] =
+      obfuscator.deobfuscate(text)
+
+    def unapply(text: CaseInsensitiveString): Option[SoQLID] =
+      unapply(text.getString)
+
+    def apply(soqlId: SoQLID) =
+      obfuscator.obfuscate(soqlId)
+  }
+
+  def isPossibleId(s: String): Boolean = Obfuscator.isPossibleObfuscatedValue(s, prefix = prefix)
+  def isPossibleId(s: CaseInsensitiveString): Boolean = isPossibleId(s.getString)
+}
 
 case class SoQLVersion(value: Long) extends SoQLValue {
   def typ = SoQLVersion
 }
-case object SoQLVersion extends SoQLType("row_version")
+case object SoQLVersion extends SoQLType("row_version") {
+  private def prefix = "rv-"
+  class StringRep(cryptProvider: CryptProvider) {
+    private class VersionObfuscator extends Obfuscator(prefix, cryptProvider) {
+      def obfuscate(version: SoQLVersion): String =
+        encrypt(version.value)
+      def deobfuscate(obfuscatedVersion: String): Option[SoQLVersion] =
+        decrypt(obfuscatedVersion).map(new SoQLVersion(_))
+    }
+    private val obfuscator = new VersionObfuscator
+
+    def unapply(text: String): Option[SoQLVersion] =
+      obfuscator.deobfuscate(text)
+
+    def unapply(text: CaseInsensitiveString): Option[SoQLVersion] =
+      unapply(text.getString)
+
+    def apply(soqlVersion: SoQLVersion) =
+      obfuscator.obfuscate(soqlVersion)
+  }
+  def isPossibleVersion(s: String): Boolean = Obfuscator.isPossibleObfuscatedValue(s, prefix = prefix)
+  def isPossibleVersion(s: CaseInsensitiveString): Boolean = isPossibleVersion(s.getString)
+}
 
 case class SoQLText(value: String) extends SoQLValue {
   def typ = SoQLText

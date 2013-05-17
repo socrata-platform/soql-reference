@@ -10,7 +10,19 @@ sealed abstract class SoQLFunctions
 object SoQLFunctions {
   private val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLFunctions])
 
-  private val Ordered = SoQLTypeConversions.typeParameterUniverse.toSet[Any] // might want to narrow this down
+  private val Ordered = Set[Any](
+    SoQLText,
+    SoQLNumber,
+    SoQLDouble,
+    SoQLMoney,
+    SoQLBoolean,
+    SoQLFixedTimestamp,
+    SoQLFloatingTimestamp,
+    SoQLDate,
+    SoQLTime,
+    SoQLID,
+    SoQLVersion
+  )
   private val NumLike = Set[Any](SoQLNumber, SoQLDouble, SoQLMoney)
   private val RealNumLike = Set[Any](SoQLNumber, SoQLDouble)
   private val GeospatialLike = Set[Any](SoQLLocation)

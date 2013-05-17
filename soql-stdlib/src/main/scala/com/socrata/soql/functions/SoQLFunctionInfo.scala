@@ -3,8 +3,9 @@ package com.socrata.soql.functions
 import com.socrata.soql.typechecker.FunctionInfo
 import com.socrata.soql.types.{SoQLAnalysisType, SoQLType}
 import com.socrata.soql.environment.FunctionName
+import com.socrata.soql.types.obfuscation.CryptProvider
 
-class SoQLFunctionInfo extends FunctionInfo[SoQLAnalysisType] {
+object SoQLFunctionInfo extends FunctionInfo[SoQLAnalysisType] {
   def functionsWithArity(name: FunctionName, n: Int) =
     SoQLFunctions.nAdicFunctionsByNameThenArity.get(name) match {
       case Some(funcsByArity) =>
@@ -36,5 +37,6 @@ class SoQLFunctionInfo extends FunctionInfo[SoQLAnalysisType] {
     }
   }
 
-  def implicitConversions(from: SoQLAnalysisType, to: SoQLAnalysisType) = SoQLTypeConversions.implicitConversions(from, to)
+  val typeConversions = SoQLTypeConversions
+  def implicitConversions(from: SoQLAnalysisType, to: SoQLAnalysisType) = typeConversions.implicitConversions(from, to)
 }

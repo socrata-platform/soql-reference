@@ -3,6 +3,7 @@ package com.socrata.soql.functions
 import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.types._
 import com.socrata.soql.types.SoQLNumberLiteral
+import com.socrata.soql.types.obfuscation.CryptProvider
 
 object SoQLTypeConversions {
   val typeParameterUniverse: OrderedSet[SoQLAnalysisType] = OrderedSet(
@@ -22,20 +23,41 @@ object SoQLTypeConversions {
     SoQLVersion
   )
 
+  private val textToFixedTimestampFunc =
+    Some(SoQLFunctions.TextToFixedTimestamp.monomorphic.getOrElse(sys.error("text to fixed_timestamp conversion not monomorphic?")))
+  private val textToFloatingTimestampFunc =
+    Some(SoQLFunctions.TextToFloatingTimestamp.monomorphic.getOrElse(sys.error("text to floating_timestamp conversion not monomorphic?")))
+  private val textToDateFunc =
+    Some(SoQLFunctions.TextToDate.monomorphic.getOrElse(sys.error("text to date conversion not monomorphic?")))
+  private val textToTimeFunc =
+    Some(SoQLFunctions.TextToTime.monomorphic.getOrElse(sys.error("text to time conversion not monomorphic?")))
+  private val numberToMoneyFunc =
+    Some(SoQLFunctions.NumberToMoney.monomorphic.getOrElse(sys.error("text to money conversion not monomorphic?")))
+  private val numberToDoubleFunc =
+    Some(SoQLFunctions.NumberToDouble.monomorphic.getOrElse(sys.error("text to money conversion not monomorphic?")))
+  private val textToRowIdFunc =
+    Some(SoQLFunctions.TextToRowIdentifier.monomorphic.getOrElse(sys.error("text to row_identifier conversion not monomorphic?")))
+  private val textToRowVersionFunc =
+    Some(SoQLFunctions.TextToRowVersion.monomorphic.getOrElse(sys.error("text to row_version conversion not monomorphic?")))
+
   def implicitConversions(from: SoQLAnalysisType, to: SoQLAnalysisType): Option[MonomorphicFunction[SoQLType]] = {
     (from,to) match {
       case (SoQLTextLiteral(SoQLFixedTimestamp.StringRep(_)), SoQLFixedTimestamp) =>
-        Some(SoQLFunctions.TextToFixedTimestamp.monomorphic.getOrElse(sys.error("text to fixed_timestamp conversion not monomorphic?")))
+        textToFixedTimestampFunc
       case (SoQLTextLiteral(SoQLFloatingTimestamp.StringRep(_)), SoQLFloatingTimestamp) =>
-        Some(SoQLFunctions.TextToFloatingTimestamp.monomorphic.getOrElse(sys.error("text to floating_timestamp conversion not monomorphic?")))
+        textToFloatingTimestampFunc
       case (SoQLTextLiteral(SoQLDate.StringRep(_)), SoQLDate) =>
-        Some(SoQLFunctions.TextToDate.monomorphic.getOrElse(sys.error("text to date conversion not monomorphic?")))
+        textToDateFunc
       case (SoQLTextLiteral(SoQLTime.StringRep(_)), SoQLTime) =>
-        Some(SoQLFunctions.TextToTime.monomorphic.getOrElse(sys.error("text to time conversion not monomorphic?")))
+        textToTimeFunc
       case (SoQLNumberLiteral(num), SoQLMoney) =>
-        Some(SoQLFunctions.NumberToMoney.monomorphic.getOrElse(sys.error("text to money conversion not monomorphic?")))
+        numberToMoneyFunc
       case (SoQLNumberLiteral(num), SoQLDouble) =>
-        Some(SoQLFunctions.NumberToDouble.monomorphic.getOrElse(sys.error("text to money conversion not monomorphic?")))
+        numberToDoubleFunc
+      case (SoQLTextLiteral(s), SoQLID) if SoQLID.isPossibleId(s) =>
+        textToRowIdFunc
+      case (SoQLTextLiteral(s), SoQLVersion) if SoQLVersion.isPossibleVersion(s) =>
+        textToRowVersionFunc
       case _ =>
         None
     }
