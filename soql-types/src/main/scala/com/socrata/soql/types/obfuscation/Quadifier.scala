@@ -48,7 +48,7 @@ object Quadifier {
       (deDigit(s.charAt(offset + 3)))
   }
 
-  def isQuad(s: String, offset: Int): Boolean =
+  def isQuad(s: String, offset: Int = 0): Boolean =
     (s.length >= offset + 4) &&
       isDigit(s.charAt(offset)) &&
       isDigit(s.charAt(offset + 1)) &&

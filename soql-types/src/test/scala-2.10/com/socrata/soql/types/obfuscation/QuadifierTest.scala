@@ -23,12 +23,24 @@ class QuadifierTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("The result of quadification is always a quad") {
-    forAll { (x: Int, prefix: String) =>
-      Quadifier.isQuad(prefix + Quadifier.quadify(x), prefix.length) must be (true)
+    forAll { (x: Int) =>
+      Quadifier.isQuad(Quadifier.quadify(x)) must be (true)
+    }
+  }
+
+  test("isQuad ignores prefixes and suffixes") {
+    forAll { (x: Int, prefix: String, suffix: String) =>
+      Quadifier.isQuad(prefix + Quadifier.quadify(x) + suffix, prefix.length) must be (true)
     }
   }
 
   test("Dequadify-quadify preserves the 20 least significant bits") {
+    forAll { (x: Int) =>
+      Quadifier.dequadifyEx(Quadifier.quadify(x)) must equal (x & 0xfffff)
+    }
+  }
+
+  test("Dequadify ignores prefix and suffixes") {
     forAll { (x: Int, prefix: String, suffix: String) =>
       Quadifier.dequadifyEx(prefix + Quadifier.quadify(x) + suffix, prefix.length) must equal (x & 0xfffff)
     }

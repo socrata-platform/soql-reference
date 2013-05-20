@@ -44,7 +44,7 @@ object LongFormatter {
   private def badValue() =
     throw new IllegalArgumentException(badValueMessage)
 
-  def isFormattedValue(s: String, offset: Int): Boolean = {
+  def isFormattedValue(s: String, offset: Int = 0): Boolean = {
     (s.length == offset + 14) &&
       quadifier.isQuad(s, offset) &&
       isPunct(s, offset + 4) &&
