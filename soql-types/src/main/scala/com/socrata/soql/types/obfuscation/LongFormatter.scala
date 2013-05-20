@@ -37,7 +37,7 @@ object LongFormatter {
     q1 + (q2 << 20) + (q3 << 40) + (p1 << 60) + (p2 << 62)
   }
 
-  def dequadify(s: String, offset: Int) =
+  private def dequadify(s: String, offset: Int) =
     try { quadifier.dequadifyEx(s, offset) }
     catch { case _: IllegalArgumentException => badValue() }
 

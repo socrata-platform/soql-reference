@@ -1,7 +1,6 @@
 package com.socrata.soql.types.obfuscation
 
 import org.bouncycastle.crypto.engines.BlowfishEngine
-import org.bouncycastle.crypto.BlockCipher
 
 abstract class Obfuscator(prefix: String, cryptProvider: CryptProvider) {
   private val formatter = LongFormatter
@@ -39,7 +38,7 @@ abstract class Obfuscator(prefix: String, cryptProvider: CryptProvider) {
       ((bs(6) & 0xff).toLong << 48) +
       ((bs(7) & 0xff).toLong << 56)
 
-  private def crypt(x: Long, engine: BlockCipher): Long = {
+  private def crypt(x: Long, engine: BlowfishEngine): Long = {
     val buf = new Array[Byte](8)
     byteify(buf, x)
     // as it happens, I know passing in buf twice is safe
