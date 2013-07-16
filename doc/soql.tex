@@ -101,9 +101,10 @@ allows dashes within the identifier.  Some examples:
 
 System identifiers are names in the column namespace which are
 provided by the system; names in this format cannot be introduced by
-users.  They match the regex
+users.  They begin with a colon; implementation-specific system identifiers
+begin with a colon followed by an at-sign.  They match the regex
 \begin{lstlisting}
-:[:jidentifiercont:]+
+:@?[:jidentifiercont:]+
 \end{lstlisting}
 If backtick-quoted, system identifiers may also contain dashes.
 
@@ -185,7 +186,7 @@ when \lstinline|*| is used in the selection.  Instead, only the
 dataset's user-defined columns are included.  System columns may be
 included individually by name or through use of the \lstinline|:*|
 token\footnote{It is meant to suggest ``all names which begin with a
-  colon''.}.
+  colon'' but also includes implementation-specific system columns.}.
 
 Note that this grammar implies that \lstinline|:*| and \lstinline|*|,
 if they appear at all, must be at the start of the selection list and,
