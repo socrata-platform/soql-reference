@@ -60,7 +60,7 @@ import com.socrata.soql.exceptions.UnterminatedString;
 
 WhiteSpace = [ \t\n]
 
-Identifier = [:jletter:] [:jletterdigit:]*
+Identifier = ([:jletter:]|\u00ae) [:jletterdigit:]*
 SystemIdentifier = ":" [:jletterdigit:]+
 QuotedIdentifier = ("-" | [:jletter:]) ("-" | [:jletterdigit:])*
 QuotedSystemIdentifier = ":" ("-" | [:jletterdigit:])+

@@ -27,7 +27,8 @@ object SoqlToy extends (Array[String] => Unit) {
       ColumnName("address") -> SoQLLocation,
       ColumnName("balance") -> SoQLMoney,
       ColumnName("object") -> SoQLObject,
-      ColumnName("array") -> SoQLArray
+      ColumnName("array") -> SoQLArray,
+      ColumnName("®meta") -> SoQLObject
     )
   }
 
