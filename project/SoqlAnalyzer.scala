@@ -2,7 +2,7 @@ import sbt._
 import Keys._
 
 object SoqlAnalyzer {
-  lazy val settings: Seq[Setting[_]] = BuildSettings.buildSettings ++ Seq(
+  lazy val settings: Seq[Setting[_]] = BuildSettings.projectSettings() ++ Seq(
     sourceGenerators in Compile <+= (sourceManaged in Compile, sourceDirectory in Compile) map { (sourceManaged, sourceDir) =>
       val task = new JFlex.anttask.JFlexTask
       task.setDestdir(sourceManaged)

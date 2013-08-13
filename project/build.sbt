@@ -1,6 +1,9 @@
-addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.1.5")
+resolvers ++= Seq(
+  "socrata releases" at "http://repository-socrata-oss.forge.cloudbees.com/release",
+  "DiversIT repo" at "http://repository-diversit.forge.cloudbees.com/release"
+)
 
-addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.8.7")
+addSbtPlugin("com.socrata" % "socrata-cloudbees-sbt" % "1.0.0")
 
 libraryDependencies ++= Seq(
   "de.jflex" % "jflex" % "1.4.3",

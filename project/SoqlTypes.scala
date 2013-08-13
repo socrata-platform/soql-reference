@@ -2,7 +2,7 @@ import sbt._
 import Keys._
 
 object SoqlTypes {
-  lazy val settings: Seq[Setting[_]] = BuildSettings.buildSettings ++ Seq(
+  lazy val settings: Seq[Setting[_]] = BuildSettings.projectSettings() ++ Seq(
     libraryDependencies ++= Seq(
       "joda-time" % "joda-time" % "2.1",
       "org.joda" % "joda-convert" % "1.2",
