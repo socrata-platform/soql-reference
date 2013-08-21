@@ -223,11 +223,20 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
 }
 
 case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
-                                        selection: OrderedMap[ColumnId, typed.CoreExpr[ColumnId, Type]],
+                                        selection: OrderedMap[ColumnName, typed.CoreExpr[ColumnId, Type]],
                                         where: Option[typed.CoreExpr[ColumnId, Type]],
                                         groupBy: Option[Seq[typed.CoreExpr[ColumnId, Type]]],
                                         having: Option[typed.CoreExpr[ColumnId, Type]],
                                         orderBy: Option[Seq[typed.OrderBy[ColumnId, Type]]],
                                         limit: Option[BigInt],
                                         offset: Option[BigInt],
-                                        search: Option[String])
+                                        search: Option[String]) {
+  def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId): SoQLAnalysis[NewColumnId, Type] =
+    copy(
+      selection = selection.mapValues(_.mapColumnIds(f)),
+      where = where.map(_.mapColumnIds(f)),
+      groupBy = groupBy.map(_.map(_.mapColumnIds(f))),
+      having = having.map(_.mapColumnIds(f)),
+      orderBy = orderBy.map(_.map(_.mapColumnIds(f)))
+    )
+}

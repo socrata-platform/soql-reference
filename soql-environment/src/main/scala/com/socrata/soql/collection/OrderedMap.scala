@@ -3,7 +3,7 @@ package com.socrata.soql.collection
 import scala.collection.immutable.{MapLike, HashMap}
 import scala.collection.generic.{CanBuildFrom, ImmutableMapFactory}
 
-class OrderedMap[A, +B](underlying: HashMap[A, (Int, B)], ordering: Vector[A]) extends Map[A,B] with MapLike[A, B, OrderedMap[A, B]] with Serializable {
+class OrderedMap[A, +B](underlying: Map[A, (Int, B)], ordering: Vector[A]) extends Map[A,B] with MapLike[A, B, OrderedMap[A, B]] with Serializable {
 
   override def size: Int = underlying.size
 
@@ -12,6 +12,8 @@ class OrderedMap[A, +B](underlying: HashMap[A, (Int, B)], ordering: Vector[A]) e
   def iterator: Iterator[(A,B)] = ordering.iterator.map { a =>
     a -> underlying(a)._2
   }
+
+  override def mapValues[C](f: B => C): OrderedMap[A, C] = new OrderedMap(underlying.mapValues { case (k,v) => (k,f(v)) }, ordering)
 
   override def foreach[U](f: ((A, B)) =>  U): Unit = iterator.foreach(f)
 
