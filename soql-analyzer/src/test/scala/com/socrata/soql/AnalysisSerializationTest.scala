@@ -3,10 +3,8 @@ package com.socrata.soql
 import org.scalatest.FunSuite
 import com.socrata.soql.environment.{TypeName, ColumnName, DatasetContext}
 import com.socrata.soql.types._
-import com.google.protobuf.{CodedInputStream, CodedOutputStream}
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import org.scalatest.matchers.MustMatchers
-import com.socrata.util.io.HexDump
 
 class AnalysisSerializationTest extends FunSuite with MustMatchers {
   implicit val datasetCtx = new DatasetContext[TestType] {
