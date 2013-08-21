@@ -6,6 +6,7 @@ import com.socrata.soql.types._
 import com.google.protobuf.{CodedInputStream, CodedOutputStream}
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import org.scalatest.matchers.MustMatchers
+import com.socrata.util.io.HexDump
 
 class AnalysisSerializationTest extends FunSuite with MustMatchers {
   implicit val datasetCtx = new DatasetContext[TestType] {
@@ -26,15 +27,14 @@ class AnalysisSerializationTest extends FunSuite with MustMatchers {
 
   val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo)
 
-  def serializeTestType(out: CodedOutputStream, t: TestType) {
-    out.writeStringNoTag(t.name.name)
-  }
+  def serializeColumnName(columnName: ColumnName) = columnName.name
+  def deserializeColumnName(s: String): ColumnName = ColumnName(s)
 
-  def deserializeTestType(in: CodedInputStream): TestType =
-    TestType.typesByName(TypeName(in.readString()))
+  def serializeTestType(t: TestType) = t.name.name
+  def deserializeTestType(s: String): TestType = TestType.typesByName(TypeName(s))
 
-  val serializer = new AnalysisSerializer(serializeTestType)
-  val deserializer = new AnalysisDeserializer(deserializeTestType, TestFunctions.functionsByIdentity)
+  val serializer = new AnalysisSerializer(serializeColumnName, serializeTestType)
+  val deserializer = new AnalysisDeserializer(deserializeColumnName, deserializeTestType, TestFunctions.functionsByIdentity)
 
   test("deserialize-of-serialize is the identity (all query options)") {
     val analysis = analyzer.analyzeFullQuery("select :id as i, sum(balance) where visits > 0 group by i, visits having sum_balance < 5 order by i desc, sum(balance) null first limit 5 offset 10 search 'gnu'")

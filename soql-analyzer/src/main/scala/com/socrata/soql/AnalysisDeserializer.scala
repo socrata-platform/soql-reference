@@ -18,26 +18,29 @@ private case class SimplePosition(line: Int, column: Int, lineContents: String) 
 
 class UnknownAnalysisSerializationVersion(val version: Int) extends Exception("Unknown analysis serialization version " + version)
 
-private trait DeserializationDictionary[T] {
+private trait DeserializationDictionary[C, T] {
   def types(i: Int): T
-  def columns(i: Int): ColumnName
+  def labels(i: Int): ColumnName
+  def columns(i: Int): C
   def functions(i: Int): MonomorphicFunction[T]
   def strings(i: Int): String
 }
 
-class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionMap: String => Function[T]) extends (InputStream => SoQLAnalysis[ColumnName, T]) {
-  type Expr = CoreExpr[ColumnName, T]
-  type Order = OrderBy[ColumnName, T]
+class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializer: String => T, functionMap: String => Function[T]) extends (InputStream => SoQLAnalysis[C, T]) {
+  type Expr = CoreExpr[C, T]
+  type Order = OrderBy[C, T]
 
   private class DeserializationDictionaryImpl(typesRegistry: TIntObjectHashMap[T],
                                       stringsRegistry: TIntObjectHashMap[String],
-                                      columnsRegistry: TIntObjectHashMap[ColumnName],
+                                      labelsRegistry: TIntObjectHashMap[ColumnName],
+                                      columnsRegistry: TIntObjectHashMap[C],
                                       functionsRegistry: TIntObjectHashMap[MonomorphicFunction[T]])
-    extends DeserializationDictionary[T]
+    extends DeserializationDictionary[C, T]
   {
     def types(i: Int): T = typesRegistry.get(i)
     def strings(i: Int): String = stringsRegistry.get(i)
-    def columns(i: Int): ColumnName = columnsRegistry.get(i)
+    def labels(i: Int): ColumnName = labelsRegistry.get(i)
+    def columns(i: Int): C = columnsRegistry.get(i)
     def functions(i: Int): MonomorphicFunction[T] = functionsRegistry.get(i)
   }
 
@@ -52,15 +55,18 @@ class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionM
       result
     }
 
-    def fromInput(in: CodedInputStream): DeserializationDictionary[T] = {
-      val types = readRegistry(in) {
-        typeDeserializer(in)
-      }
+    def fromInput(in: CodedInputStream): DeserializationDictionary[C, T] = {
       val strings = readRegistry(in) {
         in.readString()
       }
-      val columns = readRegistry(in) {
+      val labels = readRegistry(in) {
         ColumnName(strings.get(in.readUInt32()))
+      }
+      val types = readRegistry(in) {
+        typeDeserializer(strings.get(in.readUInt32()))
+      }
+      val columns = readRegistry(in) {
+        columnDeserializer(strings.get(in.readUInt32()))
       }
       val functions = readRegistry(in) {
         val function = functionMap(strings.get(in.readUInt32()))
@@ -73,12 +79,12 @@ class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionM
         MonomorphicFunction(function, bindingsBuilder.result())
       }
 
-      new DeserializationDictionaryImpl(types, strings, columns, functions)
+      new DeserializationDictionaryImpl(types, strings, labels, columns, functions)
     }
   }
 
   private class Deserializer(in: CodedInputStream,
-                             dictionary: DeserializationDictionary[T])
+                             dictionary: DeserializationDictionary[C, T])
   {
     def readPosition(): Position =
       in.readRawByte() match {
@@ -140,7 +146,7 @@ class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionM
       val count = in.readUInt32()
       val elems = new VectorBuilder[(ColumnName, Expr)]
       for(_ <- 1 to count) {
-        val name = dictionary.columns(in.readUInt32())
+        val name = dictionary.labels(in.readUInt32())
         val expr = readExpr()
         elems += name -> expr
       }
@@ -175,18 +181,18 @@ class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionM
 
     def readLimit(): Option[BigInt] =
       maybeRead {
-        BigInt(in.readString())
+        BigInt(dictionary.strings(in.readUInt32()))
       }
 
     def readOffset() = readLimit()
 
     def readSearch(): Option[String] =
       maybeRead {
-        in.readString()
+        dictionary.strings(in.readUInt32())
       }
 
 
-    def read(): SoQLAnalysis[ColumnName, T] = {
+    def read(): SoQLAnalysis[C, T] = {
       val isGrouped = readIsGrouped()
       val selection = readSelection()
       val where = readWhere()
@@ -209,9 +215,9 @@ class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionM
     }
   }
 
-  def apply(in: InputStream): SoQLAnalysis[ColumnName, T] = {
+  def apply(in: InputStream): SoQLAnalysis[C, T] = {
     val cis = CodedInputStream.newInstance(in)
-    cis.readRawByte() match {
+    cis.readInt32() match {
       case 0 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary)

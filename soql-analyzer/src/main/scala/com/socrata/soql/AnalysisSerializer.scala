@@ -8,24 +8,25 @@ import com.google.protobuf.CodedOutputStream
 import gnu.trove.impl.Constants
 import gnu.trove.map.hash.TObjectIntHashMap
 
-import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.parsing.SoQLPosition
 import com.socrata.soql.typed._
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.collection.OrderedMap
+import com.socrata.soql.environment.ColumnName
 
-private trait SerializationDictionary[T] {
+private trait SerializationDictionary[C,T] {
   def registerType(typ: T): Int
   def registerString(s: String): Int
-  def registerColumn(col: ColumnName): Int
+  def registerColumn(col: C): Int
+  def registerLabel(name: ColumnName): Int
   def registerFunction(func: MonomorphicFunction[T]): Int
 }
 
-class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) extends ((OutputStream, SoQLAnalysis[ColumnName, T]) => Unit) {
-  type Expr = CoreExpr[ColumnName, T]
-  type Order = OrderBy[ColumnName, T]
+class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => String) extends ((OutputStream, SoQLAnalysis[C, T]) => Unit) {
+  type Expr = CoreExpr[C, T]
+  type Order = OrderBy[C, T]
 
-  private class SerializationDictionaryImpl extends SerializationDictionary[T] {
+  private class SerializationDictionaryImpl extends SerializationDictionary[C, T] {
     private def makeMap[A] = new TObjectIntHashMap[A](Constants.DEFAULT_CAPACITY, Constants.DEFAULT_LOAD_FACTOR, -1)
     private def register[A](map: TObjectIntHashMap[A], a: A): Int = {
       val count = map.size()
@@ -35,23 +36,42 @@ class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) exten
       }
     }
 
+    val strings = makeMap[String] // This MUST be written BEFORE types, labels, columns and functions!
     val types = makeMap[T] // This MUST be written BEFORE functionsUnsafe!
-    val strings = makeMap[String] // This MUST be written BEFORE columns and functions!
-    val columns = makeMap[ColumnName]
+    val labels = makeMap[ColumnName]
+    val columns = makeMap[C]
     val functions = makeMap[MonomorphicFunction[T]]
-
-    def registerType(typ: T): Int =
-      register(types, typ)
 
     def registerString(s: String): Int =
       register(strings, s)
 
-    def registerColumn(col: ColumnName): Int = {
-      val count = columns.size
-      columns.putIfAbsent(col, count) match {
+    def registerType(typ: T): Int =
+      types.get(typ) match {
+        case -1 =>
+          val id = registerString(serializeType(typ))
+          types.put(typ, id)
+          id
+        case id =>
+          id
+      }
+
+    def registerColumn(col: C): Int =
+      columns.get(col) match {
+        case -1 =>
+          val id = registerString(serializeColumn(col))
+          columns.put(col, id)
+          id
+        case id =>
+          id
+      }
+
+    def registerLabel(col: ColumnName): Int = {
+      val size = labels.size()
+      labels.putIfAbsent(col, size) match {
         case -1 =>
           registerString(col.name)
-          count
+          labels.put(col, size)
+          size
         case id =>
           id
       }
@@ -84,12 +104,12 @@ class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) exten
 
     private def saveTypes(out: CodedOutputStream) =
       saveRegistry(out, types) { typ =>
-        serializeType(out, typ)
+        out.writeUInt32NoTag(types.get(typ))
       }
 
     private def saveColumns(out: CodedOutputStream) =
       saveRegistry(out: CodedOutputStream, columns) { col =>
-        out.writeUInt32NoTag(strings.get(col.name))
+        out.writeUInt32NoTag(columns.get(col))
       }
 
     private def saveFunctions(out: CodedOutputStream) =
@@ -107,15 +127,21 @@ class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) exten
         out.writeStringNoTag(s)
       }
 
+    private def saveLabels(out: CodedOutputStream) =
+      saveRegistry(out, labels) { l =>
+        out.writeUInt32NoTag(strings.get(l.name))
+      }
+
     def save(out: CodedOutputStream) {
-      saveTypes(out)
       saveStrings(out)
+      saveLabels(out)
+      saveTypes(out)
       saveColumns(out)
       saveFunctions(out)
     }
   }
 
-  private class Serializer(out: CodedOutputStream, dictionary: SerializationDictionary[T]) {
+  private class Serializer(out: CodedOutputStream, dictionary: SerializationDictionary[C, T]) {
     import dictionary._
 
     private def writePosition(pos: Position) {
@@ -178,7 +204,7 @@ class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) exten
     private def writeSelection(selection: OrderedMap[ColumnName, Expr]) {
       out.writeUInt32NoTag(selection.size)
       for((col, expr) <- selection) {
-        out.writeUInt32NoTag(dictionary.registerColumn(col))
+        out.writeUInt32NoTag(dictionary.registerLabel(col))
         writeExpr(expr)
       }
     }
@@ -220,7 +246,7 @@ class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) exten
 
     private def writeLimit(limit: Option[BigInt]) =
       maybeWrite(limit) { n =>
-        out.writeStringNoTag(n.toString)
+        out.writeUInt32NoTag(registerString(n.toString))
       }
 
     private def writeOffset(offset: Option[BigInt]) =
@@ -228,10 +254,10 @@ class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) exten
 
     private def writeSearch(search: Option[String]) =
       maybeWrite(search) { s =>
-        out.writeStringNoTag(s)
+        out.writeUInt32NoTag(registerString(s))
       }
 
-    def write(analysis: SoQLAnalysis[ColumnName, T]) {
+    def write(analysis: SoQLAnalysis[C, T]) {
       val SoQLAnalysis(isGrouped,
                        selection,
                        where,
@@ -253,7 +279,7 @@ class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) exten
     }
   }
 
-  def apply(outputStream: OutputStream, analysis: SoQLAnalysis[ColumnName, T]) {
+  def apply(outputStream: OutputStream, analysis: SoQLAnalysis[C, T]) {
     val dictionary = new SerializationDictionaryImpl
     val postDictionaryData = new ByteArrayOutputStream
     val out = CodedOutputStream.newInstance(postDictionaryData)
@@ -262,7 +288,7 @@ class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) exten
     out.flush()
 
     val codedOutputStream = CodedOutputStream.newInstance(outputStream)
-    codedOutputStream.writeRawByte(0) // version number
+    codedOutputStream.writeInt32NoTag(0) // version number
     dictionary.save(codedOutputStream)
     codedOutputStream.flush()
     postDictionaryData.writeTo(outputStream)
