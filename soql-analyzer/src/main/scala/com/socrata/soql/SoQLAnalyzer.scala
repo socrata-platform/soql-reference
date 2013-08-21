@@ -11,8 +11,8 @@ import com.socrata.soql.environment.{ColumnName, DatasetContext}
 import com.socrata.soql.collection.OrderedMap
 
 class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type]) {
-  type Analysis = SoQLAnalysis[Type]
-  type Expr = typed.CoreExpr[Type]
+  type Analysis = SoQLAnalysis[ColumnName, Type]
+  type Expr = typed.CoreExpr[ColumnName, Type]
 
   val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLAnalyzer[_]])
   def ns2ms(ns: Long) = ns / 1000000
@@ -222,12 +222,12 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
   }
 }
 
-case class SoQLAnalysis[Type](isGrouped: Boolean,
-                              selection: OrderedMap[ColumnName, typed.CoreExpr[Type]],
-                              where: Option[typed.CoreExpr[Type]],
-                              groupBy: Option[Seq[typed.CoreExpr[Type]]],
-                              having: Option[typed.CoreExpr[Type]],
-                              orderBy: Option[Seq[typed.OrderBy[Type]]],
-                              limit: Option[BigInt],
-                              offset: Option[BigInt],
-                              search: Option[String])
+case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
+                                        selection: OrderedMap[ColumnId, typed.CoreExpr[ColumnId, Type]],
+                                        where: Option[typed.CoreExpr[ColumnId, Type]],
+                                        groupBy: Option[Seq[typed.CoreExpr[ColumnId, Type]]],
+                                        having: Option[typed.CoreExpr[ColumnId, Type]],
+                                        orderBy: Option[Seq[typed.OrderBy[ColumnId, Type]]],
+                                        limit: Option[BigInt],
+                                        offset: Option[BigInt],
+                                        search: Option[String])

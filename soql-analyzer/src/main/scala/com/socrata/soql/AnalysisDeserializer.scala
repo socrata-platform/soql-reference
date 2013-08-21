@@ -25,7 +25,10 @@ private trait DeserializationDictionary[T] {
   def strings(i: Int): String
 }
 
-class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionMap: String => Function[T]) extends (InputStream => SoQLAnalysis[T]) {
+class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionMap: String => Function[T]) extends (InputStream => SoQLAnalysis[ColumnName, T]) {
+  type Expr = CoreExpr[ColumnName, T]
+  type Order = OrderBy[ColumnName, T]
+
   private class DeserializationDictionaryImpl(typesRegistry: TIntObjectHashMap[T],
                                       stringsRegistry: TIntObjectHashMap[String],
                                       columnsRegistry: TIntObjectHashMap[ColumnName],
@@ -94,7 +97,7 @@ class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionM
           SimplePosition(line, column, lineText)
       }
 
-    def readExpr(): CoreExpr[T] = {
+    def readExpr(): Expr = {
       val pos = readPosition()
       in.readRawByte() match {
         case 1 =>
@@ -133,9 +136,9 @@ class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionM
       if(in.readBool()) Some(f)
       else None
 
-    def readSelection(): OrderedMap[ColumnName, CoreExpr[T]] = {
+    def readSelection(): OrderedMap[ColumnName, Expr] = {
       val count = in.readUInt32()
-      val elems = new VectorBuilder[(ColumnName, CoreExpr[T])]
+      val elems = new VectorBuilder[(ColumnName, Expr)]
       for(_ <- 1 to count) {
         val name = dictionary.columns(in.readUInt32())
         val expr = readExpr()
@@ -144,12 +147,12 @@ class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionM
       OrderedMap(elems.result() : _*)
     }
 
-    def readWhere(): Option[CoreExpr[T]] =
+    def readWhere(): Option[Expr] =
       maybeRead {
         readExpr()
       }
 
-    def readGroupBy(): Option[Seq[CoreExpr[T]]] =
+    def readGroupBy(): Option[Seq[Expr]] =
       maybeRead {
         val count = in.readUInt32()
         (1 to count) map { _ =>
@@ -159,7 +162,7 @@ class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionM
 
     def readHaving() = readWhere()
 
-    def readOrderBy(): Option[Seq[OrderBy[T]]] =
+    def readOrderBy(): Option[Seq[Order]] =
       maybeRead {
         val count = in.readUInt32()
         (1 to count) map { _ =>
@@ -183,7 +186,7 @@ class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionM
       }
 
 
-    def read(): SoQLAnalysis[T] = {
+    def read(): SoQLAnalysis[ColumnName, T] = {
       val isGrouped = readIsGrouped()
       val selection = readSelection()
       val where = readWhere()
@@ -206,7 +209,7 @@ class AnalysisDeserializer[T](typeDeserializer: CodedInputStream => T, functionM
     }
   }
 
-  def apply(in: InputStream): SoQLAnalysis[T] = {
+  def apply(in: InputStream): SoQLAnalysis[ColumnName, T] = {
     val cis = CodedInputStream.newInstance(in)
     cis.readRawByte() match {
       case 0 =>

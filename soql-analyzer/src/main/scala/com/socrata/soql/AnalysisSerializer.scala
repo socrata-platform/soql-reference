@@ -21,7 +21,10 @@ private trait SerializationDictionary[T] {
   def registerFunction(func: MonomorphicFunction[T]): Int
 }
 
-class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) extends ((OutputStream, SoQLAnalysis[T]) => Unit) {
+class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) extends ((OutputStream, SoQLAnalysis[ColumnName, T]) => Unit) {
+  type Expr = CoreExpr[ColumnName, T]
+  type Order = OrderBy[ColumnName, T]
+
   private class SerializationDictionaryImpl extends SerializationDictionary[T] {
     private def makeMap[A] = new TObjectIntHashMap[A](Constants.DEFAULT_CAPACITY, Constants.DEFAULT_LOAD_FACTOR, -1)
     private def register[A](map: TObjectIntHashMap[A], a: A): Int = {
@@ -138,7 +141,7 @@ class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) exten
       }
     }
 
-    private def writeExpr(e: CoreExpr[T]) {
+    private def writeExpr(e: Expr) {
       writePosition(e.position)
       e match {
         case ColumnRef(col, typ) =>
@@ -172,7 +175,7 @@ class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) exten
     private def writeGrouped(isGrouped: Boolean) =
       out.writeBoolNoTag(isGrouped)
 
-    private def writeSelection(selection: OrderedMap[ColumnName, CoreExpr[T]]) {
+    private def writeSelection(selection: OrderedMap[ColumnName, Expr]) {
       out.writeUInt32NoTag(selection.size)
       for((col, expr) <- selection) {
         out.writeUInt32NoTag(dictionary.registerColumn(col))
@@ -188,28 +191,28 @@ class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) exten
         out.writeBoolNoTag(false)
     }
 
-    private def writeWhere(where: Option[CoreExpr[T]]) =
+    private def writeWhere(where: Option[Expr]) =
       maybeWrite(where) { expr =>
         writeExpr(expr)
       }
 
-    private def writeGroupBy(groupBy: Option[Seq[CoreExpr[T]]]) =
+    private def writeGroupBy(groupBy: Option[Seq[Expr]]) =
       maybeWrite(groupBy) { exprs =>
         out.writeUInt32NoTag(exprs.size)
         exprs.foreach(writeExpr)
       }
 
-    private def writeHaving(expr: Option[CoreExpr[T]]) =
+    private def writeHaving(expr: Option[Expr]) =
       writeWhere(expr)
 
-    private def writeSingleOrderBy(orderBy: OrderBy[T]) = {
+    private def writeSingleOrderBy(orderBy: Order) = {
       val OrderBy(expr, ascending, nullsLast) = orderBy
       writeExpr(expr)
       out.writeBoolNoTag(ascending)
       out.writeBoolNoTag(nullsLast)
     }
 
-    private def writeOrderBy(orderBy: Option[Seq[OrderBy[T]]]) =
+    private def writeOrderBy(orderBy: Option[Seq[Order]]) =
       maybeWrite(orderBy) { orderBys =>
         out.writeUInt32NoTag(orderBys.size)
         orderBys.foreach(writeSingleOrderBy)
@@ -228,7 +231,7 @@ class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) exten
         out.writeStringNoTag(s)
       }
 
-    def write(analysis: SoQLAnalysis[T]) {
+    def write(analysis: SoQLAnalysis[ColumnName, T]) {
       val SoQLAnalysis(isGrouped,
                        selection,
                        where,
@@ -250,7 +253,7 @@ class AnalysisSerializer[T](serializeType: (CodedOutputStream, T) => Unit) exten
     }
   }
 
-  def apply(outputStream: OutputStream, analysis: SoQLAnalysis[T]) {
+  def apply(outputStream: OutputStream, analysis: SoQLAnalysis[ColumnName, T]) {
     val dictionary = new SerializationDictionaryImpl
     val postDictionaryData = new ByteArrayOutputStream
     val out = CodedOutputStream.newInstance(postDictionaryData)
