@@ -5,7 +5,7 @@ import scala.util.parsing.input.{Position, NoPosition}
 import org.scalatest._
 import org.scalatest.matchers.MustMatchers
 
-import com.socrata.soql.parsing.{LexerReader, Parser}
+import com.socrata.soql.parsing.{Lexer, LexerReader, Parser}
 
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions.{CircularAliasDefinition, NoSuchColumn, RepeatedException, DuplicateAlias}
@@ -44,7 +44,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
   }
   def ident(e: String): ColumnName = {
     val p = new Parser()
-    p.identifier(new LexerReader(e)) match {
+    p.identifier(new LexerReader(new Lexer(e))) match {
       case p.Success(parsed, _) => ColumnName(parsed._1)
       case failure => fail("Unable to parse expression fixture " + e + ": " + failure)
     }

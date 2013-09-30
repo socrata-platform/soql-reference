@@ -4,11 +4,11 @@ import org.scalatest._
 import org.scalatest.matchers.MustMatchers
 
 import com.socrata.soql.tokens._
-import com.socrata.soql.exceptions.UnterminatedString
+import com.socrata.soql.parsing.standalone_exceptions.UnterminatedString
 
 class LexerTest extends WordSpec with MustMatchers {
   def lexTest(s: String, ts: (Token, Int, Int, Int)*) = {
-    val tokens = new LexerReader(s).toStream
+    val tokens = new LexerReader(new StandaloneLexer(s)).toStream
 
     val eof = EOF()
     val eofPos = new SoQLPosition(s.count('\n'==_)+1, s.length - s.lastIndexOf('\n'), s, s.length)
@@ -16,26 +16,27 @@ class LexerTest extends WordSpec with MustMatchers {
     val fixture = ts :+ ((eof, eofPos.line, eofPos.column, eofPos.offset))
 
     tokens must equal (fixture.map(_._1))
-    tokens.map(_.position) must equal (fixture.map { case (_, r,c,o) => new SoQLPosition(r, c, s, o) })
+
+    tokens.map(_.position).toList must equal (fixture.toList.map { case (_, r,c,o) => new SoQLPosition(r, c, s, o) })
   }
 
   def lex(s: String) {
-    new LexerReader(s).toStream.force
+    new LexerReader(new StandaloneLexer(s)).toStream.force
   }
 
   "Lexing" should {
     "set positions on identifiers" in {
       lexTest("hello there\n  world",
-              (Identifier("hello", false), 1, 1, 0),
-              (Identifier("there", false), 1, 7, 6),
-              (Identifier("world", false), 2, 3, 14))
+        (Identifier("hello", false), 1, 1, 0),
+        (Identifier("there", false), 1, 7, 6),
+        (Identifier("world", false), 2, 3, 14))
     }
 
     "set positions on system identifiers" in {
       lexTest(":hello :there\n  :world",
-              (SystemIdentifier(":hello", false), 1, 1, 0),
-              (SystemIdentifier(":there", false), 1, 8, 7),
-              (SystemIdentifier(":world", false), 2, 3, 16))
+        (SystemIdentifier(":hello", false), 1, 1, 0),
+        (SystemIdentifier(":there", false), 1, 8, 7),
+        (SystemIdentifier(":world", false), 2, 3, 16))
     }
 
     "read quoted identifiers as identifiers, not keywords" in {

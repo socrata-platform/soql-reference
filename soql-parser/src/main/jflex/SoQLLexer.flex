@@ -4,17 +4,10 @@ import scala.util.parsing.input.Position;
 
 import com.socrata.soql.tokens.*;
 
-import com.socrata.soql.exceptions.UnexpectedEscape;
-import com.socrata.soql.exceptions.BadUnicodeEscapeCharacter;
-import com.socrata.soql.exceptions.UnicodeCharacterOutOfRange;
-import com.socrata.soql.exceptions.UnexpectedCharacter;
-import com.socrata.soql.exceptions.UnexpectedEOF;
-import com.socrata.soql.exceptions.UnterminatedString;
-
 %%
 
-%class Lexer
-%final
+%class AbstractLexer
+%abstract
 %type Token
 %unicode
 %char
@@ -37,7 +30,7 @@ import com.socrata.soql.exceptions.UnterminatedString;
     return Integer.parseInt(s, 16);
   }
 
-  public Lexer(String s) {
+  public AbstractLexer(String s) {
     this(new java.io.StringReader(s));
     sourceString = s;
   }
@@ -56,6 +49,13 @@ import com.socrata.soql.exceptions.UnterminatedString;
     for(Token t = yylex(); t != null; t = yylex()) results.add(t);
     return results;
   }
+
+  protected abstract RuntimeException unexpectedEOF(Position pos);
+  protected abstract RuntimeException unexpectedEscape(char c, Position pos);
+  protected abstract RuntimeException unterminatedString(Position pos);
+  protected abstract RuntimeException badUnicodeEscapeCharacter(char c, Position pos);
+  protected abstract RuntimeException unicodeCharacterOutOfRange(int codepoint, Position pos);
+  protected abstract RuntimeException unexpectedCharacter(char c, Position pos);
 %}
 
 WhiteSpace = [ \t\n]
@@ -141,7 +141,7 @@ QuotedSystemIdentifier = ":" "@"? ("-" | [:jletterdigit:])+
     return i;
   }
   {QuotedIdentifier} { yybegin(BADQUOTEDIDENTIFIER); }
-  <<EOF>> { throw new UnexpectedEOF(pos()); }
+  <<EOF>> { throw unexpectedEOF(pos()); }
 }
 
 <QUOTEDSYSTEMIDENTIFIER> {
@@ -154,18 +154,18 @@ QuotedSystemIdentifier = ":" "@"? ("-" | [:jletterdigit:])+
   }
   {QuotedSystemIdentifier} { yybegin(BADQUOTEDIDENTIFIER); }
   ":" { yybegin(BADQUOTEDIDENTIFIER); }
-  <<EOF>> { throw new UnexpectedEOF(pos()); }
+  <<EOF>> { throw unexpectedEOF(pos()); }
 }
 
 <BADQUOTEDIDENTIFIER> {
-  <<EOF>> { throw new UnexpectedEOF(pos()); }
+  <<EOF>> { throw unexpectedEOF(pos()); }
 }
 
 <SINGLEQUOTESTRING> {
   "'"     { yybegin(YYINITIAL); return finishString(); }
   "''"    { string.append('\''); }
   [^']+   { string.append(yytext()); }
-  <<EOF>> { throw new UnexpectedEOF(pos()); }
+  <<EOF>> { throw unexpectedEOF(pos()); }
 }
 
 <DOUBLEQUOTESTRING> {
@@ -180,9 +180,9 @@ QuotedSystemIdentifier = ":" "@"? ("-" | [:jletterdigit:])+
   \\\\         { string.append('\\'); }
   \\[u]        { yybegin(ESCAPEDUNICODE); }
   \\[U]        { yybegin(ESCAPEDUNICODE6); }
-  \\(.|\n)     { throw new UnexpectedEscape(yytext().charAt(1), pos()); }
-  \n           { throw new UnterminatedString(pos()); }
-  <<EOF>>      { throw new UnexpectedEOF(pos()); }
+  \\(.|\n)     { throw unexpectedEscape(yytext().charAt(1), pos()); }
+  \n           { throw unterminatedString(pos()); }
+  <<EOF>>      { throw unexpectedEOF(pos()); }
 }
 
 <ESCAPEDUNICODE> {
@@ -191,8 +191,8 @@ QuotedSystemIdentifier = ":" "@"? ("-" | [:jletterdigit:])+
     yybegin(DOUBLEQUOTESTRING);
   }
   [0-9a-fA-F]{1,3} { yybegin(PARTIALESCAPEDUNICODE); }
-  (.|\n)  { throw new BadUnicodeEscapeCharacter(yytext().charAt(0), pos()); }
-  <<EOF>> { throw new UnexpectedEOF(pos()); }
+  (.|\n)  { throw badUnicodeEscapeCharacter(yytext().charAt(0), pos()); }
+  <<EOF>> { throw unexpectedEOF(pos()); }
 }
 
 <ESCAPEDUNICODE6> {
@@ -205,17 +205,17 @@ QuotedSystemIdentifier = ":" "@"? ("-" | [:jletterdigit:])+
     yybegin(DOUBLEQUOTESTRING);
   }
   // Six digits of hex that didn't match the above?  Out of range!
-  [0-9a-fA-F]{6} { throw new UnicodeCharacterOutOfRange(dehex(yytext()), pos()); }
+  [0-9a-fA-F]{6} { throw unicodeCharacterOutOfRange(dehex(yytext()), pos()); }
 
   [0-9a-fA-F]{1,5} { yybegin(PARTIALESCAPEDUNICODE); }
-  (.|\n)  { throw new BadUnicodeEscapeCharacter(yytext().charAt(0), pos()); }
-  <<EOF>> { throw new UnexpectedEOF(pos()); }
+  (.|\n)  { throw badUnicodeEscapeCharacter(yytext().charAt(0), pos()); }
+  <<EOF>> { throw unexpectedEOF(pos()); }
 }
 
 <PARTIALESCAPEDUNICODE> {
-  (.|\n)  { throw new BadUnicodeEscapeCharacter(yytext().charAt(0), pos()); }
-  <<EOF>> { throw new UnexpectedEOF(pos()); }
+  (.|\n)  { throw badUnicodeEscapeCharacter(yytext().charAt(0), pos()); }
+  <<EOF>> { throw unexpectedEOF(pos()); }
 }
 
 // Fallback: captures anything that managed to escape one of the above states
-.|\n { throw new UnexpectedCharacter(yytext().charAt(0), pos()); }
+.|\n { throw unexpectedCharacter(yytext().charAt(0), pos()); }

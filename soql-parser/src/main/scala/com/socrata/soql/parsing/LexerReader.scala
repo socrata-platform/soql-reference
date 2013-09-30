@@ -6,15 +6,16 @@ import com.ibm.icu.lang.UCharacter
 import com.ibm.icu.util.ULocale
 
 import com.socrata.soql.tokens._
+import scala.Some
+import scala.Some
+import scala.Some
 
 trait StreamableReader[T] extends Reader[T] {
   def toStream: Stream[T]
 }
 
-class LexerReader(lexer: Lexer) extends StreamableReader[Token] { self =>
+class LexerReader(lexer: AbstractLexer) extends StreamableReader[Token] { self =>
   import LexerReader._
-
-  def this(soql: String) = this(new Lexer(soql))
 
   val first = lexer.yylex() match {
     case i@Identifier(_, false) => keywordize(i)

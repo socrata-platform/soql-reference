@@ -16,7 +16,10 @@ object BuildSettings {
     testOptions in Test ++= Seq(
       Tests.Argument(TestFrameworks.ScalaTest, "-oFD")
     ),
-    scalacOptions += "-language:implicitConversions",
+    scalacOptions <++= (scalaVersion) map {
+      case "2.8.1" => Nil
+      case _ => Seq("-language:implicitConversions")
+    },
     libraryDependencies <++= (scalaVersion) { sv =>
       Seq(
         "org.slf4j" % "slf4j-api" % slf4jVersion,
@@ -29,6 +32,7 @@ object BuildSettings {
   val slf4jVersion = "1.7.5"
 
   def scalaTestVersion(sv: String) = sv match {
+    case "2.8.1" => "1.8"
     case _ => "1.9.1"
   }
 }
