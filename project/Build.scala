@@ -15,8 +15,8 @@ object Build extends sbt.Build {
   )
 
   lazy val soqlParser = Project(
-    "soql-parser",
-    file("soql-parser"),
+    "soql-standalone-parser",
+    file("soql-standalone-parser"),
     settings = SoqlParser.settings
   ) dependsOn (soqlEnvironment, soqlTypes % "test")
 
