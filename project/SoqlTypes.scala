@@ -4,6 +4,7 @@ import Keys._
 object SoqlTypes {
   lazy val settings: Seq[Setting[_]] = BuildSettings.projectSettings() ++ Seq(
     crossScalaVersions += "2.8.1",
+    resolvers <++= (scalaVersion) { sv => oldRojomaJsonRepo(sv) },
     libraryDependencies <++= (scalaVersion) { sv =>
       Seq(
         "joda-time" % "joda-time" % "2.1",
@@ -18,6 +19,11 @@ object SoqlTypes {
       )
     }
   )
+
+  def oldRojomaJsonRepo(scalaVersion: String) = scalaVersion match {
+    case "2.8.1" => Seq("rjmac maven" at "http://rjmac.github.com/maven/releases")
+    case _ => Nil
+  }
 
   def rojomaJsonVersion(scalaVersion: String) = scalaVersion match {
     case "2.8.1" => "1.4.4"
