@@ -66,8 +66,21 @@ class FunctionCallTypechecker[Type](typeInfo: TypeInfo[Type], functionInfo: Func
       val grouped = good.groupBy(_._2.count(_.isDefined))
       val minConversionsRequired = grouped.keys.min
       val bestGroup = grouped(minConversionsRequired)
-      if(bestGroup.size > 1) Ambiguous[Type](bestGroup.toMap)
-      else {
+      if(bestGroup.size > 1) {
+        // ok, still ambiguous.  So let's try finding by minimum-number-of-distinct-types
+        // The idea here is to make "null :: number" produce ::(number -> number) as its result.
+        val numberOfDistinctTypes = bestGroup.map { case (monoFunc, conversions) =>
+          (monoFunc.allParameters.toSet + monoFunc.result).size
+        }
+        val minDistinct = numberOfDistinctTypes.min
+        val minimalOperations = (bestGroup, numberOfDistinctTypes).zipped.filter { (_, numDistinct) => numDistinct == minDistinct }._1
+        if(minimalOperations.size == 1) {
+          val (bestFunc, conversions) = minimalOperations.head
+          Matched(bestFunc, conversions)
+        } else {
+          Ambiguous[Type](bestGroup.toMap)
+        }
+      } else {
         val (bestFunc, conversions) = bestGroup.head
         Matched(bestFunc, conversions)
       }

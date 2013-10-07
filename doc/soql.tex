@@ -467,13 +467,9 @@ At the end of the whole process of looking up implicit conversions and
 discarding functions which cannot be called, if there is a single
 function with the fewest implicit conversions applied, that function
 is the one selected and the type of the whole expression is the type
-of the resulting function.  Otherwise, the function call is ambiguous
-and, if none of the arguments is a literal \code{NULL}, typechecking
-fails.
-
-If there is an ambiguity and at least one argument is a literal
-\code{NULL}, a series of heuristics are applied to attempt to narrow
-down the result.  TODO
+of the resulting function.  Otherwise, if there is a function candidate
+with fewer distinct types in its parameter list and result, that candidate
+is chosen.  Otherwise, the call is ambiguous and typechecking fails.
 
 \subsection{Literals}
 

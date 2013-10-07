@@ -130,5 +130,23 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
       ColumnName("c4") -> typedExpression("array[123]::number")
     ))
   }
+
+  test("null :: number succeeds") {
+    val analysis = analyzer.analyzeFullQuery("select null :: number as x")
+    analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestNumber)).get.monomorphic.get,
+      Seq(typed.NullLiteral(TestNull)(NoPosition)))(NoPosition, NoPosition))
+  }
+
+  test("5 :: number succeeds") {
+    val analysis = analyzer.analyzeFullQuery("select 5 :: number as x")
+    analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestNumber)).get.monomorphic.get,
+      Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber)(NoPosition)))(NoPosition, NoPosition))
+  }
+
+  test("5 :: money succeeds") {
+    val analysis = analyzer.analyzeFullQuery("select 5 :: money as x")
+    analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
+      Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber)(NoPosition)))(NoPosition, NoPosition)))(NoPosition, NoPosition))
+  }
 }
 
