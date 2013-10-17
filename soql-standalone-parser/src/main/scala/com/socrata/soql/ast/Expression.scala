@@ -113,7 +113,11 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
     case SpecialFunctions.Parens => "(" + parameters(0) + ")"
     case SpecialFunctions.Subscript => parameters(0) + "[" + parameters(1) + "]"
     case SpecialFunctions.StarFunc(f) => f + "(*)"
-    case SpecialFunctions.Operator(op) if parameters.size == 1 => op + parameters(0)
+    case SpecialFunctions.Operator(op) if parameters.size == 1 =>
+      op match {
+        case "NOT" => s"$op ${parameters(0)}"
+        case _ => op + parameters(0)
+      }
     case SpecialFunctions.Operator(op) if parameters.size == 2 => parameters(0) + " " + op + " " + parameters(1)
     case SpecialFunctions.Operator(op) => sys.error("Found a non-unary, non-binary operator: " + op + " at " + position)
     case SpecialFunctions.Cast(typ) if parameters.size == 1 => parameters(0) + " :: " + typ
@@ -124,6 +128,8 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
     case SpecialFunctions.IsNotNull => parameters(0) + " IS NOT NULL"
     case SpecialFunctions.In => parameters.drop(1).mkString(parameters(0) + " IN (", ",", ")")
     case SpecialFunctions.NotIn => parameters.drop(1).mkString(parameters(0) + " NOT IN (", ",", ")")
+    case SpecialFunctions.Like => parameters.mkString(" LIKE ")
+    case SpecialFunctions.NotLike => parameters.mkString(" NOT LIKE ")
     case other => parameters.mkString(other + "(", ",", ")")
   }
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
