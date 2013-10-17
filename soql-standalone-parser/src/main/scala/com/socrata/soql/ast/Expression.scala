@@ -115,7 +115,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
     case SpecialFunctions.StarFunc(f) => f + "(*)"
     case SpecialFunctions.Operator(op) if parameters.size == 1 =>
       op match {
-        case "NOT" => s"$op ${parameters(0)}"
+        case "NOT" => "%s %s".format(op, parameters(0))
         case _ => op + parameters(0)
       }
     case SpecialFunctions.Operator(op) if parameters.size == 2 => parameters(0) + " " + op + " " + parameters(1)
