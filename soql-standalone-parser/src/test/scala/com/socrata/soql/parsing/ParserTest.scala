@@ -150,8 +150,28 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "allow search" in {
-      val x = parseFull("select * search 'WEather'")
-      x.search.get must be ("WEather")
+      val x = parseFull("select * search 'weather'")
+      x.search.get must be ("weather")
+    }
+
+    "allow search before order by" in {
+      val x = parseFull("select * search 'weather' order by x")
+      x.search.get must be ("weather")
+      x.orderBy.get must be (Seq(OrderBy(ident("x"), true, true)))
+    }
+
+    "allow order by before search" in {
+      val x = parseFull("select * order by x search 'weather'")
+      x.search.get must be ("weather")
+      x.orderBy.get must be (Seq(OrderBy(ident("x"), true, true)))
+    }
+
+    "disallow order by before AND after search" in {
+      evaluating { parseFull("select * order by x search 'weather' order by x") } must produce[BadParse]
+    }
+
+    "disallow search before AND after order by" in {
+      evaluating { parseFull("select * search 'weather' order by x search 'weather'") } must produce[BadParse]
     }
 
     "not round trip" in {

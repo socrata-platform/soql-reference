@@ -91,9 +91,18 @@ abstract class AbstractParser extends Parsers with PackratParsers {
    */
 
   def fullSelect =
-    (SELECT() ~> selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ opt(orderByClause) ~ opt(searchClause) ~ limitOffset ^^ {
-      case s ~ w ~ gb ~ h ~ ord ~ sr ~ ((lim, off)) => Select(s, w, gb, h, ord, lim, off, sr)
+    (SELECT() ~> selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+      case s ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(s, w, gb, h, ord, lim, off, sr)
     })
+
+  def orderByAndSearch: Parser[(Option[Seq[OrderBy]], Option[String])] =
+    orderByClause ~ opt(searchClause) ^^ { //backward-compat.  We should prefer putting the search first.
+      case ob ~ sr => (Some(ob), sr)
+    } |
+    opt(searchClause ~ opt(orderByClause)) ^^ {
+      case Some(sr ~ ob) => (ob, Some(sr))
+      case None => (None, None)
+    }
 
   def limitOffset: Parser[(Option[BigInt], Option[BigInt])] =
     limitClause ~ opt(offsetClause) ^^ {
