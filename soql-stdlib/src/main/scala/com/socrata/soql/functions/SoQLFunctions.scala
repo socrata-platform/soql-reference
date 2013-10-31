@@ -102,6 +102,7 @@ object SoQLFunctions {
 
   val NumberToText = new MonomorphicFunction("number to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLNumber), None, SoQLText).function
   val TextToNumber = new MonomorphicFunction("text to number", SpecialFunctions.Cast(SoQLNumber.name), Seq(SoQLText), None, SoQLNumber).function
+  val TextToMoney = new MonomorphicFunction("text to money", SpecialFunctions.Cast(SoQLMoney.name), Seq(SoQLText), None, SoQLMoney).function
 
   val Prop = new MonomorphicFunction(".", SpecialFunctions.Subscript, Seq(SoQLObject, SoQLText), None, SoQLJson).function
   val Index = new MonomorphicFunction("[]", SpecialFunctions.Subscript, Seq(SoQLArray, SoQLNumber), None, SoQLJson).function
