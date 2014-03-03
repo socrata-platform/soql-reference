@@ -95,6 +95,8 @@ object SoQLFunctions {
 
   val Contains = new MonomorphicFunction("contains",  FunctionName("contains"), Seq(SoQLText, SoQLText), None, SoQLBoolean).function
   val StartsWith = new MonomorphicFunction("starts_with",  FunctionName("starts_with"), Seq(SoQLText, SoQLText), None, SoQLBoolean).function
+  val Lower = new MonomorphicFunction("lower",  FunctionName("lower"), Seq(SoQLText), None, SoQLText).function
+  val Upper = new MonomorphicFunction("upper",  FunctionName("upper"), Seq(SoQLText), None, SoQLText).function
 
   val castIdentities = for((n, t) <- SoQLType.typesByName.toSeq) yield {
     Function(n.caseFolded+"::"+n.caseFolded, SpecialFunctions.Cast(n), Map.empty, Seq(FixedType(t)), None, FixedType(t))
