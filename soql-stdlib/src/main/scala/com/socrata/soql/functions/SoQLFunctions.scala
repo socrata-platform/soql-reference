@@ -27,10 +27,10 @@ object SoQLFunctions {
   private val RealNumLike = Set[Any](SoQLNumber, SoQLDouble)
   private val GeospatialLike = Set[Any](SoQLLocation)
 
-  val TextToFixedTimestamp = new MonomorphicFunction("text to fixed timestamp", FunctionName("to_fixed_timestamp"), Seq(SoQLText), None, SoQLFixedTimestamp).function
-  val TextToFloatingTimestamp = new MonomorphicFunction("text to floating timestamp", FunctionName("to_floating_timestamp"), Seq(SoQLText), None, SoQLFloatingTimestamp).function
-  val TextToDate = new MonomorphicFunction("text to date", FunctionName("to_date"), Seq(SoQLText), None, SoQLDate).function
-  val TextToTime = new MonomorphicFunction("text to time", FunctionName("to_time"), Seq(SoQLText), None, SoQLTime).function
+  val TextToFixedTimestamp = new MonomorphicFunction("text to fixed timestamp", SpecialFunctions.Cast(SoQLFixedTimestamp.name), Seq(SoQLText), None, SoQLFixedTimestamp).function
+  val TextToFloatingTimestamp = new MonomorphicFunction("text to floating timestamp", SpecialFunctions.Cast(SoQLFloatingTimestamp.name), Seq(SoQLText), None, SoQLFloatingTimestamp).function
+  val TextToDate = new MonomorphicFunction("text to date", SpecialFunctions.Cast(SoQLDate.name), Seq(SoQLText), None, SoQLDate).function
+  val TextToTime = new MonomorphicFunction("text to time", SpecialFunctions.Cast(SoQLTime.name), Seq(SoQLText), None, SoQLTime).function
   val Concat = Function("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), None, FixedType(SoQLText))
   val Gte = Function(">=", SpecialFunctions.Operator(">="), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), None, FixedType(SoQLBoolean))
   val Gt = Function(">", SpecialFunctions.Operator(">"), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), None, FixedType(SoQLBoolean))
@@ -105,6 +105,9 @@ object SoQLFunctions {
   val NumberToText = new MonomorphicFunction("number to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLNumber), None, SoQLText).function
   val TextToNumber = new MonomorphicFunction("text to number", SpecialFunctions.Cast(SoQLNumber.name), Seq(SoQLText), None, SoQLNumber).function
   val TextToMoney = new MonomorphicFunction("text to money", SpecialFunctions.Cast(SoQLMoney.name), Seq(SoQLText), None, SoQLMoney).function
+
+  val TextToBool = new MonomorphicFunction("text to boolean",  SpecialFunctions.Cast(SoQLBoolean.name), Seq(SoQLText), None, SoQLBoolean).function
+  val BoolToText = new MonomorphicFunction("boolean to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLBoolean), None, SoQLText).function
 
   val Prop = new MonomorphicFunction(".", SpecialFunctions.Subscript, Seq(SoQLObject, SoQLText), None, SoQLJson).function
   val Index = new MonomorphicFunction("[]", SpecialFunctions.Subscript, Seq(SoQLArray, SoQLNumber), None, SoQLJson).function
