@@ -8,6 +8,7 @@
 \newcommand{\nonterm}[1]{{\textit{#1}}}
 \newcommand{\SoQL}{SoQL}
 \newcommand{\SODA}{SODA}
+\newcommand{\caret}{\char`\^}
 \newcommand{\transformsTo}{ $\Longrightarrow$ }
 \setlength{\grammarindent}{5em}
 
@@ -282,7 +283,9 @@ therefor it is case-canonicalized in that locale.
 \begin{grammar}
 <unary> ::= [`+' | `-'] <unary> | <cast>
 
-<factor> ::= [<factor> (`*' | `/')] <unary>
+<exp> ::= <unary> [`\caret' <exp>]
+
+<factor> ::= [<factor> (`*' | `/' | '\%')] <exp>
 
 <term> ::= [<term> (`+' | `-' | `||')] <factor>
 
@@ -310,7 +313,8 @@ therefor it is case-canonicalized in that locale.
 \lstinline|. []| (field/subscript selection) \\
 \lstinline|::| \\
 \lstinline|+ -| (unary) \\
-\lstinline|* /| \\
+\lstinline|^| \\
+\lstinline|* / \%| \\
 \lstinline!+ - ||! \\
 \lstinline|= == != <> < <= > >=| \\
 \lstinline|IS (NOT) NULL, BETWEEN| \\
