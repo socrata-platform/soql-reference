@@ -80,8 +80,8 @@ object SoQLFunctions {
   val DivMoneyNum = new MonomorphicFunction("/MN", SpecialFunctions.Operator("/"), Seq(SoQLMoney, SoQLNumber), None, SoQLMoney).function
   val DivMoneyMoney = new MonomorphicFunction("/MM", SpecialFunctions.Operator("/"), Seq(SoQLMoney, SoQLMoney), None, SoQLNumber).function
 
-  val ExpoNumNum = new MonomorphicFunction("^NN", SpecialFunctions.Operator("^"), Seq(SoQLNumber, SoQLNumber), None, SoQLNumber).function
-  val ExpoDoubleDouble = new MonomorphicFunction("^DD", SpecialFunctions.Operator("^"), Seq(SoQLDouble, SoQLDouble), None, SoQLDouble).function
+  val ExpNumNum = new MonomorphicFunction("^NN", SpecialFunctions.Operator("^"), Seq(SoQLNumber, SoQLNumber), None, SoQLNumber).function
+  val ExpDoubleDouble = new MonomorphicFunction("^DD", SpecialFunctions.Operator("^"), Seq(SoQLDouble, SoQLDouble), None, SoQLDouble).function
 
   val ModNumNum = new MonomorphicFunction("%NN", SpecialFunctions.Operator("%"), Seq(SoQLNumber, SoQLNumber), None, SoQLNumber).function
   val ModDoubleDouble = new MonomorphicFunction("%DD", SpecialFunctions.Operator("%"), Seq(SoQLDouble, SoQLDouble), None, SoQLDouble).function

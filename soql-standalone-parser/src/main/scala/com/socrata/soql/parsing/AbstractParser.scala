@@ -280,11 +280,20 @@ abstract class AbstractParser extends Parsers with PackratParsers {
     } |
     cast
 
+  val exp_op =
+    CARET()
+
+  lazy val exp: PackratParser[Expression] =
+    unary ~ opt(exp_op ~ exp) ^^ {
+        case a ~ None => a
+        case a ~ Some(op ~ b) => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b))(a.position, op.position)
+      }
+
   val factor_op =
-    STAR() | SLASH()
+    STAR() | SLASH() | PERCENT()
 
   lazy val factor: PackratParser[Expression] =
-    opt(factor ~ factor_op) ~ unary ^^ {
+    opt(factor ~ factor_op) ~ exp ^^ {
       case None ~ a => a
       case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b))(a.position, op.position)
     }

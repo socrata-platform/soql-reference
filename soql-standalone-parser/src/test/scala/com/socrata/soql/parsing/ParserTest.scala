@@ -125,6 +125,21 @@ class ParserTest extends WordSpec with MustMatchers {
         numberLiteral(3))))
     }
 
+    "accept modulo" in {
+      parseExpression("11 % 2") must equal (
+        functionCall(SpecialFunctions.Operator("%"), Seq(numberLiteral(11), numberLiteral(2))))
+    }
+
+    "^ has higher precedence than *" in {
+      val expr = parseExpression("10 * 3 ^ 2")
+      expr must equal (
+        functionCall(SpecialFunctions.Operator("*"), Seq(
+          numberLiteral(10),
+          functionCall(SpecialFunctions.Operator("^"), Seq(numberLiteral(3), numberLiteral(2)))
+        ))
+      )
+    }
+
     "allow offset/limit" in {
       val x = parseFull("select * offset 6 limit 5")
       x.offset must be (Some(BigInt(6)))

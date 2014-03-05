@@ -58,6 +58,8 @@ case class MINUS() extends FormattedToken("-")
 case class STAR() extends FormattedToken("*")
 case class SLASH() extends FormattedToken("/")
 case class TILDE() extends FormattedToken("~")
+case class CARET() extends FormattedToken("^")
+case class PERCENT() extends FormattedToken("%")
 
 // Misc expression-y stuff
 case class PIPEPIPE() extends FormattedToken("||")

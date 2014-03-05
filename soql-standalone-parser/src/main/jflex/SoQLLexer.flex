@@ -88,6 +88,8 @@ QuotedSystemIdentifier = ":" "@"? ("-" | [:jletterdigit:])+
   "*"   { return token(new STAR()); }
   "/"   { return token(new SLASH()); }
   "~"   { return token(new TILDE()); }
+  "^"   { return token(new CARET()); }
+  "%"   { return token(new PERCENT()); }
 
   // Misc expression-y stuf
   "||"  { return token(new PIPEPIPE()); }
