@@ -284,7 +284,11 @@ therefor it is case-canonicalized in that locale.
 <unary> ::= [`+' | `-'] <unary> | <cast>
 
 <exp> ::= <unary> [`\caret' <exp>]
+\end{grammar}
 
+Unlike all other binary operators, exponentiation is right-associative.
+
+\begin{grammar}
 <factor> ::= [<factor> (`*' | `/' | '\%')] <exp>
 
 <term> ::= [<term> (`+' | `-' | `||')] <factor>
