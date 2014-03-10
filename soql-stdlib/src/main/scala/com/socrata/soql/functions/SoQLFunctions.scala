@@ -106,6 +106,10 @@ object SoQLFunctions {
   val Lower = new MonomorphicFunction("lower",  FunctionName("lower"), Seq(SoQLText), None, SoQLText).function
   val Upper = new MonomorphicFunction("upper",  FunctionName("upper"), Seq(SoQLText), None, SoQLText).function
 
+  val FloatingTimeStampTruncYmd = new MonomorphicFunction("floating timestamp trunc day", FunctionName("date_trunc_ymd"), Seq(SoQLFloatingTimestamp), None, SoQLFloatingTimestamp).function
+  val FloatingTimeStampTruncYm = new MonomorphicFunction("floating timestamp trunc month", FunctionName("date_trunc_ym"), Seq(SoQLFloatingTimestamp), None, SoQLFloatingTimestamp).function
+  val FloatingTimeStampTruncY = new MonomorphicFunction("floating timestamp trunc year", FunctionName("date_trunc_y"), Seq(SoQLFloatingTimestamp), None, SoQLFloatingTimestamp).function
+
   val castIdentities = for((n, t) <- SoQLType.typesByName.toSeq) yield {
     Function(n.caseFolded+"::"+n.caseFolded, SpecialFunctions.Cast(n), Map.empty, Seq(FixedType(t)), None, FixedType(t))
   }
