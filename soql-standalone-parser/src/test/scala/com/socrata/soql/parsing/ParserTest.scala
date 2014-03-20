@@ -12,7 +12,10 @@ import com.socrata.soql.environment.{FunctionName, ColumnName}
 class ParserTest extends WordSpec with MustMatchers {
   def parseExpression(soql: String) = new StandaloneParser().expression(soql)
 
-  def parseFull(soql: String) = new StandaloneParser().selectStatement(soql)
+  def parseFull(soql: String) = {
+    val Vector(x) = new StandaloneParser().selectStatement(soql)
+    x
+  }
 
   def expectFailure(expectedMsg: String, soql: String) =
     try {

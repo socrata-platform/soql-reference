@@ -9,6 +9,7 @@ import com.socrata.soql.environment.{ColumnName, DatasetContext}
 import com.socrata.soql.parsing.Parser
 import com.socrata.soql.typechecker.Typechecker
 import com.socrata.soql.types._
+import com.socrata.soql.functions.MonomorphicFunction
 
 class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   implicit val datasetCtx = new DatasetContext[TestType] {
@@ -37,7 +38,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   }
 
   test("analysis succeeds in a most minimal query") {
-    val analysis = analyzer.analyzeFullQuery("select :id")
+    val Vector(analysis) = analyzer.analyzeFullQuery("select :id")
     analysis.selection.toSeq must equal (Seq(ColumnName(":id") -> typedExpression(":id")))
     analysis.where must be (None)
     analysis.groupBy must be (None)
@@ -49,7 +50,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   }
 
   test("analysis succeeds in a maximal group-by query") {
-    val analysis = analyzer.analyzeFullQuery("select :id as i, sum(balance) where visits > 0 group by i having sum_balance < 5 order by i desc, sum(balance) null first limit 5 offset 10")
+    val Vector(analysis) = analyzer.analyzeFullQuery("select :id as i, sum(balance) where visits > 0 group by i having sum_balance < 5 order by i desc, sum(balance) null first limit 5 offset 10")
     analysis.selection.toSeq must equal (Seq(ColumnName("i") -> typedExpression(":id"), ColumnName("sum_balance") -> typedExpression("sum(balance)")))
     analysis.selection(ColumnName("i")).position.column must equal (8)
     analysis.selection(ColumnName("sum_balance")).position.column must equal (18)
@@ -69,7 +70,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   }
 
   test("analysis succeeds in a maximal ungrouped query") {
-    val analysis = analyzer.analyzeFullQuery("select :*, *(except name_first, name_last), nf || (' ' || nl) as name, name_first as nf, name_last as nl where nl < 'm' order by name desc, visits limit 5 offset 10")
+    val Vector(analysis) = analyzer.analyzeFullQuery("select :*, *(except name_first, name_last), nf || (' ' || nl) as name, name_first as nf, name_last as nl where nl < 'm' order by name desc, visits limit 5 offset 10")
     analysis.selection.toSeq must equal (datasetCtx.schema.toSeq.filterNot(_._1.name.startsWith("name_")).map { case (n, t) => n -> typed.ColumnRef(n, t)(NoPosition) } ++ Seq(ColumnName("name") -> typedExpression("name_first || (' ' || name_last)"), ColumnName("nf") -> typedExpression("name_first"), ColumnName("nl") -> typedExpression("name_last")))
     analysis.selection(ColumnName(":id")).position.column must equal (8)
     analysis.selection(ColumnName(":updated_at")).position.column must equal (8)
@@ -113,7 +114,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   }
 
   test("analysis succeeds in cast") {
-    val analysis = analyzer.analyzeFullQuery("select name_last::number as c1, '123'::number as c2, 456::text as c3")
+    val Vector(analysis) = analyzer.analyzeFullQuery("select name_last::number as c1, '123'::number as c2, 456::text as c3")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("c1") -> typedExpression("name_last::number"),
       ColumnName("c2") -> typedExpression("'123'::number"),
@@ -122,7 +123,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   }
 
   test("json property and index") {
-    val analysis = analyzer.analyzeFullQuery("select object.xxxx as c1, array[123] as c2, object.yyyy::text as c3, array[123]::number as c4")
+    val Vector(analysis) = analyzer.analyzeFullQuery("select object.xxxx as c1, array[123] as c2, object.yyyy::text as c3, array[123]::number as c4")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("c1") -> typedExpression("object.xxxx"),
       ColumnName("c2") -> typedExpression("array[123]"),
@@ -132,20 +133,27 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   }
 
   test("null :: number succeeds") {
-    val analysis = analyzer.analyzeFullQuery("select null :: number as x")
+    val Vector(analysis) = analyzer.analyzeFullQuery("select null :: number as x")
     analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestNumber)).get.monomorphic.get,
       Seq(typed.NullLiteral(TestNull)(NoPosition)))(NoPosition, NoPosition))
   }
 
   test("5 :: number succeeds") {
-    val analysis = analyzer.analyzeFullQuery("select 5 :: number as x")
+    val Vector(analysis) = analyzer.analyzeFullQuery("select 5 :: number as x")
     analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestNumber)).get.monomorphic.get,
       Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber)(NoPosition)))(NoPosition, NoPosition))
   }
 
   test("5 :: money succeeds") {
-    val analysis = analyzer.analyzeFullQuery("select 5 :: money as x")
+    val Vector(analysis) = analyzer.analyzeFullQuery("select 5 :: money as x")
     analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
+      Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber)(NoPosition)))(NoPosition, NoPosition)))(NoPosition, NoPosition))
+  }
+
+  test("a subselect makes the output of the inner select available to the outer") {
+    val Vector(inner, outer) = analyzer.analyzeFullQuery("select max(x) from (select 5 :: money as x)")
+    outer.selection(ColumnName("max_x")) must equal (typed.FunctionCall(MonomorphicFunction(TestFunctions.Max, Map("a" -> SoQLMoney)), Seq(typed.ColumnRef(ColumnName("x"), SoQLMoney)(NoPosition)))(NoPosition, NoPosition))
+    inner.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
       Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber)(NoPosition)))(NoPosition, NoPosition)))(NoPosition, NoPosition))
   }
 }

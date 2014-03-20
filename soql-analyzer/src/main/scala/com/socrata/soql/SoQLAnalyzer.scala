@@ -22,15 +22,26 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
     * @param query The SELECT to parse and analyze
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
     * @return The analysis of the query */
-  def analyzeFullQuery(query: String)(implicit ctx: DatasetContext[Type]): Analysis = {
+  def analyzeFullQuery(query: String)(implicit ctx: DatasetContext[Type]): Vector[Analysis] = {
     log.debug("Analyzing full query {}", query)
     val start = System.nanoTime()
     val parsed = new Parser().selectStatement(query)
     val end = System.nanoTime()
     log.trace("Parsing took {}ms", ns2ms(end - start))
 
-    analyzeWithSelection(parsed)
+    parsed.scanLeft(fakeAnalysis)(analyzeInOuterSelectionContext).drop(1)
   }
+
+  private def fakeAnalysis(implicit ctx: DatasetContext[Type]) =
+    SoQLAnalysis(isGrouped = false,
+                 selection = ctx.schema.transform(typed.ColumnRef(_, _)(NoPosition)),
+                 where = None,
+                 groupBy = None,
+                 having = None,
+                 orderBy = None,
+                 limit = None,
+                 offset = None,
+                 search = None)
 
   /** Turn framents of a SoQL SELECT statement into a typed `Analysis` object.  If no `selection` is provided,
     * one is generated based on whether the rest of the parameters indicate an aggregate query or not.  If it
@@ -153,6 +164,13 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
       limit,
       offset,
       search)
+  }
+
+  def analyzeInOuterSelectionContext(lastQuery: Analysis, query: Select): Analysis = {
+    implicit val fakeCtx = new DatasetContext[Type] {
+      override val schema: OrderedMap[ColumnName, Type] = lastQuery.selection.mapValues(_.typ)
+    }
+    analyzeWithSelection(query)
   }
 
   def analyzeWithSelection(query: Select)(implicit ctx: DatasetContext[Type]): Analysis = {

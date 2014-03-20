@@ -24,7 +24,7 @@ abstract class AbstractParser extends Parsers with PackratParsers {
   def expression(soql: String): Expression = parseFull(expr, soql)
   def orderings(soql: String): Seq[OrderBy] = parseFull(orderingList, soql)
   def groupBys(soql: String): Seq[Expression] = parseFull(groupByList, soql)
-  def selectStatement(soql: String): Select = parseFull(fullSelect, soql)
+  def selectStatement(soql: String): Vector[Select] = parseFull(fullSelect, soql)
   def limit(soql: String): BigInt = parseFull(integer, soql)
   def offset(soql: String): BigInt = parseFull(integer, soql)
   def search(soql: String): String = parseFull(stringLiteral, soql)
@@ -90,10 +90,13 @@ abstract class AbstractParser extends Parsers with PackratParsers {
    *               *************************
    */
 
-  def fullSelect =
-    (SELECT() ~> selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-      case s ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(s, w, gb, h, ord, lim, off, sr)
-    })
+  def fullSelect: Parser[Vector[Select]] =
+    SELECT() ~> selectList ~ opt(fromClause) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+      case s ~ ss ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => ss match {
+        case Some(subselects) => subselects :+ Select(s, w, gb, h, ord, lim, off, sr)
+        case None => Vector(Select(s, w, gb, h, ord, lim, off, sr))
+      }
+    }
 
   def orderByAndSearch: Parser[(Option[Seq[OrderBy]], Option[String])] =
     orderByClause ~ opt(searchClause) ^^ { //backward-compat.  We should prefer putting the search first.
@@ -113,6 +116,7 @@ abstract class AbstractParser extends Parsers with PackratParsers {
       case None => (None, None)
     }
 
+  def fromClause = FROM() ~> LPAREN() ~> fullSelect <~ RPAREN()
   def whereClause = WHERE() ~> expr
   def groupByClause = GROUP() ~ BY() ~> groupByList
   def havingClause = HAVING() ~> expr
