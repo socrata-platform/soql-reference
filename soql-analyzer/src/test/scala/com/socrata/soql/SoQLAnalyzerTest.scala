@@ -49,7 +49,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   }
 
   test("analysis succeeds in a maximal group-by query") {
-    val analysis = analyzer.analyzeFullQuery("select :id as i, sum(balance) where visits > 0 group by i having sum_balance < 5 order by i desc, sum(balance) null first limit 5 offset 10")
+    val analysis = analyzer.analyzeFullQuery("select :id as i, sum(balance) where visits > 0 group by i having sum_balance < 5 order by i desc null last, sum(balance) null first limit 5 offset 10")
     analysis.selection.toSeq must equal (Seq(ColumnName("i") -> typedExpression(":id"), ColumnName("sum_balance") -> typedExpression("sum(balance)")))
     analysis.selection(ColumnName("i")).position.column must equal (8)
     analysis.selection(ColumnName("sum_balance")).position.column must equal (18)
@@ -63,7 +63,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     analysis.having.get.asInstanceOf[typed.FunctionCall[_,_]].parameters(0).position.column must equal (18)
     analysis.having.get.asInstanceOf[typed.FunctionCall[_,_]].functionNamePosition.column must equal (78)
     analysis.orderBy must equal (Some(Seq(typed.OrderBy(typedExpression(":id"), false, true), typed.OrderBy(typedExpression("sum(balance)"), true, false))))
-    analysis.orderBy.get.map(_.expression.position.column) must equal (Seq(8, 99))
+    analysis.orderBy.get.map(_.expression.position.column) must equal (Seq(8, 109))
     analysis.limit must equal (Some(BigInt(5)))
     analysis.offset must equal (Some(BigInt(10)))
   }
@@ -87,7 +87,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     analysis.where.get.asInstanceOf[typed.FunctionCall[_,_]].parameters(0).position.column must equal (90)
     analysis.groupBy must equal (None)
     analysis.having must equal (None)
-    analysis.orderBy must equal (Some(Seq(typed.OrderBy(typedExpression("name_first || (' ' || name_last)"), false, true), typed.OrderBy(typedExpression("visits"), true, true))))
+    analysis.orderBy must equal (Some(Seq(typed.OrderBy(typedExpression("name_first || (' ' || name_last)"), false, false), typed.OrderBy(typedExpression("visits"), true, true))))
     analysis.orderBy.get.map(_.expression.position.column) must equal (Seq(45, 141))
     analysis.limit must equal (Some(BigInt(5)))
     analysis.offset must equal (Some(BigInt(10)))

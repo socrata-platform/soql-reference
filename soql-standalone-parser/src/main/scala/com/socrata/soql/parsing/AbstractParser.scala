@@ -171,7 +171,7 @@ abstract class AbstractParser extends Parsers with PackratParsers {
 
   def ordering = expr ~ opt(ascDesc) ~ opt(nullPlacement) ^^ {
     case e ~ None ~ None => OrderBy(e, true, true)
-    case e ~ Some(order) ~ None => OrderBy(e, order == ASC(), true)
+    case e ~ Some(order) ~ None => OrderBy(e, order == ASC(), order == ASC())
     case e ~ None ~ Some(firstLast) => OrderBy(e, true, firstLast == LAST())
     case e ~ Some(order) ~ Some(firstLast) => OrderBy(e, order == ASC(), firstLast == LAST())
   }
