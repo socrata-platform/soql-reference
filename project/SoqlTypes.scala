@@ -21,7 +21,7 @@ object SoqlTypes {
   )
 
   def oldRojomaJsonRepo(scalaVersion: String) = scalaVersion match {
-    case "2.8.1" => Seq("rjmac maven" at "http://rjmac.github.com/maven/releases")
+    case "2.8.1" => Seq("rjmac maven" at "http://rjmac.github.io/maven/releases")
     case _ => Nil
   }
 
