@@ -1,13 +1,14 @@
 package com.socrata.soql.types
 
-import com.ibm.icu.util.CaseInsensitiveString
 
+import com.google.protobuf.{CodedInputStream, CodedOutputStream}
+import com.ibm.icu.util.CaseInsensitiveString
+import com.rojoma.json.ast.{JValue, JArray, JObject}
 import com.socrata.soql.environment.TypeName
+import com.socrata.soql.types.obfuscation.{Obfuscator, CryptProvider}
+import com.vividsolutions.jts.geom.{LineString, Point, Polygon}
 import org.joda.time.{LocalTime, LocalDate, LocalDateTime, DateTime}
 import org.joda.time.format.ISODateTimeFormat
-import com.rojoma.json.ast.{JValue, JArray, JObject}
-import com.google.protobuf.{CodedInputStream, CodedOutputStream}
-import com.socrata.soql.types.obfuscation.{Obfuscator, CryptProvider}
 
 sealed abstract class SoQLAnalysisType(val name: TypeName) {
   def this(name: String) = this(TypeName(name))
@@ -40,7 +41,7 @@ object SoQLType {
   // I still want to retain pre-2.10 compat.
   val typesByName = Seq(
     SoQLID, SoQLVersion, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
-    SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLLocation, SoQLJson
+    SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLLocation, SoQLJson, SoQLPoint, SoQLLine, SoQLPolygon
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
   }
@@ -233,6 +234,21 @@ case class SoQLJson(value: JValue) extends SoQLValue {
   def typ = SoQLJson
 }
 case object SoQLJson extends SoQLType("json")
+
+case class SoQLPoint(value: Point) extends SoQLValue {
+  def typ = SoQLPoint
+}
+case object SoQLPoint extends SoQLType("point") with SoQLGeometryLike[Point]
+
+case class SoQLLine(value: LineString) extends SoQLValue {
+  def typ = SoQLLine
+}
+case object SoQLLine extends SoQLType("line") with SoQLGeometryLike[LineString]
+
+case class SoQLPolygon(value: Polygon) extends SoQLValue {
+  def typ = SoQLPolygon
+}
+case object SoQLPolygon extends SoQLType("polygon") with SoQLGeometryLike[Polygon]
 
 case object SoQLNull extends SoQLType("null") with SoQLValue {
   override def isPassableTo(that: SoQLAnalysisType) = true
