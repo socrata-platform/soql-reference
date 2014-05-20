@@ -4,9 +4,9 @@ import org.scalatest.FunSuite
 import org.scalatest.matchers.MustMatchers
 
 class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
-  test("Point : apply/unapply") {
-    val json = "{\"type\":\"Point\",\"coordinates\":[47.6303,-122.3148]}"
-    val wkt = "POINT (47.6303123 -122.3148123)"
+  test("Point : WKT & JSON apply/unapply") {
+    val json = """{"type":"Point","coordinates":[47.6303123,-122.123456789012]}"""
+    val wkt = "POINT (47.6303123 -122.123456789012)"
     val geoms = Seq(SoQLPoint.JsonRep.unapply(json), SoQLPoint.WktRep.unapply(wkt))
 
     geoms.foreach { geom =>
@@ -14,15 +14,15 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
         None
       }
       geom.get.getX must be {
-        47.6303123
+        47.6303123 plusOrMinus 0.5
       }
       geom.get.getY must be {
-        -122.3148123
+        -122.123456789012 plusOrMinus 0.5
       }
     }
 
-    val json2 = SoQLPoint.JsonRep.apply(geoms.last.get)
-    val wkt2 = SoQLPoint.WktRep.apply(geoms.last.get)
+    val json2 = SoQLPoint.JsonRep(geoms.last.get)
+    val wkt2 = SoQLPoint.WktRep(geoms.last.get)
 
     json2 must not be { 'empty }
     json2 must equal { json }
@@ -30,9 +30,9 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
     wkt2 must equal { wkt }
   }
 
-  test("Line : apply/unapply") {
-    val json = "{\"type\":\"LineString\",\"coordinates\":[[102,0.0928],[103,1],[104,0.0],[105,1]]}"
-    val wkt = "LINESTRING (102 0.0928123, 103 1, 104 0, 105 1)"
+  test("Line : WKT & JSON apply/unapply") {
+    val json = """{"type":"LineString","coordinates":[[102,0.123456789012],[103,1],[104,0.0],[105,1]]}"""
+    val wkt = "LINESTRING (102 0.123456789012, 103 1, 104 0, 105 1)"
     val geoms = Seq(SoQLLine.JsonRep.unapply(json), SoQLLine.WktRep.unapply(wkt))
 
     geoms.foreach {
@@ -42,12 +42,12 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
         }
         val allCoords = geom.get.getCoordinates.flatMap(c => Seq(c.x, c.y))
         allCoords must equal {
-          Array(102, 0.0928123, 103, 1, 104, 0, 105, 1)
+          Array(102, 0.123456789012, 103, 1, 104, 0, 105, 1)
         }
     }
 
-    val json2 = SoQLLine.JsonRep.apply(geoms.last.get)
-    val wkt2 = SoQLLine.WktRep.apply(geoms.last.get)
+    val json2 = SoQLLine.JsonRep(geoms.last.get)
+    val wkt2 = SoQLLine.WktRep(geoms.last.get)
 
     json2 must not be { 'empty }
     json2 must equal { json }
@@ -55,9 +55,9 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
     wkt2 must equal { wkt }
   }
 
-  test("Polygon : apply/unapply") {
-    val json = "{\"type\":\"Polygon\",\"coordinates\":[[[-2,2],[2,2],[2,-2],[-2,-2],[-2,2]],[[-1,1],[1,1],[1,-1],[-1,-1],[-1,1]]]}"
-    val wkt = "POLYGON ((-2 2, 2 2, 2 -2, -2 -2, -2 2), (-1 1, 1 1, 1 -1, -1 -1, -1 1))"
+  test("Polygon : WKT & JSON apply/unapply") {
+    val json = """{"type":"Polygon","coordinates":[[[-2,2],[2,2.123456789012],[2,-2],[-2,-2],[-2,2]],[[-1,1],[1,1],[1,-1],[-1,-1],[-1,1]]]}"""
+    val wkt = "POLYGON ((-2 2, 2 2.123456789012, 2 -2, -2 -2, -2 2), (-1 1, 1 1, 1 -1, -1 -1, -1 1))"
     val geoms = Seq(SoQLPolygon.JsonRep.unapply(json), SoQLPolygon.WktRep.unapply(wkt))
 
     geoms.foreach {
@@ -67,7 +67,7 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
         }
         val allExteriorRingCoords = geom.get.getExteriorRing().getCoordinates.flatMap(c => Seq(c.x, c.y))
         allExteriorRingCoords must equal {
-          Array(-2, 2, 2, 2, 2, -2, -2, -2, -2, 2)
+          Array(-2, 2, 2, 2.123456789012, 2, -2, -2, -2, -2, 2)
         }
         geom.get.getNumInteriorRing() must equal {
           1
@@ -78,8 +78,8 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
         }
     }
 
-    val json2 = SoQLPolygon.JsonRep.apply(geoms.last.get)
-    val wkt2 = SoQLPolygon.WktRep.apply(geoms.last.get)
+    val json2 = SoQLPolygon.JsonRep(geoms.last.get)
+    val wkt2 = SoQLPolygon.WktRep(geoms.last.get)
 
     json2 must not be { 'empty }
     json2 must equal { json }
