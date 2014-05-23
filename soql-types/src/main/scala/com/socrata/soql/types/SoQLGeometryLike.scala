@@ -1,14 +1,14 @@
 package com.socrata.soql.types
 
 import com.vividsolutions.jts.geom.{Geometry, GeometryFactory}
-import com.vividsolutions.jts.io.WKTReader
+import com.vividsolutions.jts.io.{WKBWriter, WKBReader, WKTReader}
 import java.io.StringWriter
 import org.apache.commons.io.IOUtils
 import org.geotools.geojson.geom.GeometryJSON
 import scala.util.Try
 
 trait SoQLGeometryLike[T <: Geometry] {
-  final val GEO_PRECISION = 12
+  final val GEO_PRECISION = 6
 
   object JsonRep {
     def unapply(text: String): Option[T] = {
@@ -32,5 +32,18 @@ trait SoQLGeometryLike[T <: Geometry] {
     }
 
     def apply(geom: T): String = geom.toString
+  }
+
+  object WkbRep {
+    def unapply(bytes: Array[Byte]): Option[T] = {
+      val gf = new GeometryFactory
+      val reader = new WKBReader(gf)
+      Try(reader.read(bytes).asInstanceOf[T]).toOption
+    }
+
+    def apply(geom: T): Array[Byte] = {
+      val writer = new WKBWriter
+      writer.write(geom)
+    }
   }
 }

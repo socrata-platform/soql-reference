@@ -6,7 +6,7 @@ import com.ibm.icu.util.CaseInsensitiveString
 import com.rojoma.json.ast.{JValue, JArray, JObject}
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.types.obfuscation.{Obfuscator, CryptProvider}
-import com.vividsolutions.jts.geom.{LineString, Point, Polygon}
+import com.vividsolutions.jts.geom.{MultiLineString, MultiPolygon, Point}
 import org.joda.time.{LocalTime, LocalDate, LocalDateTime, DateTime}
 import org.joda.time.format.ISODateTimeFormat
 
@@ -41,7 +41,7 @@ object SoQLType {
   // I still want to retain pre-2.10 compat.
   val typesByName = Seq(
     SoQLID, SoQLVersion, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
-    SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLLocation, SoQLJson, SoQLPoint, SoQLLine, SoQLPolygon
+    SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLLocation, SoQLJson, SoQLPoint, SoQLMultiLine, SoQLMultiPolygon
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
   }
@@ -240,15 +240,15 @@ case class SoQLPoint(value: Point) extends SoQLValue {
 }
 case object SoQLPoint extends SoQLType("point") with SoQLGeometryLike[Point]
 
-case class SoQLLine(value: LineString) extends SoQLValue {
-  def typ = SoQLLine
+case class SoQLMultiLine(value: MultiLineString) extends SoQLValue {
+  def typ = SoQLMultiLine
 }
-case object SoQLLine extends SoQLType("line") with SoQLGeometryLike[LineString]
+case object SoQLMultiLine extends SoQLType("multiline") with SoQLGeometryLike[MultiLineString]
 
-case class SoQLPolygon(value: Polygon) extends SoQLValue {
-  def typ = SoQLPolygon
+case class SoQLMultiPolygon(value: MultiPolygon) extends SoQLValue {
+  def typ = SoQLMultiPolygon
 }
-case object SoQLPolygon extends SoQLType("polygon") with SoQLGeometryLike[Polygon]
+case object SoQLMultiPolygon extends SoQLType("multipolygon") with SoQLGeometryLike[MultiPolygon]
 
 case object SoQLNull extends SoQLType("null") with SoQLValue {
   override def isPassableTo(that: SoQLAnalysisType) = true
