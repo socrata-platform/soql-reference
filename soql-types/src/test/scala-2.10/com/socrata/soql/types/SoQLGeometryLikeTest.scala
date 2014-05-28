@@ -7,18 +7,16 @@ import org.scalatest.matchers.MustMatchers
 class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
   test("Point : WKT & JSON apply/unapply") {
     val json = """{"type":"Point","coordinates":[47.123456,-122.123456]}"""
-    val wkt = "POINT (47.6303123 -122.123456789012)"
+    val wkt = "POINT (47.123456 -122.123456)"
     val geoms = Seq(SoQLPoint.JsonRep.unapply(json), SoQLPoint.WktRep.unapply(wkt))
 
     geoms.foreach { geom =>
-      geom must not be {
-        None
-      }
+      geom must not be (None)
       geom.get.getX must be {
-        47.123456 plusOrMinus 0.5
+        47.123456 plusOrMinus 0.0000005
       }
       geom.get.getY must be {
-        -122.123456 plusOrMinus 0.5
+        -122.123456 plusOrMinus 0.0000005
       }
     }
 
@@ -38,9 +36,7 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
 
     geoms.foreach {
       geom =>
-        geom must not be {
-          None
-        }
+        geom must not be (None)
         val allCoords = geom.get.getCoordinates.flatMap(c => Seq(c.x, c.y))
         allCoords must equal {
           Array(100, 0.123456, 101, 1, 102, 2, 103, 3)
@@ -63,9 +59,7 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
 
     geoms.foreach {
       geom =>
-        geom must not be {
-          None
-        }
+        geom must not be (None)
 
         val polygon1 = geom.get.getGeometryN(0).asInstanceOf[Polygon]
         polygon1.getExteriorRing.getCoordinates.flatMap(c => Seq(c.x, c.y)) must equal {
