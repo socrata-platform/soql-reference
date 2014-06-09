@@ -86,4 +86,29 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
     wkt2 must not be { 'empty }
     wkt2 must equal { wkt }
   }
+
+  test("Apply/unapply valid EWKT") {
+    val ewkt = "SRID=4326;POINT (123 456)"
+    val SoQLPoint.EWktRep(point, srid) = ewkt
+    point.getX must be (123)
+    point.getY must be (456)
+    srid must be (4326)
+
+    SoQLPoint.EWktRep(point, srid) must be (ewkt)
+  }
+
+  test("Parse totally invalid EWKT") {
+    val ewkt = "the quick brown fox jumped over the lazy dog"
+    SoQLPoint.EWktRep.unapply(ewkt) must be (None)
+  }
+
+  test("Parse EWKT with invalid SRID") {
+    val ewkt = "SRID=wgs84;POINT(123 456)"
+    SoQLPoint.EWktRep.unapply(ewkt) must be (None)
+  }
+
+  test("Parse EWKT with invalid geometry") {
+    val ewkt = "SRID=wgs84;giraffe"
+    SoQLPoint.EWktRep.unapply(ewkt) must be (None)
+  }
 }

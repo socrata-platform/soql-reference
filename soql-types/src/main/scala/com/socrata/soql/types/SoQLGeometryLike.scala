@@ -46,4 +46,27 @@ trait SoQLGeometryLike[T <: Geometry] {
       writer.write(geom)
     }
   }
+
+  object EWktRep {
+    private val SRIDPrefix = "SRID="
+    private val separator = ";"
+
+    def unapply(text: String): Option[(T, Int)] = {
+      if (!text.toUpperCase.startsWith(SRIDPrefix)) return None
+      val trimmed = text.replace(SRIDPrefix, "")
+
+      val pieces = trimmed.split(separator)
+      if (pieces.size != 2) return None
+
+      Try(pieces(0).toInt).toOption.flatMap { srid =>
+        WktRep.unapply(pieces(1)).map { geom =>
+          (geom, srid)
+        }
+      }
+    }
+
+    def apply(geom: T, srid: Int): String = {
+      s"$SRIDPrefix$srid$separator${WktRep(geom)}"
+    }
+  }
 }
