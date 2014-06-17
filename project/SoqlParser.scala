@@ -17,7 +17,7 @@ object SoqlParser {
     },
     crossScalaVersions += "2.8.1",
     libraryDependencies ++= Seq(
-      "com.socrata" %% "soql-brita" % "[1.2.1,2.0.0)",
+      "com.socrata" %% "soql-brita" % "[1.3.0,2.0.0)",
       "org.slf4j" % "slf4j-simple" % BuildSettings.slf4jVersion % "test"
     )
   )
