@@ -195,13 +195,13 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "like round trip" in {
-      val x = parseFull("select * where a like 'b'")
-      x.where.get.toString must be ("a LIKE 'b'")
+      val x = parseFull("select * where `a` like 'b'")
+      x.where.get.toString must be ("`a` LIKE 'b'")
     }
 
     "not like round trip" in {
-      val x = parseFull("select * where a not like 'b'")
-      x.where.get.toString must be ("a NOT LIKE 'b'")
+      val x = parseFull("select * where `a` not like 'b'")
+      x.where.get.toString must be ("`a` NOT LIKE 'b'")
     }
 
     // def show[T](x: => T) {
