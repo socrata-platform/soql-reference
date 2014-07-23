@@ -19,6 +19,9 @@ object SoQLTypeConversions {
     SoQLFloatingTimestamp,
     SoQLDate,
     SoQLTime,
+    SoQLPoint,
+    SoQLMultiLine,
+    SoQLMultiPolygon,
     SoQLLocation,
     SoQLObject,
     SoQLArray,
@@ -49,6 +52,12 @@ object SoQLTypeConversions {
     Some(getMonomorphically(SoQLFunctions.TextToNumber))
   private val textToMoneyFunc =
     Some(getMonomorphically(SoQLFunctions.TextToMoney))
+  private val textToPointFunc =
+    Some(SoQLFunctions.TextToPoint.monomorphic.getOrElse(sys.error("text to point conversion not monomorphic?")))
+  private val textToMultiLineFunc =
+    Some(SoQLFunctions.TextToMultiLine.monomorphic.getOrElse(sys.error("text to multi line conversion not monomorphic?")))
+  private val textToMultiPolygonFunc =
+    Some(SoQLFunctions.TextToMultiPolygon.monomorphic.getOrElse(sys.error("text to multi polygon conversion not monomorphic?")))
 
   private def isNumberLiteral(s: String) = try {
     val lexer = new Lexer(s)
@@ -83,6 +92,12 @@ object SoQLTypeConversions {
         textToNumberFunc
       case (SoQLTextLiteral(s), SoQLMoney) if isNumberLiteral(s.toString) =>
         textToMoneyFunc
+      case (SoQLTextLiteral(s), SoQLPoint) if SoQLPoint.WktRep.unapply(s.toString).isDefined =>
+        textToPointFunc
+      case (SoQLTextLiteral(s), SoQLMultiLine) if SoQLMultiLine.WktRep.unapply(s.toString).isDefined =>
+        textToMultiLineFunc
+      case (SoQLTextLiteral(s), SoQLMultiPolygon) if SoQLMultiPolygon.WktRep.unapply(s.toString).isDefined =>
+        textToMultiPolygonFunc
       case _ =>
         None
     }

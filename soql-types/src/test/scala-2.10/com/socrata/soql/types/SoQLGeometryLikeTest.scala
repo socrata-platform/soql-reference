@@ -111,4 +111,26 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
     val ewkt = "SRID=wgs84;giraffe"
     SoQLPoint.EWktRep.unapply(ewkt) must be (None)
   }
+
+  test("multipolygon round trip") {
+    val wkt = "MULTIPOLYGON (((1 1, 2 1, 2 2, 1 2, 1 1)))"
+    val geom = SoQLMultiPolygon.WktRep.unapply(wkt).get
+    val roundTrip = new String(SoQLMultiPolygon.WktRep.apply(geom))
+    roundTrip must be (wkt)
+  }
+
+  test("point round trip") {
+    val wkt = "POINT (1 2)"
+    val geom = SoQLPoint.WktRep.unapply(wkt).get
+    val roundTrip = new String(SoQLPoint.WktRep.apply(geom))
+    roundTrip must be (wkt)
+  }
+
+  test("point is not accepted as multipolygon") {
+    SoQLMultiPolygon.WktRep.unapply("POINT (1 2)") must be (None)
+  }
+
+  test("multipolygon is not accepted as point") {
+    SoQLPoint.WktRep.unapply("MULTIPOLYGON (((1 1, 2 1, 2 2, 1 2, 1 1)))") must be (None)
+  }
 }

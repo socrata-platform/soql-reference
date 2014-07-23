@@ -25,12 +25,16 @@ object SoQLFunctions {
   )
   private val NumLike = Set[Any](SoQLNumber, SoQLDouble, SoQLMoney)
   private val RealNumLike = Set[Any](SoQLNumber, SoQLDouble)
-  private val GeospatialLike = Set[Any](SoQLLocation)
+  private val GeospatialLike = Set[Any](SoQLPoint, SoQLMultiLine, SoQLMultiPolygon, SoQLLocation)
 
   val TextToFixedTimestamp = new MonomorphicFunction("text to fixed timestamp", SpecialFunctions.Cast(SoQLFixedTimestamp.name), Seq(SoQLText), None, SoQLFixedTimestamp).function
   val TextToFloatingTimestamp = new MonomorphicFunction("text to floating timestamp", SpecialFunctions.Cast(SoQLFloatingTimestamp.name), Seq(SoQLText), None, SoQLFloatingTimestamp).function
   val TextToDate = new MonomorphicFunction("text to date", SpecialFunctions.Cast(SoQLDate.name), Seq(SoQLText), None, SoQLDate).function
   val TextToTime = new MonomorphicFunction("text to time", SpecialFunctions.Cast(SoQLTime.name), Seq(SoQLText), None, SoQLTime).function
+  val TextToPoint = new MonomorphicFunction("text to point", SpecialFunctions.Cast(SoQLPoint.name), Seq(SoQLText), None, SoQLPoint).function
+  val TextToMultiLine = new MonomorphicFunction("text to multi line", SpecialFunctions.Cast(SoQLMultiLine.name), Seq(SoQLText), None, SoQLMultiLine).function
+  val TextToMultiPolygon = new MonomorphicFunction("text to multi polygon", SpecialFunctions.Cast(SoQLMultiPolygon.name), Seq(SoQLText), None, SoQLMultiPolygon).function
+
   val Concat = Function("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), None, FixedType(SoQLText))
   val Gte = Function(">=", SpecialFunctions.Operator(">="), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), None, FixedType(SoQLBoolean))
   val Gt = Function(">", SpecialFunctions.Operator(">"), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), None, FixedType(SoQLBoolean))
@@ -47,6 +51,8 @@ object SoQLFunctions {
   // arguments: nwLat, nwLon, seLat, seLon (yMax,  xMin , yMin,  xMax)
   val WithinBox = Function("within_box", FunctionName("within_box"), Map ("a"-> GeospatialLike, "b" -> RealNumLike),
     Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b"), VariableType("b")), None, FixedType(SoQLBoolean))
+  val WithinPolygon = Function("within_polygon", FunctionName("within_polygon"), Map ("a"-> GeospatialLike, "b"-> GeospatialLike),
+    Seq(VariableType("a"), VariableType("b")), None, FixedType(SoQLBoolean))
 
   val LatitudeField = new MonomorphicFunction("latitude field", SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("latitude")), None, SoQLDouble).function
   val LongitudeField = new MonomorphicFunction("longitude field", SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("longitude")), None, SoQLDouble).function
