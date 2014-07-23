@@ -238,17 +238,23 @@ case object SoQLJson extends SoQLType("json")
 case class SoQLPoint(value: Point) extends SoQLValue {
   def typ = SoQLPoint
 }
-case object SoQLPoint extends SoQLType("point") with SoQLGeometryLike[Point]
+case object SoQLPoint extends {
+  protected val Treified = classOf[Point]
+} with SoQLType("point") with SoQLGeometryLike[Point]
 
 case class SoQLMultiLine(value: MultiLineString) extends SoQLValue {
   def typ = SoQLMultiLine
 }
-case object SoQLMultiLine extends SoQLType("multiline") with SoQLGeometryLike[MultiLineString]
+case object SoQLMultiLine extends {
+  protected val Treified = classOf[MultiLineString]
+} with SoQLType("multiline") with SoQLGeometryLike[MultiLineString]
 
 case class SoQLMultiPolygon(value: MultiPolygon) extends SoQLValue {
   def typ = SoQLMultiPolygon
 }
-case object SoQLMultiPolygon extends SoQLType("multipolygon") with SoQLGeometryLike[MultiPolygon]
+case object SoQLMultiPolygon extends {
+  protected val Treified = classOf[MultiPolygon]
+} with SoQLType("multipolygon") with SoQLGeometryLike[MultiPolygon]
 
 case object SoQLNull extends SoQLType("null") with SoQLValue {
   override def isPassableTo(that: SoQLAnalysisType) = true

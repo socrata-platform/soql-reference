@@ -10,10 +10,12 @@ import scala.util.Try
 trait SoQLGeometryLike[T <: Geometry] {
   final val GEO_PRECISION = 6
 
+  protected val Treified: Class[T]
+
   object JsonRep {
     def unapply(text: String): Option[T] = {
       val json = new GeometryJSON
-      Try(json.read(IOUtils.toInputStream(text)).asInstanceOf[T]).toOption
+      Try(Treified.cast(json.read(IOUtils.toInputStream(text)))).toOption
     }
 
     def apply(geom: T): String = {
@@ -28,7 +30,7 @@ trait SoQLGeometryLike[T <: Geometry] {
     def unapply(text: String): Option[T] = {
       val gf = new GeometryFactory
       val reader = new WKTReader(gf)
-      Try(reader.read(text).asInstanceOf[T]).toOption
+      Try(Treified.cast(reader.read(text))).toOption
     }
 
     def apply(geom: T): String = geom.toString
@@ -38,7 +40,7 @@ trait SoQLGeometryLike[T <: Geometry] {
     def unapply(bytes: Array[Byte]): Option[T] = {
       val gf = new GeometryFactory
       val reader = new WKBReader(gf)
-      Try(reader.read(bytes).asInstanceOf[T]).toOption
+      Try(Treified.cast(reader.read(bytes))).toOption
     }
 
     def apply(geom: T): Array[Byte] = {
