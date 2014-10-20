@@ -25,7 +25,7 @@ object SoQLFunctions {
   )
   private val NumLike = Set[Any](SoQLNumber, SoQLDouble, SoQLMoney)
   private val RealNumLike = Set[Any](SoQLNumber, SoQLDouble)
-  private val GeospatialLike = Set[Any](SoQLPoint, SoQLMultiLine, SoQLMultiPolygon, SoQLLocation)
+  private val GeospatialLike = Set[Any](SoQLPoint, SoQLMultiLine, SoQLMultiPolygon)
 
   val TextToFixedTimestamp = new MonomorphicFunction("text to fixed timestamp", SpecialFunctions.Cast(SoQLFixedTimestamp.name), Seq(SoQLText), None, SoQLFixedTimestamp).function
   val TextToFloatingTimestamp = new MonomorphicFunction("text to floating timestamp", SpecialFunctions.Cast(SoQLFloatingTimestamp.name), Seq(SoQLText), None, SoQLFloatingTimestamp).function
@@ -55,6 +55,8 @@ object SoQLFunctions {
     Seq(VariableType("a"), VariableType("b")), None, FixedType(SoQLBoolean))
   val Extent = Function("extent", FunctionName("extent"), Map ("a" -> GeospatialLike),
     Seq(VariableType("a")), None, FixedType(SoQLMultiPolygon), isAggregate = true)
+  val Intersects = Function("intersects", FunctionName("intersects"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
+    Seq(VariableType("a"), VariableType("b")), None, FixedType(SoQLBoolean))
 
   val LatitudeField = new MonomorphicFunction("latitude field", SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("latitude")), None, SoQLDouble).function
   val LongitudeField = new MonomorphicFunction("longitude field", SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("longitude")), None, SoQLDouble).function
