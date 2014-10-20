@@ -55,6 +55,8 @@ object SoQLFunctions {
     Seq(VariableType("a"), VariableType("b")), None, FixedType(SoQLBoolean))
   val Extent = Function("extent", FunctionName("extent"), Map ("a" -> GeospatialLike),
     Seq(VariableType("a")), None, FixedType(SoQLMultiPolygon), isAggregate = true)
+  val Intersects = Function("intersects", FunctionName("intersects"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
+    Seq(VariableType("a"), VariableType("b")), None, FixedType(SoQLBoolean))
 
   val LatitudeField = new MonomorphicFunction("latitude field", SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("latitude")), None, SoQLDouble).function
   val LongitudeField = new MonomorphicFunction("longitude field", SpecialFunctions.Subscript, Seq(SoQLLocation, SoQLTextLiteral("longitude")), None, SoQLDouble).function
