@@ -22,7 +22,6 @@ object SoQLTypeConversions {
     SoQLPoint,
     SoQLMultiLine,
     SoQLMultiPolygon,
-    SoQLLocation,
     SoQLObject,
     SoQLArray,
     SoQLID,
