@@ -41,7 +41,7 @@ object SoQLType {
   // I still want to retain pre-2.10 compat.
   val typesByName = Seq(
     SoQLID, SoQLVersion, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
-    SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLLocation, SoQLJson, SoQLPoint, SoQLMultiLine, SoQLMultiPolygon
+    SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLJson, SoQLPoint, SoQLMultiLine, SoQLMultiPolygon
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
   }
