@@ -225,11 +225,6 @@ case class SoQLArray(value: JArray) extends SoQLValue {
 }
 case object SoQLArray extends SoQLType("array")
 
-case class SoQLLocation(latitude: Double, longitude: Double) extends SoQLValue {
-  def typ = SoQLLocation
-}
-case object SoQLLocation extends SoQLType("location")
-
 case class SoQLJson(value: JValue) extends SoQLValue {
   def typ = SoQLJson
 }
