@@ -55,6 +55,10 @@ object SoQLFunctions {
     Seq(VariableType("a"), VariableType("b")), None, FixedType(SoQLBoolean))
   val Extent = Function("extent", FunctionName("extent"), Map ("a" -> GeospatialLike),
     Seq(VariableType("a")), None, FixedType(SoQLMultiPolygon), isAggregate = true)
+  val ConcaveHull = Function("concave_hull", FunctionName("concave_hull"), Map ("a" -> GeospatialLike, "b" -> RealNumLike),
+    Seq(VariableType("a"), VariableType("b")), None, FixedType(SoQLMultiPolygon), isAggregate = true)
+  val ConvexHull = Function("convex_hull", FunctionName("convex_hull"), Map ("a" -> GeospatialLike),
+    Seq(VariableType("a")), None, FixedType(SoQLMultiPolygon), isAggregate = true)
   val Intersects = Function("intersects", FunctionName("intersects"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), None, FixedType(SoQLBoolean))
 
