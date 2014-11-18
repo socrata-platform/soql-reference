@@ -10,17 +10,16 @@ object SoqlTypes {
     },
     libraryDependencies <++= (scalaVersion) { sv =>
       Seq(
-        "joda-time" % "joda-time" % "2.1",
-        "org.joda" % "joda-convert" % "1.2",
-        "com.rojoma" %% "rojoma-json" % rojomaJsonVersion(sv),
-        "org.bouncycastle" % "bcprov-jdk15on" % "1.48",
-        "org.geotools" % "gt-geojson" % "11.0",
-        "commons-io" % "commons-io" % "1.4",
-
         // Only used by serialization
-        "com.google.protobuf" % "protobuf-java" % "2.4.1" % "optional",
-
-        "org.scalacheck" %% "scalacheck" % scalaCheckVersion(sv) % "test"
+        "com.google.protobuf" % "protobuf-java"            % "2.4.1" % "optional",
+        "com.rojoma"         %% "rojoma-json"              % rojomaJsonVersion(sv),
+        "com.socrata"        %% "socrata-thirdparty-utils" % "2.6.2",
+        "com.vividsolutions"  % "jts"                      % "1.13",
+        "commons-io"          % "commons-io"               % "1.4",
+        "joda-time"           % "joda-time"                % "2.1",
+        "org.bouncycastle"    % "bcprov-jdk15on"           % "1.48",
+        "org.joda"            % "joda-convert"             % "1.2",
+        "org.scalacheck"     %% "scalacheck"               % scalaCheckVersion(sv) % "test"
       )
     }
   )

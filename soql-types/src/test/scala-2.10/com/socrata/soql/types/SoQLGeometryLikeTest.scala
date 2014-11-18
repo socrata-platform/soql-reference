@@ -30,7 +30,7 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
   }
 
   test("Line : WKT & JSON apply/unapply") {
-    val json = """{"type":"MultiLineString","coordinates":[[[100,0.123456],[101,1]],[[102,2],[103,3]]]}"""
+    val json = """{"type":"MultiLineString","coordinates":[[[100.0,0.123456],[101.0,1.0]],[[102.0,2.0],[103.0,3.0]]]}"""
     val wkt = "MULTILINESTRING ((100 0.123456, 101 1), (102 2, 103 3))"
     val geoms = Seq(SoQLMultiLine.JsonRep.unapply(json), SoQLMultiLine.WktRep.unapply(wkt))
 
@@ -53,7 +53,10 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
   }
 
   test("Polygon : WKT & JSON apply/unapply") {
-    val json = """{"type":"MultiPolygon","coordinates":[[[[40,40],[20,45.123456],[45,30],[40,40]]],[[[20,35],[10,30],[10,10],[30,5],[45,20],[20,35]],[[30,20],[20,15],[20,25],[30,20]]]]}"""
+    val json =
+      """{"type":"MultiPolygon","coordinates":[[[[40.0,40.0],[20.0,45.123456],[45.0,30.0],[40.0,40.0]]],
+        |                                      [[[20.0,35.0],[10.0,30.0],[10.0,10.0],[30.0,5.0],[45.0,20.0],[20.0,35.0]],
+        |                                       [[30.0,20.0],[20.0,15.0],[20.0,25.0],[30.0,20.0]]]]}""".stripMargin
     val wkt = "MULTIPOLYGON (((40 40, 20 45.123456, 45 30, 40 40)), ((20 35, 10 30, 10 10, 30 5, 45 20, 20 35), (30 20, 20 15, 20 25, 30 20)))"
     val geoms = Seq(SoQLMultiPolygon.JsonRep.unapply(json), SoQLMultiPolygon.WktRep.unapply(wkt))
 
@@ -82,7 +85,7 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
     val wkt2 = SoQLMultiPolygon.WktRep(geoms.last.get)
 
     json2 must not be { 'empty }
-    json2 must equal { json }
+    json2 must equal { json.replaceAll("""\s""", "") }
     wkt2 must not be { 'empty }
     wkt2 must equal { wkt }
   }
