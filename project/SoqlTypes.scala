@@ -4,10 +4,7 @@ import Keys._
 object SoqlTypes {
   lazy val settings: Seq[Setting[_]] = BuildSettings.projectSettings() ++ Seq(
     crossScalaVersions += "2.8.1",
-    resolvers <++= (scalaVersion) { sv =>
-      oldRojomaJsonRepo(sv) ++
-      Seq("Open Source Geospatial Foundation Repository" at "http://download.osgeo.org/webdav/geotools")
-    },
+    resolvers <++= (scalaVersion) { sv => oldRojomaJsonRepo(sv) },
     libraryDependencies <++= (scalaVersion) { sv =>
       Seq(
         // Only used by serialization
