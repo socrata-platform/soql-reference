@@ -1,29 +1,20 @@
 package com.socrata.soql.types
 
+import com.rojoma.json.io.{CompactJsonWriter, JsonReader}
+import com.socrata.thirdparty.geojson.JtsCodecs
 import com.vividsolutions.jts.geom.{Geometry, GeometryFactory}
 import com.vividsolutions.jts.io.{WKBWriter, WKBReader, WKTReader}
-import java.io.StringWriter
-import org.apache.commons.io.IOUtils
-import org.geotools.geojson.geom.GeometryJSON
 import scala.util.Try
 
 trait SoQLGeometryLike[T <: Geometry] {
-  final val GEO_PRECISION = 6
-
   protected val Treified: Class[T]
 
   object JsonRep {
-    def unapply(text: String): Option[T] = {
-      val json = new GeometryJSON
-      Try(Treified.cast(json.read(IOUtils.toInputStream(text)))).toOption
-    }
+    def unapply(text: String): Option[T] =
+      JtsCodecs.geoCodec.decode(JsonReader.fromString(text)).map(Treified.cast)
 
-    def apply(geom: T): String = {
-      val json = new GeometryJSON(GEO_PRECISION)
-      val sw = new StringWriter
-      json.write(geom, sw)
-      sw.toString
-    }
+    def apply(geom: T): String =
+      CompactJsonWriter.toString(JtsCodecs.geoCodec.encode(geom))
   }
 
   object WktRep {
