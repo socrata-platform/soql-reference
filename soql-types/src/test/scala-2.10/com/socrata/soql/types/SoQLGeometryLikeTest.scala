@@ -137,7 +137,7 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
     SoQLPoint.WktRep.unapply("MULTIPOLYGON (((1 1, 2 1, 2 2, 1 2, 1 1)))") must be (None)
   }
 
-  test("JSON parser handles non-floating point numbers") {
+  test("JSON parser handles non floating point numbers") {
     val json = """{"type":"Point","coordinates":[47,-122]}"""
     val geom = SoQLPoint.JsonRep.unapply(json)
 
