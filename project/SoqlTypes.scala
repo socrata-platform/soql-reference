@@ -4,21 +4,20 @@ import Keys._
 object SoqlTypes {
   lazy val settings: Seq[Setting[_]] = BuildSettings.projectSettings() ++ Seq(
     crossScalaVersions += "2.8.1",
-    resolvers <++= (scalaVersion) { sv => oldRojomaJsonRepo(sv) },
-    libraryDependencies <++= (scalaVersion) { sv =>
+    resolvers ++= oldRojomaJsonRepo(scalaVersion.value),
+    libraryDependencies ++=
       Seq(
         // Only used by serialization
         "com.google.protobuf" % "protobuf-java"            % "2.4.1" % "optional",
-        "com.rojoma"         %% "rojoma-json"              % rojomaJsonVersion(sv),
+        "com.rojoma"         %% "rojoma-json"              % rojomaJsonVersion(scalaVersion.value),
         "com.socrata"        %% "socrata-thirdparty-utils" % "2.6.2",
         "com.vividsolutions"  % "jts"                      % "1.13",
         "commons-io"          % "commons-io"               % "1.4",
         "joda-time"           % "joda-time"                % "2.1",
         "org.bouncycastle"    % "bcprov-jdk15on"           % "1.48",
         "org.joda"            % "joda-convert"             % "1.2",
-        "org.scalacheck"     %% "scalacheck"               % scalaCheckVersion(sv) % "test"
+        "org.scalacheck"     %% "scalacheck"               % scalaCheckVersion(scalaVersion.value) % "test"
       )
-    }
   )
 
   def oldRojomaJsonRepo(scalaVersion: String) = scalaVersion match {
