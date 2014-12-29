@@ -12,30 +12,37 @@ object TestFunctions {
 
   private val Ordered = TestTypeConversions.typeParameterUniverse.toSet[Any] // might want to narrow this down
   private val NumLike = Set[Any](TestNumber, TestDouble, TestMoney)
+  private val AllTypes = SoQLType.typesByName.values.toSet[Any]
 
-  val Concat = Function("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), None, FixedType(TestText))
-  val Gt = Function(">", SpecialFunctions.Operator(">"), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), None, FixedType(TestBoolean))
-  val Lt = Function("<", SpecialFunctions.Operator("<"), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), None, FixedType(TestBoolean))
+  val Concat = Function("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(TestText))
+  val Gt = Function(">", SpecialFunctions.Operator(">"), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
+  val Lt = Function("<", SpecialFunctions.Operator("<"), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
 
-  val Max = Function("max", FunctionName("max"), Map("a"->Ordered), Seq(VariableType("a")), None, VariableType("a"), isAggregate = true)
-  val Sum = Function("sum", FunctionName("sum"), Map("a"->NumLike), Seq(VariableType("a")), None, VariableType("a"), isAggregate = true)
-  val CountStar = new MonomorphicFunction("count(*)", SpecialFunctions.StarFunc("count"), Seq(), None, TestNumber, isAggregate = true).function
+  val Max = Function("max", FunctionName("max"), Map("a"->Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
+  val Sum = Function("sum", FunctionName("sum"), Map("a"->NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
+  val CountStar = new MonomorphicFunction("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, TestNumber, isAggregate = true).function
 
-  val NumberToMoney = new MonomorphicFunction("number to money", SpecialFunctions.Operator("to_money"), Seq(TestNumber), None, TestMoney).function
-  val NumberToDouble = new MonomorphicFunction("number to double", SpecialFunctions.Operator("to_double"), Seq(TestNumber), None, TestDouble).function
+  val NumberToMoney = new MonomorphicFunction("number to money", SpecialFunctions.Operator("to_money"), Seq(TestNumber), Seq.empty, TestMoney).function
+  val NumberToDouble = new MonomorphicFunction("number to double", SpecialFunctions.Operator("to_double"), Seq(TestNumber), Seq.empty, TestDouble).function
 
   val castIdentities = for((n, t) <- TestType.typesByName.toSeq) yield {
-    Function(n.caseFolded + "::" + n.caseFolded, SpecialFunctions.Cast(n), Map.empty, Seq(FixedType(t)), None, FixedType(t))
+    Function(n.caseFolded + "::" + n.caseFolded, SpecialFunctions.Cast(n), Map.empty, Seq(FixedType(t)), Seq.empty, FixedType(t))
   }
 
-  val NumberToText = new MonomorphicFunction("number to text", SpecialFunctions.Cast(TestText.name), Seq(TestNumber), None, TestText).function
-  val TextToNumber = new MonomorphicFunction("text to number", SpecialFunctions.Cast(TestNumber.name), Seq(TestText), None, TestNumber).function
+  val NumberToText = new MonomorphicFunction("number to text", SpecialFunctions.Cast(TestText.name), Seq(TestNumber), Seq.empty, TestText).function
+  val TextToNumber = new MonomorphicFunction("text to number", SpecialFunctions.Cast(TestNumber.name), Seq(TestText), Seq.empty, TestNumber).function
 
-  val Prop = new MonomorphicFunction(".", SpecialFunctions.Subscript, Seq(TestObject, TestText), None, TestJson).function
-  val Index = new MonomorphicFunction("[]", SpecialFunctions.Subscript, Seq(TestArray, TestNumber), None, TestJson).function
+  val Prop = new MonomorphicFunction(".", SpecialFunctions.Subscript, Seq(TestObject, TestText), Seq.empty, TestJson).function
+  val Index = new MonomorphicFunction("[]", SpecialFunctions.Subscript, Seq(TestArray, TestNumber), Seq.empty, TestJson).function
 
-  val JsonToText = new MonomorphicFunction("json to text", SpecialFunctions.Cast(TestText.name), Seq(TestJson), None, TestText).function
-  val JsonToNumber = new MonomorphicFunction("json to Number", SpecialFunctions.Cast(TestNumber.name), Seq(TestJson), None, TestNumber).function
+  val JsonToText = new MonomorphicFunction("json to text", SpecialFunctions.Cast(TestText.name), Seq(TestJson), Seq.empty, TestText).function
+  val JsonToNumber = new MonomorphicFunction("json to Number", SpecialFunctions.Cast(TestNumber.name), Seq(TestJson), Seq.empty, TestNumber).function
+
+  val Case = Function("case", FunctionName("case"),
+    Map("a" ->  AllTypes),
+    Seq(FixedType(SoQLBoolean), VariableType("a")),
+    Seq(FixedType(SoQLBoolean), VariableType("a")),
+    VariableType("a"))
 
   def potentialAccessors = for {
     method <- getClass.getMethods
