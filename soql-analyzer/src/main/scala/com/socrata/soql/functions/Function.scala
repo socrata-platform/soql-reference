@@ -17,12 +17,12 @@ case class Function[+Type](identity: String,
                            name: FunctionName,
                            constraints: Map[String, Any => Boolean /* ick, but without Set being covariant... */],
                            parameters: Seq[TypeLike[Type]],
-                           repeated: Option[TypeLike[Type]],
+                           repeated: Seq[TypeLike[Type]],
                            result: TypeLike[Type],
                            isAggregate: Boolean = false)  {
 
   val minArity = parameters.length
-  def isVariadic = repeated.isDefined
+  def isVariadic = repeated.nonEmpty
 
   lazy val typeParameters: Set[String] =
     (parameters ++ List(result) ++ repeated).collect {
