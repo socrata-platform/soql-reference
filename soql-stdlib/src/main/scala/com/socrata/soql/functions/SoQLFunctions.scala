@@ -148,7 +148,7 @@ object SoQLFunctions {
   val TextToRowVersion = new MonomorphicFunction("text to rowver", SpecialFunctions.Cast(SoQLVersion.name), Seq(SoQLText), Seq.empty, SoQLVersion).function
 
   val Case = Function("case", FunctionName("case"),
-    Map("a" ->  AllTypes),
+    Map("a" -> AllTypes),
     Seq(FixedType(SoQLBoolean), VariableType("a")),
     Seq(FixedType(SoQLBoolean), VariableType("a")),
     VariableType("a"))

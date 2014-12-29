@@ -39,7 +39,7 @@ object TestFunctions {
   val JsonToNumber = new MonomorphicFunction("json to Number", SpecialFunctions.Cast(TestNumber.name), Seq(TestJson), Seq.empty, TestNumber).function
 
   val Case = Function("case", FunctionName("case"),
-    Map("a" ->  AllTypes),
+    Map("a" -> AllTypes),
     Seq(FixedType(SoQLBoolean), VariableType("a")),
     Seq(FixedType(SoQLBoolean), VariableType("a")),
     VariableType("a"))
