@@ -1,7 +1,7 @@
 package com.socrata.soql.types.obfuscation
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.MustMatchers
+import org.scalatest.MustMatchers
 import org.scalatest.prop.PropertyChecks
 
 class QuadifierTest extends FunSuite with MustMatchers with PropertyChecks {

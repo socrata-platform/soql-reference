@@ -1,5 +1,6 @@
 package com.socrata.soql.parsing
 
+import scala.reflect.ClassTag
 import scala.util.parsing.combinator.{Parsers, PackratParsers}
 import util.parsing.input.Position
 
@@ -73,8 +74,8 @@ abstract class AbstractParser extends Parsers with PackratParsers {
   implicit override def accept(t: Elem): Parser[Elem] =
     acceptIf(_ == t)(_ => errors.missingKeywords(t))
 
-  def accept[T <: Elem](implicit mfst: ClassManifest[T]): Parser[T] =
-    elem(mfst.erasure.getName, mfst.erasure.isInstance _) ^^(_.asInstanceOf[T])
+  def accept[T <: Elem](implicit mfst: ClassTag[T]): Parser[T] =
+    elem(mfst.runtimeClass.getName, mfst.runtimeClass.isInstance _) ^^(_.asInstanceOf[T])
 
   val eof = new Parser[Unit] {
     def apply(in: Input) =

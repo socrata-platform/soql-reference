@@ -2,7 +2,7 @@ package com.socrata.soql.types
 
 import com.vividsolutions.jts.geom.Polygon
 import org.scalatest.FunSuite
-import org.scalatest.matchers.MustMatchers
+import org.scalatest.MustMatchers
 
 class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
   test("Point : WKT & JSON apply/unapply") {
@@ -13,10 +13,10 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
     geoms.foreach { geom =>
       geom must not be (None)
       geom.get.getX must be {
-        47.123456 plusOrMinus 0.0000005
+        47.123456 +- 0.0000005
       }
       geom.get.getY must be {
-        -122.123456 plusOrMinus 0.0000005
+        -122.123456 +- 0.0000005
       }
     }
 

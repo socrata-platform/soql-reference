@@ -3,7 +3,7 @@ package com.socrata.soql.types
 
 import com.google.protobuf.{CodedInputStream, CodedOutputStream}
 import com.ibm.icu.util.CaseInsensitiveString
-import com.rojoma.json.ast.{JValue, JArray, JObject}
+import com.rojoma.json.v3.ast.{JValue, JArray, JObject}
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.types.obfuscation.{Obfuscator, CryptProvider}
 import com.vividsolutions.jts.geom.{MultiLineString, MultiPolygon, Point}

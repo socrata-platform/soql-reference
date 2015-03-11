@@ -3,8 +3,7 @@ package com.socrata.soql.mapping
 import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.parsing.StandaloneParser
 import org.scalatest.{Assertions, FunSuite}
-import org.scalatest.matchers.MustMatchers
-
+import org.scalatest.MustMatchers
 
 class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
 
@@ -24,9 +23,9 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
     val s =
       parser.selection("date_trunc_ym(purple_date) AS crime_date, ward")
 
-    evaluating {
+    a [NoSuchElementException] must be thrownBy {
       mapper.mapSelection(s)
-    } must produce [NoSuchElementException]
+    }
   }
 
   test("Selection mapped") {
