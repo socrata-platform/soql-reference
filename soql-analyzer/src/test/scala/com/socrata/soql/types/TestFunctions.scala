@@ -22,7 +22,7 @@ object TestFunctions {
   val Sum = Function("sum", FunctionName("sum"), Map("a"->NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
   val CountStar = new MonomorphicFunction("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, TestNumber, isAggregate = true).function
 
-  val Magnitude = Function("magnitude", FunctionName("magnitude"), Map("a"->NumLike, "b"->NumLike), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("b"))
+  val SignedMagnitude10 = Function("signed_magnitude_10", FunctionName("signed_magnitude_10"), Map("a"->NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
 
   val NumberToMoney = new MonomorphicFunction("number to money", SpecialFunctions.Operator("to_money"), Seq(TestNumber), Seq.empty, TestMoney).function
   val NumberToDouble = new MonomorphicFunction("number to double", SpecialFunctions.Operator("to_double"), Seq(TestNumber), Seq.empty, TestDouble).function
