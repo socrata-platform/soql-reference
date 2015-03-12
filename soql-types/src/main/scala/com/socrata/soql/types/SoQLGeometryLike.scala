@@ -1,6 +1,6 @@
 package com.socrata.soql.types
 
-import com.rojoma.json.io.{CompactJsonWriter, JsonReader}
+import com.rojoma.json.v3.io.{CompactJsonWriter, JsonReader}
 import com.socrata.thirdparty.geojson.JtsCodecs
 import com.vividsolutions.jts.geom.{Geometry, GeometryFactory}
 import com.vividsolutions.jts.io.{WKBWriter, WKBReader, WKTReader}
@@ -11,7 +11,7 @@ trait SoQLGeometryLike[T <: Geometry] {
 
   object JsonRep {
     def unapply(text: String): Option[T] =
-      JtsCodecs.geoCodec.decode(JsonReader.fromString(text)).map(Treified.cast)
+      JtsCodecs.geoCodec.decode(JsonReader.fromString(text)).right.toOption.map(Treified.cast)
 
     def apply(geom: T): String =
       CompactJsonWriter.toString(JtsCodecs.geoCodec.encode(geom))

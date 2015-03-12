@@ -3,7 +3,7 @@ package com.socrata.soql
 import scala.util.parsing.input.NoPosition
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.MustMatchers
+import org.scalatest.MustMatchers
 
 import com.socrata.soql.environment.{ColumnName, DatasetContext}
 import com.socrata.soql.parsing.Parser

@@ -1,7 +1,7 @@
 package com.socrata.soql.types
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.MustMatchers
+import org.scalatest.MustMatchers
 
 class SoQLValueTest extends FunSuite with MustMatchers {
   test("SoQLValue is 1:1 with SoQLType, and its typ fields are accurate") {

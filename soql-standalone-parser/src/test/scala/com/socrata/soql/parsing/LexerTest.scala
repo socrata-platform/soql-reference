@@ -1,7 +1,7 @@
 package com.socrata.soql.parsing
 
 import org.scalatest._
-import org.scalatest.matchers.MustMatchers
+import org.scalatest.MustMatchers
 
 import com.socrata.soql.tokens._
 import com.socrata.soql.parsing.standalone_exceptions.UnterminatedString
@@ -44,7 +44,7 @@ class LexerTest extends WordSpec with MustMatchers {
     }
 
     "forbid newlines in java-style strings" in {
-      evaluating { lex("\"\n\"") } must produce[UnterminatedString]
+      an [UnterminatedString] must be thrownBy { lex("\"\n\"") }
     }
 
     "allow newlines in sql-style strings" in {

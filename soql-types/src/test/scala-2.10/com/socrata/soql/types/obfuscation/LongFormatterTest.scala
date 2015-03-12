@@ -1,7 +1,7 @@
 package com.socrata.soql.types.obfuscation
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.MustMatchers
+import org.scalatest.MustMatchers
 import org.scalatest.prop.PropertyChecks
 
 class LongFormatterTest extends FunSuite with MustMatchers with PropertyChecks {
@@ -26,9 +26,9 @@ class LongFormatterTest extends FunSuite with MustMatchers with PropertyChecks {
   test("Deformat rejects suffixes") {
     forAll { (x: Long, suffix: String) =>
       whenever(suffix != "") {
-        evaluating {
+        an [IllegalArgumentException] must be thrownBy {
           LongFormatter.deformatEx(LongFormatter.format(x) + suffix) must equal (x)
-        } must produce[IllegalArgumentException]
+        }
       }
     }
   }
