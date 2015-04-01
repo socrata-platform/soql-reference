@@ -1,6 +1,7 @@
 package com.socrata.soql.types
 
 import com.vividsolutions.jts.geom.Polygon
+import javax.xml.bind.DatatypeConverter.parseBase64Binary
 import org.scalatest.FunSuite
 import org.scalatest.MustMatchers
 
@@ -27,6 +28,30 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
     json2 must equal { json }
     wkt2 must not be { 'empty }
     wkt2 must equal { wkt }
+  }
+
+  test("Point: WKB & WKB64 apply/unapply") {
+    val wkb64 = "AAAAAAHAPgpa8K4hcEBITaQDgJ5U"
+    val wkb = parseBase64Binary(wkb64)
+    val geoms = Seq(SoQLPoint.Wkb64Rep.unapply(wkb64), SoQLPoint.WkbRep.unapply(wkb))
+
+    geoms.foreach { geom =>
+      geom must not be (None)
+      geom.get.getX must be {
+        -30.04045 +- 0.000001
+      }
+      geom.get.getY must be {
+        48.606567 +- 0.000001
+      }
+    }
+
+    val wkb64_2 = SoQLPoint.Wkb64Rep(geoms.last.get)
+    val wkb2 = SoQLPoint.WkbRep(geoms.last.get)
+
+    wkb64_2 must not have size { 0 }
+    wkb64_2 must equal { wkb64 }
+    wkb2 must not have size { 0 }
+    wkb2 must equal { wkb }
   }
 
   test("Line : WKT & JSON apply/unapply") {

@@ -4,6 +4,7 @@ import com.rojoma.json.v3.io.{CompactJsonWriter, JsonReader}
 import com.socrata.thirdparty.geojson.JtsCodecs
 import com.vividsolutions.jts.geom.{Geometry, GeometryFactory}
 import com.vividsolutions.jts.io.{WKBWriter, WKBReader, WKTReader}
+import javax.xml.bind.DatatypeConverter.{parseBase64Binary, printBase64Binary}
 import scala.util.Try
 
 trait SoQLGeometryLike[T <: Geometry] {
@@ -44,6 +45,12 @@ trait SoQLGeometryLike[T <: Geometry] {
       val writer = new WKBWriter
       writer.write(geom)
     }
+  }
+
+  // Fast Base64 WKB representation (for CJSON transport)
+  object Wkb64Rep {
+    def unapply(text: String): Option[T] = WkbRep.unapply(parseBase64Binary(text))
+    def apply(geom: T): String           = printBase64Binary(WkbRep.apply(geom))
   }
 
   object EWktRep {
