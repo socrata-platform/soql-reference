@@ -9,6 +9,10 @@ import scala.util.Try
 trait SoQLGeometryLike[T <: Geometry] {
   protected val Treified: Class[T]
 
+  private def threadLocal[T](init: => T) = new java.lang.ThreadLocal[T] {
+    override def initialValue(): T = init
+  }
+
   object JsonRep {
     def unapply(text: String): Option[T] =
       JtsCodecs.geoCodec.decode(JsonReader.fromString(text)).right.toOption.map(Treified.cast)
@@ -18,20 +22,22 @@ trait SoQLGeometryLike[T <: Geometry] {
   }
 
   object WktRep {
+    val gf = threadLocal { new GeometryFactory }
+    val reader = threadLocal { new WKTReader(gf.get) }
+
     def unapply(text: String): Option[T] = {
-      val gf = new GeometryFactory
-      val reader = new WKTReader(gf)
-      Try(Treified.cast(reader.read(text))).toOption
+      Try(Treified.cast(reader.get.read(text))).toOption
     }
 
     def apply(geom: T): String = geom.toString
   }
 
   object WkbRep {
+    val gf = threadLocal { new GeometryFactory }
+    val reader = threadLocal { new WKBReader(gf.get) }
+
     def unapply(bytes: Array[Byte]): Option[T] = {
-      val gf = new GeometryFactory
-      val reader = new WKBReader(gf)
-      Try(Treified.cast(reader.read(bytes))).toOption
+      Try(Treified.cast(reader.get.read(bytes))).toOption
     }
 
     def apply(geom: T): Array[Byte] = {
