@@ -251,13 +251,6 @@ case object SoQLMultiPolygon extends {
   protected val Treified = classOf[MultiPolygon]
 } with SoQLType("multipolygon") with SoQLGeometryLike[MultiPolygon]
 
-// The bytes in SoQLBinaryGeometry are supposed to be WKB
-case class SoQLBinaryGeometry(value: Array[Byte]) extends SoQLValue {
-  def typ = SoQLBinaryGeometry
-}
-
-case object SoQLBinaryGeometry extends SoQLType("binarygeometry")
-
 case object SoQLNull extends SoQLType("null") with SoQLValue {
   override def isPassableTo(that: SoQLAnalysisType) = true
   def typ = this
