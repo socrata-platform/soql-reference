@@ -48,6 +48,7 @@ trait SoQLGeometryLike[T <: Geometry] {
   }
 
   // Fast Base64 WKB representation (for CJSON transport)
+  // See http://java-performance.info/base64-encoding-and-decoding-performance/
   object Wkb64Rep {
     def unapply(text: String): Option[T] = WkbRep.unapply(parseBase64Binary(text))
     def apply(geom: T): String           = printBase64Binary(WkbRep.apply(geom))
