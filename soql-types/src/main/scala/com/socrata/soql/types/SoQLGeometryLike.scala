@@ -4,10 +4,15 @@ import com.rojoma.json.v3.io.{CompactJsonWriter, JsonReader}
 import com.socrata.thirdparty.geojson.JtsCodecs
 import com.vividsolutions.jts.geom.{Geometry, GeometryFactory}
 import com.vividsolutions.jts.io.{WKBWriter, WKBReader, WKTReader}
+import javax.xml.bind.DatatypeConverter.{parseBase64Binary, printBase64Binary}
 import scala.util.Try
 
 trait SoQLGeometryLike[T <: Geometry] {
   protected val Treified: Class[T]
+
+  private def threadLocal[T](init: => T) = new java.lang.ThreadLocal[T] {
+    override def initialValue(): T = init
+  }
 
   object JsonRep {
     def unapply(text: String): Option[T] =
@@ -18,26 +23,35 @@ trait SoQLGeometryLike[T <: Geometry] {
   }
 
   object WktRep {
+    val gf = threadLocal { new GeometryFactory }
+    val reader = threadLocal { new WKTReader(gf.get) }
+
     def unapply(text: String): Option[T] = {
-      val gf = new GeometryFactory
-      val reader = new WKTReader(gf)
-      Try(Treified.cast(reader.read(text))).toOption
+      Try(Treified.cast(reader.get.read(text))).toOption
     }
 
     def apply(geom: T): String = geom.toString
   }
 
   object WkbRep {
+    val gf = threadLocal { new GeometryFactory }
+    val reader = threadLocal { new WKBReader(gf.get) }
+
     def unapply(bytes: Array[Byte]): Option[T] = {
-      val gf = new GeometryFactory
-      val reader = new WKBReader(gf)
-      Try(Treified.cast(reader.read(bytes))).toOption
+      Try(Treified.cast(reader.get.read(bytes))).toOption
     }
 
     def apply(geom: T): Array[Byte] = {
       val writer = new WKBWriter
       writer.write(geom)
     }
+  }
+
+  // Fast Base64 WKB representation (for CJSON transport)
+  // See http://java-performance.info/base64-encoding-and-decoding-performance/
+  object Wkb64Rep {
+    def unapply(text: String): Option[T] = WkbRep.unapply(parseBase64Binary(text))
+    def apply(geom: T): String           = printBase64Binary(WkbRep.apply(geom))
   }
 
   object EWktRep {
