@@ -62,6 +62,8 @@ object SoQLFunctions {
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiPolygon), isAggregate = true)
   val Intersects = Function("intersects", FunctionName("intersects"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))
+  val DistanceInMeters = Function("distance_in_meters", FunctionName("distance_in_meters"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLNumber))
 
   val IsNull = Function("is null", SpecialFunctions.IsNull, Map.empty, Seq(VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
   val IsNotNull = Function("is not null", SpecialFunctions.IsNotNull, Map.empty, Seq(VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
