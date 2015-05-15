@@ -25,7 +25,7 @@ object SoQLFunctions {
   )
   private val NumLike = Set[Any](SoQLNumber, SoQLDouble, SoQLMoney)
   private val RealNumLike = Set[Any](SoQLNumber, SoQLDouble)
-  private val GeospatialLike = Set[Any](SoQLPoint, SoQLMultiLine, SoQLMultiPolygon)
+  private val GeospatialLike = Set[Any](SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine, SoQLPolygon, SoQLMultiPolygon)
   private val AllTypes = SoQLType.typesByName.values.toSet[Any]
 
   val TextToFixedTimestamp = new MonomorphicFunction("text to fixed timestamp", SpecialFunctions.Cast(SoQLFixedTimestamp.name), Seq(SoQLText), Seq.empty, SoQLFixedTimestamp).function
@@ -33,7 +33,10 @@ object SoQLFunctions {
   val TextToDate = new MonomorphicFunction("text to date", SpecialFunctions.Cast(SoQLDate.name), Seq(SoQLText), Seq.empty, SoQLDate).function
   val TextToTime = new MonomorphicFunction("text to time", SpecialFunctions.Cast(SoQLTime.name), Seq(SoQLText), Seq.empty, SoQLTime).function
   val TextToPoint = new MonomorphicFunction("text to point", SpecialFunctions.Cast(SoQLPoint.name), Seq(SoQLText), Seq.empty, SoQLPoint).function
+  val TextToMultiPoint = new MonomorphicFunction("text to multi point", SpecialFunctions.Cast(SoQLMultiPoint.name), Seq(SoQLText), Seq.empty, SoQLMultiPoint).function
+  val TextToLine = new MonomorphicFunction("text to line", SpecialFunctions.Cast(SoQLLine.name), Seq(SoQLText), Seq.empty, SoQLLine).function
   val TextToMultiLine = new MonomorphicFunction("text to multi line", SpecialFunctions.Cast(SoQLMultiLine.name), Seq(SoQLText), Seq.empty, SoQLMultiLine).function
+  val TextToPolygon = new MonomorphicFunction("text to polygon", SpecialFunctions.Cast(SoQLPolygon.name), Seq(SoQLText), Seq.empty, SoQLPolygon).function
   val TextToMultiPolygon = new MonomorphicFunction("text to multi polygon", SpecialFunctions.Cast(SoQLMultiPolygon.name), Seq(SoQLText), Seq.empty, SoQLMultiPolygon).function
 
   val Concat = Function("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))

@@ -6,7 +6,7 @@ import com.ibm.icu.util.CaseInsensitiveString
 import com.rojoma.json.v3.ast.{JValue, JArray, JObject}
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.types.obfuscation.{Obfuscator, CryptProvider}
-import com.vividsolutions.jts.geom.{MultiLineString, MultiPolygon, Point}
+import com.vividsolutions.jts.geom.{MultiLineString, MultiPolygon, Point, Polygon, MultiPoint, LineString}
 import org.joda.time.{LocalTime, LocalDate, LocalDateTime, DateTime}
 import org.joda.time.format.ISODateTimeFormat
 
@@ -41,7 +41,8 @@ object SoQLType {
   // I still want to retain pre-2.10 compat.
   val typesByName = Seq(
     SoQLID, SoQLVersion, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
-    SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLJson, SoQLPoint, SoQLMultiLine, SoQLMultiPolygon
+    SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLJson, SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine,
+    SoQLPolygon, SoQLMultiPolygon
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
   }
@@ -250,6 +251,27 @@ case class SoQLMultiPolygon(value: MultiPolygon) extends SoQLValue {
 case object SoQLMultiPolygon extends {
   protected val Treified = classOf[MultiPolygon]
 } with SoQLType("multipolygon") with SoQLGeometryLike[MultiPolygon]
+
+case class SoQLPolygon(value: Polygon) extends SoQLValue {
+  def typ = SoQLPolygon
+}
+case object SoQLPolygon extends {
+  protected val Treified = classOf[Polygon]
+} with SoQLType("polygon") with SoQLGeometryLike[Polygon]
+
+case class SoQLMultiPoint(value: MultiPoint) extends SoQLValue {
+  def typ = SoQLMultiPoint
+}
+case object SoQLMultiPoint extends {
+  protected val Treified = classOf[MultiPoint]
+} with SoQLType("multipoint") with SoQLGeometryLike[MultiPoint]
+
+case class SoQLLine(value: LineString) extends SoQLValue {
+  def typ = SoQLLine
+}
+case object SoQLLine extends {
+  protected val Treified = classOf[LineString]
+} with SoQLType("line") with SoQLGeometryLike[LineString]
 
 case object SoQLNull extends SoQLType("null") with SoQLValue {
   override def isPassableTo(that: SoQLAnalysisType) = true
