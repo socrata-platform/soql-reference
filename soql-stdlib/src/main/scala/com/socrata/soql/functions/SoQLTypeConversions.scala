@@ -20,7 +20,10 @@ object SoQLTypeConversions {
     SoQLDate,
     SoQLTime,
     SoQLPoint,
+    SoQLMultiPoint,
+    SoQLLine,
     SoQLMultiLine,
+    SoQLPolygon,
     SoQLMultiPolygon,
     SoQLObject,
     SoQLArray,
@@ -53,8 +56,14 @@ object SoQLTypeConversions {
     Some(getMonomorphically(SoQLFunctions.TextToMoney))
   private val textToPointFunc =
     Some(SoQLFunctions.TextToPoint.monomorphic.getOrElse(sys.error("text to point conversion not monomorphic?")))
+  private val textToMultiPointFunc =
+    Some(SoQLFunctions.TextToMultiPoint.monomorphic.getOrElse(sys.error("text to multi point conversion not monomorphic?")))
+  private val textToLineFunc =
+    Some(SoQLFunctions.TextToLine.monomorphic.getOrElse(sys.error("text to line conversion not monomorphic?")))
   private val textToMultiLineFunc =
     Some(SoQLFunctions.TextToMultiLine.monomorphic.getOrElse(sys.error("text to multi line conversion not monomorphic?")))
+  private val textToPolygonFunc =
+    Some(SoQLFunctions.TextToPolygon.monomorphic.getOrElse((sys.error(("text to polygon conversion not monomorphic?")))))
   private val textToMultiPolygonFunc =
     Some(SoQLFunctions.TextToMultiPolygon.monomorphic.getOrElse(sys.error("text to multi polygon conversion not monomorphic?")))
 
@@ -93,8 +102,14 @@ object SoQLTypeConversions {
         textToMoneyFunc
       case (SoQLTextLiteral(s), SoQLPoint) if SoQLPoint.WktRep.unapply(s.toString).isDefined =>
         textToPointFunc
+      case (SoQLTextLiteral(s), SoQLMultiPoint) if SoQLMultiPoint.WktRep.unapply(s.toString).isDefined =>
+        textToMultiPointFunc
+      case (SoQLTextLiteral(s), SoQLLine) if SoQLLine.WktRep.unapply((s.toString)).isDefined =>
+        textToLineFunc
       case (SoQLTextLiteral(s), SoQLMultiLine) if SoQLMultiLine.WktRep.unapply(s.toString).isDefined =>
         textToMultiLineFunc
+      case (SoQLTextLiteral(s), SoQLPolygon) if SoQLPolygon.WktRep.unapply(s.toString).isDefined =>
+        textToPolygonFunc
       case (SoQLTextLiteral(s), SoQLMultiPolygon) if SoQLMultiPolygon.WktRep.unapply(s.toString).isDefined =>
         textToMultiPolygonFunc
       case _ =>

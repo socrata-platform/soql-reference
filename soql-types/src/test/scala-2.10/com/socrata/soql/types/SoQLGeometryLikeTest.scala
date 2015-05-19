@@ -54,7 +54,7 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
     wkb2 must equal { wkb }
   }
 
-  test("Line : WKT & JSON apply/unapply") {
+  test("MultiLine : WKT & JSON apply/unapply") {
     val json = """{"type":"MultiLineString","coordinates":[[[100.0,0.123456],[101.0,1.0]],[[102.0,2.0],[103.0,3.0]]]}"""
     val wkt = "MULTILINESTRING ((100 0.123456, 101 1), (102 2, 103 3))"
     val geoms = Seq(SoQLMultiLine.JsonRep.unapply(json), SoQLMultiLine.WktRep.unapply(wkt))
@@ -77,7 +77,7 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
     wkt2 must equal { wkt }
   }
 
-  test("Polygon : WKT & JSON apply/unapply") {
+  test("MultiPolygon : WKT & JSON apply/unapply") {
     val json =
       """{"type":"MultiPolygon","coordinates":[[[[40.0,40.0],[20.0,45.123456],[45.0,30.0],[40.0,40.0]]],
         |                                      [[[20.0,35.0],[10.0,30.0],[10.0,10.0],[30.0,5.0],[45.0,20.0],[20.0,35.0]],
@@ -114,6 +114,75 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
     wkt2 must not be { 'empty }
     wkt2 must equal { wkt }
   }
+
+
+  test("Polygon : WKT & JSON apply/unapply") {
+    val json =
+      """{"type" : "Polygon", "coordinates": [[[0.0, 0.0], [0.0, 20.0], [20.0, 20.0], [0.0, 0.0]]]}""".stripMargin
+    val wkt = "POLYGON ((0 0, 0 20, 20 20, 0 0))"
+    val polys = Seq(SoQLPolygon.JsonRep.unapply(json), SoQLPolygon.WktRep.unapply(wkt))
+    polys.foreach {
+      poly =>
+        poly must not be (None)
+
+        poly.get.getExteriorRing.getCoordinates.flatMap(coords => Seq(coords.x, coords.y)) must equal {
+          Array(0, 0, 0, 20, 20, 20, 0, 0)
+        }
+    }
+
+    val serializedJS = SoQLPolygon.JsonRep(polys.last.get)
+    val serializedWKT = SoQLPolygon.WktRep(polys.last.get)
+
+    serializedJS must equal { json.replaceAll("""\s""", "") }
+    serializedWKT must equal { wkt }
+
+  }
+
+  test("Multipoint : WKT & JSON apply/unapply") {
+    val json =
+      """{ "type": "MultiPoint", "coordinates": [ [0.0, 0.0], [0.0, 20.0], [20.0, 20.0]]}""".stripMargin
+    val wkt = "MULTIPOINT ((0 0), (0 20), (20 20))"
+    val pts = Seq(SoQLMultiPoint.JsonRep.unapply(json), SoQLMultiPoint.WktRep.unapply(wkt))
+    println(pts.toString)
+    pts.foreach {
+      pt =>
+        pt must not be (None)
+
+        pt.get.getCoordinates.flatMap(c => Seq(c.x, c.y)) must equal {
+          Array(0, 0, 0, 20, 20, 20)
+        }
+
+    }
+
+    val serializedJS = SoQLMultiPoint.JsonRep(pts.last.get)
+    val serializedWKT = SoQLMultiPoint.WktRep(pts.last.get)
+
+    serializedJS must equal { json.replaceAll("""\s""", "") }
+    serializedWKT must equal { wkt }
+
+  }
+
+  test("Line : WKT & JSON apply/unapply") {
+    val json =
+      """{"type" : "LineString", "coordinates": [[0.0, 0.0], [0.0, 20.0], [20.0, 20.0]]}""".stripMargin
+    val wkt = "LINESTRING (0 0, 0 20, 20 20)"
+    val lines = Seq(SoQLLine.JsonRep.unapply(json), SoQLLine.WktRep.unapply(wkt))
+    lines.foreach {
+      line =>
+        line must not be (None)
+        line.get.getCoordinates.flatMap(c => Seq(c.x, c.y)) must equal {
+          Array(0, 0, 0, 20, 20, 20)
+        }
+    }
+    val serializedJS = SoQLLine.JsonRep(lines.last.get)
+    val serializedWKT = SoQLLine.WktRep(lines.last.get)
+
+    serializedJS must equal { json.replaceAll("""\s""", "") }
+    serializedWKT must equal { wkt }
+
+  }
+
+
 
   test("Apply/unapply valid EWKT") {
     val ewkt = "SRID=4326;POINT (123 456)"
