@@ -1,34 +1,36 @@
 package com.socrata.soql.types
 
+import java.lang.reflect.Modifier
+
 import com.socrata.soql.ast.SpecialFunctions
 import com.socrata.soql.environment.FunctionName
-import java.lang.reflect.Modifier
-import com.socrata.soql.functions.{FixedType, VariableType, MonomorphicFunction, Function}
+import com.socrata.soql.functions.{FixedType, Function, MonomorphicFunction, VariableType}
 
 sealed abstract class TestFunctions
 
 object TestFunctions {
   private val log = org.slf4j.LoggerFactory.getLogger(classOf[TestFunctions])
 
-  private val Ordered = TestTypeConversions.typeParameterUniverse.toSet[Any] // might want to narrow this down
+  // TODO: might want to narrow this down
+  private val Ordered = TestTypeConversions.typeParameterUniverse.toSet[Any]
   private val NumLike = Set[Any](TestNumber, TestDouble, TestMoney)
   private val AllTypes = SoQLType.typesByName.values.toSet[Any]
 
   val Concat = Function("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(TestText))
-  val Gt = Function(">", SpecialFunctions.Operator(">"), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
-  val Lt = Function("<", SpecialFunctions.Operator("<"), Map("a"->Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
+  val Gt = Function(">", SpecialFunctions.Operator(">"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
+  val Lt = Function("<", SpecialFunctions.Operator("<"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
 
-  val Max = Function("max", FunctionName("max"), Map("a"->Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
-  val Sum = Function("sum", FunctionName("sum"), Map("a"->NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
+  val Max = Function("max", FunctionName("max"), Map("a" -> Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
+  val Sum = Function("sum", FunctionName("sum"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
   val CountStar = new MonomorphicFunction("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, TestNumber, isAggregate = true).function
 
-  val SignedMagnitude10 = Function("signed_magnitude_10", FunctionName("signed_magnitude_10"), Map("a"->NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
-  val SignedMagnitudeLinear = Function("signed_magnitude_linear", FunctionName("signed_magnitude_linear"), Map("a"->NumLike, "w"->NumLike), Seq(VariableType("a"), VariableType("w")), Seq.empty, VariableType("a"))
+  val SignedMagnitude10 = Function("signed_magnitude_10", FunctionName("signed_magnitude_10"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
+  val SignedMagnitudeLinear = Function("signed_magnitude_linear", FunctionName("signed_magnitude_linear"), Map("a" -> NumLike, "b" -> NumLike), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
 
   val NumberToMoney = new MonomorphicFunction("number to money", SpecialFunctions.Operator("to_money"), Seq(TestNumber), Seq.empty, TestMoney).function
   val NumberToDouble = new MonomorphicFunction("number to double", SpecialFunctions.Operator("to_double"), Seq(TestNumber), Seq.empty, TestDouble).function
 
-  val castIdentities = for((n, t) <- TestType.typesByName.toSeq) yield {
+  val castIdentities = for ((n, t) <- TestType.typesByName.toSeq) yield {
     Function(n.caseFolded + "::" + n.caseFolded, SpecialFunctions.Cast(n), Map.empty, Seq(FixedType(t)), Seq.empty, FixedType(t))
   }
 
@@ -52,7 +54,7 @@ object TestFunctions {
     if Modifier.isPublic(method.getModifiers) && method.getParameterTypes.length == 0
   } yield method
 
-  for(potentialAccessor <- potentialAccessors) {
+  for (potentialAccessor <- potentialAccessors) {
     assert(potentialAccessor.getReturnType != classOf[MonomorphicFunction[_]])
   }
 
