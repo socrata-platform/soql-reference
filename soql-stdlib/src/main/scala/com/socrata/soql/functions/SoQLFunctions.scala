@@ -85,6 +85,7 @@ object SoQLFunctions {
   val UnaryMinus = Function("unary -", SpecialFunctions.Operator("-"), Map("a"->NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
 
   val SignedMagnitude10 = Function("signed_magnitude_10", FunctionName("signed_magnitude_10"), Map("a"->NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
+  val SignedMagnitudeLinear = Function("signed_magnitude_linear", FunctionName("signed_magnitude_linear"), Map("a"->NumLike, "w"->NumLike), Seq(VariableType("a"), VariableType("w")), Seq.empty, VariableType("a"))
 
   val BinaryPlus = Function("+", SpecialFunctions.Operator("+"), Map("a"->NumLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"))
   val BinaryMinus = Function("-", SpecialFunctions.Operator("-"), Map("a"->NumLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"))
