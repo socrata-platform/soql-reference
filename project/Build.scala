@@ -43,4 +43,10 @@ object Build extends sbt.Build {
     file("soql-toy"),
     settings = SoqlToy.settings
   ) dependsOn(soqlStdlib)
+
+  lazy val soqlPack = Project(
+    "soql-pack",
+    file("soql-pack"),
+    settings = SoqlPack.settings
+  ) dependsOn (soqlTypes)
 }

@@ -1,0 +1,1 @@
+soql-reference provides type definitions and utilities such as analyzers and parsers for Socrata's SoQL query language.
