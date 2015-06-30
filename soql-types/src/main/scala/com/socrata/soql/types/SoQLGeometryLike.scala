@@ -36,14 +36,14 @@ trait SoQLGeometryLike[T <: Geometry] {
   object WkbRep {
     val gf = threadLocal { new GeometryFactory }
     val reader = threadLocal { new WKBReader(gf.get) }
+    val writer = threadLocal { new WKBWriter }
 
     def unapply(bytes: Array[Byte]): Option[T] = {
       Try(Treified.cast(reader.get.read(bytes))).toOption
     }
 
     def apply(geom: T): Array[Byte] = {
-      val writer = new WKBWriter
-      writer.write(geom)
+      writer.get.write(geom)
     }
   }
 
