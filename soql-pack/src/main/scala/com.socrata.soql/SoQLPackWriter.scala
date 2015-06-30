@@ -48,6 +48,15 @@ class SoQLPackWriter(schema: Seq[(String, SoQLType)],
     geoColumnIndices(0)
   }
 
+  val nullEncoder: PartialFunction[SoQLValue, Any] = {
+    case SoQLNull            => null
+    case null                => null
+  }
+
+  val encoders = schema.map { case (colName, colType) =>
+    SoQLPackEncoder.encoderByType(colType) orElse nullEncoder
+  }
+
   /**
    * Serializes the rows into SoQLPack binary format, writing it out to the ostream.
    * The caller must be responsible for closing the output stream.
@@ -70,21 +79,7 @@ class SoQLPackWriter(schema: Seq[(String, SoQLType)],
 
       for (row <- rows) {
         val values: Seq[Any] = (0 until row.length).map { i =>
-          // TODO: turn this logic into a MessagePackColumnRep
-          row(i) match {
-            case SoQLPoint(pt)       => wkbWriter.write(pt)
-            case SoQLMultiLine(ml)   => wkbWriter.write(ml)
-            case SoQLMultiPolygon(p) => wkbWriter.write(p)
-            case SoQLPolygon(p)      => wkbWriter.write(p)
-            case SoQLLine(l)         => wkbWriter.write(l)
-            case SoQLMultiPoint(mp)  => wkbWriter.write(mp)
-            case SoQLText(str)       => str
-            case SoQLNull            => null
-            case null                => null
-            case SoQLBoolean(bool)   => bool
-            // For anything else, we rely on the JsonColumnRep and translate from JValues
-            case other: SoQLValue    => ???
-          }
+          encoders(i)(row(i))
         }
         MsgPack.pack(values, dos)
       }
