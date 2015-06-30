@@ -8,13 +8,15 @@ class SoQLPackTest extends FunSuite with MustMatchers {
   val wkt1 = "POINT (47.123456 -122.123456)"
   val point1 = SoQLPoint.WktRep.unapply(wkt1).get
 
-  val schema1 = Seq("str" -> SoQLText,
+  val schema1 = Seq("id" -> SoQLID,
+                    "ver" -> SoQLVersion,
+                    "str" -> SoQLText,
                     "bool" -> SoQLBoolean,
                     "point" -> SoQLPoint)
 
   val data1: Seq[Array[SoQLValue]] = Seq(
-    Array(SoQLText("first"),  SoQLBoolean(true),  SoQLPoint(point1)),
-    Array(SoQLText("second"), SoQLBoolean(false), SoQLNull)
+    Array(SoQLID(1L), SoQLVersion(11L), SoQLText("first"),  SoQLBoolean(true),  SoQLPoint(point1)),
+    Array(SoQLID(2L), SoQLVersion(12L), SoQLText("second"), SoQLBoolean(false), SoQLNull)
   )
 
   def writeThenRead(writer: java.io.OutputStream => Unit)(reader: java.io.DataInputStream => Unit) {
@@ -40,7 +42,7 @@ class SoQLPackTest extends FunSuite with MustMatchers {
       w.write(os, data1.toIterator)
     } { dis =>
       val r = new SoQLPackIterator(dis)
-      r.geomIndex must equal (2)
+      r.geomIndex must equal (4)
       r.schema must equal (schema1)
       val outRows = r.toList
       outRows must have length (data1.length)

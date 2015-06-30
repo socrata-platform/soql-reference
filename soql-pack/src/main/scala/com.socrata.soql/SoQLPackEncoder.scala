@@ -14,7 +14,9 @@ object SoQLPackEncoder {
     SoQLLine         -> geomEncoder,
     SoQLMultiPoint   -> geomEncoder,
     SoQLText         -> { case SoQLText(str) => str },
-    SoQLBoolean      -> { case SoQLBoolean(bool) => bool }
+    SoQLBoolean      -> { case SoQLBoolean(bool) => bool },
+    SoQLID           -> { case SoQLID(long) => long },
+    SoQLVersion      -> { case SoQLVersion(long) => long }
   )
 
   lazy val geomEncoder: Encoder = {

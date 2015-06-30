@@ -2,6 +2,7 @@ package com.socrata.soql
 
 import com.socrata.soql.types._
 import com.vividsolutions.jts.geom.Geometry
+import org.velvia.MsgPackUtils._
 import scala.util.Try
 
 /**
@@ -19,8 +20,12 @@ object SoQLPackDecoder {
     SoQLMultiPoint   -> (decodeGeom(SoQLMultiPoint, _: Any).map(x => SoQLMultiPoint(x))),
     SoQLText         -> decodeBinaryString _,
     SoQLNull         -> (x => Some(SoQLNull)),
-    SoQLBoolean      -> decodeBoolean _
+    SoQLBoolean      -> decodeBoolean _,
+    SoQLID           -> (x => decodeLong(x).map(SoQLID(_))),
+    SoQLVersion      -> (x => decodeLong(x).map(SoQLVersion(_)))
   )
+
+  def decodeLong(item: Any): Option[Long] = Try(getLong(item)).toOption
 
   def decodeGeom[T <: Geometry](typ: SoQLGeometryLike[T], item: Any): Option[T] =
     typ.WkbRep.unapply(item.asInstanceOf[Array[Byte]])
