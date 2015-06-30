@@ -6,7 +6,7 @@ object Build extends sbt.Build {
     "soql",
     file("."),
     settings = BuildSettings.buildSettings
-  ) aggregate (soqlEnvironment, soqlParser, soqlAnalyzer, soqlTypes, soqlStdlib, soqlToy)
+  ) aggregate (soqlEnvironment, soqlParser, soqlAnalyzer, soqlTypes, soqlStdlib, soqlToy, soqlPack)
 
   lazy val soqlEnvironment = Project(
     "soql-environment",
