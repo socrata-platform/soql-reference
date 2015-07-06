@@ -2,6 +2,7 @@ package com.socrata.soql
 
 import com.socrata.soql.types._
 import com.vividsolutions.jts.geom.Polygon
+import java.math.{BigDecimal => BD}
 import org.scalatest.{FunSuite, MustMatchers}
 
 class SoQLPackTest extends FunSuite with MustMatchers {
@@ -17,6 +18,15 @@ class SoQLPackTest extends FunSuite with MustMatchers {
   val data1: Seq[Array[SoQLValue]] = Seq(
     Array(SoQLID(1L), SoQLVersion(11L), SoQLText("first"),  SoQLBoolean(true),  SoQLPoint(point1)),
     Array(SoQLID(2L), SoQLVersion(12L), SoQLText("second"), SoQLBoolean(false), SoQLNull)
+  )
+
+  val schema2 = Seq("num" -> SoQLNumber,
+                    "$" -> SoQLMoney,
+                    "dbl" -> SoQLDouble)
+
+  val data2: Seq[Array[SoQLValue]] = Seq(
+    Array(SoQLNumber(new BD(12345678901L)), SoQLMoney(new BD(9999)), SoQLDouble(0.1)),
+    Array(SoQLNumber(new BD(-123.456)),     SoQLMoney(new BD(9.99)), SoQLDouble(-99.0))
   )
 
   def writeThenRead(writer: java.io.OutputStream => Unit)(reader: java.io.DataInputStream => Unit) {
@@ -48,6 +58,19 @@ class SoQLPackTest extends FunSuite with MustMatchers {
       outRows must have length (data1.length)
       outRows(0) must equal (data1(0))
       outRows(1) must equal (data1(1))
+    }
+
+    writeThenRead { os =>
+      val w = new SoQLPackWriter(schema2)
+      w.write(os, data2.toIterator)
+    } { dis =>
+      val r = new SoQLPackIterator(dis)
+      r.geomIndex must equal (-1)
+      r.schema must equal (schema2)
+      val outRows = r.toList
+      outRows must have length (data2.length)
+      outRows(0) must equal (data2(0))
+      outRows(1) must equal (data2(1))
     }
   }
 }

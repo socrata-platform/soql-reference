@@ -16,7 +16,10 @@ object SoQLPackEncoder {
     SoQLText         -> { case SoQLText(str) => str },
     SoQLBoolean      -> { case SoQLBoolean(bool) => bool },
     SoQLID           -> { case SoQLID(long) => long },
-    SoQLVersion      -> { case SoQLVersion(long) => long }
+    SoQLVersion      -> { case SoQLVersion(long) => long },
+    SoQLNumber       -> { case SoQLNumber(bd) => encodeBigDecimal(bd) },
+    SoQLMoney        -> { case SoQLMoney(bd) => encodeBigDecimal(bd) },
+    SoQLDouble       -> { case SoQLDouble(dbl) => dbl }
   )
 
   lazy val geomEncoder: Encoder = {
@@ -27,4 +30,7 @@ object SoQLPackEncoder {
     case SoQLLine(l)         => SoQLLine.WkbRep(l)
     case SoQLMultiPoint(mp)  => SoQLMultiPoint.WkbRep(mp)
   }
+
+  def encodeBigDecimal(bd: java.math.BigDecimal): Any =
+    Array(bd.scale, bd.unscaledValue.toByteArray)
 }

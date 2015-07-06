@@ -2,6 +2,7 @@ package com.socrata.soql
 
 import com.socrata.soql.types._
 import com.vividsolutions.jts.geom.Geometry
+import java.math.BigDecimal
 import org.velvia.MsgPackUtils._
 import scala.util.Try
 
@@ -22,7 +23,10 @@ object SoQLPackDecoder {
     SoQLNull         -> (x => Some(SoQLNull)),
     SoQLBoolean      -> decodeBoolean _,
     SoQLID           -> (x => decodeLong(x).map(SoQLID(_))),
-    SoQLVersion      -> (x => decodeLong(x).map(SoQLVersion(_)))
+    SoQLVersion      -> (x => decodeLong(x).map(SoQLVersion(_))),
+    SoQLNumber       -> (x => decodeBigDecimal(x).map(SoQLNumber(_))),
+    SoQLMoney        -> (x => decodeBigDecimal(x).map(SoQLMoney(_))),
+    SoQLDouble       -> (x => Try(x.asInstanceOf[Double]).toOption.map(SoQLDouble(_)))
   )
 
   def decodeLong(item: Any): Option[Long] = Try(getLong(item)).toOption
@@ -36,4 +40,14 @@ object SoQLPackDecoder {
 
   def decodeBoolean(item: Any): Option[SoQLValue] =
     Some(SoQLBoolean(item.asInstanceOf[Boolean]))
+
+  def decodeBigDecimal(item: Any): Option[BigDecimal] = item match {
+    case Seq(scale: Byte, bytes: Array[Byte]) =>
+      Some(new BigDecimal(new java.math.BigInteger(bytes), scale.toInt))
+    case Seq(scale: Short, bytes: Array[Byte]) =>
+      Some(new BigDecimal(new java.math.BigInteger(bytes), scale.toInt))
+    case Seq(scale: Int, bytes: Array[Byte]) =>
+      Some(new BigDecimal(new java.math.BigInteger(bytes), scale))
+    case other: Any => None
+  }
 }
