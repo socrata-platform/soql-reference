@@ -3,6 +3,7 @@ package com.socrata.soql
 import com.socrata.soql.types._
 import com.vividsolutions.jts.geom.Polygon
 import java.math.{BigDecimal => BD}
+import org.joda.time.DateTime
 import org.scalatest.{FunSuite, MustMatchers}
 
 class SoQLPackTest extends FunSuite with MustMatchers {
@@ -71,6 +72,31 @@ class SoQLPackTest extends FunSuite with MustMatchers {
       outRows must have length (data2.length)
       outRows(0) must equal (data2(0))
       outRows(1) must equal (data2(1))
+    }
+  }
+
+  val dt1 = DateTime.parse("2015-03-22T12Z")
+  val dt2 = DateTime.parse("2015-03-22T12:00:00-08:00")
+
+  val schemaDT = Seq("dt" -> SoQLFixedTimestamp)
+
+  val dataDT: Seq[Array[SoQLValue]] = Seq(
+    Array(SoQLFixedTimestamp(dt1)),
+    Array(SoQLFixedTimestamp(dt2))
+  )
+
+  test("Can serialize SoQL rows with date time types to and from SoQLPack") {
+    writeThenRead { os =>
+      val w = new SoQLPackWriter(schemaDT)
+      w.write(os, dataDT.toIterator)
+    } { dis =>
+      val r = new SoQLPackIterator(dis)
+      r.geomIndex must equal (-1)
+      r.schema must equal (schemaDT)
+      val outRows = r.toList
+      outRows must have length (dataDT.length)
+      outRows(0) must equal (dataDT(0))
+      outRows(1) must equal (dataDT(1))
     }
   }
 }

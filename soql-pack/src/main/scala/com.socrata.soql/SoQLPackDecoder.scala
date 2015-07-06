@@ -3,6 +3,7 @@ package com.socrata.soql
 import com.socrata.soql.types._
 import com.vividsolutions.jts.geom.Geometry
 import java.math.BigDecimal
+import org.joda.time.{DateTime, DateTimeZone}
 import org.velvia.MsgPackUtils._
 import scala.util.Try
 
@@ -26,7 +27,8 @@ object SoQLPackDecoder {
     SoQLVersion      -> (x => decodeLong(x).map(SoQLVersion(_))),
     SoQLNumber       -> (x => decodeBigDecimal(x).map(SoQLNumber(_))),
     SoQLMoney        -> (x => decodeBigDecimal(x).map(SoQLMoney(_))),
-    SoQLDouble       -> (x => Try(x.asInstanceOf[Double]).toOption.map(SoQLDouble(_)))
+    SoQLDouble       -> (x => Try(x.asInstanceOf[Double]).toOption.map(SoQLDouble(_))),
+    SoQLFixedTimestamp -> (x => decodeDateTime(x).map(SoQLFixedTimestamp(_)))
   )
 
   def decodeLong(item: Any): Option[Long] = Try(getLong(item)).toOption
@@ -48,6 +50,18 @@ object SoQLPackDecoder {
       Some(new BigDecimal(new java.math.BigInteger(bytes), scale.toInt))
     case Seq(scale: Int, bytes: Array[Byte]) =>
       Some(new BigDecimal(new java.math.BigInteger(bytes), scale))
+    case other: Any => None
+  }
+
+  def decodeDateTime(item: Any): Option[DateTime] = item match {
+    case Seq(millis: Any) =>
+      Some(new DateTime(getLong(millis), DateTimeZone.UTC))
+    case Seq(millis: Any, tz: Byte) =>
+      Some(new DateTime(getLong(millis), DateTimeZone.forOffsetMillis(tz * SoQLPackEncoder.FifteenMinMillis)))
+    case Seq(millis: Any, tz: Byte, chrono: Byte) =>
+      val zone = DateTimeZone.forOffsetMillis(tz * SoQLPackEncoder.FifteenMinMillis)
+      val chronos = SoQLPackEncoder.Chronologies(chrono).withZone(zone)
+      Some(new DateTime(getLong(millis), chronos))
     case other: Any => None
   }
 }
