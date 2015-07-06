@@ -3,7 +3,7 @@ package com.socrata.soql
 import com.socrata.soql.types._
 import com.vividsolutions.jts.geom.Polygon
 import java.math.{BigDecimal => BD}
-import org.joda.time.DateTime
+import org.joda.time.{DateTime, LocalDateTime}
 import org.scalatest.{FunSuite, MustMatchers}
 
 class SoQLPackTest extends FunSuite with MustMatchers {
@@ -77,12 +77,18 @@ class SoQLPackTest extends FunSuite with MustMatchers {
 
   val dt1 = DateTime.parse("2015-03-22T12Z")
   val dt2 = DateTime.parse("2015-03-22T12:00:00-08:00")
+  val ldt = LocalDateTime.parse("2015-03-22T01:23")
+  val date = ldt.toLocalDate
+  val time = ldt.toLocalTime
 
-  val schemaDT = Seq("dt" -> SoQLFixedTimestamp)
+  val schemaDT = Seq("dt" -> SoQLFixedTimestamp,
+                     "ldt" -> SoQLFloatingTimestamp,
+                     "date" -> SoQLDate,
+                     "time" -> SoQLTime)
 
   val dataDT: Seq[Array[SoQLValue]] = Seq(
-    Array(SoQLFixedTimestamp(dt1)),
-    Array(SoQLFixedTimestamp(dt2))
+    Array(SoQLFixedTimestamp(dt1), SoQLFloatingTimestamp(ldt),              SoQLDate(date), null),
+    Array(SoQLFixedTimestamp(dt2), SoQLFloatingTimestamp(ldt.plusHours(1)), SoQLNull, SoQLTime(time))
   )
 
   test("Can serialize SoQL rows with date time types to and from SoQLPack") {
@@ -95,8 +101,10 @@ class SoQLPackTest extends FunSuite with MustMatchers {
       r.schema must equal (schemaDT)
       val outRows = r.toList
       outRows must have length (dataDT.length)
-      outRows(0) must equal (dataDT(0))
-      outRows(1) must equal (dataDT(1))
+      // NOTE: just comparing raw DateTime objects doesn't work because even though the timezones
+      // have the same offset, they render differently [-07:00] vs [America/Los_Angeles].
+      outRows(0).mkString(",") must equal (dataDT(0).mkString(","))
+      outRows(1).mkString(",") must equal (dataDT(1).mkString(","))
     }
   }
 }

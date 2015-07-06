@@ -3,6 +3,7 @@ package com.socrata.soql
 import com.socrata.soql.types._
 import com.vividsolutions.jts.geom.Geometry
 import org.joda.time.DateTime
+import org.joda.time.DateTimeZone.UTC
 
 object SoQLPackEncoder {
   type Encoder = PartialFunction[SoQLValue, Any]
@@ -21,7 +22,10 @@ object SoQLPackEncoder {
     SoQLNumber       -> { case SoQLNumber(bd) => encodeBigDecimal(bd) },
     SoQLMoney        -> { case SoQLMoney(bd) => encodeBigDecimal(bd) },
     SoQLDouble       -> { case SoQLDouble(dbl) => dbl },
-    SoQLFixedTimestamp -> { case SoQLFixedTimestamp(dt) => encodeDateTime(dt) }
+    SoQLFixedTimestamp -> { case SoQLFixedTimestamp(dt) => encodeDateTime(dt) },
+    SoQLFloatingTimestamp -> { case SoQLFloatingTimestamp(ldt) => encodeDateTime(ldt.toDateTime(UTC)) },
+    SoQLDate         -> { case SoQLDate(date) => encodeDateTime(date.toDateTimeAtStartOfDay(UTC)) },
+    SoQLTime         -> { case SoQLTime(time) => time.getMillisOfDay }
   )
 
   lazy val geomEncoder: Encoder = {

@@ -3,7 +3,7 @@ package com.socrata.soql
 import com.socrata.soql.types._
 import com.vividsolutions.jts.geom.Geometry
 import java.math.BigDecimal
-import org.joda.time.{DateTime, DateTimeZone}
+import org.joda.time.{DateTime, DateTimeZone, LocalDateTime, LocalDate, LocalTime}
 import org.velvia.MsgPackUtils._
 import scala.util.Try
 
@@ -28,7 +28,10 @@ object SoQLPackDecoder {
     SoQLNumber       -> (x => decodeBigDecimal(x).map(SoQLNumber(_))),
     SoQLMoney        -> (x => decodeBigDecimal(x).map(SoQLMoney(_))),
     SoQLDouble       -> (x => Try(x.asInstanceOf[Double]).toOption.map(SoQLDouble(_))),
-    SoQLFixedTimestamp -> (x => decodeDateTime(x).map(SoQLFixedTimestamp(_)))
+    SoQLFixedTimestamp -> (x => decodeDateTime(x).map(SoQLFixedTimestamp(_))),
+    SoQLFloatingTimestamp -> (x => decodeDateTime(x).map(t => SoQLFloatingTimestamp(new LocalDateTime(t)))),
+    SoQLDate         -> (x => decodeDateTime(x).map(t => SoQLDate(new LocalDate(t)))),
+    SoQLTime         -> (x => decodeLong(x).map(t => SoQLTime(LocalTime.fromMillisOfDay(t.toInt))))
   )
 
   def decodeLong(item: Any): Option[Long] = Try(getLong(item)).toOption
