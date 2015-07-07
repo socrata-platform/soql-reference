@@ -6,7 +6,8 @@ object SoqlPack {
     libraryDependencies ++=
       Seq(
         // Only used by serialization
-        "org.velvia"         %% "msgpack4s"                % "0.4.2"
-      )
+        "org.velvia"         %% "msgpack4s"                % "0.4.3"
+      ),
+    resolvers += "velvia maven" at "http://dl.bintray.com/velvia/maven"
   )
 }

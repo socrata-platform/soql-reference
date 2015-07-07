@@ -1,6 +1,5 @@
 resolvers ++= Seq(
-  "socrata releases" at "https://repository-socrata-oss.forge.cloudbees.com/release",
-  "velvia maven" at "http://dl.bintray.com/velvia/maven"
+  "socrata releases" at "https://repository-socrata-oss.forge.cloudbees.com/release"
 )
 
 addSbtPlugin("com.socrata" % "socrata-cloudbees-sbt" % "1.3.2")
