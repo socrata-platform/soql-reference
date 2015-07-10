@@ -17,6 +17,7 @@ object SoQLPackEncoder {
     SoQLMultiPoint   -> geomEncoder,
     SoQLText         -> { case SoQLText(str) => str },
     SoQLBoolean      -> { case SoQLBoolean(bool) => bool },
+    // meant for internal usage only because SoQLID is not encrypted
     SoQLID           -> { case SoQLID(long) => long },
     SoQLVersion      -> { case SoQLVersion(long) => long },
     SoQLNumber       -> { case SoQLNumber(bd) => encodeBigDecimal(bd) },

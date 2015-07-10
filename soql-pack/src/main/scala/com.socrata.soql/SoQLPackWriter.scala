@@ -12,6 +12,8 @@ import org.velvia.MsgPack
  *   - Designed to be very streaming friendly
  *   - MessagePack format means easier to implement clients in any language
  *
+ * It is currently designed for internal (service to service) use, partly due to SoQLID being not encrypted.
+ *
  * The structure of the content is pretty much identical to CJSON,
  * but framed as follows:
  *   +0000  P bytes - CJSON-like header, MessagePack object/map, currently with the following entries:
