@@ -107,4 +107,31 @@ class SoQLPackTest extends FunSuite with MustMatchers {
       outRows(1).mkString(",") must equal (dataDT(1).mkString(","))
     }
   }
+
+  import com.rojoma.json.v3.interpolation._
+
+  val schemaJson = Seq("jobj" -> SoQLObject,
+                       "jarray" -> SoQLArray,
+                       "json" -> SoQLJson)
+
+  val dataJson: Seq[Array[SoQLValue]] = Seq(
+    Array(SoQLObject(j"""{"apple": 5, "bananas": [456, "Chiquitos"]}"""),
+          SoQLArray (j"""[1, true, null, "not really"]"""),
+          SoQLJson  (j"""56.7890"""))
+  )
+
+  test("Can serialize SoQL rows with Json data types") {
+    writeThenRead { os =>
+      val w = new SoQLPackWriter(schemaJson)
+      w.write(os, dataJson.toIterator)
+    } { dis =>
+      val r = new SoQLPackIterator(dis)
+      r.geomIndex must equal (-1)
+      r.schema must equal (schemaJson)
+      val outRows = r.toList
+      outRows must have length (dataJson.length)
+      outRows(0) must equal (dataJson(0))
+    }
+
+  }
 }

@@ -26,7 +26,10 @@ object SoQLPackEncoder {
     SoQLFixedTimestamp -> { case SoQLFixedTimestamp(dt) => encodeDateTime(dt) },
     SoQLFloatingTimestamp -> { case SoQLFloatingTimestamp(ldt) => encodeDateTime(ldt.toDateTime(UTC)) },
     SoQLDate         -> { case SoQLDate(date) => encodeDateTime(date.toDateTimeAtStartOfDay(UTC)) },
-    SoQLTime         -> { case SoQLTime(time) => time.getMillisOfDay }
+    SoQLTime         -> { case SoQLTime(time) => time.getMillisOfDay },
+    SoQLObject       -> { case SoQLObject(jObj) => jObj.toString },
+    SoQLArray        -> { case SoQLArray(jAray) => jAray.toString },
+    SoQLJson         -> { case SoQLJson(jValue) => jValue.toString }
   )
 
   lazy val geomEncoder: Encoder = {

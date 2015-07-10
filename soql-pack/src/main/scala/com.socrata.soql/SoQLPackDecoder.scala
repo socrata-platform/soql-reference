@@ -1,5 +1,7 @@
 package com.socrata.soql
 
+import com.rojoma.json.v3.ast.{JValue, JArray, JObject}
+import com.rojoma.json.v3.io.JsonReader
 import com.socrata.soql.types._
 import com.vividsolutions.jts.geom.Geometry
 import java.math.BigDecimal
@@ -31,7 +33,10 @@ object SoQLPackDecoder {
     SoQLFixedTimestamp -> (x => decodeDateTime(x).map(SoQLFixedTimestamp(_))),
     SoQLFloatingTimestamp -> (x => decodeDateTime(x).map(t => SoQLFloatingTimestamp(new LocalDateTime(t)))),
     SoQLDate         -> (x => decodeDateTime(x).map(t => SoQLDate(new LocalDate(t)))),
-    SoQLTime         -> (x => decodeLong(x).map(t => SoQLTime(LocalTime.fromMillisOfDay(t.toInt))))
+    SoQLTime         -> (x => decodeLong(x).map(t => SoQLTime(LocalTime.fromMillisOfDay(t.toInt)))),
+    SoQLObject       -> (x => decodeJson[JObject](x).map(SoQLObject(_))),
+    SoQLArray        -> (x => decodeJson[JArray](x).map(SoQLArray(_))),
+    SoQLJson         -> (x => decodeJson[JValue](x).map(SoQLJson(_)))
   )
 
   def decodeLong(item: Any): Option[Long] = Try(getLong(item)).toOption
@@ -41,7 +46,10 @@ object SoQLPackDecoder {
 
   // msgpack4s sometimes does not decode binary as string, when a flag is set
   def decodeBinaryString(item: Any): Option[SoQLValue] =
-    Try(SoQLText(new String(item.asInstanceOf[Array[Byte]], "UTF-8"))).toOption
+    Try(SoQLText(getString(item))).toOption
+
+  // This will not be needed once we have msgpack4s 0.5.0 with auto string detection
+  private def getString(item: Any) = new String(item.asInstanceOf[Array[Byte]], "UTF-8")
 
   def decodeBoolean(item: Any): Option[SoQLValue] =
     Some(SoQLBoolean(item.asInstanceOf[Boolean]))
@@ -67,4 +75,7 @@ object SoQLPackDecoder {
       Some(new DateTime(getLong(millis), chronos))
     case other: Any => None
   }
+
+  def decodeJson[J <: JValue](item: Any): Option[J] =
+    Try(JsonReader.fromString(getString(item))).toOption.map(_.asInstanceOf[J])
 }
