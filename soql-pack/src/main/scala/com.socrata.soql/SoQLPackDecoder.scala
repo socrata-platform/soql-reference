@@ -7,12 +7,11 @@ import com.vividsolutions.jts.geom.Geometry
 import java.math.BigDecimal
 import org.joda.time.{DateTime, DateTimeZone, LocalDateTime, LocalDate, LocalTime}
 import org.velvia.MsgPackUtils._
-import scala.util.Try
 
 /**
- * The decoders decode from elements of the Seq[Any] decoded by msgpack4s from
- * a binary array corresponding to a row of SoQLPack.
- */
+  * The decoders decode from elements of the Seq[Any] decoded by msgpack4s from
+  * a binary array corresponding to a row of SoQLPack.
+  */
 object SoQLPackDecoder {
   type Decoder = Any => Option[SoQLValue]
   val decoderByType: Map[SoQLType, Decoder] = Map(
@@ -29,7 +28,11 @@ object SoQLPackDecoder {
     SoQLVersion      -> (x => decodeLong(x).map(SoQLVersion(_))),
     SoQLNumber       -> (x => decodeBigDecimal(x).map(SoQLNumber(_))),
     SoQLMoney        -> (x => decodeBigDecimal(x).map(SoQLMoney(_))),
-    SoQLDouble       -> (x => Try(x.asInstanceOf[Double]).toOption.map(SoQLDouble(_))),
+    SoQLDouble       -> (x => try {
+                           Some(SoQLDouble(x.asInstanceOf[Double]))
+                         } catch {
+                           case _: Exception => None
+                         }),
     SoQLFixedTimestamp -> (x => decodeDateTime(x).map(SoQLFixedTimestamp(_))),
     SoQLFloatingTimestamp -> (x => decodeDateTime(x).map(t => SoQLFloatingTimestamp(new LocalDateTime(t)))),
     SoQLDate         -> (x => decodeDateTime(x).map(t => SoQLDate(new LocalDate(t)))),
@@ -39,14 +42,21 @@ object SoQLPackDecoder {
     SoQLJson         -> (x => decodeJson[JValue](x).map(SoQLJson(_)))
   )
 
-  def decodeLong(item: Any): Option[Long] = Try(getLong(item)).toOption
+  def decodeLong(item: Any): Option[Long] = try {
+    Some(getLong(item))
+  } catch {
+    case _: Exception => None
+  }
 
   def decodeGeom[T <: Geometry](typ: SoQLGeometryLike[T], item: Any): Option[T] =
     typ.WkbRep.unapply(item.asInstanceOf[Array[Byte]])
 
   // msgpack4s sometimes does not decode binary as string, when a flag is set
-  def decodeBinaryString(item: Any): Option[SoQLValue] =
-    Try(SoQLText(getString(item))).toOption
+  def decodeBinaryString(item: Any): Option[SoQLValue] = try {
+    Some(SoQLText(getString(item)))
+  } catch {
+    case _: Exception => None
+  }
 
   // This will not be needed once we have msgpack4s 0.5.0 with auto string detection
   private def getString(item: Any) = new String(item.asInstanceOf[Array[Byte]], "UTF-8")
@@ -76,6 +86,9 @@ object SoQLPackDecoder {
     case other: Any => None
   }
 
-  def decodeJson[J <: JValue](item: Any): Option[J] =
-    Try(JsonReader.fromString(getString(item))).toOption.map(_.asInstanceOf[J])
+  def decodeJson[J <: JValue](item: Any): Option[J] = try {
+    Some(JsonReader.fromString(getString(item)).asInstanceOf[J])
+  } catch {
+    case _: Exception => None
+  }
 }
