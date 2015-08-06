@@ -28,10 +28,9 @@ object SoQLPackDecoder {
     SoQLVersion      -> (x => decodeLong(x).map(SoQLVersion(_))),
     SoQLNumber       -> (x => decodeBigDecimal(x).map(SoQLNumber(_))),
     SoQLMoney        -> (x => decodeBigDecimal(x).map(SoQLMoney(_))),
-    SoQLDouble       -> (x => try {
-                           Some(SoQLDouble(x.asInstanceOf[Double]))
-                         } catch {
-                           case _: Exception => None
+    SoQLDouble       -> (x => x match {
+                           case d: Double if d != null  => Some(SoQLDouble(d))
+                           case _: Any => None
                          }),
     SoQLFixedTimestamp -> (x => decodeDateTime(x).map(SoQLFixedTimestamp(_))),
     SoQLFloatingTimestamp -> (x => decodeDateTime(x).map(t => SoQLFloatingTimestamp(new LocalDateTime(t)))),
