@@ -62,7 +62,7 @@ class SoQLPackWriter(schema: Seq[(String, SoQLType)],
   /**
     * Serializes the rows into SoQLPack binary format, writing it out to the ostream.
     * The caller must be responsible for closing the output stream.
-    =   */
+    */
   def write(ostream: OutputStream, rows: Iterator[Array[SoQLValue]]) {
     for {
       dos <- managed(new DataOutputStream(ostream))
