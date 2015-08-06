@@ -24,7 +24,9 @@ class SoQLPackIterator(dis: DataInputStream) extends Iterator[Array[SoQLValue]] 
   val headers = MsgPack.unpack(dis, MsgPack.UNPACK_RAW_AS_STRING).asInstanceOf[Map[String, Any]]
   logger.debug("Unpacked SoQLPack headers: " + headers)
 
+  lazy val geomName = colNames(geomIndex)
   val geomIndex = headers.asInt("geometry_index")
+  lazy val colNames = schema.map(_._1).toArray
 
   // Schema is a Seq of (ColumnName, SoQLType)
   val schema = headers("schema").asInstanceOf[Seq[Map[String, String]]].map { colInfo =>

@@ -132,6 +132,5 @@ class SoQLPackTest extends FunSuite with MustMatchers {
       outRows must have length (dataJson.length)
       outRows(0) must equal (dataJson(0))
     }
-
   }
 }
