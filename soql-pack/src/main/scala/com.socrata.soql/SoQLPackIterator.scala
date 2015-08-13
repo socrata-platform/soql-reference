@@ -50,6 +50,9 @@ class SoQLPackIterator(dis: DataInputStream) extends Iterator[Array[SoQLValue]] 
         case e: InvalidMsgPackDataException =>
           logger.debug("Probably reached end of data at rowNum {}, got {}", rowNum, e.getMessage)
           nextRow = None
+        case e: ClassCastException =>
+          logger.debug("Corrupt data at rowNum {}, got {}", rowNum, e.getMessage)
+          throw new InvalidMsgPackDataException("Unable to unpack stream, corrupt data.")
         // $COVERAGE-OFF$
         // This case should ideally never happen, and is caught at a higher level.
         case e: Exception =>
