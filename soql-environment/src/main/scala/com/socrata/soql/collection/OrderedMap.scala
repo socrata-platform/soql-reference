@@ -23,7 +23,7 @@ class OrderedMap[A, +B](underlying: Map[A, (Int, B)], ordering: Vector[A]) exten
   override def updated [B1 >: B] (key: A, value: B1): OrderedMap[A, B1] =
     underlying.get(key) match {
       case Some((idx, _)) =>
-        new OrderedMap(underlying - key + (key -> (idx, value)), ordering.updated(idx, key))
+        new OrderedMap(underlying - key + (key -> ((idx, value))), ordering.updated(idx, key))
       case None =>
         new OrderedMap(underlying.updated(key, (ordering.length, value)), ordering :+ key)
     }

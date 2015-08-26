@@ -2,7 +2,7 @@ import sbt._
 import Keys._
 
 object SoqlTypes {
-  lazy val settings: Seq[Setting[_]] = BuildSettings.projectSettings() ++ Seq(
+  lazy val settings: Seq[Setting[_]] = BuildSettings.projectSettings ++ Seq(
     libraryDependencies ++=
       Seq(
         // Only used by serialization
