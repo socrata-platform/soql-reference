@@ -6,7 +6,7 @@ import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
 
 object BuildSettings {
   val buildSettings: Seq[Setting[_]] = Defaults.defaultSettings ++ SocrataCloudbeesSbt.socrataBuildSettings ++ Seq(
-    scalaVersion := "2.10.4"
+    scalaVersion := "2.11.7"
   )
 
   def projectSettings(assembly: Boolean = false): Seq[Setting[_]] = buildSettings ++ SocrataCloudbeesSbt.socrataProjectSettings(assembly) ++ Seq(
@@ -16,11 +16,15 @@ object BuildSettings {
       Tests.Argument(TestFrameworks.ScalaTest, "-oFD")
     ),
     scalacOptions += "-language:implicitConversions",
-    libraryDependencies <++= (scalaVersion) { sv =>
-      Seq(
-        "org.slf4j" % "slf4j-api" % slf4jVersion,
-        "org.slf4j" % "jcl-over-slf4j" % slf4jVersion,
-        "org.scalatest" %% "scalatest" % "2.2.0" % "test"
+    libraryDependencies ++= Seq(
+      "org.slf4j" % "slf4j-api" % slf4jVersion,
+      "org.slf4j" % "jcl-over-slf4j" % slf4jVersion,
+      "org.scalatest" %% "scalatest" % "2.2.0" % "test"
+    ),
+    libraryDependencies <++=(scalaVersion) {
+      case "2.10.4" => Seq.empty
+      case _ => Seq(
+        "org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.4"
       )
     }
   )
