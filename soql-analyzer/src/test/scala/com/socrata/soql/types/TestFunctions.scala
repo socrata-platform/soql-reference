@@ -14,6 +14,7 @@ object TestFunctions {
   // TODO: might want to narrow this down
   private val Ordered = TestTypeConversions.typeParameterUniverse.toSet[Any]
   private val NumLike = Set[Any](TestNumber, TestDouble, TestMoney)
+  private val GeospatialLike = Set[Any](SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine, SoQLPolygon, SoQLMultiPolygon)
   private val AllTypes = SoQLType.typesByName.values.toSet[Any]
 
   val Concat = Function("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(TestText))
@@ -42,6 +43,9 @@ object TestFunctions {
 
   val JsonToText = new MonomorphicFunction("json to text", SpecialFunctions.Cast(TestText.name), Seq(TestJson), Seq.empty, TestText).function
   val JsonToNumber = new MonomorphicFunction("json to Number", SpecialFunctions.Cast(TestNumber.name), Seq(TestJson), Seq.empty, TestNumber).function
+
+  val CuratedRegionTest = Function("curated_region_test", FunctionName("curated_region_test"), Map("a" -> GeospatialLike, "b" -> NumLike),
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))
 
   val Case = Function("case", FunctionName("case"),
     Map("a" -> AllTypes),
