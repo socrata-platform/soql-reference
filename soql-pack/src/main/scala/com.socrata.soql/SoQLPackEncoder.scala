@@ -29,7 +29,8 @@ object SoQLPackEncoder {
     SoQLTime         -> { case SoQLTime(time) => time.getMillisOfDay },
     SoQLObject       -> { case SoQLObject(jObj) => jObj.toString },
     SoQLArray        -> { case SoQLArray(jAray) => jAray.toString },
-    SoQLJson         -> { case SoQLJson(jValue) => jValue.toString }
+    SoQLJson         -> { case SoQLJson(jValue) => jValue.toString },
+    SoQLBlob         -> { case SoQLBlob(str) => str }
   )
 
   lazy val geomEncoder: Encoder = {

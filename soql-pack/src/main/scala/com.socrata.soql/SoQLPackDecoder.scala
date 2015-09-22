@@ -38,7 +38,8 @@ object SoQLPackDecoder {
     SoQLTime         -> (x => decodeLong(x).map(t => SoQLTime(LocalTime.fromMillisOfDay(t.toInt)))),
     SoQLObject       -> (x => decodeJson[JObject](x).map(SoQLObject(_))),
     SoQLArray        -> (x => decodeJson[JArray](x).map(SoQLArray(_))),
-    SoQLJson         -> (x => decodeJson[JValue](x).map(SoQLJson(_)))
+    SoQLJson         -> (x => decodeJson[JValue](x).map(SoQLJson(_))),
+    SoQLBlob         -> decodeBlobId _
   )
 
   def decodeLong(item: Any): Option[Long] = try {
@@ -53,6 +54,12 @@ object SoQLPackDecoder {
   // msgpack4s sometimes does not decode binary as string, when a flag is set
   def decodeBinaryString(item: Any): Option[SoQLValue] = try {
     Some(SoQLText(getString(item)))
+  } catch {
+    case _: Exception => None
+  }
+
+  def decodeBlobId(item: Any): Option[SoQLValue] = try {
+    Some(SoQLBlob(getString(item)))
   } catch {
     case _: Exception => None
   }
