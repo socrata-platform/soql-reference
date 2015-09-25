@@ -42,7 +42,7 @@ object SoQLType {
   val typesByName = Seq(
     SoQLID, SoQLVersion, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
     SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLJson, SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine,
-    SoQLPolygon, SoQLMultiPolygon
+    SoQLPolygon, SoQLMultiPolygon, SoQLBlob
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
   }
@@ -272,6 +272,11 @@ case class SoQLLine(value: LineString) extends SoQLValue {
 case object SoQLLine extends {
   protected val Treified = classOf[LineString]
 } with SoQLType("line") with SoQLGeometryLike[LineString]
+
+case class SoQLBlob(value: String) extends SoQLValue {
+  def typ = SoQLBlob
+}
+case object SoQLBlob extends SoQLType("blob")
 
 case object SoQLNull extends SoQLType("null") with SoQLValue {
   override def isPassableTo(that: SoQLAnalysisType) = true

@@ -28,7 +28,8 @@ object SoQLTypeConversions {
     SoQLObject,
     SoQLArray,
     SoQLID,
-    SoQLVersion
+    SoQLVersion,
+    SoQLBlob
   )
 
   private def getMonomorphically(f: Function[SoQLType]): MonomorphicFunction[SoQLType] =
@@ -66,6 +67,8 @@ object SoQLTypeConversions {
     Some(SoQLFunctions.TextToPolygon.monomorphic.getOrElse((sys.error(("text to polygon conversion not monomorphic?")))))
   private val textToMultiPolygonFunc =
     Some(SoQLFunctions.TextToMultiPolygon.monomorphic.getOrElse(sys.error("text to multi polygon conversion not monomorphic?")))
+  private val textToBlobFunc =
+    Some(SoQLFunctions.TextToBlob.monomorphic.getOrElse(sys.error("text to blob conversion not monomorphic?")))
 
   private def isNumberLiteral(s: String) = try {
     val lexer = new Lexer(s)
@@ -112,6 +115,8 @@ object SoQLTypeConversions {
         textToPolygonFunc
       case (SoQLTextLiteral(s), SoQLMultiPolygon) if SoQLMultiPolygon.WktRep.unapply(s.toString).isDefined =>
         textToMultiPolygonFunc
+      case (SoQLTextLiteral(s), SoQLBlob) =>
+        textToBlobFunc
       case _ =>
         None
     }

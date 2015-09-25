@@ -24,6 +24,11 @@ object SoQLFunctions {
     SoQLID,
     SoQLVersion
   )
+
+  private val Equatable = Ordered ++ Set[Any](
+    SoQLBlob
+  )
+
   private val NumLike = Set[Any](SoQLNumber, SoQLDouble, SoQLMoney)
   private val RealNumLike = Set[Any](SoQLNumber, SoQLDouble)
   private val GeospatialLike = Set[Any](SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine, SoQLPolygon, SoQLMultiPolygon)
@@ -39,15 +44,16 @@ object SoQLFunctions {
   val TextToMultiLine = new MonomorphicFunction("text to multi line", SpecialFunctions.Cast(SoQLMultiLine.name), Seq(SoQLText), Seq.empty, SoQLMultiLine).function
   val TextToPolygon = new MonomorphicFunction("text to polygon", SpecialFunctions.Cast(SoQLPolygon.name), Seq(SoQLText), Seq.empty, SoQLPolygon).function
   val TextToMultiPolygon = new MonomorphicFunction("text to multi polygon", SpecialFunctions.Cast(SoQLMultiPolygon.name), Seq(SoQLText), Seq.empty, SoQLMultiPolygon).function
+  val TextToBlob = new MonomorphicFunction("text to blob", SpecialFunctions.Cast(SoQLBlob.name), Seq(SoQLText), Seq.empty, SoQLBlob).function
 
   val Concat = Function("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))
   val Gte = Function(">=", SpecialFunctions.Operator(">="), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
   val Gt = Function(">", SpecialFunctions.Operator(">"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
   val Lt = Function("<", SpecialFunctions.Operator("<"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
   val Lte = Function("<=", SpecialFunctions.Operator("<="), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
-  val Eq = Function("=", SpecialFunctions.Operator("="), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
+  val Eq = Function("=", SpecialFunctions.Operator("="), Map("a" -> Equatable), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
   val EqEq = Eq.copy(identity = "==", name = SpecialFunctions.Operator("=="))
-  val Neq = Function("<>", SpecialFunctions.Operator("<>"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
+  val Neq = Function("<>", SpecialFunctions.Operator("<>"), Map("a" -> Equatable), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
   val BangEq = Neq.copy(identity = "!=", name = SpecialFunctions.Operator("!="))
 
   // arguments: lat, lon, distance in meter
