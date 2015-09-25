@@ -74,6 +74,8 @@ object SoQLFunctions {
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))
   val DistanceInMeters = Function("distance_in_meters", FunctionName("distance_in_meters"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLNumber))
+  val Simplify = Function("simplify", FunctionName("simplify"), Map("a" -> GeospatialLike, "b" -> NumLike),
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
   val CuratedRegionTest = Function("curated_region_test", FunctionName("curated_region_test"), Map("a" -> GeospatialLike, "b" -> NumLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))
 
