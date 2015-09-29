@@ -6,14 +6,15 @@ import types._
 
 class SoQLGeoRow(underlying: Array[SoQLValue], parent: SoQLPackIterator)
     extends IndexedSeq[SoQLValue] {
-  def geometry: Geometry = underlying(parent.geomIndex) match {
-    case SoQLMultiPolygon(mp) => mp
-    case SoQLPolygon(p) => p
-    case SoQLPoint(pt) => pt
-    case SoQLMultiPoint(mp) => mp
-    case SoQLLine(l) => l
-    case SoQLMultiLine(ml) => ml
-    case x: SoQLValue => throw new RuntimeException("Should not be seeing non-geom SoQL type" + x)
+  def geometry: Option[Geometry] = underlying(parent.geomIndex) match {
+    case SoQLNull => None
+    case SoQLMultiPolygon(mp) => Some(mp)
+    case SoQLPolygon(p) => Some(p)
+    case SoQLPoint(pt) => Some(pt)
+    case SoQLMultiPoint(mp) => Some(mp)
+    case SoQLLine(l) => Some(l)
+    case SoQLMultiLine(ml) => Some(ml)
+    case x: SoQLValue => throw new RuntimeException("Should not be seeing non-geom SoQL type " + x)
   }
 
   def properties: Map[String, JValue] = {
