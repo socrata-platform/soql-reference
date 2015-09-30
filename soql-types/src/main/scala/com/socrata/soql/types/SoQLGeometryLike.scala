@@ -1,11 +1,13 @@
 package com.socrata.soql.types
 
+import com.google.common.collect.{Interner, Interners}
 import com.rojoma.json.v3.io.{CompactJsonWriter, JsonReader}
 import com.socrata.thirdparty.geojson.JtsCodecs
 import com.vividsolutions.jts.geom.{Geometry, GeometryFactory}
 import com.vividsolutions.jts.io.{WKBWriter, WKBReader, WKTReader}
 import javax.xml.bind.DatatypeConverter.{parseBase64Binary, printBase64Binary}
-import scala.util.Try
+
+import SoQLGeometryLike._
 
 trait SoQLGeometryLike[T <: Geometry] {
   protected val Treified: Class[T]
@@ -27,7 +29,12 @@ trait SoQLGeometryLike[T <: Geometry] {
     val reader = threadLocal { new WKTReader(gf.get) }
 
     def unapply(text: String): Option[T] = {
-      Try(Treified.cast(reader.get.read(text))).toOption
+      try {
+        val geom = interner.intern(reader.get.read(text))
+        Some(Treified.cast(geom))
+      } catch {
+        case _: Exception => None
+      }
     }
 
     def apply(geom: T): String = geom.toString
@@ -39,7 +46,12 @@ trait SoQLGeometryLike[T <: Geometry] {
     val writer = threadLocal { new WKBWriter }
 
     def unapply(bytes: Array[Byte]): Option[T] = {
-      Try(Treified.cast(reader.get.read(bytes))).toOption
+      try {
+        val geom = interner.intern(reader.get.read(bytes))
+        Some(Treified.cast(geom))
+      } catch {
+        case _: Exception => None
+      }
     }
 
     def apply(geom: T): Array[Byte] = {
@@ -65,7 +77,13 @@ trait SoQLGeometryLike[T <: Geometry] {
       val pieces = trimmed.split(separator)
       if (pieces.size != 2) return None
 
-      Try(pieces(0).toInt).toOption.flatMap { srid =>
+      val maybeSrid = try {
+        Some(pieces(0).toInt)
+      } catch {
+        case _: Exception => None
+      }
+
+      maybeSrid.flatMap { srid =>
         WktRep.unapply(pieces(1)).map { geom =>
           (geom, srid)
         }
@@ -76,4 +94,8 @@ trait SoQLGeometryLike[T <: Geometry] {
       s"$SRIDPrefix$srid$separator${WktRep(geom)}"
     }
   }
+}
+
+object SoQLGeometryLike {
+  val interner: Interner[Geometry] = Interners.newWeakInterner()
 }
