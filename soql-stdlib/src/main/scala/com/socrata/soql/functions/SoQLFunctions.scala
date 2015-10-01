@@ -78,6 +78,8 @@ object SoQLFunctions {
     Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
   val CuratedRegionTest = Function("curated_region_test", FunctionName("curated_region_test"), Map("a" -> GeospatialLike, "b" -> NumLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))
+  val VisibleAt = Function("visible_at", FunctionName("visible_at"), Map("a" -> GeospatialLike, "b" -> RealNumLike),
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))
 
   val IsNull = Function("is null", SpecialFunctions.IsNull, Map.empty, Seq(VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
   val IsNotNull = Function("is not null", SpecialFunctions.IsNotNull, Map.empty, Seq(VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
