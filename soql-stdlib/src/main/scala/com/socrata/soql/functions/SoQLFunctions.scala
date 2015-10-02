@@ -76,6 +76,8 @@ object SoQLFunctions {
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLNumber))
   val Simplify = Function("simplify", FunctionName("simplify"), Map("a" -> GeospatialLike, "b" -> NumLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
+  val SnapToGrid = Function("snap_to_grid", FunctionName("snap_to_grid"), Map("a" -> GeospatialLike, "b" -> NumLike),
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
   val CuratedRegionTest = Function("curated_region_test", FunctionName("curated_region_test"), Map("a" -> GeospatialLike, "b" -> NumLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))
   val VisibleAt = Function("visible_at", FunctionName("visible_at"), Map("a" -> GeospatialLike, "b" -> RealNumLike),
