@@ -1,5 +1,7 @@
 package com.socrata.soql
 
+import scala.io.StdIn
+
 import com.socrata.soql.exceptions.SoQLException
 import com.socrata.soql.types._
 import environment.{ColumnName, DatasetContext}
@@ -43,7 +45,7 @@ object SoqlToy extends (Array[String] => Unit) {
     val analyzer = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo)
 
     while(true) {
-      val selection = readLine("> ")
+      val selection = StdIn.readLine("> ")
       if(selection == null) return;
       if(selection == "?") {
         menu()

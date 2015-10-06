@@ -1,5 +1,6 @@
 package com.socrata.soql
 
+import scala.io.StdIn
 import scala.util.control.Breaks._
 
 import com.ibm.icu.util.ULocale
@@ -27,7 +28,7 @@ object ParserToy extends (Array[String] => Unit) {
     menu()
     val p = new Parser
     while(true) {
-      val cmd = readLine("> ")
+      val cmd = StdIn.readLine("> ")
       if(cmd == null) return;
       breakable {
         val f = cmd match {
@@ -41,7 +42,7 @@ object ParserToy extends (Array[String] => Unit) {
           case "?" => menu(); break(); sys.error("can't get here")
           case other => println("bad command"); break(); sys.error("can't get here")
         }
-        val input = readLine("... ")
+        val input = StdIn.readLine("... ")
         if(input == null) return;
         try {
           println(f(input))

@@ -18,7 +18,7 @@ class SoQLValueTest extends FunSuite with MustMatchers {
     valueClasses.size must equal (typeClasses.size)
 
     valueClasses.foreach { sym =>
-      val companionType = sym.typeSignature.member(newTermName("typ")).asMethod.returnType.typeSymbol
+      val companionType = sym.typeSignature.member(TermName("typ")).asMethod.returnType.typeSymbol
       companionType.name.toString must equal (sym.name.toString)
     }
   }
