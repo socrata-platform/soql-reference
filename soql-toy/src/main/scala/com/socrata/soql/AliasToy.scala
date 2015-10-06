@@ -1,6 +1,5 @@
 package com.socrata.soql
 
-import scala.io.StdIn
 import collection.OrderedSet
 import com.socrata.soql.aliases._
 
@@ -16,8 +15,7 @@ object AliasToy extends (Array[String] => Unit) {
 
   implicit val datasetCtx = new UntypedDatasetContext {
     val locale = com.ibm.icu.util.ULocale.ENGLISH
-    val columns =
-      com.socrata.soql.collection.OrderedSet(":id", ":created_at", "a", "b", "c", "d").map(ColumnName(_))
+    val columns = com.socrata.soql.collection.OrderedSet(":id", ":created_at", "a", "b", "c", "d").map(ColumnName(_))
   }
 
   def menu() {
@@ -29,7 +27,7 @@ object AliasToy extends (Array[String] => Unit) {
     menu()
     val p = new Parser
     while(true) {
-      val selection = StdIn.readLine("> ")
+      val selection = readLine("> ")
       if(selection == null) return;
       try {
         val analysis = AliasAnalysis(p.selection(selection))

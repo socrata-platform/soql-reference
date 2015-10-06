@@ -16,9 +16,9 @@ class QuadifierTest extends FunSuite with MustMatchers with PropertyChecks {
     for(i <- 0 until n) {
       val buf = new Array[Char](n + 4)
       Quadifier.quadify(-1, buf, i)
-      buf.take(i) must equal (Array.fill(i)('\u0000'))
+      buf.take(i) must equal (Array.fill(i)('\0'))
       buf.drop(i).take(4) must equal (Array('z','z','z','z'))
-      buf.drop(i + 4) must equal (Array.fill(n - i)('\u0000'))
+      buf.drop(i+4) must equal (Array.fill(n - i)('\0'))
     }
   }
 
