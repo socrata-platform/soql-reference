@@ -8,7 +8,7 @@ case class Select(selection: Selection, where: Option[Expression], groupBy: Opti
     if(AST.pretty) {
       val sb = new StringBuilder("SELECT " + selection)
       where.foreach(sb.append(" WHERE ").append(_))
-      groupBy.foreach { gb => sb.append(gb.mkString(" GROUP BY ", ",", "")) }
+      groupBy.foreach { gb => sb.append(gb.mkString(" GROUP BY ", ", ", "")) }
       having.foreach(sb.append(" HAVING ").append(_))
       orderBy.foreach { ob => sb.append(ob.mkString(" ORDER BY ", ", ", "")) }
       limit.foreach(sb.append(" LIMIT ").append(_))
@@ -27,7 +27,7 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Opti
       def star(s: StarSelection, token: String) = {
         val sb = new StringBuilder(token)
         if(s.exceptions.nonEmpty) {
-          sb.append(s.exceptions.mkString(" (EXCEPT ", ", ", ")"))
+          sb.append(s.exceptions.map(e => e._1).mkString(" (EXCEPT ", ", ", ")"))
         }
         sb.toString
       }
@@ -50,7 +50,7 @@ case class SelectedExpression(expression: Expression, name: Option[(ColumnName, 
   override def toString =
     if(AST.pretty) {
       name match {
-        case Some(name) => expression + " AS " + name
+        case Some(name) => expression + " AS " + name._1
         case None => expression.toString
       }
     } else {

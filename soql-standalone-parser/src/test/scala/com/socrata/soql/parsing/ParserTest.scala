@@ -3,7 +3,7 @@ package com.socrata.soql.parsing
 import scala.util.parsing.input.NoPosition
 
 import org.scalatest._
-import org.scalatest.matchers.MustMatchers
+import org.scalatest.MustMatchers
 
 import com.socrata.soql.ast._
 import com.socrata.soql.parsing.standalone_exceptions.BadParse
@@ -185,11 +185,11 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "disallow order by before AND after search" in {
-      evaluating { parseFull("select * order by x search 'weather' order by x") } must produce[BadParse]
+      a [BadParse] must be thrownBy { parseFull("select * order by x search 'weather' order by x") }
     }
 
     "disallow search before AND after order by" in {
-      evaluating { parseFull("select * search 'weather' order by x search 'weather'") } must produce[BadParse]
+      a [BadParse] must be thrownBy { parseFull("select * search 'weather' order by x search 'weather'") }
     }
 
     "not round trip" in {
@@ -198,13 +198,13 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "like round trip" in {
-      val x = parseFull("select * where a like 'b'")
-      x.where.get.toString must be ("a LIKE 'b'")
+      val x = parseFull("select * where `a` like 'b'")
+      x.where.get.toString must be ("`a` LIKE 'b'")
     }
 
     "not like round trip" in {
-      val x = parseFull("select * where a not like 'b'")
-      x.where.get.toString must be ("a NOT LIKE 'b'")
+      val x = parseFull("select * where `a` not like 'b'")
+      x.where.get.toString must be ("`a` NOT LIKE 'b'")
     }
 
     // def show[T](x: => T) {

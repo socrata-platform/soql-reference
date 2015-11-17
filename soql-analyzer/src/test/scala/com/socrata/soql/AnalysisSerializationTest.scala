@@ -4,7 +4,7 @@ import org.scalatest.FunSuite
 import com.socrata.soql.environment.{TypeName, ColumnName, DatasetContext}
 import com.socrata.soql.types._
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
-import org.scalatest.matchers.MustMatchers
+import org.scalatest.MustMatchers
 
 class AnalysisSerializationTest extends FunSuite with MustMatchers {
   implicit val datasetCtx = new DatasetContext[TestType] {

@@ -1,9 +1,10 @@
 resolvers ++= Seq(
-  "socrata releases" at "http://repository-socrata-oss.forge.cloudbees.com/release",
-  "DiversIT repo" at "http://repository-diversit.forge.cloudbees.com/release"
+  "socrata releases" at "https://repository-socrata-oss.forge.cloudbees.com/release"
 )
 
-addSbtPlugin("com.socrata" % "socrata-cloudbees-sbt" % "1.1.1")
+addSbtPlugin("com.socrata" % "socrata-cloudbees-sbt" % "1.4.1")
+
+addSbtPlugin("org.scoverage" %% "sbt-scoverage" % "0.99.5.1")
 
 libraryDependencies ++= Seq(
   "de.jflex" % "jflex" % "1.4.3",

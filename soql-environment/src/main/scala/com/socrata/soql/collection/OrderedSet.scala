@@ -52,6 +52,7 @@ class OrderedSet[A](underlying: Map[A, Int], order: Vector[A])
 object OrderedSet extends ImmutableSetFactory[OrderedSet] {
   implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, OrderedSet[A]] = setCanBuildFrom[A]
   override def empty[A]: OrderedSet[A] = EmptyOrderedSet.asInstanceOf[OrderedSet[A]]
+  def emptyInstance: OrderedSet[Any] = EmptyOrderedSet.asInstanceOf[OrderedSet[Any]]
 
   private val EmptyOrderedSet = new OrderedSet[Any](Map.empty, Vector.empty)
 }

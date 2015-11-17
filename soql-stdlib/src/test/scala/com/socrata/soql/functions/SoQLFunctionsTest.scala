@@ -1,6 +1,6 @@
 package com.socrata.soql.functions
 
-import org.scalatest.matchers.MustMatchers
+import org.scalatest.MustMatchers
 import org.scalatest.FunSuite
 
 class SoQLFunctionsTest extends FunSuite with MustMatchers {

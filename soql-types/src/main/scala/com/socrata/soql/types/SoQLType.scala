@@ -1,13 +1,14 @@
 package com.socrata.soql.types
 
-import com.ibm.icu.util.CaseInsensitiveString
 
+import com.google.protobuf.{CodedInputStream, CodedOutputStream}
+import com.ibm.icu.util.CaseInsensitiveString
+import com.rojoma.json.v3.ast.{JValue, JArray, JObject}
 import com.socrata.soql.environment.TypeName
+import com.socrata.soql.types.obfuscation.{Obfuscator, CryptProvider}
+import com.vividsolutions.jts.geom.{MultiLineString, MultiPolygon, Point, Polygon, MultiPoint, LineString}
 import org.joda.time.{LocalTime, LocalDate, LocalDateTime, DateTime}
 import org.joda.time.format.ISODateTimeFormat
-import com.rojoma.json.ast.{JValue, JArray, JObject}
-import com.google.protobuf.{CodedInputStream, CodedOutputStream}
-import com.socrata.soql.types.obfuscation.{Obfuscator, CryptProvider}
 
 sealed abstract class SoQLAnalysisType(val name: TypeName) {
   def this(name: String) = this(TypeName(name))
@@ -40,7 +41,8 @@ object SoQLType {
   // I still want to retain pre-2.10 compat.
   val typesByName = Seq(
     SoQLID, SoQLVersion, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
-    SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLLocation, SoQLJson
+    SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLJson, SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine,
+    SoQLPolygon, SoQLMultiPolygon, SoQLBlob
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
   }
@@ -224,15 +226,57 @@ case class SoQLArray(value: JArray) extends SoQLValue {
 }
 case object SoQLArray extends SoQLType("array")
 
-case class SoQLLocation(latitude: Double, longitude: Double) extends SoQLValue {
-  def typ = SoQLLocation
-}
-case object SoQLLocation extends SoQLType("location")
-
 case class SoQLJson(value: JValue) extends SoQLValue {
   def typ = SoQLJson
 }
 case object SoQLJson extends SoQLType("json")
+
+case class SoQLPoint(value: Point) extends SoQLValue {
+  def typ = SoQLPoint
+}
+case object SoQLPoint extends {
+  protected val Treified = classOf[Point]
+} with SoQLType("point") with SoQLGeometryLike[Point]
+
+case class SoQLMultiLine(value: MultiLineString) extends SoQLValue {
+  def typ = SoQLMultiLine
+}
+case object SoQLMultiLine extends {
+  protected val Treified = classOf[MultiLineString]
+} with SoQLType("multiline") with SoQLGeometryLike[MultiLineString]
+
+case class SoQLMultiPolygon(value: MultiPolygon) extends SoQLValue {
+  def typ = SoQLMultiPolygon
+}
+case object SoQLMultiPolygon extends {
+  protected val Treified = classOf[MultiPolygon]
+} with SoQLType("multipolygon") with SoQLGeometryLike[MultiPolygon]
+
+case class SoQLPolygon(value: Polygon) extends SoQLValue {
+  def typ = SoQLPolygon
+}
+case object SoQLPolygon extends {
+  protected val Treified = classOf[Polygon]
+} with SoQLType("polygon") with SoQLGeometryLike[Polygon]
+
+case class SoQLMultiPoint(value: MultiPoint) extends SoQLValue {
+  def typ = SoQLMultiPoint
+}
+case object SoQLMultiPoint extends {
+  protected val Treified = classOf[MultiPoint]
+} with SoQLType("multipoint") with SoQLGeometryLike[MultiPoint]
+
+case class SoQLLine(value: LineString) extends SoQLValue {
+  def typ = SoQLLine
+}
+case object SoQLLine extends {
+  protected val Treified = classOf[LineString]
+} with SoQLType("line") with SoQLGeometryLike[LineString]
+
+case class SoQLBlob(value: String) extends SoQLValue {
+  def typ = SoQLBlob
+}
+case object SoQLBlob extends SoQLType("blob")
 
 case object SoQLNull extends SoQLType("null") with SoQLValue {
   override def isPassableTo(that: SoQLAnalysisType) = true

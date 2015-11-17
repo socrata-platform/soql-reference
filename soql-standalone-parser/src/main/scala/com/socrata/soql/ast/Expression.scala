@@ -88,7 +88,7 @@ object SpecialFunctions {
 }
 
 case class ColumnOrAliasRef(column: ColumnName)(val position: Position) extends Expression {
-  protected def asString = column.toString
+  protected def asString = "`" + column.toString + "`"
   def allColumnRefs = Set(this)
 }
 

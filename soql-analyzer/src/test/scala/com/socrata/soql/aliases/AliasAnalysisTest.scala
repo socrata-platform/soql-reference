@@ -3,7 +3,7 @@ package com.socrata.soql.aliases
 import scala.util.parsing.input.{Position, NoPosition}
 
 import org.scalatest._
-import org.scalatest.matchers.MustMatchers
+import org.scalatest.MustMatchers
 
 import com.socrata.soql.parsing.{Lexer, LexerReader, Parser}
 
@@ -71,12 +71,12 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
 
     "throw an exception if an exception does not occur in the column-set" in {
       // TODO: Check the position
-      evaluating { AliasAnalysis.processStar(StarSelection(Seq((ident("not_there"), NoPosition))).positionedAt(pos), columnNames("a","c")) } must produce[NoSuchColumn]
+      a [NoSuchColumn] must be thrownBy { AliasAnalysis.processStar(StarSelection(Seq((ident("not_there"), NoPosition))).positionedAt(pos), columnNames("a","c")) }
     }
 
     "throw an exception if an exception occurs more than once" in {
         // TODO: Check the position
-      evaluating { AliasAnalysis.processStar(StarSelection(Seq((ident("a"), NoPosition), (ident("a"), NoPosition))).positionedAt(pos), columnNames("a","c")) } must produce[RepeatedException]
+      a [RepeatedException] must be thrownBy { AliasAnalysis.processStar(StarSelection(Seq((ident("a"), NoPosition), (ident("a"), NoPosition))).positionedAt(pos), columnNames("a","c")) }
     }
   }
 
@@ -135,17 +135,17 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
 
     "reject duplicate aliases when one is explicit and the other semi-explicit" in {
       val ss = selections("2+2 as four, four").expressions
-      evaluating { AliasAnalysis.assignExplicitAndSemiExplicit(ss) } must produce[DuplicateAlias]
+      a [DuplicateAlias] must be thrownBy { AliasAnalysis.assignExplicitAndSemiExplicit(ss) }
     }
 
     "reject duplicate aliases when both are semi-explicit" in {
       val ss = selections("four, four").expressions
-      evaluating { AliasAnalysis.assignExplicitAndSemiExplicit(ss) } must produce[DuplicateAlias]
+      a [DuplicateAlias] must be thrownBy { AliasAnalysis.assignExplicitAndSemiExplicit(ss) }
     }
 
     "reject duplicate aliases when both are explicit" in {
       val ss = selections("2 + 2 as four, 1 + 3 as four").expressions
-      evaluating { AliasAnalysis.assignExplicitAndSemiExplicit(ss) } must produce[DuplicateAlias]
+      a [DuplicateAlias] must be thrownBy { AliasAnalysis.assignExplicitAndSemiExplicit(ss) }
     }
   }
 
@@ -197,7 +197,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     }
 
     "reject assigning to a straight identifier" in {
-      evaluating { AliasAnalysis.assignImplicit(Seq(se("q"))) } must produce[AssertionError]
+      an [AssertionError] must be thrownBy { AliasAnalysis.assignImplicit(Seq(se("q"))) }
     }
   }
 
@@ -209,9 +209,9 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     }
 
     "reject directly-circular aliases with complex expressions" in {
-      evaluating { AliasAnalysis.orderAliasesForEvaluation(OrderedMap(ColumnName("x") -> expr("x + x")), Set.empty) } must produce[CircularAliasDefinition]
-      evaluating { AliasAnalysis.orderAliasesForEvaluation(OrderedMap(ColumnName("x") -> expr("(x)")), Set.empty) } must produce[CircularAliasDefinition]
-      evaluating { AliasAnalysis.orderAliasesForEvaluation(OrderedMap(ColumnName("x") -> expr("x")), Set.empty) } must produce[CircularAliasDefinition]
+      a [CircularAliasDefinition] must be thrownBy { AliasAnalysis.orderAliasesForEvaluation(OrderedMap(ColumnName("x") -> expr("x + x")), Set.empty) }
+      a [CircularAliasDefinition] must be thrownBy { AliasAnalysis.orderAliasesForEvaluation(OrderedMap(ColumnName("x") -> expr("(x)")), Set.empty) }
+      a [CircularAliasDefinition] must be thrownBy { AliasAnalysis.orderAliasesForEvaluation(OrderedMap(ColumnName("x") -> expr("x")), Set.empty) }
     }
 
     "reject indirectly-circular aliases" in {
@@ -221,7 +221,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
         ColumnName("z") -> expr("5"),
         ColumnName("y") -> expr("a / b")
       )
-      evaluating { AliasAnalysis.orderAliasesForEvaluation(aliasMap, Set.empty) } must produce[CircularAliasDefinition]
+      a [CircularAliasDefinition] must be thrownBy { AliasAnalysis.orderAliasesForEvaluation(aliasMap, Set.empty) }
     }
 
     "produce a valid linearization" in {
@@ -320,15 +320,15 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     }
 
     "forbid hiding a column if it's selected via *" in {
-      evaluating { AliasAnalysis(selections("*, c as d")) } must produce[DuplicateAlias]
+      a [DuplicateAlias] must be thrownBy { AliasAnalysis(selections("*, c as d")) }
     }
 
     "forbid hiding a column if it's selected explicitly" in {
-      evaluating { AliasAnalysis(selections("d, c as d")) } must produce[DuplicateAlias]
+      a [DuplicateAlias] must be thrownBy { AliasAnalysis(selections("d, c as d")) }
     }
 
     "forbid hiding giving two expressions the same alias" in {
-      evaluating { AliasAnalysis(selections("e as q, c as q")) } must produce[DuplicateAlias]
+      a [DuplicateAlias] must be thrownBy { AliasAnalysis(selections("e as q, c as q")) }
     }
 
     "allow hiding a column if it's excluded via *" in {
@@ -343,19 +343,19 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     }
 
     "forbid excluding the same user column twice" in {
-      evaluating { AliasAnalysis(selections("* (except c, c)")) } must produce[RepeatedException]
+      a [RepeatedException] must be thrownBy { AliasAnalysis(selections("* (except c, c)")) }
     }
 
     "forbid excluding the same system column twice" in {
-      evaluating { AliasAnalysis(selections(":* (except :b, :b)")) } must produce[RepeatedException]
+      a [RepeatedException] must be thrownBy { AliasAnalysis(selections(":* (except :b, :b)")) }
     }
 
     "forbid excluding a non-existant user column" in {
-      evaluating { AliasAnalysis(selections("* (except gnu)")) } must produce[NoSuchColumn]
+      a [NoSuchColumn] must be thrownBy { AliasAnalysis(selections("* (except gnu)")) }
     }
 
     "forbid excluding a non-existant system column" in {
-      evaluating { AliasAnalysis(selections(":* (except :gnu)")) } must produce[NoSuchColumn]
+      a [NoSuchColumn] must be thrownBy { AliasAnalysis(selections(":* (except :gnu)")) }
     }
   }
 }
