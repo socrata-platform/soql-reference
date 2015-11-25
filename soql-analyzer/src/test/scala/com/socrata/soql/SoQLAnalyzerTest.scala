@@ -38,7 +38,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   }
 
   test("analysis succeeds in a most minimal query") {
-    val Vector(analysis) = analyzer.analyzeFullQuery("select :id")
+    val analysis = analyzer.analyzeUnchainedQuery("select :id")
     analysis.selection.toSeq must equal (Seq(ColumnName(":id") -> typedExpression(":id")))
     analysis.where must be (None)
     analysis.groupBy must be (None)
@@ -50,7 +50,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   }
 
   test("analysis succeeds in a maximal group-by query") {
-    val Vector(analysis) = analyzer.analyzeFullQuery("select :id as i, sum(balance) where visits > 0 group by i having sum_balance < 5 order by i desc, sum(balance) null first limit 5 offset 10")
+    val analysis = analyzer.analyzeUnchainedQuery("select :id as i, sum(balance) where visits > 0 group by i having sum_balance < 5 order by i desc null last, sum(balance) null first limit 5 offset 10")
     analysis.selection.toSeq must equal (Seq(ColumnName("i") -> typedExpression(":id"), ColumnName("sum_balance") -> typedExpression("sum(balance)")))
     analysis.selection(ColumnName("i")).position.column must equal (8)
     analysis.selection(ColumnName("sum_balance")).position.column must equal (18)
@@ -70,7 +70,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   }
 
   test("analysis succeeds in a maximal ungrouped query") {
-    val Vector(analysis) = analyzer.analyzeFullQuery("select :*, *(except name_first, name_last), nf || (' ' || nl) as name, name_first as nf, name_last as nl where nl < 'm' order by name desc, visits limit 5 offset 10")
+    val analysis = analyzer.analyzeUnchainedQuery("select :*, *(except name_first, name_last), nf || (' ' || nl) as name, name_first as nf, name_last as nl where nl < 'm' order by name desc, visits limit 5 offset 10")
     analysis.selection.toSeq must equal (datasetCtx.schema.toSeq.filterNot(_._1.name.startsWith("name_")).map { case (n, t) => n -> typed.ColumnRef(n, t)(NoPosition) } ++ Seq(ColumnName("name") -> typedExpression("name_first || (' ' || name_last)"), ColumnName("nf") -> typedExpression("name_first"), ColumnName("nl") -> typedExpression("name_last")))
     analysis.selection(ColumnName(":id")).position.column must equal (8)
     analysis.selection(ColumnName(":updated_at")).position.column must equal (8)
@@ -96,12 +96,12 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
 
   test("Giving no values to the split-query analyzer returns the equivalent of `SELECT *'") {
     val analysis = analyzer.analyzeSplitQuery(None, None, None, None, None, None, None, None)
-    analysis must equal (analyzer.analyzeFullQuery("SELECT *"))
+    analysis must equal (analyzer.analyzeUnchainedQuery("SELECT *"))
   }
 
   test("Putting an aggregate in the order-by slot causes aggregation to occur") {
     val analysis = analyzer.analyzeSplitQuery(None, None, None, None, Some("max(visits)"), None, None, None)
-    analysis must equal (analyzer.analyzeFullQuery("SELECT count(*) ORDER BY max(visits)"))
+    analysis must equal (analyzer.analyzeUnchainedQuery("SELECT count(*) ORDER BY max(visits)"))
   }
 
   test("Having a group by clause puts them in the selection list") {
@@ -109,12 +109,12 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     val sep = ", "
     val uncomputed = "visits"
     val analysis = analyzer.analyzeSplitQuery(None, None, Some(computed + sep + uncomputed), None, None, None, None, None)
-    analysis must equal (analyzer.analyzeFullQuery("SELECT "+computed+", "+uncomputed+", count(*) GROUP BY "+computed+", "+uncomputed))
+    analysis must equal (analyzer.analyzeUnchainedQuery("SELECT "+computed+", "+uncomputed+", count(*) GROUP BY "+computed+", "+uncomputed))
     analysis.selection(ColumnName("visits")).position.column must equal (1 + computed.length + sep.length)
   }
 
   test("analysis succeeds in cast") {
-    val Vector(analysis) = analyzer.analyzeFullQuery("select name_last::number as c1, '123'::number as c2, 456::text as c3")
+    val analysis = analyzer.analyzeUnchainedQuery("select name_last::number as c1, '123'::number as c2, 456::text as c3")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("c1") -> typedExpression("name_last::number"),
       ColumnName("c2") -> typedExpression("'123'::number"),
@@ -123,7 +123,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   }
 
   test("json property and index") {
-    val Vector(analysis) = analyzer.analyzeFullQuery("select object.xxxx as c1, array[123] as c2, object.yyyy::text as c3, array[123]::number as c4")
+    val analysis = analyzer.analyzeUnchainedQuery("select object.xxxx as c1, array[123] as c2, object.yyyy::text as c3, array[123]::number as c4")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("c1") -> typedExpression("object.xxxx"),
       ColumnName("c2") -> typedExpression("array[123]"),
@@ -133,26 +133,26 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   }
 
   test("null :: number succeeds") {
-    val Vector(analysis) = analyzer.analyzeFullQuery("select null :: number as x")
+    val analysis = analyzer.analyzeUnchainedQuery("select null :: number as x")
     analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestNumber)).get.monomorphic.get,
       Seq(typed.NullLiteral(TestNull)(NoPosition)))(NoPosition, NoPosition))
   }
 
   test("5 :: number succeeds") {
-    val Vector(analysis) = analyzer.analyzeFullQuery("select 5 :: number as x")
+    val analysis = analyzer.analyzeUnchainedQuery("select 5 :: number as x")
     analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestNumber)).get.monomorphic.get,
       Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber)(NoPosition)))(NoPosition, NoPosition))
   }
 
   test("5 :: money succeeds") {
-    val Vector(analysis) = analyzer.analyzeFullQuery("select 5 :: money as x")
+    val analysis = analyzer.analyzeUnchainedQuery("select 5 :: money as x")
     analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
       Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber)(NoPosition)))(NoPosition, NoPosition)))(NoPosition, NoPosition))
   }
 
   test("a subselect makes the output of the inner select available to the outer") {
-    val Vector(inner, outer) = analyzer.analyzeFullQuery("select max(x) from (select 5 :: money as x)")
-    outer.selection(ColumnName("max_x")) must equal (typed.FunctionCall(MonomorphicFunction(TestFunctions.Max, Map("a" -> SoQLMoney)), Seq(typed.ColumnRef(ColumnName("x"), SoQLMoney)(NoPosition)))(NoPosition, NoPosition))
+    val Seq(inner, outer) = analyzer.analyzeFullQuery("select max(x) from (select 5 :: money as x)")
+    outer.selection(ColumnName("max_x")) must equal (typed.FunctionCall(MonomorphicFunction(TestFunctions.Max, Map("a" -> TestMoney)), Seq(typed.ColumnRef(ColumnName("x"), TestMoney)(NoPosition)))(NoPosition, NoPosition))
     inner.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
       Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber)(NoPosition)))(NoPosition, NoPosition)))(NoPosition, NoPosition))
   }

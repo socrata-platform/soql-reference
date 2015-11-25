@@ -47,6 +47,9 @@ case class ON() extends Token
 case class OUTER() extends Token
 case class RIGHT() extends Token
 
+// Query chaining
+case class QUERYPIPE() extends Token
+
 // Subscripting
 case class DOT() extends FormattedToken(".")
 case class LBRACKET() extends FormattedToken("[")

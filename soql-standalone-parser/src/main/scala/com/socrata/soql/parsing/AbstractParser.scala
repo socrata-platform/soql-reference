@@ -25,7 +25,8 @@ abstract class AbstractParser extends Parsers with PackratParsers {
   def expression(soql: String): Expression = parseFull(expr, soql)
   def orderings(soql: String): Seq[OrderBy] = parseFull(orderingList, soql)
   def groupBys(soql: String): Seq[Expression] = parseFull(groupByList, soql)
-  def selectStatement(soql: String): Vector[Select] = parseFull(fullSelect, soql)
+  def selectStatement(soql: String): Seq[Select] = parseFull(pipedSelect, soql)
+  def unchainedSelectStatement(soql: String): Select = parseFull(unchainedSelect, soql) // a select statement without pipes or subselects
   def limit(soql: String): BigInt = parseFull(integer, soql)
   def offset(soql: String): BigInt = parseFull(integer, soql)
   def search(soql: String): String = parseFull(stringLiteral, soql)
@@ -91,12 +92,18 @@ abstract class AbstractParser extends Parsers with PackratParsers {
    *               *************************
    */
 
-  def fullSelect: Parser[Vector[Select]] =
+  def pipedSelect: Parser[Seq[Select]] =
+    rep1sep(nestedSelect, QUERYPIPE()) ^^ { qs => qs.flatten }
+
+  def nestedSelect: Parser[Seq[Select]] =
     SELECT() ~> selectList ~ opt(fromClause) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-      case s ~ ss ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => ss match {
-        case Some(subselects) => subselects :+ Select(s, w, gb, h, ord, lim, off, sr)
-        case None => Vector(Select(s, w, gb, h, ord, lim, off, sr))
-      }
+      case s ~ ss ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
+        ss.fold(Vector.empty[Select])(_.toVector) :+ Select(s, w, gb, h, ord, lim, off, sr)
+    }
+
+  def unchainedSelect: Parser[Select] =
+    SELECT() ~> selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+      case s ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(s, w, gb, h, ord, lim, off, sr)
     }
 
   def orderByAndSearch: Parser[(Option[Seq[OrderBy]], Option[String])] =
@@ -117,7 +124,7 @@ abstract class AbstractParser extends Parsers with PackratParsers {
       case None => (None, None)
     }
 
-  def fromClause = FROM() ~> LPAREN() ~> fullSelect <~ RPAREN()
+  def fromClause = FROM() ~> LPAREN() ~> pipedSelect <~ RPAREN()
   def whereClause = WHERE() ~> expr
   def groupByClause = GROUP() ~ BY() ~> groupByList
   def havingClause = HAVING() ~> expr

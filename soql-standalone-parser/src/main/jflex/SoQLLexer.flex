@@ -77,6 +77,9 @@ QuotedSystemIdentifier = ":" "@"? ("-" | [:jletterdigit:])+
 %%
 
 <YYINITIAL> {
+  // Query chaining
+  "|>"  { return token(new QUERYPIPE()); }
+
   // Subscripting
   "."   { return token(new DOT()); }
   "["   { return token(new LBRACKET()); }

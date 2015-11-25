@@ -22,7 +22,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
     * @param query The SELECT to parse and analyze
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
     * @return The analysis of the query */
-  def analyzeFullQuery(query: String)(implicit ctx: DatasetContext[Type]): Vector[Analysis] = {
+  def analyzeFullQuery(query: String)(implicit ctx: DatasetContext[Type]): Seq[Analysis] = {
     log.debug("Analyzing full query {}", query)
     val start = System.nanoTime()
     val parsed = new Parser().selectStatement(query)
@@ -30,6 +30,16 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
     log.trace("Parsing took {}ms", ns2ms(end - start))
 
     parsed.scanLeft(fakeAnalysis)(analyzeInOuterSelectionContext).drop(1)
+  }
+
+  def analyzeUnchainedQuery(query: String)(implicit ctx: DatasetContext[Type]): Analysis = {
+    log.debug("Analyzing full query {}", query)
+    val start = System.nanoTime()
+    val parsed = new Parser().unchainedSelectStatement(query)
+    val end = System.nanoTime()
+    log.trace("Parsing took {}ms", ns2ms(end - start))
+
+    analyzeInOuterSelectionContext(fakeAnalysis, parsed)
   }
 
   private def fakeAnalysis(implicit ctx: DatasetContext[Type]) =
