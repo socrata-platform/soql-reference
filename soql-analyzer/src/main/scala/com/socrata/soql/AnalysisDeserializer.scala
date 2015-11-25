@@ -26,7 +26,7 @@ private trait DeserializationDictionary[C, T] {
   def strings(i: Int): String
 }
 
-class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializer: String => T, functionMap: String => Function[T]) extends (InputStream => SoQLAnalysis[C, T]) {
+class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializer: String => T, functionMap: String => Function[T]) extends (InputStream => Seq[SoQLAnalysis[C, T]]) {
   type Expr = CoreExpr[C, T]
   type Order = OrderBy[C, T]
 
@@ -192,7 +192,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       }
 
 
-    def read(): SoQLAnalysis[C, T] = {
+    def readAnalysis(): SoQLAnalysis[C, T] = {
       val isGrouped = readIsGrouped()
       val selection = readSelection()
       val where = readWhere()
@@ -213,12 +213,21 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         offset,
         search)
     }
+
+    def read(): Seq[SoQLAnalysis[C, T]] = {
+      val count = in.readInt32()
+      for(_ <- 1 to count) yield readAnalysis()
+    }
   }
 
-  def apply(in: InputStream): SoQLAnalysis[C, T] = {
+  def apply(in: InputStream): Seq[SoQLAnalysis[C, T]] = {
     val cis = CodedInputStream.newInstance(in)
     cis.readInt32() match {
       case 0 =>
+        val dictionary = DeserializationDictionaryImpl.fromInput(cis)
+        val deserializer = new Deserializer(cis, dictionary)
+        Seq(deserializer.readAnalysis())
+      case 1 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary)
         deserializer.read()

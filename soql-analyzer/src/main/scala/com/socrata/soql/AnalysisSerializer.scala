@@ -22,7 +22,7 @@ private trait SerializationDictionary[C,T] {
   def registerFunction(func: MonomorphicFunction[T]): Int
 }
 
-class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => String) extends ((OutputStream, SoQLAnalysis[C, T]) => Unit) {
+class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => String) extends ((OutputStream, Seq[SoQLAnalysis[C, T]]) => Unit) {
   type Expr = CoreExpr[C, T]
   type Order = OrderBy[C, T]
 
@@ -257,7 +257,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
         out.writeUInt32NoTag(registerString(s))
       }
 
-    def write(analysis: SoQLAnalysis[C, T]) {
+    def writeAnalysis(analysis: SoQLAnalysis[C, T]) {
       val SoQLAnalysis(isGrouped,
                        selection,
                        where,
@@ -277,18 +277,23 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       writeOffset(offset)
       writeSearch(search)
     }
+
+    def write(analyses: Seq[SoQLAnalysis[C, T]]): Unit = {
+      out.writeInt32NoTag(analyses.length)
+      analyses.foreach(writeAnalysis)
+    }
   }
 
-  def apply(outputStream: OutputStream, analysis: SoQLAnalysis[C, T]) {
+  def apply(outputStream: OutputStream, analyses: Seq[SoQLAnalysis[C, T]]) {
     val dictionary = new SerializationDictionaryImpl
     val postDictionaryData = new ByteArrayOutputStream
     val out = CodedOutputStream.newInstance(postDictionaryData)
     val serializer = new Serializer(out, dictionary)
-    serializer.write(analysis)
+    serializer.write(analyses)
     out.flush()
 
     val codedOutputStream = CodedOutputStream.newInstance(outputStream)
-    codedOutputStream.writeInt32NoTag(0) // version number
+    codedOutputStream.writeInt32NoTag(1) // version number
     dictionary.save(codedOutputStream)
     codedOutputStream.flush()
     postDictionaryData.writeTo(outputStream)
