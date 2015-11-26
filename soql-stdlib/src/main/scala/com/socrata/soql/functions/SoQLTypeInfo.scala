@@ -24,4 +24,6 @@ object SoQLTypeInfo extends TypeInfo[SoQLAnalysisType] {
 
   def canBePassedToWithoutConversion(actual: SoQLAnalysisType, expected: SoQLAnalysisType) =
     SoQLTypeConversions.canBePassedToWithoutConversion(actual, expected)
+
+  def isOrdered(typ: SoQLAnalysisType): Boolean = SoQLTypeClasses.Ordered(typ.canonical)
 }

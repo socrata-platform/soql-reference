@@ -4,8 +4,8 @@ import com.ibm.icu.util.CaseInsensitiveString
 
 import com.socrata.soql.environment.TypeName
 
-sealed abstract class TestType(val name: TypeName) {
-  def this(name: String) = this(TypeName(name))
+sealed abstract class TestType(val name: TypeName, val isOrdered: Boolean) {
+  def this(name: String, isOrdered: Boolean) = this(TypeName(name), isOrdered)
   override final def toString = name.toString
 
   def real = true
@@ -23,23 +23,23 @@ object TestType {
   }
 }
 
-case object TestText extends TestType("text")
-case object TestBoolean extends TestType("boolean")
-case object TestNumber extends TestType("number")
-case object TestMoney extends TestType("money")
-case object TestDouble extends TestType("double")
-case object TestFixedTimestamp extends TestType("fixed_timestamp")
-case object TestFloatingTimestamp extends TestType("floating_timestamp")
-case object TestObject extends TestType("object")
-case object TestArray extends TestType("array")
-case object TestLocation extends TestType("location")
-case object TestJson extends TestType("json")
+case object TestText extends TestType("text", isOrdered = true)
+case object TestBoolean extends TestType("boolean", isOrdered = true)
+case object TestNumber extends TestType("number", isOrdered = true)
+case object TestMoney extends TestType("money", isOrdered = true)
+case object TestDouble extends TestType("double", isOrdered = true)
+case object TestFixedTimestamp extends TestType("fixed_timestamp", isOrdered = true)
+case object TestFloatingTimestamp extends TestType("floating_timestamp", isOrdered = true)
+case object TestObject extends TestType("object", isOrdered = false)
+case object TestArray extends TestType("array", isOrdered = false)
+case object TestLocation extends TestType("location", isOrdered = false)
+case object TestJson extends TestType("json", isOrdered = false)
 
-case object TestNull extends TestType("null") {
+case object TestNull extends TestType("null", isOrdered = false) {
   override def isPassableTo(that: TestType) = true
 }
 
-sealed abstract class FakeTestType(name: String) extends TestType(name) {
+sealed abstract class FakeTestType(name: String) extends TestType(name, isOrdered = false) {
   override def real = false
   def realType: TestType
   override def canonical = realType

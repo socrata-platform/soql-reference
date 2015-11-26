@@ -32,4 +32,4 @@ sealed trait TypecheckException extends SoQLException
 case class NoSuchFunction(name: FunctionName, arity: Int, position: Position) extends SoQLException("No such function `" + name + "/" + arity + "'", position) with TypecheckException
 case class TypeMismatch(name: FunctionName, actual: TypeName, position: Position) extends SoQLException("Cannot pass a value of type `" + actual + "' to function `" + name + "'", position) with TypecheckException
 case class AmbiguousCall(name: FunctionName, position: Position) extends SoQLException("Ambiguous call to `" + name + "'", position) with TypecheckException
-
+case class UnorderableOrderBy(typ: TypeName, position: Position) extends SoQLException("Cannot order by an expression of type `" + typ + "'", position) with TypecheckException

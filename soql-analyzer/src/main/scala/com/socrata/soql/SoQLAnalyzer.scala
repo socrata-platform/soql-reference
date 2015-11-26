@@ -1,5 +1,7 @@
 package com.socrata.soql
 
+import com.socrata.soql.exceptions.UnorderableOrderBy
+
 import scala.util.parsing.input.NoPosition
 
 import com.socrata.soql.aliases.AliasAnalysis
@@ -235,7 +237,11 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
                      offset: Option[BigInt],
                      search: Option[String]): Analysis =
   {
-    // todo: check that the types of the order-bys are Orderable
+    for {
+      obs <- orderBy
+      (_, e) <- obs
+      if !typeInfo.isOrdered(e.typ)
+    } throw UnorderableOrderBy(typeInfo.typeNameFor(e.typ), e.position)
 
     SoQLAnalysis(
       isGrouped,

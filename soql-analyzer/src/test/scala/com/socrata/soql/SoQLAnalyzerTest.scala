@@ -1,5 +1,7 @@
 package com.socrata.soql
 
+import com.socrata.soql.exceptions.UnorderableOrderBy
+
 import scala.util.parsing.input.NoPosition
 
 import org.scalatest.FunSuite
@@ -155,6 +157,10 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     outer.selection(ColumnName("max_x")) must equal (typed.FunctionCall(MonomorphicFunction(TestFunctions.Max, Map("a" -> TestMoney)), Seq(typed.ColumnRef(ColumnName("x"), TestMoney)(NoPosition)))(NoPosition, NoPosition))
     inner.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
       Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber)(NoPosition)))(NoPosition, NoPosition)))(NoPosition, NoPosition))
+  }
+
+  test("cannot ORDER BY an unorderable type") {
+    an [UnorderableOrderBy] must be thrownBy analyzer.analyzeFullQuery("select * order by array")
   }
 }
 

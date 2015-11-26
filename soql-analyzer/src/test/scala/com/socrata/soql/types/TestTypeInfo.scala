@@ -22,4 +22,6 @@ object TestTypeInfo extends TypeInfo[TestType] {
   def typeParameterUniverse = TestTypeConversions.typeParameterUniverse
 
   def canBePassedToWithoutConversion(actual: TestType, expected: TestType) = TestTypeConversions.canBePassedToWithoutConversion(actual, expected)
+
+  def isOrdered(typ: TestType) = typ.isOrdered
 }
