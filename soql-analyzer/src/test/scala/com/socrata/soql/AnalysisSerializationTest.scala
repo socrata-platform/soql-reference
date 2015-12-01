@@ -57,4 +57,27 @@ class AnalysisSerializationTest extends FunSuite with MustMatchers {
     serializer(baos, analysis)
     deserializer(new ByteArrayInputStream(baos.toByteArray)) must equal (analysis)
   }
+
+  test("deserialize-of-unchained-serialize is Seq(_) (all query options)") {
+    val analysis = analyzer.analyzeUnchainedQuery(
+      """select :id as i, sum(balance)
+        |   where visits > 0
+        |   group by i, visits
+        |   having sum_balance < 5
+        |   order by i desc,
+        |            sum(balance) null first
+        |   search 'gnu'
+        |   limit 5
+        |   offset 10""".stripMargin)
+    val baos = new ByteArrayOutputStream
+    serializer.unchainedSerializer(baos, analysis)
+    deserializer(new ByteArrayInputStream(baos.toByteArray)) must equal (Seq(analysis))
+  }
+
+  test("deserialize-of-unchained-serialize is Seq(_) (minimal query options)") {
+    val analysis = analyzer.analyzeUnchainedQuery("select :id")
+    val baos = new ByteArrayOutputStream
+    serializer.unchainedSerializer(baos, analysis)
+    deserializer(new ByteArrayInputStream(baos.toByteArray)) must equal (Seq(analysis))
+  }
 }
