@@ -20,7 +20,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
   def ns2ms(ns: Long) = ns / 1000000
   val aggregateChecker = new AggregateChecker[Type]
 
-  /** Turn a SoQL SELECT statement into a typed `Analysis` object.
+  /** Turn a SoQL SELECT statement into a sequence of typed `Analysis` objects.
     * @param query The SELECT to parse and analyze
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
     * @return The analysis of the query */
@@ -31,20 +31,24 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
     val end = System.nanoTime()
     log.trace("Parsing took {}ms", ns2ms(end - start))
 
-    parsed.scanLeft(fakeAnalysis)(analyzeInOuterSelectionContext).drop(1)
+    parsed.scanLeft(baseAnalysis)(analyzeInOuterSelectionContext).drop(1)
   }
 
+  /** Turn a simple SoQL SELECT statement into an `Analysis` object.
+    * @param query The SELECT to parse and analyze
+    * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
+    * @return The analysis of the query */
   def analyzeUnchainedQuery(query: String)(implicit ctx: DatasetContext[Type]): Analysis = {
-    log.debug("Analyzing full query {}", query)
+    log.debug("Analyzing full unchained query {}", query)
     val start = System.nanoTime()
     val parsed = new Parser().unchainedSelectStatement(query)
     val end = System.nanoTime()
     log.trace("Parsing took {}ms", ns2ms(end - start))
 
-    analyzeInOuterSelectionContext(fakeAnalysis, parsed)
+    analyzeInOuterSelectionContext(baseAnalysis, parsed)
   }
 
-  private def fakeAnalysis(implicit ctx: DatasetContext[Type]) =
+  private def baseAnalysis(implicit ctx: DatasetContext[Type]) =
     SoQLAnalysis(isGrouped = false,
                  selection = ctx.schema.transform(typed.ColumnRef(_, _)(NoPosition)),
                  where = None,
@@ -68,8 +72,9 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
     * @param orderBy A comma-separated list of expressions and sort-order specifiers to be uesd as the query's ORDER BY clause.
     * @param limit A non-negative integer to be used as the query's LIMIT parameter
     * @param offset A non-negative integer to be used as the query's OFFSET parameter
+    * @param sourceFrom The analysis-chain of the query this query is based upon, if applicable.
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous.
-    * @return The analysis of the query. */
+    * @return The analysis of the query.  Note this should be appended to `sourceFrom` to form a full query-chain. */
   def analyzeSplitQuery(selection: Option[String],
                         where: Option[String],
                         groupBy: Option[String],
@@ -77,16 +82,21 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
                         orderBy: Option[String],
                         limit: Option[String],
                         offset: Option[String],
-                        search: Option[String])(implicit ctx: DatasetContext[Type]): Analysis =
+                        search: Option[String],
+                        sourceFrom: Seq[Analysis] = Nil)(implicit ctx: DatasetContext[Type]): Analysis =
   {
     log.debug("analyzing split query")
 
     val p = new Parser
 
+    val lastQuery =
+      if(sourceFrom.isEmpty) baseAnalysis
+      else sourceFrom.last
+
     def dispatch(selection: Option[Selection], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) =
       selection match {
-        case None => analyzeNoSelection(where, groupBy, having, orderBy, limit, offset, search)
-        case Some(s) => analyzeWithSelection(Select(s, where, groupBy, having, orderBy, limit, offset, search))
+        case None => analyzeNoSelectionInOuterSelectionContext(lastQuery, where, groupBy, having, orderBy, limit, offset, search)
+        case Some(s) => analyzeInOuterSelectionContext(lastQuery, Select(s, where, groupBy, having, orderBy, limit, offset, search))
       }
 
     dispatch(
@@ -99,6 +109,19 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
       offset.map(p.offset),
       search.map(p.search)
     )
+  }
+
+  def analyzeNoSelectionInOuterSelectionContext(lastQuery: Analysis,
+                                                where: Option[Expression],
+                                                groupBy: Option[Seq[Expression]],
+                                                having: Option[Expression],
+                                                orderBy: Option[Seq[OrderBy]],
+                                                limit: Option[BigInt],
+                                                offset: Option[BigInt],
+                                                search: Option[String]): Analysis =
+  {
+    implicit val fakeCtx = contextFromAnalysis(lastQuery)
+    analyzeNoSelection(where, groupBy, having, orderBy, limit, offset, search)
   }
 
   def analyzeNoSelection(where: Option[Expression],
@@ -179,11 +202,14 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
   }
 
   def analyzeInOuterSelectionContext(lastQuery: Analysis, query: Select): Analysis = {
-    implicit val fakeCtx = new DatasetContext[Type] {
-      override val schema: OrderedMap[ColumnName, Type] = lastQuery.selection.mapValues(_.typ)
-    }
+    implicit val fakeCtx = contextFromAnalysis(lastQuery)
     analyzeWithSelection(query)
   }
+
+  def contextFromAnalysis(a: Analysis): DatasetContext[Type] =
+    new DatasetContext[Type] {
+      override val schema: OrderedMap[ColumnName, Type] = a.selection.mapValues(_.typ)
+    }
 
   def analyzeWithSelection(query: Select)(implicit ctx: DatasetContext[Type]): Analysis = {
     log.debug("There is a selection; typechecking all parts")
