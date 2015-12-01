@@ -36,16 +36,16 @@ class AnalysisSerializationTest extends FunSuite with MustMatchers {
 
   test("deserialize-of-serialize is the identity (all query options)") {
     val analysis = analyzer.analyzeFullQuery(
-      """select :id as i, sum(amt)
-        |   from (select :id, balance as amt, visits)
-        |   where visits > 0
-        |   group by i, visits
-        |   having sum_amt < 5
-        |   order by i desc,
-        |            sum(amt) null first
-        |   search 'gnu'
-        |   limit 5
-        |   offset 10""".stripMargin)
+      """select :id, balance as amt, visits |>
+        |   select :id as i, sum(amt)
+        |     where visits > 0
+        |     group by i, visits
+        |     having sum_amt < 5
+        |     order by i desc,
+        |              sum(amt) null first
+        |     search 'gnu'
+        |     limit 5
+        |     offset 10""".stripMargin)
     val baos = new ByteArrayOutputStream
     serializer(baos, analysis)
     deserializer(new ByteArrayInputStream(baos.toByteArray)) must equal (analysis)

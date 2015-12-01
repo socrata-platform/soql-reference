@@ -92,14 +92,7 @@ abstract class AbstractParser extends Parsers with PackratParsers {
    *               *************************
    */
 
-  def pipedSelect: Parser[Seq[Select]] =
-    rep1sep(nestedSelect, QUERYPIPE()) ^^ { qs => qs.flatten }
-
-  def nestedSelect: Parser[Seq[Select]] =
-    SELECT() ~> selectList ~ opt(fromClause) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-      case s ~ ss ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
-        ss.fold(Vector.empty[Select])(_.toVector) :+ Select(s, w, gb, h, ord, lim, off, sr)
-    }
+  def pipedSelect: Parser[Seq[Select]] = rep1sep(unchainedSelect, QUERYPIPE())
 
   def unchainedSelect: Parser[Select] =
     SELECT() ~> selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
@@ -124,7 +117,6 @@ abstract class AbstractParser extends Parsers with PackratParsers {
       case None => (None, None)
     }
 
-  def fromClause = FROM() ~> LPAREN() ~> pipedSelect <~ RPAREN()
   def whereClause = WHERE() ~> expr
   def groupByClause = GROUP() ~ BY() ~> groupByList
   def havingClause = HAVING() ~> expr
