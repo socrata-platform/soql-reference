@@ -24,4 +24,6 @@ object TestTypeInfo extends TypeInfo[TestType] {
   def canBePassedToWithoutConversion(actual: TestType, expected: TestType) = TestTypeConversions.canBePassedToWithoutConversion(actual, expected)
 
   def isOrdered(typ: TestType) = typ.isOrdered
+  def isGroupable(typ: TestType) = typ != TestArray
+  def isBoolean(typ: TestType) = typ == TestBoolean
 }

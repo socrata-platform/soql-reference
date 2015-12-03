@@ -1,6 +1,6 @@
 package com.socrata.soql
 
-import com.socrata.soql.exceptions.UnorderableOrderBy
+import com.socrata.soql.exceptions.{NonGroupableGroupBy, NonBooleanHaving, NonBooleanWhere, UnorderableOrderBy}
 import org.scalacheck.{Gen, Arbitrary}
 import org.scalatest.prop.PropertyChecks
 
@@ -163,6 +163,19 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
 
   test("cannot ORDER BY an unorderable type") {
     an [UnorderableOrderBy] must be thrownBy analyzer.analyzeFullQuery("select * order by array")
+  }
+
+  test("cannot filter by a non-boolean type") {
+    a [NonBooleanWhere] must be thrownBy analyzer.analyzeFullQuery("select * where array")
+    a [NonBooleanHaving] must be thrownBy analyzer.analyzeFullQuery("select count(*) having count(*)")
+  }
+
+  test("cannot group by a non-groupable type") {
+    a [NonGroupableGroupBy] must be thrownBy analyzer.analyzeFullQuery("select array group by array")
+  }
+
+  test("Merging no stages returns no stages") {
+    SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, Nil) must equal (Nil)
   }
 
   test("Merging two simple filter queries is the same as querying one") {

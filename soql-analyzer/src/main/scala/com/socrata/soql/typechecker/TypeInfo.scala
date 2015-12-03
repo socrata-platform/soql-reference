@@ -16,6 +16,8 @@ trait TypeInfo[Type] {
   def canonicalize(typ: Type): Type
 
   def isOrdered(typ: Type): Boolean
+  def isBoolean(typ: Type): Boolean
+  def isGroupable(typ: Type): Boolean
 
   /** The set of all types a function can be declared to accept.  That is,
     * every real type except null.  It should be ordered by most-preferred

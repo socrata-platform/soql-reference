@@ -1,15 +1,16 @@
 package com.socrata.soql
 
-import com.socrata.soql.exceptions.UnorderableOrderBy
+import com.socrata.soql.exceptions.{NonGroupableGroupBy, NonBooleanWhere, NonBooleanHaving, UnorderableOrderBy}
+import com.socrata.soql.functions.MonomorphicFunction
 
-import scala.util.parsing.input.NoPosition
+import scala.util.parsing.input.{Position, NoPosition}
 
 import com.socrata.soql.aliases.AliasAnalysis
 import com.socrata.soql.aggregates.AggregateChecker
 import com.socrata.soql.ast._
 import com.socrata.soql.parsing.Parser
 import com.socrata.soql.typechecker._
-import com.socrata.soql.environment.{ColumnName, DatasetContext}
+import com.socrata.soql.environment.{TypeName, ColumnName, DatasetContext}
 import com.socrata.soql.collection.OrderedMap
 
 class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type]) {
@@ -263,11 +264,14 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
                      offset: Option[BigInt],
                      search: Option[String]): Analysis =
   {
-    for {
-      obs <- orderBy
-      (_, e) <- obs
-      if !typeInfo.isOrdered(e.typ)
-    } throw UnorderableOrderBy(typeInfo.typeNameFor(e.typ), e.position)
+    def check(items: TraversableOnce[Expr], pred: Type => Boolean, onError: (TypeName, Position) => Throwable) {
+      for(item <- items if !pred(item.typ)) throw onError(typeInfo.typeNameFor(item.typ), item.position)
+    }
+
+    check(where, typeInfo.isBoolean, NonBooleanWhere)
+    check(groupBy.getOrElse(Nil), typeInfo.isGroupable, NonGroupableGroupBy)
+    check(having, typeInfo.isBoolean, NonBooleanHaving)
+    check(orderBy.getOrElse(Nil).map(_._2), typeInfo.isOrdered, UnorderableOrderBy)
 
     SoQLAnalysis(
       isGrouped,
