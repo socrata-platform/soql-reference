@@ -1,6 +1,8 @@
 package com.socrata.soql
 
 import com.socrata.soql.exceptions.UnorderableOrderBy
+import org.scalacheck.{Gen, Arbitrary}
+import org.scalatest.prop.PropertyChecks
 
 import scala.util.parsing.input.NoPosition
 
@@ -13,7 +15,7 @@ import com.socrata.soql.typechecker.Typechecker
 import com.socrata.soql.types._
 import com.socrata.soql.functions.MonomorphicFunction
 
-class SoQLAnalyzerTest extends FunSuite with MustMatchers {
+class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   implicit val datasetCtx = new DatasetContext[TestType] {
     val schema = com.socrata.soql.collection.OrderedMap(
       ColumnName(":id") -> TestNumber,
@@ -162,5 +164,69 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   test("cannot ORDER BY an unorderable type") {
     an [UnorderableOrderBy] must be thrownBy analyzer.analyzeFullQuery("select * order by array")
   }
-}
 
+  test("Merging two simple filter queries is the same as querying one") {
+    val analysis1 = analyzer.analyzeFullQuery("select 2*visits as twice_visits where twice_visits > 10 |> select * where twice_visits > 20")
+    val analysis2 = analyzer.analyzeFullQuery("select 2*visits as twice_visits where twice_visits > 10 and twice_visits > 20")
+    SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
+  }
+
+  test("Merging a filter-on-a-group-on-a-filter is the same as a where-group-having one") {
+    val analysis1 = analyzer.analyzeFullQuery("select visits where visits > 10 |> select visits, count(*) as c group by visits |> select * where c > 5")
+    val analysis2 = analyzer.analyzeFullQuery("select visits, count(*) as c where visits > 10 group by visits having c > 5")
+    SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
+  }
+
+  test("Merging limits truncates the second limit to the window defined by the first") {
+    val analysis1 = analyzer.analyzeFullQuery("select visits offset 10 limit 5 |> select * offset 3 limit 10")
+    val analysis2 = analyzer.analyzeFullQuery("select visits offset 13 limit 2")
+    SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
+  }
+
+  test("Merging an offset to the end of a limit reduces the limit to 0") {
+    val analysis1 = analyzer.analyzeFullQuery("select visits offset 10 limit 5 |> select * offset 5")
+    val analysis2 = analyzer.analyzeFullQuery("select visits offset 15 limit 0")
+    SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
+  }
+
+  test("Merging an offset past the end of a limit reduces the limit to 0 and does not move the offset past the end of the first query") {
+    val analysis1 = analyzer.analyzeFullQuery("select visits offset 10 limit 5 |> select * offset 50")
+    val analysis2 = analyzer.analyzeFullQuery("select visits offset 15 limit 0")
+    SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
+  }
+
+  test("Limit-combining produces the intersection of the two regions") {
+    forAll { (aLim0: Option[BigInt], aOff0: Option[BigInt], bLim0: Option[BigInt], bOff0: Option[BigInt]) =>
+      val aLim = aLim0.map(_.abs)
+      val aOff = aOff0.map(_.abs)
+      val bLim = bLim0.map(_.abs)
+      val bOff = bOff0.map(_.abs)
+
+      val (cLim, cOff) = Merger.combineLimits(aLim, aOff, bLim, bOff)
+
+      val trueAOff = aOff.getOrElse(BigInt(0))
+      val trueBOff = trueAOff + bOff.getOrElse(BigInt(0))
+      val trueCOff = cOff.getOrElse(BigInt(0))
+
+      sealed trait Bound
+      case class Value(x: BigInt) extends Bound
+      case object Infinite extends Bound
+      def asBound(x: Option[BigInt]) = x.fold[Bound](Infinite)(Value)
+      implicit object boundOrd extends Ordering[Bound] {
+        override def compare(x: Bound, y: Bound): Int = (x, y) match {
+          case (Value(a), Value(b)) => a.compare(b)
+          case (Infinite, Value(_)) => 1
+          case (Value(_), Infinite) => -1
+          case (Infinite, Infinite) => 0
+        }
+      }
+
+      val trueAEnd = asBound(aLim.map(_ + trueAOff))
+      val trueBEnd = asBound(bLim.map(_ + trueBOff))
+      val trueCEnd = asBound(cLim.map(_ + trueCOff))
+
+      Value(trueCOff) must equal (List(Value(trueBOff), trueAEnd).min)
+      trueCEnd must equal (List(trueAEnd, trueBEnd).min)
+    }
+  }
+}

@@ -300,3 +300,160 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
       orderBy = orderBy.map(_.map(_.mapColumnIds(f)))
     )
 }
+
+object SoQLAnalysis {
+  def merge[T](andFunction: MonomorphicFunction[T], stages: Seq[SoQLAnalysis[ColumnName, T]]): Seq[SoQLAnalysis[ColumnName, T]] =
+    new Merger(andFunction).merge(stages)
+}
+
+private class Merger[T](andFunction: MonomorphicFunction[T]) {
+  type Analysis = SoQLAnalysis[ColumnName, T]
+  type Expr = typed.CoreExpr[ColumnName, T]
+
+  def merge(stages: Seq[Analysis]): Seq[Analysis] =
+    stages.drop(1).foldLeft(stages.take(1).toList) { (acc, nextStage) =>
+      tryMerge(acc.head /* acc cannot be empty */, nextStage) match {
+        case Some(merged) => merged :: acc.tail
+        case None => nextStage :: acc
+      }
+    }.reverse
+
+  // Currently a search on the second query prevents merging, as its meaning ought to
+  // be "search the output of the first query" rather than "search the underlying
+  // dataset".  Unfortunately this means "select :*,*" isn't a left-identity of merge
+  // for a query that contains a search.
+  private def tryMerge(a: Analysis, b: Analysis): Option[Analysis] = (a, b) match {
+    case (SoQLAnalysis(aIsGroup, aSelect, aWhere, aGroup, aHaving, aOrder, aLim, aOff, aSearch),
+          SoQLAnalysis(false,    bSelect, None,   None,   None,    None,   bLim, bOff, None)) =>
+      // we can merge a change of only selection and limit + offset onto anything
+      val (newLim, newOff) = Merger.combineLimits(aLim, aOff, bLim, bOff)
+      Some(SoQLAnalysis(isGrouped = aIsGroup,
+                        selection = mergeSelection(aSelect, bSelect),
+                        where = aWhere,
+                        groupBy = aGroup,
+                        having = aHaving,
+                        orderBy = aOrder,
+                        limit = newLim,
+                        offset = newOff,
+                        search = aSearch))
+    case (SoQLAnalysis(false, aSelect, aWhere, None, None, aOrder, None, None, aSearch),
+          SoQLAnalysis(false, bSelect, bWhere, None, None, bOrder, bLim, bOff, None)) =>
+      // Can merge a change of filter or order only if no window was specified on the left
+      Some(SoQLAnalysis(isGrouped = false,
+                        selection = mergeSelection(aSelect, bSelect),
+                        where = mergeWhereLike(aSelect, aWhere, bWhere),
+                        groupBy = None,
+                        having = None,
+                        orderBy = mergeOrderBy(aSelect, aOrder, bOrder),
+                        limit = bLim,
+                        offset = bOff,
+                        search = aSearch))
+    case (SoQLAnalysis(false, aSelect, aWhere, None,     None,    _,      None, None, aSearch),
+          SoQLAnalysis(true,  bSelect, bWhere, bGroupBy, bHaving, bOrder, bLim, bOff, None)) =>
+      // an aggregate on a non-aggregate
+      Some(SoQLAnalysis(isGrouped = true,
+                        selection = mergeSelection(aSelect, bSelect),
+                        where = mergeWhereLike(aSelect, aWhere, bWhere),
+                        groupBy = mergeGroupBy(aSelect, bGroupBy),
+                        having = mergeWhereLike(aSelect, None, bHaving),
+                        orderBy = mergeOrderBy(aSelect, None, bOrder),
+                        limit = bLim,
+                        offset = bOff,
+                        search = aSearch))
+    case (SoQLAnalysis(true,  aSelect, aWhere, aGroupBy, aHaving, aOrder, None, None, aSearch),
+          SoQLAnalysis(false, bSelect, bWhere, None,     None,    bOrder, bLim, bOff, None)) =>
+      // a non-aggregate on an aggregate -- merge the WHERE of the second with the HAVING of the first
+      Some(SoQLAnalysis(isGrouped = true,
+                        selection = mergeSelection(aSelect, bSelect),
+                        where = aWhere,
+                        groupBy = aGroupBy,
+                        having = mergeWhereLike(aSelect, aHaving, bWhere),
+                        orderBy = mergeOrderBy(aSelect, aOrder, bOrder),
+                        limit = bLim,
+                        offset = bOff,
+                        search = aSearch))
+    case (_, _) =>
+      None
+  }
+
+  private def mergeSelection(a: OrderedMap[ColumnName, Expr],
+                                b: OrderedMap[ColumnName, Expr]): OrderedMap[ColumnName, Expr] =
+    // ok.  We don't need anything from A, but columnRefs in b's expr that refer to a's values need to get substituted
+    b.mapValues(replaceRefs(a, _))
+
+  private def mergeOrderBy(aliases: OrderedMap[ColumnName, Expr],
+                              obA: Option[Seq[typed.OrderBy[ColumnName, T]]],
+                              obB: Option[Seq[typed.OrderBy[ColumnName, T]]]): Option[Seq[typed.OrderBy[ColumnName, T]]] =
+    (obA, obB) match {
+      case (None, None) => None
+      case (Some(a), None) => Some(a)
+      case (None, Some(b)) => Some(b.map { ob => ob.copy(expression = replaceRefs(aliases, ob.expression)) })
+      case (Some(a), Some(b)) => Some(b.map { ob => ob.copy(expression = replaceRefs(aliases, ob.expression)) } ++ a)
+    }
+
+  private def mergeWhereLike(aliases: OrderedMap[ColumnName, Expr],
+                             a: Option[Expr],
+                             b: Option[Expr]): Option[Expr] =
+    (a, b) match {
+      case (None, None) => None
+      case (Some(a), None) => Some(a)
+      case (None, Some(b)) => Some(replaceRefs(aliases, b))
+      case (Some(a), Some(b)) => Some(typed.FunctionCall(andFunction, List(a, replaceRefs(aliases, b)))(NoPosition, NoPosition))
+    }
+
+  private def mergeGroupBy(aliases: OrderedMap[ColumnName, Expr],
+                              gb: Option[Seq[Expr]]): Option[Seq[Expr]] =
+    gb.map(_.map(replaceRefs(aliases, _)))
+
+  private def replaceRefs(a: OrderedMap[ColumnName, Expr],
+                             b: Expr): Expr =
+    b match {
+      case cr@typed.ColumnRef(c, t) =>
+        a.getOrElse(c, cr)
+      case tl: typed.TypedLiteral[T] =>
+        tl
+      case fc@typed.FunctionCall(f, params) =>
+        typed.FunctionCall(f, params.map(replaceRefs(a, _)))(fc.position, fc.functionNamePosition)
+    }
+}
+
+private object Merger {
+  def combineLimits(aLim: Option[BigInt], aOff: Option[BigInt], bLim: Option[BigInt], bOff: Option[BigInt]): (Option[BigInt], Option[BigInt]) = {
+    // ok, what we're doing here is basically finding the intersection of two segments of
+    // the integers, where either segment may end at infinity.  Note that all the inputs are
+    // non-negative (enforced by the parser).  This simplifies things somewhat
+    // because we can assume that aOff + bOff > aOff
+    require(aLim.fold(true)(_ >= 0), "Negative aLim")
+    require(aOff.fold(true)(_ >= 0), "Negative aOff")
+    require(bLim.fold(true)(_ >= 0), "Negative bLim")
+    require(bOff.fold(true)(_ >= 0), "Negative bOff")
+    (aLim, aOff, bLim, bOff) match {
+      case (None, None, bLim, bOff) =>
+        (bLim, bOff)
+      case (None, Some(aOff), bLim, bOff) =>
+        // first is unbounded to the right
+        (bLim, Some(aOff + bOff.getOrElse(BigInt(0))))
+      case (Some(aLim), aOff, Some(bLim), bOff) =>
+        // both are bound to the right
+        val trueAOff = aOff.getOrElse(BigInt(0))
+        val trueBOff = bOff.getOrElse(BigInt(0)) + trueAOff
+        val trueAEnd = trueAOff + aLim
+        val trueBEnd = trueBOff + bLim
+
+        val trueOff = trueBOff min trueAEnd
+        val trueEnd = trueBEnd min trueAEnd
+        val trueLim = trueEnd - trueOff
+
+        (Some(trueLim), Some(trueOff))
+      case (Some(aLim), aOff, None, bOff) =>
+        // first is bound to the right but the second is not
+        val trueAOff = aOff.getOrElse(BigInt(0))
+        val trueBOff = bOff.getOrElse(BigInt(0)) + trueAOff
+
+        val trueEnd = trueAOff + aLim
+        val trueOff = trueBOff min trueEnd
+        val trueLim = trueEnd - trueOff
+        (Some(trueLim), Some(trueOff))
+    }
+  }
+}
