@@ -1,5 +1,7 @@
 package com.socrata.soql.typed
 
+import com.socrata.soql.ast.Expression
+
 import scala.util.parsing.input.Position
 import scala.runtime.ScalaRunTime
 
@@ -32,7 +34,7 @@ case class NumberLiteral[Type](value: BigDecimal, typ: Type)(val position: Posit
   protected def asString = value.toString
 }
 case class StringLiteral[Type](value: String, typ: Type)(val position: Position) extends TypedLiteral[Type] {
-  protected def asString = "'" + value.replaceAll("'", "''") + "'"
+  protected def asString = Expression.escapeString(value)
 }
 case class BooleanLiteral[Type](value: Boolean, typ: Type)(val position: Position) extends TypedLiteral[Type] {
   protected def asString = value.toString.toUpperCase
