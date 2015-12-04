@@ -24,4 +24,8 @@ object SoQLTypeInfo extends TypeInfo[SoQLAnalysisType] {
 
   def canBePassedToWithoutConversion(actual: SoQLAnalysisType, expected: SoQLAnalysisType) =
     SoQLTypeConversions.canBePassedToWithoutConversion(actual, expected)
+
+  def isOrdered(typ: SoQLAnalysisType): Boolean = SoQLTypeClasses.Ordered(typ.canonical)
+  def isBoolean(typ: SoQLAnalysisType): Boolean = typ.canonical == SoQLBoolean
+  def isGroupable(typ: SoQLAnalysisType): Boolean = SoQLTypeClasses.Equatable(typ.canonical)
 }

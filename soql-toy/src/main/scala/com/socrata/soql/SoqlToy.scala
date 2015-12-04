@@ -49,29 +49,31 @@ object SoqlToy extends (Array[String] => Unit) {
         menu()
       } else {
         try {
-          val analysis = analyzer.analyzeFullQuery(selection)
+          val analyses = analyzer.analyzeFullQuery(selection)
 
           println("Outputs:")
-          Util.printList(analysis.selection)
-          analysis.where.foreach { w =>
-            println("where:\n  " + w)
-          }
-          analysis.groupBy.foreach { gbs =>
-            println("group bys:")
-            for(gb <- gbs) {
-              println("  " + gb)
+          analyses.foreach { analysis =>
+            Util.printList(analysis.selection)
+            analysis.where.foreach { w =>
+              println("where:\n  " + w)
             }
-          }
-          analysis.having.foreach { h =>
-            println("having:\n  " + h)
-          }
-          analysis.orderBy.map { obs =>
-            println("order bys:")
-            for(ob <- obs) {
-              println("  " + ob.expression + " (" + (if(ob.ascending) "ascending" else "descending") + ", nulls " + (if(ob.nullLast) "last" else "first") + ")")
+            analysis.groupBy.foreach { gbs =>
+              println("group bys:")
+              for (gb <- gbs) {
+                println("  " + gb)
+              }
             }
+            analysis.having.foreach { h =>
+              println("having:\n  " + h)
+            }
+            analysis.orderBy.map { obs =>
+              println("order bys:")
+              for (ob <- obs) {
+                println("  " + ob.expression + " (" + (if (ob.ascending) "ascending" else "descending") + ", nulls " + (if (ob.nullLast) "last" else "first") + ")")
+              }
+            }
+            println("has aggregates: " + analysis.isGrouped)
           }
-          println("has aggregates: " + analysis.isGrouped)
         } catch {
           case e: SoQLException => println(e.getMessage)
         }

@@ -11,27 +11,15 @@ sealed abstract class SoQLFunctions
 object SoQLFunctions {
   private val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLFunctions])
 
-  private val Ordered = Set[Any](
-    SoQLText,
-    SoQLNumber,
-    SoQLDouble,
-    SoQLMoney,
-    SoQLBoolean,
-    SoQLFixedTimestamp,
-    SoQLFloatingTimestamp,
-    SoQLDate,
-    SoQLTime,
-    SoQLID,
-    SoQLVersion
-  )
-
-  private val Equatable = Ordered ++ Set[Any](
-    SoQLBlob
-  )
-
-  private val NumLike = Set[Any](SoQLNumber, SoQLDouble, SoQLMoney)
-  private val RealNumLike = Set[Any](SoQLNumber, SoQLDouble)
-  private val GeospatialLike = Set[Any](SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine, SoQLPolygon, SoQLMultiPolygon)
+  private def typeclass(f: SoQLType => Boolean): Any => Boolean = { // design compromises rear their ugly head
+    case x: SoQLType => f(x)
+    case _ => false
+  }
+  private val Ordered = typeclass(SoQLTypeClasses.Ordered)
+  private val Equatable = typeclass(SoQLTypeClasses.Equatable)
+  private val NumLike = typeclass(SoQLTypeClasses.NumLike)
+  private val RealNumLike = typeclass(SoQLTypeClasses.RealNumLike)
+  private val GeospatialLike = typeclass(SoQLTypeClasses.GeospatialLike)
   private val AllTypes = SoQLType.typesByName.values.toSet[Any]
 
   val TextToFixedTimestamp = new MonomorphicFunction("text to fixed timestamp", SpecialFunctions.Cast(SoQLFixedTimestamp.name), Seq(SoQLText), Seq.empty, SoQLFixedTimestamp).function

@@ -25,7 +25,8 @@ abstract class AbstractParser extends Parsers with PackratParsers {
   def expression(soql: String): Expression = parseFull(expr, soql)
   def orderings(soql: String): Seq[OrderBy] = parseFull(orderingList, soql)
   def groupBys(soql: String): Seq[Expression] = parseFull(groupByList, soql)
-  def selectStatement(soql: String): Select = parseFull(fullSelect, soql)
+  def selectStatement(soql: String): Seq[Select] = parseFull(pipedSelect, soql)
+  def unchainedSelectStatement(soql: String): Select = parseFull(unchainedSelect, soql) // a select statement without pipes or subselects
   def limit(soql: String): BigInt = parseFull(integer, soql)
   def offset(soql: String): BigInt = parseFull(integer, soql)
   def search(soql: String): String = parseFull(stringLiteral, soql)
@@ -91,10 +92,12 @@ abstract class AbstractParser extends Parsers with PackratParsers {
    *               *************************
    */
 
-  def fullSelect =
-    (SELECT() ~> selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+  def pipedSelect: Parser[Seq[Select]] = rep1sep(unchainedSelect, QUERYPIPE())
+
+  def unchainedSelect: Parser[Select] =
+    SELECT() ~> selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
       case s ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(s, w, gb, h, ord, lim, off, sr)
-    })
+    }
 
   def orderByAndSearch: Parser[(Option[Seq[OrderBy]], Option[String])] =
     orderByClause ~ opt(searchClause) ^^ { //backward-compat.  We should prefer putting the search first.

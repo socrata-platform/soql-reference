@@ -14,16 +14,23 @@ import scala.util.parsing.input.{Position, NoPosition}
  */
 class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
 
-  def mapSelect(s: Select): Select = {
-    Select(
-      selection = mapSelection(s.selection),
-      where = s.where map mapExpression,
-      groupBy = s.groupBy.map(_ map mapExpression),
-      having = s.having map mapExpression,
-      orderBy = s.orderBy.map(_ map mapOrderBy),
-      limit = s.limit,
-      offset = s.offset,
-      search = s.search)
+  def mapSelect(ss: Seq[Select]): Seq[Select] = {
+    if(ss.nonEmpty) {
+      // this only needs to apply to the first query in the chain; subsequent elements
+      // take their names from the output of the first query.
+      val s = ss.head
+      ss.updated(0, Select(
+        selection = mapSelection(s.selection),
+        where = s.where map mapExpression,
+        groupBy = s.groupBy.map(_ map mapExpression),
+        having = s.having map mapExpression,
+        orderBy = s.orderBy.map(_ map mapOrderBy),
+        limit = s.limit,
+        offset = s.offset,
+        search = s.search))
+    } else {
+      ss
+    }
   }
 
   def mapExpression(e: Expression): Expression =  e match {
