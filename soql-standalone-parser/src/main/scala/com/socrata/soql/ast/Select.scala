@@ -13,7 +13,7 @@ case class Select(selection: Selection, where: Option[Expression], groupBy: Opti
       orderBy.foreach { ob => sb.append(ob.mkString(" ORDER BY ", ", ", "")) }
       limit.foreach(sb.append(" LIMIT ").append(_))
       offset.foreach(sb.append(" OFFSET ").append(_))
-      search.foreach(s => sb.append(" SEARCH ").append("'" + s.replaceAll("'", "''") + "'"))
+      search.foreach(s => sb.append(" SEARCH ").append(Expression.escapeString(s)))
       sb.toString
     } else {
       AST.unpretty(this)

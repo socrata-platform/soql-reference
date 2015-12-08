@@ -19,6 +19,8 @@ sealed abstract class Expression extends Product {
 object Expression {
   val pretty = AST.pretty
 
+  def escapeString(s: String): String = "'" + s.replaceAll("'", "''") + "'"
+
   private def findIdentsAndLiterals(e: Expression): Seq[String] = e match {
     case v: Literal => Vector(v.asString)
     case ColumnOrAliasRef(name) => Vector(name.name)
