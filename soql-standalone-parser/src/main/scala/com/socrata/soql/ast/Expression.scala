@@ -120,7 +120,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
         case "NOT" => "%s %s".format(op, parameters(0))
         case _ => op + parameters(0)
       }
-    case SpecialFunctions.Operator(op) if parameters.size == 2 => parameters(0) + " " + op + " " + parameters(1)
+    case SpecialFunctions.Operator(op) if parameters.size == 2 => s"(${parameters(0)} $op ${parameters(1)})"
     case SpecialFunctions.Operator(op) => sys.error("Found a non-unary, non-binary operator: " + op + " at " + position)
     case SpecialFunctions.Cast(typ) if parameters.size == 1 => parameters(0) + " :: " + typ
     case SpecialFunctions.Cast(_) => sys.error("Found a non-unary cast at " + position)
