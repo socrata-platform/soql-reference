@@ -24,6 +24,7 @@ object SoqlToy extends (Array[String] => Unit) {
       ColumnName("name_first") -> SoQLText,
       ColumnName("visits") -> SoQLNumber,
       ColumnName("last_visit") -> SoQLFixedTimestamp,
+      ColumnName("address") -> SoQLLocation,
       ColumnName("balance") -> SoQLMoney,
       ColumnName("object") -> SoQLObject,
       ColumnName("array") -> SoQLArray,
