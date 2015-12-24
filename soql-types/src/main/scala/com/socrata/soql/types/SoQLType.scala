@@ -5,6 +5,7 @@ import com.google.protobuf.{CodedInputStream, CodedOutputStream}
 import com.ibm.icu.util.CaseInsensitiveString
 import com.rojoma.json.v3.ast.{JValue, JArray, JObject}
 import com.rojoma.json.v3.codec.JsonDecode
+import com.rojoma.json.v3.io.JsonReaderException
 import com.rojoma.json.v3.util.{JsonUtil, AutomaticJsonCodecBuilder, JsonKey}
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.types.obfuscation.{Obfuscator, CryptProvider}
@@ -309,9 +310,15 @@ case class SoQLLocation(latitude: Option[java.math.BigDecimal],
 case object SoQLLocation extends SoQLType("location") {
   implicit val jCodec = AutomaticJsonCodecBuilder[SoQLLocation]
 
-  def isPossibleVersion(s: String): Boolean = JsonUtil.parseJson[SoQLLocation](s).isRight
+  def isPossibleLocation(s: String): Boolean = {
+    try {
+      JsonUtil.parseJson[SoQLLocation](s).isRight
+    } catch {
+      case ex: JsonReaderException => false
+    }
+  }
 
-  def isPossibleVersion(s: CaseInsensitiveString): Boolean = isPossibleVersion(s.getString)
+  def isPossibleLocation(s: CaseInsensitiveString): Boolean = isPossibleLocation(s.getString)
 }
 
 case object SoQLNull extends SoQLType("null") with SoQLValue {
