@@ -4,6 +4,8 @@ package com.socrata.soql.types
 import com.google.protobuf.{CodedInputStream, CodedOutputStream}
 import com.ibm.icu.util.CaseInsensitiveString
 import com.rojoma.json.v3.ast.{JValue, JArray, JObject}
+import com.rojoma.json.v3.codec.JsonDecode
+import com.rojoma.json.v3.util.{JsonUtil, AutomaticJsonCodecBuilder, JsonKey}
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.types.obfuscation.{Obfuscator, CryptProvider}
 import com.vividsolutions.jts.geom.{MultiLineString, MultiPolygon, Point, Polygon, MultiPoint, LineString}
@@ -299,12 +301,18 @@ case object SoQLBlob extends SoQLType("blob")
 
 case class SoQLLocation(latitude: Option[java.math.BigDecimal],
                         longitude: Option[java.math.BigDecimal],
-                        address: Option[String]
+                        @JsonKey("human_address") address: Option[String]
 ) extends SoQLValue {
   def typ = SoQLLocation
 }
 
-case object SoQLLocation extends SoQLType("location")
+case object SoQLLocation extends SoQLType("location") {
+  implicit val jCodec = AutomaticJsonCodecBuilder[SoQLLocation]
+
+  def isPossibleVersion(s: String): Boolean = JsonUtil.parseJson[SoQLLocation](s).isRight
+
+  def isPossibleVersion(s: CaseInsensitiveString): Boolean = isPossibleVersion(s.getString)
+}
 
 case object SoQLNull extends SoQLType("null") with SoQLValue {
   override def isPassableTo(that: SoQLAnalysisType) = true

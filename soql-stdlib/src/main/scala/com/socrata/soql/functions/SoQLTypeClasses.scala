@@ -18,7 +18,8 @@ object SoQLTypeClasses {
   )
 
   val Equatable = Ordered ++ Set[SoQLType](
-    SoQLBlob
+    SoQLBlob,
+    SoQLLocation
   )
 
   val NumLike = Set[SoQLType](SoQLNumber, SoQLDouble, SoQLMoney)
