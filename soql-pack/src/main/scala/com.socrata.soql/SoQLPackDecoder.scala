@@ -1,6 +1,7 @@
 package com.socrata.soql
 
 import com.rojoma.json.v3.ast.{JValue, JArray, JObject}
+import com.rojoma.json.v3.codec.JsonDecode
 import com.rojoma.json.v3.io.JsonReader
 import com.socrata.soql.types._
 import com.vividsolutions.jts.geom.Geometry
@@ -39,7 +40,8 @@ object SoQLPackDecoder {
     SoQLObject       -> (x => decodeJson[JObject](x).map(SoQLObject(_))),
     SoQLArray        -> (x => decodeJson[JArray](x).map(SoQLArray(_))),
     SoQLJson         -> (x => decodeJson[JValue](x).map(SoQLJson(_))),
-    SoQLBlob         -> decodeBlobId _
+    SoQLBlob         -> decodeBlobId _,
+    SoQLLocation     -> (x => decodeJson[JValue](x).flatMap(JsonDecode[SoQLLocation].decode(_).right.toOption))
   )
 
   def decodeLong(item: Any): Option[Long] = try {

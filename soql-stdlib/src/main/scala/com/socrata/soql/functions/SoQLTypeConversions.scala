@@ -70,6 +70,8 @@ object SoQLTypeConversions {
     Some(SoQLFunctions.TextToMultiPolygon.monomorphic.getOrElse(sys.error("text to multi polygon conversion not monomorphic?")))
   private val textToBlobFunc =
     Some(SoQLFunctions.TextToBlob.monomorphic.getOrElse(sys.error("text to blob conversion not monomorphic?")))
+  private val textToLocationFunc =
+    Some(SoQLFunctions.TextToLocation.monomorphic.getOrElse(sys.error("text to location conversion not monomorphic?")))
 
   private def isNumberLiteral(s: String) = try {
     val lexer = new Lexer(s)
@@ -118,6 +120,8 @@ object SoQLTypeConversions {
         textToMultiPolygonFunc
       case (SoQLTextLiteral(s), SoQLBlob) =>
         textToBlobFunc
+      case (SoQLTextLiteral(s), SoQLLocation) if SoQLVersion.isPossibleVersion(s) =>
+        textToLocationFunc
       case _ =>
         None
     }

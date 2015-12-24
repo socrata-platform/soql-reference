@@ -1,5 +1,6 @@
 package com.socrata.soql
 
+import com.rojoma.json.v3.util.JsonUtil
 import com.socrata.soql.types._
 import com.vividsolutions.jts.geom.Geometry
 import org.joda.time.DateTime
@@ -30,7 +31,8 @@ object SoQLPackEncoder {
     SoQLObject       -> { case SoQLObject(jObj) => jObj.toString },
     SoQLArray        -> { case SoQLArray(jAray) => jAray.toString },
     SoQLJson         -> { case SoQLJson(jValue) => jValue.toString },
-    SoQLBlob         -> { case SoQLBlob(str) => str }
+    SoQLBlob         -> { case SoQLBlob(str) => str },
+    SoQLLocation     -> { case x@SoQLLocation(_, _, _) => JsonUtil.renderJson(x) }
   )
 
   lazy val geomEncoder: Encoder = {
