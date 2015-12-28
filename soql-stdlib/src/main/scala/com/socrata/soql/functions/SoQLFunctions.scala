@@ -20,6 +20,7 @@ object SoQLFunctions {
   private val NumLike = typeclass(SoQLTypeClasses.NumLike)
   private val RealNumLike = typeclass(SoQLTypeClasses.RealNumLike)
   private val GeospatialLike = typeclass(SoQLTypeClasses.GeospatialLike)
+  private val Location = typeclass(SoQLTypeClasses.Location)
   private val AllTypes = SoQLType.typesByName.values.toSet[Any]
 
   val TextToFixedTimestamp = new MonomorphicFunction("text to fixed timestamp", SpecialFunctions.Cast(SoQLFixedTimestamp.name), Seq(SoQLText), Seq.empty, SoQLFixedTimestamp).function
@@ -161,6 +162,21 @@ object SoQLFunctions {
   val Index = new MonomorphicFunction("[]", SpecialFunctions.Subscript, Seq(SoQLArray, SoQLNumber), Seq.empty, SoQLJson).function
   val JsonProp = new MonomorphicFunction(".J", SpecialFunctions.Subscript, Seq(SoQLJson, SoQLText), Seq.empty, SoQLJson).function
   val JsonIndex = new MonomorphicFunction("[]J", SpecialFunctions.Subscript, Seq(SoQLJson, SoQLNumber), Seq.empty, SoQLJson).function
+
+  // Cannot use property subscript syntax (loc.prop) to access properties of different types - number, text, point. Use cast syntax (loc::prop) instead
+  val LocationToPoint = new MonomorphicFunction("loc to point", SpecialFunctions.Cast(SoQLPoint.name), Seq(SoQLLocation), Seq.empty, SoQLPoint).function
+  val LocationToLatitude = new MonomorphicFunction("loc to latitude", FunctionName("location_latitude"), Seq(SoQLLocation), Seq.empty, SoQLNumber).function
+  val LocationToLongitude = new MonomorphicFunction("loc to longitude", FunctionName("location_longitude"), Seq(SoQLLocation), Seq.empty, SoQLNumber).function
+  val LocationToAddress = new MonomorphicFunction("loc to address", FunctionName("location_address"), Seq(SoQLLocation), Seq.empty, SoQLText).function
+
+  val LocationWithinCircle = Function("location_within_circle", FunctionName("within_circle"),
+    Map("a" -> Location, "b" -> RealNumLike),
+    Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b")), Seq.empty,
+    FixedType(SoQLBoolean))
+  val LocationWithinBox = Function("location_within_box", FunctionName("within_box"),
+    Map("a" -> Location, "b" -> RealNumLike),
+    Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b"), VariableType("b")), Seq.empty,
+    FixedType(SoQLBoolean))
 
   val JsonToText = new MonomorphicFunction("json to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLJson), Seq.empty, SoQLText).function
   val JsonToNumber = new MonomorphicFunction("json to number", SpecialFunctions.Cast(SoQLNumber.name), Seq(SoQLJson), Seq.empty, SoQLNumber).function

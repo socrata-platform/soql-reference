@@ -25,4 +25,5 @@ object SoQLTypeClasses {
   val NumLike = Set[SoQLType](SoQLNumber, SoQLDouble, SoQLMoney)
   val RealNumLike = Set[SoQLType](SoQLNumber, SoQLDouble)
   val GeospatialLike = Set[SoQLType](SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine, SoQLPolygon, SoQLMultiPolygon)
+  val Location = Set[SoQLType](SoQLLocation)
 }
