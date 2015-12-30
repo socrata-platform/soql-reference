@@ -4,7 +4,7 @@ import java.lang.reflect.Modifier
 
 import com.socrata.soql.ast.SpecialFunctions
 import com.socrata.soql.environment.FunctionName
-import com.socrata.soql.functions.{FixedType, Function, MonomorphicFunction, VariableType}
+import com.socrata.soql.functions._
 
 sealed abstract class TestFunctions
 
@@ -14,8 +14,13 @@ object TestFunctions {
   // TODO: might want to narrow this down
   private val Ordered = TestTypeConversions.typeParameterUniverse.toSet[Any]
   private val NumLike = Set[Any](TestNumber, TestDouble, TestMoney)
-  private val GeospatialLike = Set[Any](SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine, SoQLPolygon, SoQLMultiPolygon)
-  private val AllTypes = SoQLType.typesByName.values.toSet[Any]
+  private val RealNumLike = Set[Any](TestNumber, TestDouble)
+  private val GeospatialLike = Set[Any](TestPoint, TestMultiPoint, TestLine, TestMultiLine, TestPolygon, TestMultiPolygon)
+  private val Location = Set[Any](TestLocation)
+  private val AllTypes = TestType.typesByName.values.toSet[Any]
+
+
+  val TextToLocation = new MonomorphicFunction("text to location", SpecialFunctions.Cast(TestLocation.name), Seq(TestText), Seq.empty, TestLocation).function
 
   val Concat = Function("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(TestText))
   val Gt = Function(">", SpecialFunctions.Operator(">"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
@@ -48,15 +53,30 @@ object TestFunctions {
   val JsonToText = new MonomorphicFunction("json to text", SpecialFunctions.Cast(TestText.name), Seq(TestJson), Seq.empty, TestText).function
   val JsonToNumber = new MonomorphicFunction("json to Number", SpecialFunctions.Cast(TestNumber.name), Seq(TestJson), Seq.empty, TestNumber).function
 
+  val LocationToPoint = new MonomorphicFunction("loc to point", SpecialFunctions.Cast(TestPoint.name), Seq(TestLocation), Seq.empty, TestPoint).function
+  val LocationToLatitude = new MonomorphicFunction("loc to latitude", FunctionName("location_latitude"), Seq(TestLocation), Seq.empty, TestNumber).function
+  val LocationToLongitude = new MonomorphicFunction("loc to longitude", FunctionName("location_longitude"), Seq(TestLocation), Seq.empty, TestNumber).function
+  val LocationToAddress = new MonomorphicFunction("loc to address", FunctionName("location_address"), Seq(TestLocation), Seq.empty, TestText).function
+
+  val LocationWithinCircle = Function("location_within_circle", FunctionName("within_circle"),
+    Map("a" -> Location, "b" -> RealNumLike),
+    Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b")), Seq.empty,
+    FixedType(TestBoolean))
+  val LocationWithinBox = Function("location_within_box", FunctionName("within_box"),
+    Map("a" -> Location, "b" -> RealNumLike),
+    Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b"), VariableType("b")), Seq.empty,
+    FixedType(TestBoolean))
+
+
   val Simplify = Function("simplify", FunctionName("simplify"), Map("a" -> GeospatialLike, "b" -> NumLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
   val CuratedRegionTest = Function("curated_region_test", FunctionName("curated_region_test"), Map("a" -> GeospatialLike, "b" -> NumLike),
-    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(TestText))
 
   val Case = Function("case", FunctionName("case"),
     Map("a" -> AllTypes),
-    Seq(FixedType(SoQLBoolean), VariableType("a")),
-    Seq(FixedType(SoQLBoolean), VariableType("a")),
+    Seq(FixedType(TestBoolean), VariableType("a")),
+    Seq(FixedType(TestBoolean), VariableType("a")),
     VariableType("a"))
 
   def potentialAccessors = for {
