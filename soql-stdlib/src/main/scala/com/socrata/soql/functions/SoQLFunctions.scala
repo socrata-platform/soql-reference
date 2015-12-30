@@ -20,7 +20,6 @@ object SoQLFunctions {
   private val NumLike = typeclass(SoQLTypeClasses.NumLike)
   private val RealNumLike = typeclass(SoQLTypeClasses.RealNumLike)
   private val GeospatialLike = typeclass(SoQLTypeClasses.GeospatialLike)
-  private val Location = typeclass(SoQLTypeClasses.Location)
   private val AllTypes = SoQLType.typesByName.values.toSet[Any]
 
   val TextToFixedTimestamp = new MonomorphicFunction("text to fixed timestamp", SpecialFunctions.Cast(SoQLFixedTimestamp.name), Seq(SoQLText), Seq.empty, SoQLFixedTimestamp).function
@@ -170,12 +169,12 @@ object SoQLFunctions {
   val LocationToAddress = new MonomorphicFunction("loc to address", FunctionName("location_address"), Seq(SoQLLocation), Seq.empty, SoQLText).function
 
   val LocationWithinCircle = Function("location_within_circle", FunctionName("within_circle"),
-    Map("a" -> Location, "b" -> RealNumLike),
-    Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b")), Seq.empty,
+    Map("a" -> RealNumLike),
+    Seq(FixedType(SoQLLocation), VariableType("a"), VariableType("a"), VariableType("a")), Seq.empty,
     FixedType(SoQLBoolean))
   val LocationWithinBox = Function("location_within_box", FunctionName("within_box"),
-    Map("a" -> Location, "b" -> RealNumLike),
-    Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b"), VariableType("b")), Seq.empty,
+    Map("a" -> RealNumLike),
+    Seq(FixedType(SoQLLocation), VariableType("a"), VariableType("a"), VariableType("a"), VariableType("a")), Seq.empty,
     FixedType(SoQLBoolean))
 
   val JsonToText = new MonomorphicFunction("json to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLJson), Seq.empty, SoQLText).function
