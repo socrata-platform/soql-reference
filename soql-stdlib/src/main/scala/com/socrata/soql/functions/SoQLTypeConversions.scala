@@ -120,7 +120,7 @@ object SoQLTypeConversions {
         textToMultiPolygonFunc
       case (SoQLTextLiteral(s), SoQLBlob) =>
         textToBlobFunc
-      case (SoQLTextLiteral(s), SoQLLocation) if SoQLVersion.isPossibleVersion(s) =>
+      case (SoQLTextLiteral(s), SoQLLocation) if SoQLLocation.isPossibleLocation(s) =>
         textToLocationFunc
       case _ =>
         None
