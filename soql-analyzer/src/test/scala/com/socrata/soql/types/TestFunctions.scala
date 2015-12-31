@@ -53,9 +53,9 @@ object TestFunctions {
   val JsonToNumber = new MonomorphicFunction("json to Number", SpecialFunctions.Cast(TestNumber.name), Seq(TestJson), Seq.empty, TestNumber).function
 
   val LocationToPoint = new MonomorphicFunction("loc to point", SpecialFunctions.Cast(TestPoint.name), Seq(TestLocation), Seq.empty, TestPoint).function
-  val LocationToLatitude = new MonomorphicFunction("loc to latitude", FunctionName("location_latitude"), Seq(TestLocation), Seq.empty, TestNumber).function
-  val LocationToLongitude = new MonomorphicFunction("loc to longitude", FunctionName("location_longitude"), Seq(TestLocation), Seq.empty, TestNumber).function
-  val LocationToAddress = new MonomorphicFunction("loc to address", FunctionName("location_address"), Seq(TestLocation), Seq.empty, TestText).function
+  val LocationToLatitude = new MonomorphicFunction("location_latitude", FunctionName("location_latitude"), Seq(TestLocation), Seq.empty, TestNumber).function
+  val LocationToLongitude = new MonomorphicFunction("location_longitude", FunctionName("location_longitude"), Seq(TestLocation), Seq.empty, TestNumber).function
+  val LocationToAddress = new MonomorphicFunction("location_human_address", FunctionName("location_human_address"), Seq(TestLocation), Seq.empty, TestText).function
 
   val LocationWithinCircle = Function("location_within_circle", FunctionName("within_circle"),
     Map("a" -> RealNumLike),
