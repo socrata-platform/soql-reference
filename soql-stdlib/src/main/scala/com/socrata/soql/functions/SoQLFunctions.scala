@@ -34,6 +34,9 @@ object SoQLFunctions {
   val TextToMultiPolygon = new MonomorphicFunction("text to multi polygon", SpecialFunctions.Cast(SoQLMultiPolygon.name), Seq(SoQLText), Seq.empty, SoQLMultiPolygon).function
   val TextToBlob = new MonomorphicFunction("text to blob", SpecialFunctions.Cast(SoQLBlob.name), Seq(SoQLText), Seq.empty, SoQLBlob).function
   val TextToLocation = new MonomorphicFunction("text to location", SpecialFunctions.Cast(SoQLLocation.name), Seq(SoQLText), Seq.empty, SoQLLocation).function
+  val TextToLocationLatitude = new MonomorphicFunction("text to location latitude", SpecialFunctions.Cast(SoQLLocationLatitude.name), Seq(SoQLText), Seq.empty, SoQLLocationLatitude).function
+  val TextToLocationLongitude = new MonomorphicFunction("text to location longitude", SpecialFunctions.Cast(SoQLLocationLongitude.name), Seq(SoQLText), Seq.empty, SoQLLocationLongitude).function
+  val TextToLocationAddress = new MonomorphicFunction("text to location address", SpecialFunctions.Cast(SoQLLocationAddress.name), Seq(SoQLText), Seq.empty, SoQLLocationAddress).function
 
   val Concat = Function("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))
   val Gte = Function(">=", SpecialFunctions.Operator(">="), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
@@ -164,9 +167,12 @@ object SoQLFunctions {
 
   // Cannot use property subscript syntax (loc.prop) to access properties of different types - number, text, point. Use cast syntax (loc::prop) instead
   val LocationToPoint = new MonomorphicFunction("loc to point", SpecialFunctions.Cast(SoQLPoint.name), Seq(SoQLLocation), Seq.empty, SoQLPoint).function
-  val LocationToLatitude = new MonomorphicFunction("loc to latitude", FunctionName("location_latitude"), Seq(SoQLLocation), Seq.empty, SoQLNumber).function
-  val LocationToLongitude = new MonomorphicFunction("loc to longitude", FunctionName("location_longitude"), Seq(SoQLLocation), Seq.empty, SoQLNumber).function
-  val LocationToAddress = new MonomorphicFunction("loc to address", FunctionName("location_address"), Seq(SoQLLocation), Seq.empty, SoQLText).function
+  val LocationDotLatitude = new MonomorphicFunction("loc dot latitude", SpecialFunctions.Subscript,
+    Seq(SoQLLocation, SoQLLocationLatitude), Seq.empty, SoQLNumber).function
+  val LocationDotLongitude = new MonomorphicFunction("loc dot longitude", SpecialFunctions.Subscript,
+    Seq(SoQLLocation, SoQLLocationLongitude), Seq.empty, SoQLNumber).function
+  val LocationDotAddress = new MonomorphicFunction("loc dot address", SpecialFunctions.Subscript,
+    Seq(SoQLLocation, SoQLLocationAddress), Seq.empty, SoQLText).function
 
   val LocationWithinCircle = Function("location_within_circle", FunctionName("within_circle"),
     Map("a" -> RealNumLike),
