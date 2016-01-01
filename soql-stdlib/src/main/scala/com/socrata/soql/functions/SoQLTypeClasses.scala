@@ -17,12 +17,13 @@ object SoQLTypeClasses {
     SoQLVersion
   )
 
-  val Equatable = Ordered ++ Set[SoQLType](
+  val GeospatialLike = Set[SoQLType](SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine, SoQLPolygon, SoQLMultiPolygon)
+
+  val Equatable = Ordered ++ GeospatialLike ++ Set[SoQLType](
     SoQLBlob,
     SoQLLocation
   )
 
   val NumLike = Set[SoQLType](SoQLNumber, SoQLDouble, SoQLMoney)
   val RealNumLike = Set[SoQLType](SoQLNumber, SoQLDouble)
-  val GeospatialLike = Set[SoQLType](SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine, SoQLPolygon, SoQLMultiPolygon)
 }
