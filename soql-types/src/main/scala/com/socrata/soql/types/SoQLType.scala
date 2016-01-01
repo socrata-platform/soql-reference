@@ -346,3 +346,17 @@ case class SoQLNumberLiteral(number: BigDecimal) extends FakeSoQLType(SoQLNumber
 object SoQLNumberLiteral {
   val typeName = TypeName("*number")
 }
+
+// Support accessing individual properties of complex column types especially when
+// these properties have different types.
+// location.latitude, location.longitude, location.address
+sealed abstract class SoQLSubType(val parent: SoQLType, val subTypeName: String) extends
+  SoQLType(s"${parent.name.name}_$subTypeName") {
+  def isPossible(s: CaseInsensitiveString): Boolean = subTypeName == s.getString
+}
+
+case object SoQLLocationLatitude extends SoQLSubType(SoQLLocation, "latitude")
+
+case object SoQLLocationLongitude extends SoQLSubType(SoQLLocation, "longitude")
+
+case object SoQLLocationAddress extends SoQLSubType(SoQLLocation, "human_address")

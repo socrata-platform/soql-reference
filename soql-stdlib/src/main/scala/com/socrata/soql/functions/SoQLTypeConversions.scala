@@ -72,6 +72,12 @@ object SoQLTypeConversions {
     Some(SoQLFunctions.TextToBlob.monomorphic.getOrElse(sys.error("text to blob conversion not monomorphic?")))
   private val textToLocationFunc =
     Some(SoQLFunctions.TextToLocation.monomorphic.getOrElse(sys.error("text to location conversion not monomorphic?")))
+  private val textToLocationLatitudeFunc =
+    Some(SoQLFunctions.TextToLocationLatitude.monomorphic.getOrElse(sys.error("text to location latitude conversion not monomorphic?")))
+  private val textToLocationLongitudeFunc =
+    Some(SoQLFunctions.TextToLocationLongitude.monomorphic.getOrElse(sys.error("text to location longitude conversion not monomorphic?")))
+  private val textToLocationAddressFunc =
+    Some(SoQLFunctions.TextToLocationAddress.monomorphic.getOrElse(sys.error("text to location address conversion not monomorphic?")))
 
   private def isNumberLiteral(s: String) = try {
     val lexer = new Lexer(s)
@@ -122,6 +128,12 @@ object SoQLTypeConversions {
         textToBlobFunc
       case (SoQLTextLiteral(s), SoQLLocation) if SoQLLocation.isPossibleLocation(s) =>
         textToLocationFunc
+      case (SoQLTextLiteral(s), SoQLLocationLatitude) if SoQLLocationLatitude.isPossible(s) =>
+        textToLocationLatitudeFunc
+      case (SoQLTextLiteral(s), SoQLLocationLongitude) if SoQLLocationLongitude.isPossible(s) =>
+        textToLocationLongitudeFunc
+      case (SoQLTextLiteral(s), SoQLLocationAddress) if SoQLLocationAddress.isPossible(s) =>
+        textToLocationAddressFunc
       case _ =>
         None
     }
