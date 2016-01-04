@@ -162,11 +162,13 @@ object SoQLFunctions {
   val JsonProp = new MonomorphicFunction(".J", SpecialFunctions.Subscript, Seq(SoQLJson, SoQLText), Seq.empty, SoQLJson).function
   val JsonIndex = new MonomorphicFunction("[]J", SpecialFunctions.Subscript, Seq(SoQLJson, SoQLNumber), Seq.empty, SoQLJson).function
 
-  // Cannot use property subscript syntax (loc.prop) to access properties of different types - number, text, point. Use cast syntax (loc::prop) instead
   val LocationToPoint = new MonomorphicFunction("loc to point", SpecialFunctions.Cast(SoQLPoint.name), Seq(SoQLLocation), Seq.empty, SoQLPoint).function
-  val LocationToLatitude = new MonomorphicFunction("loc to latitude", FunctionName("location_latitude"), Seq(SoQLLocation), Seq.empty, SoQLNumber).function
-  val LocationToLongitude = new MonomorphicFunction("loc to longitude", FunctionName("location_longitude"), Seq(SoQLLocation), Seq.empty, SoQLNumber).function
-  val LocationToAddress = new MonomorphicFunction("loc to address", FunctionName("location_address"), Seq(SoQLLocation), Seq.empty, SoQLText).function
+  // Cannot directly use property subscript syntax (loc.prop) to access sub-columns of different types.
+  // These functions provide indirect support of subscript syntax through function rewrite.
+  // The names of these function must be type_subColumnType by convention.
+  val LocationToLatitude = new MonomorphicFunction("location_latitude", FunctionName("location_latitude"), Seq(SoQLLocation), Seq.empty, SoQLNumber).function
+  val LocationToLongitude = new MonomorphicFunction("location_longitude", FunctionName("location_longitude"), Seq(SoQLLocation), Seq.empty, SoQLNumber).function
+  val LocationToAddress = new MonomorphicFunction("location_human_address", FunctionName("location_human_address"), Seq(SoQLLocation), Seq.empty, SoQLText).function
 
   val LocationWithinCircle = Function("location_within_circle", FunctionName("within_circle"),
     Map("a" -> RealNumLike),
