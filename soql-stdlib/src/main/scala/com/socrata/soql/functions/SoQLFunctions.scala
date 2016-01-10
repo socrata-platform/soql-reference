@@ -194,6 +194,12 @@ object SoQLFunctions {
     Seq(FixedType(SoQLBoolean), VariableType("a")),
     VariableType("a"))
 
+  val Coalesce = Function("coalesce", FunctionName("coalesce"),
+    Map("a" -> AllTypes),
+    Seq(VariableType("a")),
+    Seq(VariableType("a")),
+    VariableType("a"))
+
   def potentialAccessors = for {
     method <- getClass.getMethods
     if Modifier.isPublic(method.getModifiers) && method.getParameterTypes.length == 0
