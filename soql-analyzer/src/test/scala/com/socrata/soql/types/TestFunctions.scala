@@ -16,7 +16,6 @@ object TestFunctions {
   private val NumLike = Set[Any](TestNumber, TestDouble, TestMoney)
   private val RealNumLike = Set[Any](TestNumber, TestDouble)
   private val GeospatialLike = Set[Any](TestPoint, TestMultiPoint, TestLine, TestMultiLine, TestPolygon, TestMultiPolygon)
-  private val AllTypes = TestType.typesByName.values.toSet[Any]
 
 
   val TextToLocation = new MonomorphicFunction("text to location", SpecialFunctions.Cast(TestLocation.name), Seq(TestText), Seq.empty, TestLocation).function
@@ -72,7 +71,7 @@ object TestFunctions {
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(TestText))
 
   val Case = Function("case", FunctionName("case"),
-    Map("a" -> AllTypes),
+    Map.empty,
     Seq(FixedType(TestBoolean), VariableType("a")),
     Seq(FixedType(TestBoolean), VariableType("a")),
     VariableType("a"))
