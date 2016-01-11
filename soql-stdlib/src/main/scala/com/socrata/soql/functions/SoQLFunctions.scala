@@ -20,7 +20,6 @@ object SoQLFunctions {
   private val NumLike = typeclass(SoQLTypeClasses.NumLike)
   private val RealNumLike = typeclass(SoQLTypeClasses.RealNumLike)
   private val GeospatialLike = typeclass(SoQLTypeClasses.GeospatialLike)
-  private val AllTypes = SoQLType.typesByName.values.toSet[Any]
 
   val TextToFixedTimestamp = new MonomorphicFunction("text to fixed timestamp", SpecialFunctions.Cast(SoQLFixedTimestamp.name), Seq(SoQLText), Seq.empty, SoQLFixedTimestamp).function
   val TextToFloatingTimestamp = new MonomorphicFunction("text to floating timestamp", SpecialFunctions.Cast(SoQLFloatingTimestamp.name), Seq(SoQLText), Seq.empty, SoQLFloatingTimestamp).function
@@ -189,13 +188,13 @@ object SoQLFunctions {
   val TextToRowVersion = new MonomorphicFunction("text to rowver", SpecialFunctions.Cast(SoQLVersion.name), Seq(SoQLText), Seq.empty, SoQLVersion).function
 
   val Case = Function("case", FunctionName("case"),
-    Map("a" -> AllTypes),
+    Map.empty,
     Seq(FixedType(SoQLBoolean), VariableType("a")),
     Seq(FixedType(SoQLBoolean), VariableType("a")),
     VariableType("a"))
 
   val Coalesce = Function("coalesce", FunctionName("coalesce"),
-    Map("a" -> AllTypes),
+    Map.empty,
     Seq(VariableType("a")),
     Seq(VariableType("a")),
     VariableType("a"))
