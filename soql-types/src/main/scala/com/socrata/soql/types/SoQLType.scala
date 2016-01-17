@@ -45,7 +45,8 @@ object SoQLType {
   val typesByName = Seq(
     SoQLID, SoQLVersion, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
     SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLJson, SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine,
-    SoQLPolygon, SoQLMultiPolygon, SoQLBlob, SoQLLocation
+    SoQLPolygon, SoQLMultiPolygon, SoQLBlob,
+    SoQLPhone, SoQLLocation
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
   }
@@ -345,4 +346,31 @@ case class SoQLNumberLiteral(number: BigDecimal) extends FakeSoQLType(SoQLNumber
 }
 object SoQLNumberLiteral {
   val typeName = TypeName("*number")
+}
+
+case class SoQLPhone(@JsonKey("phone_number") phoneNumber: Option[String],
+                     @JsonKey("phone_type") phoneType: Option[String]) extends SoQLValue {
+  def typ = SoQLPhone
+}
+
+case object SoQLPhone extends SoQLType("phone") {
+  implicit val jCodec = AutomaticJsonCodecBuilder[SoQLPhone]
+
+  // Phone number can take almost anything.  But it does not take { } to avoid confusion with json
+  val phoneRx = "((?i)Home|Cell|Work|Fax|Other)?(: ?)?([^{}]+)?".r
+
+  def isPossible(s: String): Boolean = {
+    s match {
+      case phoneRx(pt, sep, pn) =>
+        Option(pt).nonEmpty || Option(pn).nonEmpty
+      case _ =>
+        try {
+          JsonUtil.parseJson[SoQLPhone](s).isRight
+        } catch {
+          case ex: JsonReaderException => false
+        }
+    }
+  }
+
+  def isPossible(s: CaseInsensitiveString): Boolean = isPossible(s.getString)
 }

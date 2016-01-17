@@ -30,6 +30,7 @@ object SoQLTypeConversions {
     SoQLArray,
     SoQLID,
     SoQLVersion,
+    SoQLPhone,
     SoQLBlob
   )
 
@@ -70,6 +71,8 @@ object SoQLTypeConversions {
     Some(SoQLFunctions.TextToMultiPolygon.monomorphic.getOrElse(sys.error("text to multi polygon conversion not monomorphic?")))
   private val textToBlobFunc =
     Some(SoQLFunctions.TextToBlob.monomorphic.getOrElse(sys.error("text to blob conversion not monomorphic?")))
+  private val textToPhoneFunc =
+    Some(SoQLFunctions.TextToPhone.monomorphic.getOrElse(sys.error("text to phone conversion not monomorphic?")))
   private val textToLocationFunc =
     Some(SoQLFunctions.TextToLocation.monomorphic.getOrElse(sys.error("text to location conversion not monomorphic?")))
 
@@ -120,6 +123,8 @@ object SoQLTypeConversions {
         textToMultiPolygonFunc
       case (SoQLTextLiteral(s), SoQLBlob) =>
         textToBlobFunc
+      case (SoQLTextLiteral(s), SoQLPhone) if SoQLPhone.isPossible(s) =>
+        textToPhoneFunc
       case (SoQLTextLiteral(s), SoQLLocation) if SoQLLocation.isPossibleLocation(s) =>
         textToLocationFunc
       case _ =>
