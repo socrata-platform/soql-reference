@@ -356,8 +356,8 @@ case class SoQLPhone(@JsonKey("phone_number") phoneNumber: Option[String],
 case object SoQLPhone extends SoQLType("phone") {
   implicit val jCodec = AutomaticJsonCodecBuilder[SoQLPhone]
 
-  // Phone number can take almost anything.  But it does not take { } to avoid confusion with json
-  val phoneRx = "((?i)Home|Cell|Work|Fax|Other)?(: ?)?([^{}]+)?".r
+  // Phone number can take almost anything.  But it does not take :, {, } to avoid confusion with phone type and json
+  val phoneRx = "((?i)Home|Cell|Work|Fax|Other)?(: ?)?([^:{}]+)?".r
 
   def isPossible(s: String): Boolean = {
     s match {
