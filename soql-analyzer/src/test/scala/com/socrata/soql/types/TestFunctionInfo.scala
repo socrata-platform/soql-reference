@@ -35,6 +35,4 @@ object TestFunctionInfo extends FunctionInfo[TestType] {
         Set.empty
     }
   }
-
-  def implicitConversions(from: TestType, to: TestType) = TestTypeConversions.implicitConversions(from, to)
 }

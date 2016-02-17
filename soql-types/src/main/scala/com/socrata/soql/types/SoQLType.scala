@@ -7,36 +7,18 @@ import com.rojoma.json.v3.ast.{JValue, JArray, JObject}
 import com.rojoma.json.v3.codec.JsonDecode
 import com.rojoma.json.v3.io.JsonReaderException
 import com.rojoma.json.v3.util.{JsonUtil, AutomaticJsonCodecBuilder, JsonKey}
+import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.types.obfuscation.{Obfuscator, CryptProvider}
 import com.vividsolutions.jts.geom.{MultiLineString, MultiPolygon, Point, Polygon, MultiPoint, LineString}
 import org.joda.time.{LocalTime, LocalDate, LocalDateTime, DateTime}
 import org.joda.time.format.ISODateTimeFormat
 
-sealed abstract class SoQLAnalysisType(val name: TypeName) {
-  def this(name: String) = this(TypeName(name))
+sealed abstract class SoQLType(n: String) {
+  val name = TypeName(n)
 
   override final def toString = name.toString
-  def isPassableTo(that: SoQLAnalysisType): Boolean = (this == that)
-
-  def real: Boolean
-  def canonical: SoQLType
-}
-
-object SoQLAnalysisType {
-  object Serialization {
-    def serialize(out: CodedOutputStream, t: SoQLAnalysisType) =
-      out.writeStringNoTag(t.name.name)
-    def deserialize(in: CodedInputStream): SoQLType = {
-      val name = TypeName(in.readString())
-      SoQLType.typesByName(name) // post-analysis, the fake types are gone
-    }
-  }
-}
-
-sealed abstract class SoQLType(n: String) extends SoQLAnalysisType(n) {
-  def real = true
-  def canonical: SoQLType = this
+  def isPassableTo(that: SoQLType) = this == that
 }
 
 object SoQLType {
@@ -48,6 +30,44 @@ object SoQLType {
     SoQLPolygon, SoQLMultiPolygon, SoQLBlob, SoQLLocation
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
+  }
+
+  // The ordering here is used to define disambiguation rules; types that appear earlier will be preferred
+  // to types that appear later.
+  val typePreferences = Seq[SoQLType](
+    SoQLText,
+    SoQLNumber,
+    SoQLDouble,
+    SoQLMoney,
+    SoQLBoolean,
+    SoQLFixedTimestamp,
+    SoQLFloatingTimestamp,
+    SoQLDate,
+    SoQLTime,
+    SoQLPoint,
+    SoQLMultiPoint,
+    SoQLLine,
+    SoQLMultiLine,
+    SoQLPolygon,
+    SoQLMultiPolygon,
+    SoQLLocation,
+    SoQLObject,
+    SoQLArray,
+    SoQLID,
+    SoQLVersion,
+    SoQLJson,
+    SoQLBlob
+  )
+
+  assert(typePreferences.toSet == typesByName.values.toSet, "Mismatch in typesByName and typePreferences: " + (typePreferences.toSet -- typesByName.values.toSet) + " " + (typesByName.values.toSet -- typePreferences.toSet))
+
+  object Serialization {
+    def serialize(out: CodedOutputStream, t: SoQLType) =
+      out.writeStringNoTag(t.name.name)
+    def deserialize(in: CodedInputStream): SoQLType = {
+      val name = TypeName(in.readString())
+      SoQLType.typesByName(name) // post-analysis, the fake types are gone
+    }
   }
 }
 
@@ -321,28 +341,8 @@ case object SoQLLocation extends SoQLType("location") {
   def isPossibleLocation(s: CaseInsensitiveString): Boolean = isPossibleLocation(s.getString)
 }
 
+// SoQLNull should not be a type, but it's too deeply ingrained to change now.
 case object SoQLNull extends SoQLType("null") with SoQLValue {
-  override def isPassableTo(that: SoQLAnalysisType) = true
+  override def isPassableTo(that: SoQLType) = true
   def typ = this
-}
-
-sealed abstract class FakeSoQLType(name: TypeName) extends SoQLAnalysisType(name) {
-  def real = false
-  override def isPassableTo(that: SoQLAnalysisType) =
-    super.isPassableTo(that) || canonical.isPassableTo(that)
-}
-
-case class SoQLTextLiteral(text: CaseInsensitiveString) extends FakeSoQLType(SoQLTextLiteral.typeName) {
-  def canonical = SoQLText
-}
-object SoQLTextLiteral {
-  val typeName = TypeName("*text")
-  def apply(s: String): SoQLTextLiteral = apply(new CaseInsensitiveString(s))
-}
-
-case class SoQLNumberLiteral(number: BigDecimal) extends FakeSoQLType(SoQLNumberLiteral.typeName) {
-  def canonical = SoQLNumber
-}
-object SoQLNumberLiteral {
-  val typeName = TypeName("*number")
 }

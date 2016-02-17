@@ -139,7 +139,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   test("null :: number succeeds") {
     val analysis = analyzer.analyzeUnchainedQuery("select null :: number as x")
     analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestNumber)).get.monomorphic.get,
-      Seq(typed.NullLiteral(TestNull)(NoPosition)))(NoPosition, NoPosition))
+      Seq(typed.NullLiteral(TestNumber)(NoPosition)))(NoPosition, NoPosition))
   }
 
   test("5 :: number succeeds") {

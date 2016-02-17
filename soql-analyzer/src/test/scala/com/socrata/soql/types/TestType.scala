@@ -1,7 +1,5 @@
 package com.socrata.soql.types
 
-import com.ibm.icu.util.CaseInsensitiveString
-
 import com.socrata.soql.environment.TypeName
 
 sealed abstract class TestType(val name: TypeName, val isOrdered: Boolean) {
@@ -46,23 +44,4 @@ case object TestMultiPolygon extends TestType("multi_polygon", isOrdered = false
 
 case object TestNull extends TestType("null", isOrdered = false) {
   override def isPassableTo(that: TestType) = true
-}
-
-sealed abstract class FakeTestType(name: String) extends TestType(name, isOrdered = false) {
-  override def real = false
-  def realType: TestType
-  override def canonical = realType
-}
-
-case class TestTextLiteral(text: CaseInsensitiveString) extends FakeTestType("*text") {
-  override def isPassableTo(that: TestType) = super.isPassableTo(that) || that == TestText
-  def realType = TestText
-}
-object TestTextLiteral {
-  def apply(s: String): TestTextLiteral = apply(new CaseInsensitiveString(s))
-}
-
-case class TestNumberLiteral(number: BigDecimal) extends FakeTestType("*number") {
-  override def isPassableTo(that: TestType) = super.isPassableTo(that) || that == TestNumber
-  def realType = TestNumber
 }

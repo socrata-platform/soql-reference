@@ -1,7 +1,5 @@
 package com.socrata.soql.typechecker
 
-import scala.util.parsing.input.NoPosition
-
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions.{NoSuchColumn, NoSuchFunction, TypeMismatch, AmbiguousCall}
 import com.socrata.soql.typed
@@ -15,22 +13,26 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
   val columns = ctx.schema
   val functionCallTypechecker = new FunctionCallTypechecker(typeInfo, functionInfo)
 
-  def apply(e: Expression, aliases: Map[ColumnName, Expr]) = canonicalizeType(typecheck(e, aliases))
+  def apply(e: Expression, aliases: Map[ColumnName, Expr]) = typecheck(e, aliases) match {
+    case Left(tm) => throw tm
+    case Right(es) => disambiguate(es)
+  }
 
-  private def typecheck(e: Expression, aliases: Map[ColumnName, Expr]): Expr = e match {
+  // never returns an empty value
+  private def typecheck(e: Expression, aliases: Map[ColumnName, Expr]): Either[TypeMismatch, Seq[Expr]] = e match {
     case r@ColumnOrAliasRef(col) =>
       aliases.get(col) match {
         case Some(typed.ColumnRef(name, typ)) if name == col =>
           // special case: if this is an alias that refers directly to itself, position the typed tree _here_
           // (as if there were no alias at all) to make error messages that much clearer.  This will only catch
           // semi-implicitly assigned aliases, so it's better anyway.
-          typed.ColumnRef(col, typ)(r.position)
+          Right(Seq(typed.ColumnRef(col, typ)(r.position)))
         case Some(tree) =>
-          tree
+          Right(Seq(tree))
         case None =>
           columns.get(col) match {
             case Some(typ) =>
-              typed.ColumnRef(col, typ)(r.position)
+              Right(Seq(typed.ColumnRef(col, typ)(r.position)))
             case None =>
               throw NoSuchColumn(col, r.position)
           }
@@ -39,41 +41,72 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       assert(params.length == 1, "Parens with more than one parameter?!")
       typecheck(params(0), aliases)
     case fc@FunctionCall(name, parameters) =>
-      val typedParameters = parameters.map(typecheck(_, aliases))
+      val typedParameters = parameters.map(typecheck(_, aliases)).map {
+        case Left(tm) => return Left(tm)
+        case Right(es) => es
+      }
 
       val options = functionInfo.functionsWithArity(name, typedParameters.length)
       if(options.isEmpty) throw NoSuchFunction(name, typedParameters.length, fc.functionNamePosition)
-      functionCallTypechecker.resolveOverload(options, typedParameters) match {
-        case Matched(f, cs) =>
-          val realParameterList = (typedParameters, cs).zipped.map { (param, converter) =>
-            converter match {
-              case None => param
-              case Some(conv) => typed.FunctionCall(conv, Seq(canonicalizeType(param)))(NoPosition, NoPosition)
-            }
+      val (failed, resolved) = divide(functionCallTypechecker.resolveOverload(options, typedParameters.map(_.map(_.typ).toSet))) {
+        case Passed(f) => Right(f)
+        case tm: TypeMismatchFailure[Type] => Left(tm)
+      }
+      if(resolved.isEmpty) {
+        val TypeMismatchFailure(expected, found, idx) = failed.maxBy(_.idx)
+        Left(TypeMismatch(name, typeNameFor(found.head), parameters(idx).position))
+      } else {
+        Right(resolved.flatMap { f =>
+          val selectedParameters = (f.allParameters, typedParameters).zipped.map { (expected, options) =>
+            val choices = options.filter(_.typ == expected)
+            if(choices.isEmpty) sys.error("Can't happen, we passed typechecking")
+            // we can't commit to a choice here.  Because if we decide this is ambiguous, we have to wait to find out
+            // later if "f" is eliminated as a contender by typechecking.  It's only an error if f survives
+            // typechecking.
+            //
+            // This means we actually need to preserve all _permutations_ of subtrees.  Fortunately they
+            // won't be common -- the number of permutations is related to the number of distinct type variables
+            // available to fill; otherwise unification happens and they're forced to be equal.  We don't presently
+            // have any functions with more than two distinct type variables.
+            choices
           }
-          typed.FunctionCall(f, realParameterList.toSeq.map(canonicalizeType))(fc.position, fc.functionNamePosition)
-        case NoMatch =>
-          val failure = functionCallTypechecker.narrowDownFailure(options, typedParameters)
-          throw TypeMismatch(name, typeNameFor(typedParameters(failure.idx).typ), typedParameters(failure.idx).position)
-        case Ambiguous(_) =>
-          throw AmbiguousCall(name, fc.functionNamePosition)
+
+          selectedParameters.foldRight(Seq(List.empty[Expr])) { (choices, remainingParams) =>
+            choices.flatMap { choice => remainingParams.map(choice :: _) }
+          }.map(typed.FunctionCall(f, _)(fc.position, fc.functionNamePosition))
+        })
       }
     case bl@BooleanLiteral(b) =>
-      typed.BooleanLiteral(b, booleanLiteralType(b))(bl.position)
+      Right(booleanLiteralExpr(b, bl.position))
     case sl@StringLiteral(s) =>
-      typed.StringLiteral(s, stringLiteralType(s))(sl.position)
+      Right(stringLiteralExpr(s, sl.position))
     case nl@NumberLiteral(n) =>
-      typed.NumberLiteral(n, numberLiteralType(n))(nl.position)
+      Right(numberLiteralExpr(n, nl.position))
     case nl@NullLiteral() =>
-      typed.NullLiteral(nullLiteralType)(nl.position)
+      Right(nullLiteralExpr(nl.position))
   }
 
-  def canonicalizeType(expr: Expr): Expr = expr match {
-    case fc@typed.FunctionCall(_, _) => fc // a functioncall's type is intrinsic, so it shouldn't need canonicalizing
-    case cr@typed.ColumnRef(c, t) => typed.ColumnRef(c, typeInfo.canonicalize(t))(cr.position)
-    case bl@typed.BooleanLiteral(b, t) => typed.BooleanLiteral(b, typeInfo.canonicalize(t))(bl.position)
-    case nl@typed.NumberLiteral(n, t) => typed.NumberLiteral(n, typeInfo.canonicalize(t))(nl.position)
-    case sl@typed.StringLiteral(s, t) => typed.StringLiteral(s, typeInfo.canonicalize(t))(sl.position)
-    case nl@typed.NullLiteral(t) => typed.NullLiteral(typeInfo.canonicalize(t))(nl.position)
+  def divide[T, L, R](xs: TraversableOnce[T])(f: T => Either[L, R]): (Seq[L], Seq[R]) = {
+    val left = Seq.newBuilder[L]
+    val right = Seq.newBuilder[R]
+    for(x <- xs) {
+      f(x) match {
+        case Left(l) => left += l
+        case Right(r) => right += r
+      }
+    }
+    (left.result(), right.result())
+  }
+
+  def disambiguate(choices: Seq[Expr]): Expr = {
+    // technically we should use typeInfo.typeParameterUniverse to determine which
+    // we prefer, but as it happens these are constructed such that more preferrred
+    // things happen to come first anyway.
+    val minSize = choices.minBy(_.size).size
+    val minimal = choices.filter(_.size == minSize)
+    minimal.lengthCompare(1) match {
+      case 1 => minimal.head
+      case n => minimal.head
+    }
   }
 }
