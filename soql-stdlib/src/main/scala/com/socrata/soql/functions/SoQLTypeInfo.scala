@@ -13,7 +13,7 @@ import scala.util.parsing.input.Position
 object SoQLTypeInfo extends TypeInfo[SoQLType] {
   val typeParameterUniverse = OrderedSet(SoQLType.typePreferences : _*)
 
-  def booleanLiteralExpr(b: Boolean, pos: Position) = Seq(typed.BooleanLiteral(b, SoQLBoolean)(pos))
+  def booleanLiteralExpr(b: Boolean, pos: Position) = Seq(typed.BooleanLiteral(b, SoQLBoolean.t)(pos))
 
   private def getMonomorphically(f: Function[SoQLType]): MonomorphicFunction[SoQLType] =
     f.monomorphic.getOrElse(sys.error(f.identity + " not monomorphic?"))
@@ -66,7 +66,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
   )
 
   def stringLiteralExpr(s: String, pos: Position) = {
-    val baseString = typed.StringLiteral(s, SoQLText)(pos)
+    val baseString = typed.StringLiteral(s, SoQLText.t)(pos)
     val results = Seq.newBuilder[typed.CoreExpr[Nothing, SoQLType]]
     results += baseString
     results ++= (for {
@@ -79,7 +79,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
   }
 
   def numberLiteralExpr(n: BigDecimal, pos: Position) = {
-    val baseNumber = typed.NumberLiteral(n, SoQLNumber)(pos)
+    val baseNumber = typed.NumberLiteral(n, SoQLNumber.t)(pos)
     Seq(
       baseNumber,
       typed.FunctionCall(numberToMoneyFunc, Seq(baseNumber))(pos, pos),

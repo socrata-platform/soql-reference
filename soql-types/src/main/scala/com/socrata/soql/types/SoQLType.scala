@@ -19,6 +19,8 @@ sealed abstract class SoQLType(n: String) {
 
   override final def toString = name.toString
   def isPassableTo(that: SoQLType) = this == that
+
+  def t: SoQLType = this // Various things are invariant in SoQLType for good reasons; this avoids sprinkling ": SoQLType" all over the place
 }
 
 object SoQLType {

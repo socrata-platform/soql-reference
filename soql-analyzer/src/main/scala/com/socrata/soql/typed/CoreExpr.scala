@@ -10,7 +10,7 @@ import com.socrata.soql.functions.MonomorphicFunction
 /** A "core expression" -- nothing but literals, column references, and function calls,
   * with aliases fully expanded and with types ascribed at each node. */
 sealed abstract class
-CoreExpr[+ColumnId, +Type] extends Product with Typable[Type] {
+CoreExpr[+ColumnId, Type] extends Product with Typable[Type] {
   val position: Position
   val size: Int
   protected def asString: String

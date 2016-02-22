@@ -1,7 +1,7 @@
 package com.socrata.soql.typechecker
 
 import com.socrata.soql.ast._
-import com.socrata.soql.exceptions.{NoSuchColumn, NoSuchFunction, TypeMismatch, AmbiguousCall}
+import com.socrata.soql.exceptions._
 import com.socrata.soql.typed
 import com.socrata.soql.environment.{ColumnName, DatasetContext}
 
@@ -19,7 +19,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
   }
 
   // never returns an empty value
-  private def typecheck(e: Expression, aliases: Map[ColumnName, Expr]): Either[TypeMismatch, Seq[Expr]] = e match {
+  private def typecheck(e: Expression, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = e match {
     case r@ColumnOrAliasRef(col) =>
       aliases.get(col) match {
         case Some(typed.ColumnRef(name, typ)) if name == col =>
@@ -47,7 +47,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       }
 
       val options = functionInfo.functionsWithArity(name, typedParameters.length)
-      if(options.isEmpty) throw NoSuchFunction(name, typedParameters.length, fc.functionNamePosition)
+      if(options.isEmpty) return Left(NoSuchFunction(name, typedParameters.length, fc.functionNamePosition))
       val (failed, resolved) = divide(functionCallTypechecker.resolveOverload(options, typedParameters.map(_.map(_.typ).toSet))) {
         case Passed(f) => Right(f)
         case tm: TypeMismatchFailure[Type] => Left(tm)

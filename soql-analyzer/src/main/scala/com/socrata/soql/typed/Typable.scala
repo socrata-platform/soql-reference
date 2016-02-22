@@ -1,6 +1,6 @@
 package com.socrata.soql.typed
 
-trait Typable[+Type] {
+trait Typable[Type] {
   def typ: Type
 }
 

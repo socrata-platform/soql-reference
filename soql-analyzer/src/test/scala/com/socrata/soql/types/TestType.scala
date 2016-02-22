@@ -6,10 +6,8 @@ sealed abstract class TestType(val name: TypeName, val isOrdered: Boolean) {
   def this(name: String, isOrdered: Boolean) = this(TypeName(name), isOrdered)
   override final def toString = name.toString
 
-  def real = true
-
-  def isPassableTo(that: TestType): Boolean = (this == that)
-  def canonical: TestType = this
+  def isPassableTo(that: TestType): Boolean = this == that
+  def t: TestType = this
 }
 
 object TestType {

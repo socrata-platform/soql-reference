@@ -21,12 +21,12 @@ object TestTypeInfo extends TypeInfo[TestType] {
     TestArray
   )
 
-  def booleanLiteralExpr(b: Boolean, pos: Position) = Seq(typed.BooleanLiteral(b, TestBoolean)(pos))
+  def booleanLiteralExpr(b: Boolean, pos: Position) = Seq(typed.BooleanLiteral(b, TestBoolean.t)(pos))
 
-  def stringLiteralExpr(s: String, pos: Position) = Seq(typed.StringLiteral(s, TestText)(pos))
+  def stringLiteralExpr(s: String, pos: Position) = Seq(typed.StringLiteral(s, TestText.t)(pos))
 
   def numberLiteralExpr(n: BigDecimal, pos: Position) = {
-    val baseNum = typed.NumberLiteral(n, TestNumber)(pos)
+    val baseNum = typed.NumberLiteral(n, TestNumber.t)(pos)
     Seq(
       baseNum,
       typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(baseNum))(pos, pos),
