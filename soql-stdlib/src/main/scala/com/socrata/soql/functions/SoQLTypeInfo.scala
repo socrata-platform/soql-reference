@@ -35,6 +35,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
   private val textToPolygonFunc = getMonomorphically(SoQLFunctions.TextToPolygon)
   private val textToMultiPolygonFunc = getMonomorphically(SoQLFunctions.TextToMultiPolygon)
   private val textToBlobFunc = getMonomorphically(SoQLFunctions.TextToBlob)
+  private val textToPhoneFunc = getMonomorphically(SoQLFunctions.TextToPhone)
   private val textToLocationFunc = getMonomorphically(SoQLFunctions.TextToLocation)
 
   private def isNumberLiteral(s: String) = try {
@@ -62,6 +63,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
     (SoQLMultiLine.WktRep.unapply(_).isDefined, Seq(textToMultiLineFunc)),
     (SoQLPolygon.WktRep.unapply(_).isDefined, Seq(textToPolygonFunc)),
     (SoQLMultiPolygon.WktRep.unapply(_).isDefined, Seq(textToMultiPolygonFunc)),
+    (SoQLPhone.isPossible, Seq(textToPhoneFunc)),
     (SoQLLocation.isPossibleLocation, Seq(textToLocationFunc))
   )
 

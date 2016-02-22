@@ -58,9 +58,9 @@ object TestFunctions {
   val JsonToNumber = mf("json to Number", SpecialFunctions.Cast(TestNumber.name), Seq(TestJson), Seq.empty, TestNumber)
 
   val LocationToPoint = mf("loc to point", SpecialFunctions.Cast(TestPoint.name), Seq(TestLocation), Seq.empty, TestPoint)
-  val LocationToLatitude = mf("loc to latitude", FunctionName("location_latitude"), Seq(TestLocation), Seq.empty, TestNumber)
-  val LocationToLongitude = mf("loc to longitude", FunctionName("location_longitude"), Seq(TestLocation), Seq.empty, TestNumber)
-  val LocationToAddress = mf("loc to address", FunctionName("location_address"), Seq(TestLocation), Seq.empty, TestText)
+  val LocationToLatitude = mf("location_latitude", FunctionName("location_latitude"), Seq(TestLocation), Seq.empty, TestNumber)
+  val LocationToLongitude = mf("location_longitude", FunctionName("location_longitude"), Seq(TestLocation), Seq.empty, TestNumber)
+  val LocationToAddress = mf("location_human_address", FunctionName("location_human_address"), Seq(TestLocation), Seq.empty, TestText)
 
   val LocationWithinCircle = f("location_within_circle", FunctionName("within_circle"),
     Map("a" -> RealNumLike),

@@ -32,6 +32,7 @@ object SoQLFunctions {
   val TextToMultiPolygon = mf("text to multi polygon", SpecialFunctions.Cast(SoQLMultiPolygon.name), Seq(SoQLText), Seq.empty, SoQLMultiPolygon)
   val TextToBlob = mf("text to blob", SpecialFunctions.Cast(SoQLBlob.name), Seq(SoQLText), Seq.empty, SoQLBlob)
   val TextToLocation = mf("text to location", SpecialFunctions.Cast(SoQLLocation.name), Seq(SoQLText), Seq.empty, SoQLLocation)
+  val TextToPhone = mf("text to phone", SpecialFunctions.Cast(SoQLPhone.name), Seq(SoQLText), Seq.empty, SoQLPhone)
 
   val Concat = f("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))
   val Gte = f(">=", SpecialFunctions.Operator(">="), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
@@ -162,9 +163,9 @@ object SoQLFunctions {
 
   // Cannot use property subscript syntax (loc.prop) to access properties of different types - number, text, point. Use cast syntax (loc::prop) instead
   val LocationToPoint = mf("loc to point", SpecialFunctions.Cast(SoQLPoint.name), Seq(SoQLLocation), Seq.empty, SoQLPoint)
-  val LocationToLatitude = mf("loc to latitude", FunctionName("location_latitude"), Seq(SoQLLocation), Seq.empty, SoQLNumber)
-  val LocationToLongitude = mf("loc to longitude", FunctionName("location_longitude"), Seq(SoQLLocation), Seq.empty, SoQLNumber)
-  val LocationToAddress = mf("loc to address", FunctionName("location_address"), Seq(SoQLLocation), Seq.empty, SoQLText)
+  val LocationToLatitude = mf("location_latitude", FunctionName("location_latitude"), Seq(SoQLLocation), Seq.empty, SoQLNumber)
+  val LocationToLongitude = mf("location_longitude", FunctionName("location_longitude"), Seq(SoQLLocation), Seq.empty, SoQLNumber)
+  val LocationToAddress = mf("location_human_address", FunctionName("location_human_address"), Seq(SoQLLocation), Seq.empty, SoQLText)
 
   val LocationWithinCircle = f("location_within_circle", FunctionName("within_circle"),
     Map("a" -> RealNumLike),
@@ -174,6 +175,9 @@ object SoQLFunctions {
     Map("a" -> RealNumLike),
     Seq(FixedType(SoQLLocation), VariableType("a"), VariableType("a"), VariableType("a"), VariableType("a")), Seq.empty,
     FixedType(SoQLBoolean))
+
+  val PhoneToPhoneNumber = mf("phone_phone_number", FunctionName("phone_phone_number"), Seq(SoQLPhone), Seq.empty, SoQLText)
+  val PhoneToPhoneType = mf("phone_phone_type", FunctionName("phone_phone_type"), Seq(SoQLPhone), Seq.empty, SoQLText)
 
   val JsonToText = mf("json to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLJson), Seq.empty, SoQLText)
   val JsonToNumber = mf("json to number", SpecialFunctions.Cast(SoQLNumber.name), Seq(SoQLJson), Seq.empty, SoQLNumber)
@@ -188,6 +192,12 @@ object SoQLFunctions {
     Map("a" -> AllTypes),
     Seq(FixedType(SoQLBoolean), VariableType("a")),
     Seq(FixedType(SoQLBoolean), VariableType("a")),
+    VariableType("a"))
+
+  val Coalesce = f("coalesce", FunctionName("coalesce"),
+    Map.empty,
+    Seq(VariableType("a")),
+    Seq(VariableType("a")),
     VariableType("a"))
 
   def potentialAccessors = for {

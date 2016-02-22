@@ -140,14 +140,19 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
     //      selecting the group-by clauses together with "count(*)".
     //   2. Otherwise, it should be the equivalent of selecting "*".
     val typechecker = new Typechecker(typeInfo, functionInfo)
+    val subscriptConverter = new SubscriptConverter(typeInfo, functionInfo)
+
+    // Rewrite subscript before typecheck
+    val typecheck = subscriptConverter andThen (e => typechecker(e, Map.empty))
+
     val t0 = System.nanoTime()
-    val checkedWhere = where.map(typechecker(_, Map.empty))
+    val checkedWhere = where.map(typecheck)
     val t1 = System.nanoTime()
-    val checkedGroupBy = groupBy.map(_.map(typechecker(_, Map.empty)))
+    val checkedGroupBy = groupBy.map(_.map(typecheck))
     val t2 = System.nanoTime()
-    val checkedHaving = having.map(typechecker(_, Map.empty))
+    val checkedHaving = having.map(typecheck)
     val t3 = System.nanoTime()
-    val checkedOrderBy = orderBy.map { obs => obs.zip(obs.map { ob => typechecker(ob.expression, Map.empty) }) }
+    val checkedOrderBy = orderBy.map { obs => obs.zip(obs.map { ob => typecheck(ob.expression) })}
     val t4 = System.nanoTime()
     val isGrouped = aggregateChecker(Nil, checkedWhere, checkedGroupBy, checkedHaving, checkedOrderBy.getOrElse(Nil).map(_._2))
     val t5 = System.nanoTime()
@@ -216,22 +221,27 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
     log.debug("There is a selection; typechecking all parts")
 
     val typechecker = new Typechecker(typeInfo, functionInfo)
+    val subscriptConverter = new SubscriptConverter(typeInfo, functionInfo)
 
     val t0 = System.nanoTime()
     val aliasAnalysis = AliasAnalysis(query.selection)
     val t1 = System.nanoTime()
     val typedAliases = aliasAnalysis.evaluationOrder.foldLeft(Map.empty[ColumnName, Expr]) { (acc, alias) =>
-      acc + (alias -> typechecker(aliasAnalysis.expressions(alias), acc))
+      acc + (alias -> typechecker(subscriptConverter(aliasAnalysis.expressions(alias)), acc))
     }
+
+    // Rewrite subscript before typecheck
+    val typecheck = subscriptConverter andThen (e => typechecker(e, typedAliases))
+
     val outputs = OrderedMap(aliasAnalysis.expressions.keys.map { k => k -> typedAliases(k) }.toSeq : _*)
     val t2 = System.nanoTime()
-    val checkedWhere = query.where.map(typechecker(_, typedAliases))
+    val checkedWhere = query.where.map(typecheck)
     val t3 = System.nanoTime()
-    val checkedGroupBy = query.groupBy.map(_.map(typechecker(_, typedAliases)))
+    val checkedGroupBy = query.groupBy.map(_.map(typecheck))
     val t4 = System.nanoTime()
-    val checkedHaving = query.having.map(typechecker(_, typedAliases))
+    val checkedHaving = query.having.map(typecheck)
     val t5 = System.nanoTime()
-    val checkedOrderBy = query.orderBy.map { obs => obs.zip(obs.map { ob => typechecker(ob.expression, typedAliases) }) }
+    val checkedOrderBy = query.orderBy.map { obs => obs.zip(obs.map { ob => typecheck(ob.expression) })}
     val t6 = System.nanoTime()
     val isGrouped = aggregateChecker(
       outputs.values.toSeq,

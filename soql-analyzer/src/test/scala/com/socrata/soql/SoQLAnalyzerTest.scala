@@ -136,6 +136,17 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     ))
   }
 
+  test("subcolumn subscript converted") {
+    val analysis = analyzer.analyzeUnchainedQuery(
+      "select address.human_address where address.latitude > 1.1 order by address.longitude")
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName("address_human_address") -> typedExpression("location_human_address(address)")
+    ))
+    analysis.where must equal (Some(typedExpression("location_latitude(address) > 1.1")))
+    analysis.where.get.position.column must equal (36)
+    analysis.orderBy must equal (Some(Seq(typed.OrderBy(typedExpression("location_longitude(address)"), true, true))))
+  }
+
   test("null :: number succeeds") {
     val analysis = analyzer.analyzeUnchainedQuery("select null :: number as x")
     analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestNumber)).get.monomorphic.get,
