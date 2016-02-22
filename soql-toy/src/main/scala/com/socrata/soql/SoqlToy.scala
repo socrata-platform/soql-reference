@@ -3,8 +3,7 @@ package com.socrata.soql
 import com.socrata.soql.exceptions.SoQLException
 import com.socrata.soql.types._
 import environment.{ColumnName, DatasetContext}
-import com.socrata.soql.functions.{SoQLTypeConversions, SoQLTypeInfo, SoQLFunctionInfo}
-import com.socrata.soql.types.obfuscation.CryptProvider
+import com.socrata.soql.functions.{SoQLTypeInfo, SoQLFunctionInfo}
 
 object SoqlToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -12,7 +11,7 @@ object SoqlToy extends (Array[String] => Unit) {
     sys.exit(1)
   }
 
-  implicit val datasetCtx = new DatasetContext[SoQLAnalysisType] {
+  implicit val datasetCtx = new DatasetContext[SoQLType] {
     private implicit def ctx = this
     val locale = com.ibm.icu.util.ULocale.ENGLISH
     val schema = com.socrata.soql.collection.OrderedMap(

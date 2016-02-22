@@ -13,13 +13,13 @@ case class VariableType(name: String) extends TypeLike[Nothing]
  * @param identity A _unique_ name for this function that can be used to identify it when
  *                 serializing things that refer to it.
  */
-case class Function[+Type](identity: String,
-                           name: FunctionName,
-                           constraints: Map[String, Any => Boolean /* ick, but without Set being covariant... */],
-                           parameters: Seq[TypeLike[Type]],
-                           repeated: Seq[TypeLike[Type]],
-                           result: TypeLike[Type],
-                           isAggregate: Boolean = false)  {
+case class Function[Type](identity: String,
+                          name: FunctionName,
+                          constraints: Map[String, Set[Type]],
+                          parameters: Seq[TypeLike[Type]],
+                          repeated: Seq[TypeLike[Type]],
+                          result: TypeLike[Type],
+                          isAggregate: Boolean = false)  {
 
   val minArity = parameters.length
   def isVariadic = repeated.nonEmpty

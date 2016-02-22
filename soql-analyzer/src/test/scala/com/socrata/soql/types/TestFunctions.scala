@@ -12,66 +12,72 @@ object TestFunctions {
   private val log = org.slf4j.LoggerFactory.getLogger(classOf[TestFunctions])
 
   // TODO: might want to narrow this down
-  private val Ordered = TestTypeConversions.typeParameterUniverse.toSet[Any]
-  private val NumLike = Set[Any](TestNumber, TestDouble, TestMoney)
-  private val RealNumLike = Set[Any](TestNumber, TestDouble)
-  private val GeospatialLike = Set[Any](TestPoint, TestMultiPoint, TestLine, TestMultiLine, TestPolygon, TestMultiPolygon)
+  private val Ordered = TestTypeInfo.typeParameterUniverse.toSet
+  private val NumLike = Set[TestType](TestNumber, TestDouble, TestMoney)
+  private val RealNumLike = Set[TestType](TestNumber, TestDouble)
+  private val GeospatialLike = Set[TestType](TestPoint, TestMultiPoint, TestLine, TestMultiLine, TestPolygon, TestMultiPolygon)
+  private val AllTypes = TestType.typesByName.values.toSet
 
+  // helpers to guide type inference (specifically forces TestType to be inferred)
+  private def mf(identity: String, name: FunctionName, params: Seq[TestType], varargs: Seq[TestType], result: TestType, isAggregate: Boolean = false) =
+    new MonomorphicFunction(identity, name, params, varargs, result, isAggregate = isAggregate).function
+  private def f(identity: String, name: FunctionName, constraints: Map[String, Set[TestType]], params: Seq[TypeLike[TestType]], varargs: Seq[TypeLike[TestType]], result: TypeLike[TestType], isAggregate: Boolean = false) =
+    Function(identity, name, constraints, params, varargs, result, isAggregate = isAggregate)
 
-  val TextToLocation = new MonomorphicFunction("text to location", SpecialFunctions.Cast(TestLocation.name), Seq(TestText), Seq.empty, TestLocation).function
+  val TextToLocation = mf("text to location", SpecialFunctions.Cast(TestLocation.name), Seq(TestText), Seq.empty, TestLocation)
 
-  val Concat = Function("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(TestText))
-  val Gt = Function(">", SpecialFunctions.Operator(">"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
-  val Lt = Function("<", SpecialFunctions.Operator("<"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
+  val Concat = f("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(TestText))
+  val Gt = f(">", SpecialFunctions.Operator(">"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
+  val Lt = f("<", SpecialFunctions.Operator("<"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
 
-  val Max = Function("max", FunctionName("max"), Map("a" -> Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
-  val Sum = Function("sum", FunctionName("sum"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
-  val CountStar = new MonomorphicFunction("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, TestNumber, isAggregate = true).function
+  val Max = f("max", FunctionName("max"), Map("a" -> Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
+  val Sum = f("sum", FunctionName("sum"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
+  val CountStar = mf("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, TestNumber, isAggregate = true)
 
-  val Mul = Function("*", SpecialFunctions.Operator("*"), Map("a" -> NumLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"), isAggregate = false)
+  val Mul = f("*", SpecialFunctions.Operator("*"), Map("a" -> NumLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"), isAggregate = false)
 
-  val And = Function("and", SpecialFunctions.Operator("and"), Map.empty, Seq(FixedType(TestBoolean), FixedType(TestBoolean)), Seq.empty, FixedType(TestBoolean), isAggregate = false)
+  val And = f("and", SpecialFunctions.Operator("and"), Map.empty, Seq(FixedType(TestBoolean), FixedType(TestBoolean)), Seq.empty, FixedType(TestBoolean), isAggregate = false)
 
-  val SignedMagnitude10 = Function("signed_magnitude_10", FunctionName("signed_magnitude_10"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
-  val SignedMagnitudeLinear = Function("signed_magnitude_linear", FunctionName("signed_magnitude_linear"), Map("a" -> NumLike, "b" -> NumLike), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
+  val SignedMagnitude10 = f("signed_magnitude_10", FunctionName("signed_magnitude_10"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
+  val SignedMagnitudeLinear = f("signed_magnitude_linear", FunctionName("signed_magnitude_linear"), Map("a" -> NumLike, "b" -> NumLike), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
 
-  val NumberToMoney = new MonomorphicFunction("number to money", SpecialFunctions.Operator("to_money"), Seq(TestNumber), Seq.empty, TestMoney).function
-  val NumberToDouble = new MonomorphicFunction("number to double", SpecialFunctions.Operator("to_double"), Seq(TestNumber), Seq.empty, TestDouble).function
+  val NumberToMoney = mf("number to money", SpecialFunctions.Operator("to_money"), Seq(TestNumber), Seq.empty, TestMoney)
+  val NumberToDouble = mf("number to double", SpecialFunctions.Operator("to_double"), Seq(TestNumber), Seq.empty, TestDouble)
 
   val castIdentities = for ((n, t) <- TestType.typesByName.toSeq) yield {
-    Function(n.caseFolded + "::" + n.caseFolded, SpecialFunctions.Cast(n), Map.empty, Seq(FixedType(t)), Seq.empty, FixedType(t))
+    f(n.caseFolded + "::" + n.caseFolded, SpecialFunctions.Cast(n), Map.empty, Seq(FixedType(t)), Seq.empty, FixedType(t))
   }
 
-  val NumberToText = new MonomorphicFunction("number to text", SpecialFunctions.Cast(TestText.name), Seq(TestNumber), Seq.empty, TestText).function
-  val TextToNumber = new MonomorphicFunction("text to number", SpecialFunctions.Cast(TestNumber.name), Seq(TestText), Seq.empty, TestNumber).function
+  val NumberToText = mf("number to text", SpecialFunctions.Cast(TestText.name), Seq(TestNumber), Seq.empty, TestText)
+  val TextToNumber = mf("text to number", SpecialFunctions.Cast(TestNumber.name), Seq(TestText), Seq.empty, TestNumber)
 
-  val Prop = new MonomorphicFunction(".", SpecialFunctions.Subscript, Seq(TestObject, TestText), Seq.empty, TestJson).function
-  val Index = new MonomorphicFunction("[]", SpecialFunctions.Subscript, Seq(TestArray, TestNumber), Seq.empty, TestJson).function
+  val Prop = mf(".", SpecialFunctions.Subscript, Seq(TestObject, TestText), Seq.empty, TestJson)
+  val Index = mf("[]", SpecialFunctions.Subscript, Seq(TestArray, TestNumber), Seq.empty, TestJson)
 
-  val JsonToText = new MonomorphicFunction("json to text", SpecialFunctions.Cast(TestText.name), Seq(TestJson), Seq.empty, TestText).function
-  val JsonToNumber = new MonomorphicFunction("json to Number", SpecialFunctions.Cast(TestNumber.name), Seq(TestJson), Seq.empty, TestNumber).function
+  val JsonToText = mf("json to text", SpecialFunctions.Cast(TestText.name), Seq(TestJson), Seq.empty, TestText)
+  val JsonToNumber = mf("json to Number", SpecialFunctions.Cast(TestNumber.name), Seq(TestJson), Seq.empty, TestNumber)
 
-  val LocationToPoint = new MonomorphicFunction("loc to point", SpecialFunctions.Cast(TestPoint.name), Seq(TestLocation), Seq.empty, TestPoint).function
-  val LocationToLatitude = new MonomorphicFunction("location_latitude", FunctionName("location_latitude"), Seq(TestLocation), Seq.empty, TestNumber).function
-  val LocationToLongitude = new MonomorphicFunction("location_longitude", FunctionName("location_longitude"), Seq(TestLocation), Seq.empty, TestNumber).function
-  val LocationToAddress = new MonomorphicFunction("location_human_address", FunctionName("location_human_address"), Seq(TestLocation), Seq.empty, TestText).function
+  val LocationToPoint = mf("loc to point", SpecialFunctions.Cast(TestPoint.name), Seq(TestLocation), Seq.empty, TestPoint)
+  val LocationToLatitude = mf("location_latitude", FunctionName("location_latitude"), Seq(TestLocation), Seq.empty, TestNumber)
+  val LocationToLongitude = mf("location_longitude", FunctionName("location_longitude"), Seq(TestLocation), Seq.empty, TestNumber)
+  val LocationToAddress = mf("location_human_address", FunctionName("location_human_address"), Seq(TestLocation), Seq.empty, TestText)
 
-  val LocationWithinCircle = Function("location_within_circle", FunctionName("within_circle"),
+  val LocationWithinCircle = f("location_within_circle", FunctionName("within_circle"),
     Map("a" -> RealNumLike),
-    Seq(FixedType(SoQLLocation), VariableType("a"), VariableType("a"), VariableType("a")), Seq.empty,
+    Seq(FixedType(TestLocation), VariableType("a"), VariableType("a"), VariableType("a")), Seq.empty,
     FixedType(TestBoolean))
-  val LocationWithinBox = Function("location_within_box", FunctionName("within_box"),
+  val LocationWithinBox = f("location_within_box", FunctionName("within_box"),
     Map("a" -> RealNumLike),
-    Seq(FixedType(SoQLLocation), VariableType("a"), VariableType("a"), VariableType("a"), VariableType("a")), Seq.empty,
+    Seq(FixedType(TestLocation), VariableType("a"), VariableType("a"), VariableType("a"), VariableType("a")), Seq.empty,
     FixedType(TestBoolean))
 
-  val Simplify = Function("simplify", FunctionName("simplify"), Map("a" -> GeospatialLike, "b" -> NumLike),
+  val Simplify = f("simplify", FunctionName("simplify"), Map("a" -> GeospatialLike, "b" -> NumLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
-  val CuratedRegionTest = Function("curated_region_test", FunctionName("curated_region_test"), Map("a" -> GeospatialLike, "b" -> NumLike),
+  val CuratedRegionTest = f("curated_region_test", FunctionName("curated_region_test"), Map("a" -> GeospatialLike, "b" -> NumLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(TestText))
 
-  val Case = Function("case", FunctionName("case"),
-    Map.empty,
+  val Case = f("case", FunctionName("case"),
+    Map("a" -> AllTypes),
     Seq(FixedType(TestBoolean), VariableType("a")),
     Seq(FixedType(TestBoolean), VariableType("a")),
     VariableType("a"))
