@@ -62,6 +62,8 @@ object SoQLFunctions {
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))
   val DistanceInMeters = f("distance_in_meters", FunctionName("distance_in_meters"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLNumber))
+  val NumberOfPoints = f("num_points", FunctionName("num_points"), Map("a" -> GeospatialLike),
+    Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber))
   val Simplify = f("simplify", FunctionName("simplify"), Map("a" -> GeospatialLike, "b" -> NumLike),
                           Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
   val SimplifyPreserveTopology =
