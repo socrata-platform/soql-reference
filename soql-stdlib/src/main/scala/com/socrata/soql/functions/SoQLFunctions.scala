@@ -178,6 +178,9 @@ object SoQLFunctions {
     Seq(FixedType(SoQLLocation), VariableType("a"), VariableType("a"), VariableType("a"), VariableType("a")), Seq.empty,
     FixedType(SoQLBoolean))
 
+  val PointToLatitude = mf("point_latitude", FunctionName("point_latitude"), Seq(SoQLPoint), Seq.empty, SoQLNumber)
+  val PointToLongitude = mf("point_longitude", FunctionName("point_longitude"), Seq(SoQLPoint), Seq.empty, SoQLNumber)
+
   val PhoneToPhoneNumber = mf("phone_phone_number", FunctionName("phone_phone_number"), Seq(SoQLPhone), Seq.empty, SoQLText)
   val PhoneToPhoneType = mf("phone_phone_type", FunctionName("phone_phone_type"), Seq(SoQLPhone), Seq.empty, SoQLText)
 
