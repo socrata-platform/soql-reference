@@ -62,8 +62,11 @@ object SoQLFunctions {
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))
   val DistanceInMeters = f("distance_in_meters", FunctionName("distance_in_meters"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLNumber))
-  val ValidMultiPolygon = f("valid_multi_polygon", FunctionName("valid_multi_polygon"), Map("a" -> GeospatialLike),
+  val GeoMakeValid = f("geo_make_valid", FunctionName("geo_make_valid"), Map("a" -> GeospatialLike),
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiPolygon))
+  val GeoMulti = f("geo_multi", FunctionName("geo_multi"), Map("a" -> GeospatialLike),
+    Seq(VariableType("a")), Seq.empty, VariableType("a"))
+
   val NumberOfPoints = f("num_points", FunctionName("num_points"), Map("a" -> GeospatialLike),
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber))
   val Simplify = f("simplify", FunctionName("simplify"), Map("a" -> GeospatialLike, "b" -> NumLike),
