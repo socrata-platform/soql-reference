@@ -183,11 +183,19 @@ object SoQLFunctions {
     Seq(FixedType(SoQLLocation), VariableType("a"), VariableType("a"), VariableType("a"), VariableType("a")), Seq.empty,
     FixedType(SoQLBoolean))
 
+  val Location = f("location", FunctionName("location"), Map.empty,
+    Seq(FixedType(SoQLPoint), FixedType(SoQLText), FixedType(SoQLText), FixedType(SoQLText), FixedType(SoQLText)), Seq.empty,
+    FixedType(SoQLLocation))
+
   val PointToLatitude = mf("point_latitude", FunctionName("point_latitude"), Seq(SoQLPoint), Seq.empty, SoQLNumber)
   val PointToLongitude = mf("point_longitude", FunctionName("point_longitude"), Seq(SoQLPoint), Seq.empty, SoQLNumber)
 
   val PhoneToPhoneNumber = mf("phone_phone_number", FunctionName("phone_phone_number"), Seq(SoQLPhone), Seq.empty, SoQLText)
   val PhoneToPhoneType = mf("phone_phone_type", FunctionName("phone_phone_type"), Seq(SoQLPhone), Seq.empty, SoQLText)
+
+  val Phone = f("phone", FunctionName("phone"), Map.empty,
+    Seq(FixedType(SoQLText), FixedType(SoQLText)), Seq.empty,
+    FixedType(SoQLPhone))
 
   val JsonToText = mf("json to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLJson), Seq.empty, SoQLText)
   val JsonToNumber = mf("json to number", SpecialFunctions.Cast(SoQLNumber.name), Seq(SoQLJson), Seq.empty, SoQLNumber)
