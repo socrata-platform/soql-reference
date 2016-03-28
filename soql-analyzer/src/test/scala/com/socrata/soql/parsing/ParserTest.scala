@@ -161,6 +161,11 @@ class ParserTest extends WordSpec with MustMatchers {
       x.selection.expressions.head.expression.toString must be (largeNumber)
     }
 
+    "recognize from #4x4" in {
+      val x = parseFull(s"select * fRoM #abcd-efgha")
+      println(x.from)
+    }
+
   // def show[T](x: => T) {
   //   try {
   //     println(x)

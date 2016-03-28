@@ -97,7 +97,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
     def dispatch(selection: Option[Selection], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) =
       selection match {
         case None => analyzeNoSelectionInOuterSelectionContext(lastQuery, where, groupBy, having, orderBy, limit, offset, search)
-        case Some(s) => analyzeInOuterSelectionContext(lastQuery, Select(s, where, groupBy, having, orderBy, limit, offset, search))
+        case Some(s) => analyzeInOuterSelectionContext(lastQuery, Select(s, None, where, groupBy, having, orderBy, limit, offset, search))
       }
 
     dispatch(

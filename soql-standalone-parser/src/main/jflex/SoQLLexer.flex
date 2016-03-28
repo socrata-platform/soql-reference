@@ -62,8 +62,10 @@ WhiteSpace = [ \t\n]
 
 Identifier = [:jletter:] [:jletterdigit:]*
 SystemIdentifier = ":" "@"? [:jletterdigit:]+
+TableIdentifier = "#" [:jletterdigit:]{4} "-" [:jletterdigit:]{4}
 QuotedIdentifier = ("-" | [:jletter:]) ("-" | [:jletterdigit:])*
 QuotedSystemIdentifier = ":" "@"? ("-" | [:jletterdigit:])+
+
 
 %state QUOTEDIDENTIFIER
 %state QUOTEDSYSTEMIDENTIFIER
@@ -125,6 +127,10 @@ QuotedSystemIdentifier = ":" "@"? ("-" | [:jletterdigit:])+
   // Identifiers
   {SystemIdentifier} { return token(new SystemIdentifier(yytext(), false)); }
   "`" / ":" { stringStart = pos(); yybegin(QUOTEDSYSTEMIDENTIFIER); }
+
+  // Identifiers
+  {TableIdentifier} { return token(new TableIdentifier(yytext())); }
+
 
   // Punctuation
   ","  { return token(new COMMA()); }

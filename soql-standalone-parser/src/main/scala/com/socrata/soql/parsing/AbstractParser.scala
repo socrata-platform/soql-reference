@@ -30,6 +30,7 @@ abstract class AbstractParser extends Parsers with PackratParsers {
   def limit(soql: String): BigInt = parseFull(integer, soql)
   def offset(soql: String): BigInt = parseFull(integer, soql)
   def search(soql: String): String = parseFull(stringLiteral, soql)
+  def from(soql: String): (String, Position) = parseFull(tableIdentifier, soql)
 
   protected def badParse(msg: String, nextPos: Position): Nothing
   protected def lexer(s: String): AbstractLexer
@@ -95,8 +96,8 @@ abstract class AbstractParser extends Parsers with PackratParsers {
   def pipedSelect: Parser[Seq[Select]] = rep1sep(unchainedSelect, QUERYPIPE())
 
   def unchainedSelect: Parser[Select] =
-    SELECT() ~> selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-      case s ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(s, w, gb, h, ord, lim, off, sr)
+    SELECT() ~> selectList ~ opt(fromClause) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+      case s ~ f ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(s, f, w, gb, h, ord, lim, off, sr)
     }
 
   def orderByAndSearch: Parser[(Option[Seq[OrderBy]], Option[String])] =
@@ -117,6 +118,7 @@ abstract class AbstractParser extends Parsers with PackratParsers {
       case None => (None, None)
     }
 
+  def fromClause = FROM () ~> tableIdentifier
   def whereClause = WHERE() ~> expr
   def groupByClause = GROUP() ~ BY() ~> groupByList
   def havingClause = HAVING() ~> expr
@@ -229,7 +231,12 @@ abstract class AbstractParser extends Parsers with PackratParsers {
       (t.value, t.position)
     } | failure(errors.missingSystemIdentifier)
 
-  val identifier: Parser[(String, Position)] = systemIdentifier | userIdentifier | failure(errors.missingIdentifier)
+  val tableIdentifier: Parser[(String, Position)] =
+    accept[tokens.TableIdentifier] ^^ { t =>
+      (t.value, t.position)
+    } | failure(errors.missingIdentifier)
+
+  val identifier: Parser[(String, Position)] = systemIdentifier | userIdentifier | tableIdentifier | failure(errors.missingIdentifier)
 
   def paramList: Parser[Either[Position, Seq[Expression]]] =
     // the clauses have to be in this order, or it can't backtrack enough to figure out it's allowed to take

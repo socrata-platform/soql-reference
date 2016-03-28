@@ -21,6 +21,7 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
       val s = ss.head
       ss.updated(0, Select(
         selection = mapSelection(s.selection),
+        from = s.from,
         where = s.where map mapExpression,
         groupBy = s.groupBy.map(_ map mapExpression),
         having = s.having map mapExpression,

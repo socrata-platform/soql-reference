@@ -3,10 +3,11 @@ package com.socrata.soql.ast
 import scala.util.parsing.input.{Position, NoPosition}
 import com.socrata.soql.environment.ColumnName
 
-case class Select(selection: Selection, where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) {
+case class Select(selection: Selection, from: Option[(String, Position)], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) {
   override def toString = {
     if(AST.pretty) {
       val sb = new StringBuilder("SELECT " + selection)
+      from.foreach(sb.append(" FROM ").append(_))
       where.foreach(sb.append(" WHERE ").append(_))
       groupBy.foreach { gb => sb.append(gb.mkString(" GROUP BY ", ", ", "")) }
       having.foreach(sb.append(" HAVING ").append(_))

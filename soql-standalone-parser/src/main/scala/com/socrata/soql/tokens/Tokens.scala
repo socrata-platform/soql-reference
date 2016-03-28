@@ -113,7 +113,10 @@ case class Identifier(value: String, quoted: Boolean) extends ValueToken[String]
 case class SystemIdentifier(value: String, quoted: Boolean) extends ValueToken[String] {
   override def printable = if(quoted) "`" + super.printable + "`" else super.printable
 }
-case class TableIdentifier(value: String) extends ValueToken[String] // For #abcd-2345 syntax
+case class TableIdentifier(value: String) extends ValueToken[String] {
+  // For #abcd-2345 syntax
+  override def printable = "#" + super.printable
+}
 
 // Punctuation
 case class COMMA() extends Token
