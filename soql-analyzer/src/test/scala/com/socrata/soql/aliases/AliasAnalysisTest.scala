@@ -208,12 +208,6 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
       AliasAnalysis.orderAliasesForEvaluation(OrderedMap(ColumnName("x") -> expr("x")), Set(ColumnName("x"))) must equal (Seq(ColumnName("x")))
     }
 
-    "reject directly-circular aliases with complex expressions" in {
-      a [CircularAliasDefinition] must be thrownBy { AliasAnalysis.orderAliasesForEvaluation(OrderedMap(ColumnName("x") -> expr("x + x")), Set.empty) }
-      a [CircularAliasDefinition] must be thrownBy { AliasAnalysis.orderAliasesForEvaluation(OrderedMap(ColumnName("x") -> expr("(x)")), Set.empty) }
-      a [CircularAliasDefinition] must be thrownBy { AliasAnalysis.orderAliasesForEvaluation(OrderedMap(ColumnName("x") -> expr("x")), Set.empty) }
-    }
-
     "reject indirectly-circular aliases" in {
       val aliasMap = OrderedMap(
         ColumnName("x") -> expr("y * 2"),
