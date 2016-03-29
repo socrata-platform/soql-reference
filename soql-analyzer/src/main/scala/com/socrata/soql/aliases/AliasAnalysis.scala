@@ -197,12 +197,12 @@ object AliasAnalysis extends AliasAnalysis {
       case _ => false
     }
 
-    val graph = otherRefs.mapValues { expr =>
+    val graph = otherRefs.transform { (targetAlias, expr) =>
       // semi-explicit refs are non-circular, but since they _look_ circular we want to exclude them.
       // We also want to exclude references to things that are not aliased at all (either they're columns
       // on the dataset or they're not -- either way it'll be handled at typechecking).
       expr.allColumnRefs.filterNot { cr =>
-        semiExplicit.contains(cr.column) || !in.contains(cr.column)
+        semiExplicit.contains(cr.column) || !in.contains(cr.column) || targetAlias == cr.column
       }
     }
 
