@@ -1,5 +1,7 @@
 package com.socrata.soql.tokens
 
+import java.math.MathContext
+
 import scala.util.parsing.input.{Position, NoPosition}
 
 sealed abstract class Token {
@@ -98,7 +100,9 @@ case class NULL() extends Token with LiteralToken
 case class NumberLiteral(value: BigDecimal) extends ValueToken[BigDecimal] with LiteralToken {
   def this(value: java.math.BigDecimal) = this(new BigDecimal(value))
 }
-class IntegerLiteral(val asInt: BigInt) extends NumberLiteral(BigDecimal(asInt))
+
+// Scala has default math context precision of 34.  Use unlimited here.
+class IntegerLiteral(val asInt: BigInt) extends NumberLiteral(BigDecimal(asInt, MathContext.UNLIMITED))
 case class BooleanLiteral(value: Boolean) extends ValueToken[Boolean] with LiteralToken
 case class StringLiteral(value: String) extends ValueToken[String] with LiteralToken
 

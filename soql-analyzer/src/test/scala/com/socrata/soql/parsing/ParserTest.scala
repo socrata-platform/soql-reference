@@ -154,6 +154,12 @@ class ParserTest extends WordSpec with MustMatchers {
       x.search.get must be ("WEather")
     }
 
+    "big decimal keeps precision" in {
+      val largeNumber =
+        "10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002"
+      val x = parseFull(s"select $largeNumber")
+      x.selection.expressions.head.expression.toString must be (largeNumber)
+    }
 
   // def show[T](x: => T) {
   //   try {
