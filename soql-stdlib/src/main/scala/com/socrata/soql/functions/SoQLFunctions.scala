@@ -64,8 +64,16 @@ object SoQLFunctions {
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLNumber))
   val GeoMakeValid = f("geo_make_valid", FunctionName("geo_make_valid"), Map("a" -> GeospatialLike),
     Seq(VariableType("a")), Seq.empty, VariableType("a"))
-  val GeoMulti = f("geo_multi", FunctionName("geo_multi"), Map("a" -> GeospatialLike),
-    Seq(VariableType("a")), Seq.empty, VariableType("a"))
+
+  // multi to multi conversion
+  val GeoMultiPolygonFromMultiPolygon = mf("geo_multi_mpg_mpg", FunctionName("geo_multi"), Seq(SoQLMultiPolygon), Seq.empty, SoQLMultiPolygon)
+  val GeoMultiLineFromMultiLine = mf("geo_multi_mln_mln", FunctionName("geo_multi"), Seq(SoQLMultiLine), Seq.empty, SoQLMultiLine)
+  val GeoMultiPointFromMultiPoint = mf("geo_multi_mpt_mpt", FunctionName("geo_multi"), Seq(SoQLMultiPoint), Seq.empty, SoQLMultiPoint)
+
+  // geo to multi geo conversion
+  val GeoMultiPolygonFromPolygon = mf("geo_multi_mpg_pg", FunctionName("geo_multi"), Seq(SoQLPolygon), Seq.empty, SoQLMultiPolygon)
+  val GeoMultiLineFromLine = mf("geo_multi_mln_ln", FunctionName("geo_multi"), Seq(SoQLLine), Seq.empty, SoQLMultiLine)
+  val GeoMultiPointFromPoint = mf("geo_multi_mpt_pt", FunctionName("geo_multi"), Seq(SoQLPoint), Seq.empty, SoQLMultiPoint)
 
   val NumberOfPoints = f("num_points", FunctionName("num_points"), Map("a" -> GeospatialLike),
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber))
