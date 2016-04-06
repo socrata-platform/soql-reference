@@ -31,8 +31,11 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
     val parsed = new Parser().selectStatement(query)
     val end = System.nanoTime()
     log.trace("Parsing took {}ms", ns2ms(end - start))
+    analyze(parsed)
+  }
 
-    parsed.scanLeft(baseAnalysis)(analyzeInOuterSelectionContext).drop(1)
+  def analyze(selects: Seq[Select])(implicit ctx: DatasetContext[Type]): Seq[Analysis] = {
+    selects.scanLeft(baseAnalysis)(analyzeInOuterSelectionContext).drop(1)
   }
 
   /** Turn a simple SoQL SELECT statement into an `Analysis` object.
