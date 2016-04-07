@@ -195,6 +195,13 @@ object SoQLFunctions {
     Seq(FixedType(SoQLPoint), FixedType(SoQLText), FixedType(SoQLText), FixedType(SoQLText), FixedType(SoQLText)), Seq.empty,
     FixedType(SoQLLocation))
 
+  /**
+   * human_address should return a string address in json object form
+   * like { "address": "101 Main St", "city": "Seattle", "state": "WA", "zip": "98104" }
+   */
+  val HumanAddress = mf("human_address", FunctionName("human_address"),
+    Seq(SoQLText, SoQLText, SoQLText, SoQLText), Seq.empty, SoQLText)
+
   val PointToLatitude = mf("point_latitude", FunctionName("point_latitude"), Seq(SoQLPoint), Seq.empty, SoQLNumber)
   val PointToLongitude = mf("point_longitude", FunctionName("point_longitude"), Seq(SoQLPoint), Seq.empty, SoQLNumber)
 
