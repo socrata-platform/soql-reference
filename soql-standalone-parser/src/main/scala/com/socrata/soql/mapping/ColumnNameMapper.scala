@@ -39,8 +39,10 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
     case BooleanLiteral(v) => BooleanLiteral(v)(NoPosition)
     case NullLiteral() => NullLiteral()(NoPosition)
 
-    case e: ColumnOrAliasRef =>
-      ColumnOrAliasRef(columnNameMap(e.column))(NoPosition)
+    case ColumnRef(colName) =>
+      ColumnRef(colName)(NoPosition)
+    case ColumnOrAliasRef(colName) =>
+      ColumnOrAliasRef(colName)(NoPosition)
     case e: FunctionCall =>
       FunctionCall(e.functionName, e.parameters map mapExpression)(NoPosition, NoPosition)
   }

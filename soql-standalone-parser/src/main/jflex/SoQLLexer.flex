@@ -134,6 +134,8 @@ QuotedSystemIdentifier = ":" "@"? ("-" | [:jletterdigit:])+
 
   "--" .* { /* comment */ }
 
+  "#" { return token(new HASH()); }
+
   <<EOF>> { return token(new EOF()); }
 }
 

@@ -10,7 +10,7 @@ sealed abstract class Expression extends Product {
   protected def asString: String
   override final def toString = if(Expression.pretty) asString else ScalaRunTime._toString(this)
   override final lazy val hashCode = ScalaRunTime._hashCode(this)
-  def allColumnRefs: Set[ColumnOrAliasRef]
+  def allColumnOrAliasRefs: Set[ColumnOrAliasRef] // Note that this EXCLUDES pure column refs!
 
   def toSyntheticIdentifierBase: String =
     com.socrata.soql.brita.IdentifierFilter(Expression.findIdentsAndLiterals(this))
@@ -23,6 +23,7 @@ object Expression {
 
   private def findIdentsAndLiterals(e: Expression): Seq[String] = e match {
     case v: Literal => Vector(v.asString)
+    case ColumnRef(name) => Vector(name.name)
     case ColumnOrAliasRef(name) => Vector(name.name)
     case fc: FunctionCall =>
       fc match {
@@ -89,13 +90,18 @@ object SpecialFunctions {
   }
 }
 
+case class ColumnRef(column: ColumnName)(val position: Position) extends Expression {
+  protected def asString = "`" + column.toString + "`"
+  def allColumnOrAliasRefs = Set.empty
+}
+
 case class ColumnOrAliasRef(column: ColumnName)(val position: Position) extends Expression {
   protected def asString = "`" + column.toString + "`"
-  def allColumnRefs = Set(this)
+  def allColumnOrAliasRefs = Set(this)
 }
 
 sealed abstract class Literal extends Expression {
-  def allColumnRefs = Set.empty
+  def allColumnOrAliasRefs = Set.empty
 }
 case class NumberLiteral(value: BigDecimal)(val position: Position) extends Literal {
   protected def asString = value.toString
@@ -134,5 +140,5 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
     case SpecialFunctions.NotLike => parameters.mkString(" NOT LIKE ")
     case other => parameters.mkString(other + "(", ",", ")")
   }
-  lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
+  lazy val allColumnOrAliasRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnOrAliasRefs)
 }

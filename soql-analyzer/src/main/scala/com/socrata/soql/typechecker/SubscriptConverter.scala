@@ -17,6 +17,7 @@ class SubscriptConverter[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionI
   def apply(e: Expression) = convert(e)
 
   private def convert(e: Expression): Expression = e match {
+    case c@ColumnRef(_) => c
     case c@ColumnOrAliasRef(_) => c
     case l: Literal => l
     case fc@FunctionCall(SpecialFunctions.Subscript,

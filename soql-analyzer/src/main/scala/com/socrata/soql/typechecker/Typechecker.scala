@@ -20,6 +20,13 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
 
   // never returns an empty value
   private def typecheck(e: Expression, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = e match {
+    case r@ColumnRef(col) =>
+      columns.get(col) match {
+        case Some(typ) =>
+          Right(Seq(typed.ColumnRef(col, typ)(r.position)))
+        case None =>
+          throw NoSuchColumn(col, r.position)
+      }
     case r@ColumnOrAliasRef(col) =>
       aliases.get(col) match {
         case Some(typed.ColumnRef(name, typ)) if name == col =>

@@ -248,6 +248,10 @@ abstract class AbstractParser extends Parsers with PackratParsers {
         FunctionCall(FunctionName(ident), params)(identPos, identPos)
       case ((ident, identPos)) ~ Some(Left(position)) =>
         FunctionCall(SpecialFunctions.StarFunc(ident), Seq.empty)(identPos, identPos)
+    } |
+    HASH() ~> identifier ^^ {
+      case ((ident, identPos)) =>
+        ColumnRef(ColumnName(ident))(identPos)
     }
 
   def paren: Parser[Expression] =

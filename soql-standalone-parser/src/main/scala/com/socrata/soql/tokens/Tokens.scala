@@ -118,5 +118,6 @@ case class TableIdentifier(value: String) extends ValueToken[String] // For #abc
 // Punctuation
 case class COMMA() extends Token
 case class COLONSTAR() extends FormattedToken(":*")
+case class HASH() extends Token
 
 case class EOF() extends Token
