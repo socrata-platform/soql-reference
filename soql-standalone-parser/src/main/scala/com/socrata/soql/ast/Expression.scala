@@ -91,7 +91,7 @@ object SpecialFunctions {
 }
 
 case class ColumnRef(column: ColumnName)(val position: Position) extends Expression {
-  protected def asString = "`" + column.toString + "`"
+  protected def asString = "#`" + column.toString + "`"
   def allColumnOrAliasRefs = Set.empty
 }
 
