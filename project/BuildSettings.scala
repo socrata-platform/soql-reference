@@ -25,7 +25,8 @@ object BuildSettings {
     libraryDependencies <++=(scalaVersion) {
       case "2.10.4" => Seq.empty
       case _ => Seq(
-        "org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.4"
+        "org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.4",
+        "org.scala-lang.modules" %% "scala-xml"                % "1.0.3"
       )
     }
   )

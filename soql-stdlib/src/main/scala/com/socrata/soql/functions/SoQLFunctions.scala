@@ -33,6 +33,7 @@ object SoQLFunctions {
   val TextToBlob = mf("text to blob", SpecialFunctions.Cast(SoQLBlob.name), Seq(SoQLText), Seq.empty, SoQLBlob)
   val TextToLocation = mf("text to location", SpecialFunctions.Cast(SoQLLocation.name), Seq(SoQLText), Seq.empty, SoQLLocation)
   val TextToPhone = mf("text to phone", SpecialFunctions.Cast(SoQLPhone.name), Seq(SoQLText), Seq.empty, SoQLPhone)
+  val TextToUrl = mf("text to url", SpecialFunctions.Cast(SoQLUrl.name), Seq(SoQLText), Seq.empty, SoQLUrl)
 
   val Concat = f("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))
   val Gte = f(">=", SpecialFunctions.Operator(">="), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
@@ -211,6 +212,13 @@ object SoQLFunctions {
   val Phone = f("phone", FunctionName("phone"), Map.empty,
     Seq(FixedType(SoQLText), FixedType(SoQLText)), Seq.empty,
     FixedType(SoQLPhone))
+
+  val UrlToUrl = mf("url_url", FunctionName("url_url"), Seq(SoQLUrl), Seq.empty, SoQLText)
+  val UrlToDescription = mf("url_description", FunctionName("url_description"), Seq(SoQLUrl), Seq.empty, SoQLText)
+
+  val Url = f("url", FunctionName("url"), Map.empty,
+    Seq(FixedType(SoQLText), FixedType(SoQLText)), Seq.empty,
+    FixedType(SoQLUrl))
 
   val JsonToText = mf("json to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLJson), Seq.empty, SoQLText)
   val JsonToNumber = mf("json to number", SpecialFunctions.Cast(SoQLNumber.name), Seq(SoQLJson), Seq.empty, SoQLNumber)
