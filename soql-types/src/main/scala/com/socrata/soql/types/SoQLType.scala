@@ -407,7 +407,6 @@ case object SoQLUrl extends SoQLType("url") {
         } catch {
           case e: SAXParseException => false
         }
-      case _ => false
     }
   }
 
