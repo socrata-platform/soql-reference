@@ -1,18 +1,21 @@
 package com.socrata.soql.types
 
+import java.net.{URI, URISyntaxException}
 
 import com.google.protobuf.{CodedInputStream, CodedOutputStream}
 import com.ibm.icu.util.CaseInsensitiveString
-import com.rojoma.json.v3.ast.{JValue, JArray, JObject}
+import com.rojoma.json.v3.ast.{JArray, JObject, JValue}
 import com.rojoma.json.v3.codec.JsonDecode
 import com.rojoma.json.v3.io.JsonReaderException
-import com.rojoma.json.v3.util.{JsonUtil, AutomaticJsonCodecBuilder, JsonKey}
+import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, JsonKey, JsonUtil}
 import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
-import com.socrata.soql.types.obfuscation.{Obfuscator, CryptProvider}
-import com.vividsolutions.jts.geom.{MultiLineString, MultiPolygon, Point, Polygon, MultiPoint, LineString}
-import org.joda.time.{LocalTime, LocalDate, LocalDateTime, DateTime}
+import com.socrata.soql.types.obfuscation.{CryptProvider, Obfuscator}
+import com.vividsolutions.jts.geom.{LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon}
+import org.joda.time.{DateTime, LocalDate, LocalDateTime, LocalTime}
 import org.joda.time.format.ISODateTimeFormat
+
+import scala.xml.SAXParseException
 
 sealed abstract class SoQLType(n: String) {
   val name = TypeName(n)
@@ -30,7 +33,7 @@ object SoQLType {
     SoQLID, SoQLVersion, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
     SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLJson, SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine,
     SoQLPolygon, SoQLMultiPolygon, SoQLBlob,
-    SoQLPhone, SoQLLocation
+    SoQLPhone, SoQLLocation, SoQLUrl
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
   }
@@ -55,6 +58,7 @@ object SoQLType {
     SoQLMultiPolygon,
     SoQLPhone,
     SoQLLocation,
+    SoQLUrl,
     SoQLObject,
     SoQLArray,
     SoQLID,
@@ -372,6 +376,38 @@ case object SoQLPhone extends SoQLType("phone") {
         } catch {
           case ex: JsonReaderException => false
         }
+    }
+  }
+
+  def isPossible(s: CaseInsensitiveString): Boolean = isPossible(s.getString)
+}
+
+case class SoQLUrl(@JsonKey("url") url: Option[String],
+                   @JsonKey("description") description: Option[String]) extends SoQLValue {
+  def typ = SoQLUrl
+}
+
+case object SoQLUrl extends SoQLType("url") {
+  implicit val jCodec = AutomaticJsonCodecBuilder[SoQLUrl]
+
+  def isPossible(s: String): Boolean = {
+    try {
+      if (JsonUtil.parseJson[SoQLUrl](s).isRight) { true }
+      else {
+        new URI(s)
+        true
+      }
+    } catch {
+      case e: URISyntaxException =>
+        try {
+          xml.XML.loadString(s) match {
+            case a @ <a>{_*}</a> => true
+            case _ => false
+          }
+        } catch {
+          case e: SAXParseException => false
+        }
+      case _ => false
     }
   }
 

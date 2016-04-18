@@ -22,7 +22,8 @@ object SoQLTypeClasses {
   val Equatable = Ordered ++ GeospatialLike ++ Set[SoQLType](
     SoQLBlob,
     SoQLPhone,
-    SoQLLocation
+    SoQLLocation,
+    SoQLUrl
   )
 
   val NumLike = Set[SoQLType](SoQLNumber, SoQLDouble, SoQLMoney)
