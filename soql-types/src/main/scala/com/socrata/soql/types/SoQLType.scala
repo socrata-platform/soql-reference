@@ -5,10 +5,8 @@ import java.net.{URI, URISyntaxException}
 import com.google.protobuf.{CodedInputStream, CodedOutputStream}
 import com.ibm.icu.util.CaseInsensitiveString
 import com.rojoma.json.v3.ast.{JArray, JObject, JValue}
-import com.rojoma.json.v3.codec.JsonDecode
 import com.rojoma.json.v3.io.JsonReaderException
 import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, JsonKey, JsonUtil}
-import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.types.obfuscation.{CryptProvider, Obfuscator}
 import com.vividsolutions.jts.geom.{LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon}
@@ -390,25 +388,44 @@ case class SoQLUrl(@JsonKey("url") url: Option[String],
 case object SoQLUrl extends SoQLType("url") {
   implicit val jCodec = AutomaticJsonCodecBuilder[SoQLUrl]
 
-  def isPossible(s: String): Boolean = {
+  def isPossible(s: String): Boolean = parseUrl(s).isDefined
+
+  def isPossible(s: CaseInsensitiveString): Boolean = isPossible(s.getString)
+
+  /**
+    * Tag and attribute must be lower case.
+    */
+  def parseUrl(value: String): Option[SoQLUrl] = {
+    parseAsJson(value).orElse(parseAsUri(value)).orElse(parseAsHtmlTag(value))
+  }
+
+  private def parseAsJson(value: String): Option[SoQLUrl] = {
     try {
-      if (JsonUtil.parseJson[SoQLUrl](s).isRight) { true }
-      else {
-        new URI(s)
-        true
-      }
+      JsonUtil.parseJson[SoQLUrl](value).right.toOption
     } catch {
-      case e: URISyntaxException =>
-        try {
-          xml.XML.loadString(s) match {
-            case a @ <a>{_*}</a> => true
-            case _ => false
-          }
-        } catch {
-          case e: SAXParseException => false
-        }
+      case ex: JsonReaderException => None
     }
   }
 
-  def isPossible(s: CaseInsensitiveString): Boolean = isPossible(s.getString)
+  private def parseAsUri(value: String): Option[SoQLUrl] = {
+    try {
+      val uri = new URI(value)
+      Some(SoQLUrl(Some(value), None))
+    } catch {
+      case e: URISyntaxException => None
+    }
+  }
+
+  private def parseAsHtmlTag(value: String): Option[SoQLUrl] = {
+    try {
+      xml.XML.loadString(value) match {
+        case a @ <a>{_*}</a> =>
+          Some(SoQLUrl(a.attribute("href").map(_.text),
+            if (a.text.nonEmpty) Some(a.text) else None))
+        case _ => None
+      }
+    } catch {
+      case e: SAXParseException => None
+    }
+  }
 }
