@@ -14,7 +14,8 @@ object SoQLTypeClasses {
     SoQLDate,
     SoQLTime,
     SoQLID,
-    SoQLVersion
+    SoQLVersion,
+    SoQLUrl
   )
 
   val GeospatialLike = Set[SoQLType](SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine, SoQLPolygon, SoQLMultiPolygon)
