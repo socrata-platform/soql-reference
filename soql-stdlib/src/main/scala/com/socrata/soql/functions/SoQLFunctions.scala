@@ -193,6 +193,12 @@ object SoQLFunctions {
     Map("a" -> RealNumLike),
     Seq(FixedType(SoQLLocation), VariableType("a"), VariableType("a"), VariableType("a"), VariableType("a")), Seq.empty,
     FixedType(SoQLBoolean))
+  val LocationWithinPolygon = f("location_within_polygon", FunctionName("within_polygon"),
+    Map("a" -> GeospatialLike),
+    Seq(FixedType(SoQLLocation), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))
+  val LocationDistanceInMeters = f("location_distance_in_meters", FunctionName("distance_in_meters"),
+    Map("a" -> GeospatialLike),
+    Seq(FixedType(SoQLLocation), VariableType("a")), Seq.empty, FixedType(SoQLNumber))
 
   val Location = f("location", FunctionName("location"), Map.empty,
     Seq(FixedType(SoQLPoint), FixedType(SoQLText), FixedType(SoQLText), FixedType(SoQLText), FixedType(SoQLText)), Seq.empty,
