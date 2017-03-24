@@ -99,10 +99,7 @@ abstract class AbstractParser extends Parsers with PackratParsers {
       case d ~ s ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(d, s, w, gb, h, ord, lim, off, sr)
     }
 
-  def distinct: Parser[Boolean] = opt(DISTINCT()) ^^ {
-    case Some(_) => true
-    case None => false
-  }
+  def distinct: Parser[Boolean] = opt(DISTINCT()) ^^ (_.isDefined)
 
   def orderByAndSearch: Parser[(Option[Seq[OrderBy]], Option[String])] =
     orderByClause ~ opt(searchClause) ^^ { //backward-compat.  We should prefer putting the search first.
