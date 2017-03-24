@@ -56,6 +56,7 @@ object LexerReader {
 
   private val keywords = List(
     SELECT,
+    DISTINCT,
     EXCEPT,
     AS,
     WHERE,
@@ -72,7 +73,6 @@ object LexerReader {
     LAST,
 
     // Presently unused keywords
-    DISTINCT,
     FROM,
     FULL,
     IN,

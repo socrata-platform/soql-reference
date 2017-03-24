@@ -19,6 +19,7 @@ sealed abstract class ValueToken[T] extends Token {
 
 // Keywords
 case class SELECT() extends Token
+case class DISTINCT() extends Token
 case class EXCEPT() extends Token
 case class AS() extends Token
 case class WHERE() extends Token
@@ -39,7 +40,6 @@ case class FIRST() extends Token with NullPlacement
 case class LAST() extends Token with NullPlacement
 
 // Presently unused keywords
-case class DISTINCT() extends Token
 case class FROM() extends Token
 case class FULL() extends Token
 case class INNER() extends Token

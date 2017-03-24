@@ -84,7 +84,8 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
   }
 
   private class Deserializer(in: CodedInputStream,
-                             dictionary: DeserializationDictionary[C, T])
+                             dictionary: DeserializationDictionary[C, T],
+                             version: Int)
   {
     def readPosition(): Position =
       in.readRawByte() match {
@@ -137,6 +138,14 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
     def readIsGrouped(): Boolean =
       in.readBool()
+
+    def readDistinct(): Boolean = {
+      version match {
+        case 1 => false
+        case 0 | 2 => in.readBool() // This is odd and for smooth deploy transition.  0 is used by test.
+        case _ => in.readBool()
+      }
+    }
 
     def maybeRead[A](f: => A): Option[A] =
       if(in.readBool()) Some(f)
@@ -194,6 +203,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
     def readAnalysis(): SoQLAnalysis[C, T] = {
       val isGrouped = readIsGrouped()
+      val distinct = readDistinct()
       val selection = readSelection()
       val where = readWhere()
       val groupBy = readGroupBy()
@@ -204,6 +214,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val search = readSearch()
       SoQLAnalysis(
         isGrouped,
+        distinct,
         selection,
         where,
         groupBy,
@@ -225,11 +236,11 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     cis.readInt32() match {
       case 0 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
-        val deserializer = new Deserializer(cis, dictionary)
+        val deserializer = new Deserializer(cis, dictionary, 0)
         Seq(deserializer.readAnalysis())
-      case 1 =>
+      case v if v == 1 || v == 2 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
-        val deserializer = new Deserializer(cis, dictionary)
+        val deserializer = new Deserializer(cis, dictionary, v)
         deserializer.read()
       case other =>
         throw new UnknownAnalysisSerializationVersion(other)
