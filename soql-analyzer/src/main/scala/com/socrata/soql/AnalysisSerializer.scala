@@ -302,7 +302,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     out.flush()
 
     val codedOutputStream = CodedOutputStream.newInstance(outputStream)
-    codedOutputStream.writeInt32NoTag(1) // version number
+    codedOutputStream.writeInt32NoTag(2) // version number
     dictionary.save(codedOutputStream)
     codedOutputStream.flush()
     postDictionaryData.writeTo(outputStream)
