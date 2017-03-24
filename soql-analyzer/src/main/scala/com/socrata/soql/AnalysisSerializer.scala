@@ -205,6 +205,9 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     private def writeGrouped(isGrouped: Boolean) =
       out.writeBoolNoTag(isGrouped)
 
+    private def writeDistinct(distinct: Boolean) =
+      out.writeBoolNoTag(distinct)
+
     private def writeSelection(selection: OrderedMap[ColumnName, Expr]) {
       out.writeUInt32NoTag(selection.size)
       for((col, expr) <- selection) {
@@ -263,6 +266,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
 
     def writeAnalysis(analysis: SoQLAnalysis[C, T]) {
       val SoQLAnalysis(isGrouped,
+                       distinct,
                        selection,
                        where,
                        groupBy,
@@ -272,6 +276,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
                        offset,
                        search) = analysis
       writeGrouped(isGrouped)
+      writeDistinct(analysis.distinct)
       writeSelection(selection)
       writeWhere(where)
       writeGroupBy(groupBy)

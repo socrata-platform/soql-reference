@@ -51,6 +51,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     analysis.limit must be (None)
     analysis.offset must be (None)
     analysis.isGrouped must be (false)
+    analysis.distinct must be (false)
   }
 
   test("analysis succeeds in a maximal group-by query") {
@@ -99,12 +100,12 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("Giving no values to the split-query analyzer returns the equivalent of `SELECT *'") {
-    val analysis = analyzer.analyzeSplitQuery(None, None, None, None, None, None, None, None)
+    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, None, None, None, None, None)
     analysis must equal (analyzer.analyzeUnchainedQuery("SELECT *"))
   }
 
   test("Putting an aggregate in the order-by slot causes aggregation to occur") {
-    val analysis = analyzer.analyzeSplitQuery(None, None, None, None, Some("max(visits)"), None, None, None)
+    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, None, Some("max(visits)"), None, None, None)
     analysis must equal (analyzer.analyzeUnchainedQuery("SELECT count(*) ORDER BY max(visits)"))
   }
 
@@ -112,7 +113,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     val computed = "name_first || ' ' || name_last"
     val sep = ", "
     val uncomputed = "visits"
-    val analysis = analyzer.analyzeSplitQuery(None, None, Some(computed + sep + uncomputed), None, None, None, None, None)
+    val analysis = analyzer.analyzeSplitQuery(false, None, None, Some(computed + sep + uncomputed), None, None, None, None, None)
     analysis must equal (analyzer.analyzeUnchainedQuery("SELECT "+computed+", "+uncomputed+", count(*) GROUP BY "+computed+", "+uncomputed))
     analysis.selection(ColumnName("visits")).position.column must equal (1 + computed.length + sep.length)
   }
@@ -253,4 +254,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       trueCEnd must equal (List(trueAEnd, trueBEnd).min)
     }
   }
+
+  test("distinct") {
+    val analysis = analyzer.analyzeUnchainedQuery("select distinct name_last, visits")
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName("name_last") -> typedExpression("name_last"),
+      ColumnName("visits") -> typedExpression("visits")
+    ))
+    analysis.distinct must be (true)
+  }
+
 }

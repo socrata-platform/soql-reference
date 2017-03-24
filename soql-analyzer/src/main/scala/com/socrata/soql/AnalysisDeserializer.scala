@@ -138,6 +138,9 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     def readIsGrouped(): Boolean =
       in.readBool()
 
+    def readDistinct(): Boolean =
+      in.readBool()
+
     def maybeRead[A](f: => A): Option[A] =
       if(in.readBool()) Some(f)
       else None
@@ -194,6 +197,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
     def readAnalysis(): SoQLAnalysis[C, T] = {
       val isGrouped = readIsGrouped()
+      val distinct = readDistinct()
       val selection = readSelection()
       val where = readWhere()
       val groupBy = readGroupBy()
@@ -204,6 +208,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val search = readSearch()
       SoQLAnalysis(
         isGrouped,
+        distinct,
         selection,
         where,
         groupBy,

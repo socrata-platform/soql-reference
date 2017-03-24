@@ -20,6 +20,7 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
       // take their names from the output of the first query.
       val s = ss.head
       ss.updated(0, Select(
+        distinct = s.distinct,
         selection = mapSelection(s.selection),
         where = s.where map mapExpression,
         groupBy = s.groupBy.map(_ map mapExpression),

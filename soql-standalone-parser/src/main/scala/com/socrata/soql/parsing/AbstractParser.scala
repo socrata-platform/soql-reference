@@ -95,9 +95,14 @@ abstract class AbstractParser extends Parsers with PackratParsers {
   def pipedSelect: Parser[Seq[Select]] = rep1sep(unchainedSelect, QUERYPIPE())
 
   def unchainedSelect: Parser[Select] =
-    SELECT() ~> selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-      case s ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(s, w, gb, h, ord, lim, off, sr)
+    SELECT() ~> distinct ~ selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+      case d ~ s ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(d, s, w, gb, h, ord, lim, off, sr)
     }
+
+  def distinct: Parser[Boolean] = opt(DISTINCT()) ^^ {
+    case Some(_) => true
+    case None => false
+  }
 
   def orderByAndSearch: Parser[(Option[Seq[OrderBy]], Option[String])] =
     orderByClause ~ opt(searchClause) ^^ { //backward-compat.  We should prefer putting the search first.
