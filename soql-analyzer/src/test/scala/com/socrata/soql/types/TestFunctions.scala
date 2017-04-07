@@ -57,6 +57,9 @@ object TestFunctions {
   val JsonToText = mf("json to text", SpecialFunctions.Cast(TestText.name), Seq(TestJson), Seq.empty, TestText)
   val JsonToNumber = mf("json to Number", SpecialFunctions.Cast(TestNumber.name), Seq(TestJson), Seq.empty, TestNumber)
 
+  val FloatingTimeStampExtractHh = mf("floating timestamp extract hour", FunctionName("date_extract_hh"), Seq(TestFloatingTimestamp), Seq.empty, TestNumber)
+  val FloatingTimeStampExtractDow = mf("floating timestamp extract day of week", FunctionName("date_extract_dow"), Seq(TestFloatingTimestamp), Seq.empty, TestNumber)
+
   val LocationToPoint = mf("loc to point", SpecialFunctions.Cast(TestPoint.name), Seq(TestLocation), Seq.empty, TestPoint)
   val LocationToLatitude = mf("location_latitude", FunctionName("location_latitude"), Seq(TestLocation), Seq.empty, TestNumber)
   val LocationToLongitude = mf("location_longitude", FunctionName("location_longitude"), Seq(TestLocation), Seq.empty, TestNumber)
