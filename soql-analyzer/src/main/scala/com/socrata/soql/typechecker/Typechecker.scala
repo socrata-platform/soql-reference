@@ -3,14 +3,13 @@ package com.socrata.soql.typechecker
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions._
 import com.socrata.soql.typed
-import com.socrata.soql.environment.{ColumnName, DatasetContext}
+import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
 
-class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: DatasetContext[Type]) extends ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]]) => typed.CoreExpr[ColumnName, Type]) { self =>
+class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: String => DatasetContext[Type]) extends ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]]) => typed.CoreExpr[ColumnName, Type]) { self =>
   import typeInfo._
 
   type Expr = typed.CoreExpr[ColumnName, Type]
 
-  val columns = ctx.schema
   val functionCallTypechecker = new FunctionCallTypechecker(typeInfo, functionInfo)
 
   def apply(e: Expression, aliases: Map[ColumnName, Expr]) = typecheck(e, aliases) match {
@@ -20,19 +19,20 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
 
   // never returns an empty value
   private def typecheck(e: Expression, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = e match {
-    case r@ColumnOrAliasRef(col) =>
+    case r@ColumnOrAliasRef(qual, col) =>
       aliases.get(col) match {
-        case Some(typed.ColumnRef(name, typ)) if name == col =>
+        case Some(typed.ColumnRef(qual, name, typ)) if name == col =>
           // special case: if this is an alias that refers directly to itself, position the typed tree _here_
           // (as if there were no alias at all) to make error messages that much clearer.  This will only catch
           // semi-implicitly assigned aliases, so it's better anyway.
-          Right(Seq(typed.ColumnRef(col, typ)(r.position)))
+          Right(Seq(typed.ColumnRef(qual, col, typ)(r.position)))
         case Some(tree) =>
           Right(Seq(tree))
         case None =>
+          val columns = ctx(qual.getOrElse(TableName.PrimaryTable.qualifier)).schema
           columns.get(col) match {
             case Some(typ) =>
-              Right(Seq(typed.ColumnRef(col, typ)(r.position)))
+              Right(Seq(typed.ColumnRef(qual, col, typ)(r.position)))
             case None =>
               throw NoSuchColumn(col, r.position)
           }

@@ -22,6 +22,7 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
       ss.updated(0, Select(
         distinct = s.distinct,
         selection = mapSelection(s.selection),
+        join = None,
         where = s.where map mapExpression,
         groupBy = s.groupBy.map(_ map mapExpression),
         having = s.having map mapExpression,
@@ -41,7 +42,7 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
     case NullLiteral() => NullLiteral()(NoPosition)
 
     case e: ColumnOrAliasRef =>
-      ColumnOrAliasRef(columnNameMap(e.column))(NoPosition)
+      ColumnOrAliasRef(e.qualifier, columnNameMap(e.column))(NoPosition)
     case e: FunctionCall =>
       FunctionCall(e.functionName, e.parameters map mapExpression)(NoPosition, NoPosition)
   }
@@ -55,7 +56,7 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
     (columnNameMap(s._1), NoPosition)
 
   def mapStarSelection(s: StarSelection): StarSelection =
-    StarSelection(s.exceptions map mapColumnNameAndPosition)
+    StarSelection(s.qualifier, s.exceptions map mapColumnNameAndPosition)
 
   def mapSelectedExpression(s: SelectedExpression): SelectedExpression = {
       // name isn't a column name, but a column alias so no mapping

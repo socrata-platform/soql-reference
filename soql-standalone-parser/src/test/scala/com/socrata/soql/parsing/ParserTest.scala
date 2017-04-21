@@ -22,7 +22,7 @@ class ParserTest extends WordSpec with MustMatchers {
       case e: BadParse => e.message must equal (expectedMsg)
     }
 
-  def ident(name: String) = ColumnOrAliasRef(ColumnName(name))(NoPosition)
+  def ident(name: String) = ColumnOrAliasRef(None, ColumnName(name))(NoPosition)
   def functionCall(name: FunctionName, args: Seq[Expression]) = FunctionCall(name, args)(NoPosition, NoPosition)
   def stringLiteral(s: String) = StringLiteral(s)(NoPosition)
   def numberLiteral(num: BigDecimal) = NumberLiteral(num)(NoPosition)

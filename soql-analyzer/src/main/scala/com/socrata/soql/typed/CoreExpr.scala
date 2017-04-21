@@ -24,7 +24,7 @@ object CoreExpr {
   val pretty = true
 }
 
-case class ColumnRef[ColumnId, Type](column: ColumnId, typ: Type)(val position: Position) extends CoreExpr[ColumnId, Type] {
+case class ColumnRef[ColumnId, Type](qualifier: Option[String], column: ColumnId, typ: Type)(val position: Position) extends CoreExpr[ColumnId, Type] {
   protected def asString = column.toString
   def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId) = copy(column = f(column))(position)
   val size = 0

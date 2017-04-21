@@ -1,18 +1,16 @@
 package com.socrata.soql
 
 import scala.util.parsing.input.{NoPosition, Position}
-
 import java.io.{ByteArrayOutputStream, OutputStream}
 
 import com.google.protobuf.CodedOutputStream
 import gnu.trove.impl.Constants
 import gnu.trove.map.hash.TObjectIntHashMap
-
 import com.socrata.soql.parsing.SoQLPosition
 import com.socrata.soql.typed._
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.collection.OrderedMap
-import com.socrata.soql.environment.ColumnName
+import com.socrata.soql.environment.{ColumnName, TableName}
 
 private trait SerializationDictionary[C,T] {
   def registerType(typ: T): Int
@@ -174,8 +172,9 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     private def writeExpr(e: Expr) {
       writePosition(e.position)
       e match {
-        case ColumnRef(col, typ) =>
+        case ColumnRef(qual, col, typ) =>
           out.writeRawByte(1)
+          maybeWrite(qual) { x => out.writeStringNoTag(x) }
           out.writeUInt32NoTag(registerColumn(col))
           out.writeUInt32NoTag(registerType(typ))
         case StringLiteral(value, typ) =>
@@ -212,6 +211,16 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       out.writeUInt32NoTag(selection.size)
       for((col, expr) <- selection) {
         out.writeUInt32NoTag(dictionary.registerLabel(col))
+        writeExpr(expr)
+      }
+    }
+
+    private def writeJoins(joins: Option[List[Tuple2[TableName, Expr]]]) {
+      val size = joins.map(_.size).getOrElse(0)
+      out.writeUInt32NoTag(size)
+      joins.toList.flatten.foreach { case(tableName, expr) =>
+        out.writeStringNoTag(tableName.name)
+        maybeWrite(tableName.alias)(alias => out.writeStringNoTag(alias))
         writeExpr(expr)
       }
     }
@@ -268,6 +277,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       val SoQLAnalysis(isGrouped,
                        distinct,
                        selection,
+                       join,
                        where,
                        groupBy,
                        having,
@@ -278,6 +288,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       writeGrouped(isGrouped)
       writeDistinct(analysis.distinct)
       writeSelection(selection)
+      writeJoins(join)
       writeWhere(where)
       writeGroupBy(groupBy)
       writeHaving(having)
@@ -302,7 +313,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     out.flush()
 
     val codedOutputStream = CodedOutputStream.newInstance(outputStream)
-    codedOutputStream.writeInt32NoTag(2) // version number
+    codedOutputStream.writeInt32NoTag(3) // version number
     dictionary.save(codedOutputStream)
     codedOutputStream.flush()
     postDictionaryData.writeTo(outputStream)

@@ -2,8 +2,8 @@ package com.socrata.soql
 
 import com.socrata.soql.exceptions.SoQLException
 import com.socrata.soql.types._
-import environment.{ColumnName, DatasetContext}
-import com.socrata.soql.functions.{SoQLTypeInfo, SoQLFunctionInfo}
+import environment.{ColumnName, DatasetContext, TableName}
+import com.socrata.soql.functions.{SoQLFunctionInfo, SoQLTypeInfo}
 
 object SoqlToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -11,7 +11,7 @@ object SoqlToy extends (Array[String] => Unit) {
     sys.exit(1)
   }
 
-  implicit val datasetCtx = new DatasetContext[SoQLType] {
+  implicit val datasetCtx = Map(TableName.PrimaryTable.qualifier -> new DatasetContext[SoQLType] {
     private implicit def ctx = this
     val locale = com.ibm.icu.util.ULocale.ENGLISH
     val schema = com.socrata.soql.collection.OrderedMap(
@@ -30,11 +30,11 @@ object SoqlToy extends (Array[String] => Unit) {
       ColumnName("dbl") -> SoQLDouble,
       ColumnName(":@meta") -> SoQLObject
     )
-  }
+  })
 
   def menu() {
     println("Columns:")
-    Util.printList(datasetCtx.schema)
+    Util.printList(datasetCtx(TableName.PrimaryTable.qualifier).schema)
   }
 
   def apply(args: Array[String]) {
