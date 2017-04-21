@@ -2,8 +2,8 @@ package com.socrata.soql.environment
 
 import com.ibm.icu.text.{Normalizer2, Normalizer}
 
-abstract class AbstractName[Self <: AbstractName[Self]](val name: String) extends Ordered[Self] {
-  final lazy val caseFolded = AbstractName.caseFold(name)
+abstract class AbstractName[Self <: AbstractName[Self]](val qualifier: Option[String], val name: String) extends Ordered[Self] {
+  final lazy val caseFolded = AbstractName.caseFold(toString)
 
   protected def hashCodeSeed: Int
   override lazy val hashCode = caseFolded.hashCode ^ hashCodeSeed
@@ -16,7 +16,7 @@ abstract class AbstractName[Self <: AbstractName[Self]](val name: String) extend
   final def compare(that: Self) =
     this.caseFolded.compareTo(that.caseFolded)
 
-  override final def toString = name
+  override final def toString = qualifier.map(x => x + ".").getOrElse("") + name
 }
 
 object AbstractName {

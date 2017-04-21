@@ -65,6 +65,8 @@ SystemIdentifier = ":" "@"? [:jletterdigit:]+
 QuotedIdentifier = ("-" | [:jletter:]) ("-" | [:jletterdigit:])*
 QuotedSystemIdentifier = ":" "@"? ("-" | [:jletterdigit:])+
 
+TableIdentifier = "@" ("-" | [:jletterdigit:])+
+
 %state QUOTEDIDENTIFIER
 %state QUOTEDSYSTEMIDENTIFIER
 %state BADQUOTEDIDENTIFIER
@@ -81,9 +83,12 @@ QuotedSystemIdentifier = ":" "@"? ("-" | [:jletterdigit:])+
   "|>"  { return token(new QUERYPIPE()); }
 
   // Subscripting
-  "."   { return token(new DOT()); }
+  // "." share with qualifying
   "["   { return token(new LBRACKET()); }
   "]"   { return token(new RBRACKET()); }
+
+  // Qualifying
+  "."   { return token(new DOT()); }
 
   // Math
   "+"   { return token(new PLUS()); }
@@ -125,6 +130,9 @@ QuotedSystemIdentifier = ":" "@"? ("-" | [:jletterdigit:])+
   // Identifiers
   {SystemIdentifier} { return token(new SystemIdentifier(yytext(), false)); }
   "`" / ":" { stringStart = pos(); yybegin(QUOTEDSYSTEMIDENTIFIER); }
+
+  {TableIdentifier} { return token(new TableIdentifier(yytext())); }
+  "" { stringStart = pos(); yybegin(QUOTEDIDENTIFIER); }
 
   // Punctuation
   ","  { return token(new COMMA()); }

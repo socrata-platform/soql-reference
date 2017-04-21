@@ -16,6 +16,7 @@ object TestFunctions {
   private val NumLike = Set[TestType](TestNumber, TestDouble, TestMoney)
   private val RealNumLike = Set[TestType](TestNumber, TestDouble)
   private val GeospatialLike = Set[TestType](TestPoint, TestMultiPoint, TestLine, TestMultiLine, TestPolygon, TestMultiPolygon)
+  private val Equatable = Ordered ++ GeospatialLike ++ Set[TestType](TestText, TestNumber)
   private val AllTypes = TestType.typesByName.values.toSet
 
   // helpers to guide type inference (specifically forces TestType to be inferred)
@@ -27,6 +28,7 @@ object TestFunctions {
   val TextToLocation = mf("text to location", SpecialFunctions.Cast(TestLocation.name), Seq(TestText), Seq.empty, TestLocation)
 
   val Concat = f("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(TestText))
+  val Eq = f("=", SpecialFunctions.Operator("="), Map("a" -> Equatable), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
   val Gt = f(">", SpecialFunctions.Operator(">"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
   val Lt = f("<", SpecialFunctions.Operator("<"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
 

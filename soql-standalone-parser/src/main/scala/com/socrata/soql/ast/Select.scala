@@ -1,14 +1,21 @@
 package com.socrata.soql.ast
 
-import scala.util.parsing.input.{Position, NoPosition}
-import com.socrata.soql.environment.ColumnName
+import scala.util.parsing.input.{NoPosition, Position}
+import com.socrata.soql.environment.{ColumnName, TableName}
 
-case class Select(distinct: Boolean, selection: Selection, where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) {
+case class Select(distinct: Boolean, selection: Selection, join: Option[List[((TableName, Position), Expression)]], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) {
   override def toString = {
     if(AST.pretty) {
       val sb = new StringBuilder("SELECT ")
       if (distinct) sb.append("DISTINCT ")
       sb.append(selection)
+      join.toList.flatten.foreach { j =>
+        val tableName = j._1._1
+        sb.append(" JOIN ")
+        sb.append(tableName)
+        sb.append(" ON ")
+        sb.append(j._2)
+      }
       where.foreach(sb.append(" WHERE ").append(_))
       groupBy.foreach { gb => sb.append(gb.mkString(" GROUP BY ", ", ", "")) }
       having.foreach(sb.append(" HAVING ").append(_))
@@ -40,7 +47,7 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Opti
   }
 }
 
-case class StarSelection(exceptions: Seq[(ColumnName, Position)]) {
+case class StarSelection(qualifier: Option[String], exceptions: Seq[(ColumnName, Position)]) {
   var starPosition: Position = NoPosition
   def positionedAt(p: Position): this.type = {
     starPosition = p

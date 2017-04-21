@@ -1,14 +1,13 @@
 package com.socrata.soql.parsing
 
 import scala.reflect.ClassTag
-import scala.util.parsing.combinator.{Parsers, PackratParsers}
+import scala.util.parsing.combinator.{PackratParsers, Parsers}
 import util.parsing.input.Position
-
 import com.socrata.soql.tokens
 import com.socrata.soql.tokens._
 import com.socrata.soql.ast
 import com.socrata.soql.ast._
-import com.socrata.soql.environment.{TypeName, FunctionName, ColumnName}
+import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
 
 // This can't be an "object" because parsers are not thread safe at least
 // through 2.9.2.  Might revisit when we drop 2.9 support, but it's hardly
@@ -95,8 +94,8 @@ abstract class AbstractParser extends Parsers with PackratParsers {
   def pipedSelect: Parser[Seq[Select]] = rep1sep(unchainedSelect, QUERYPIPE())
 
   def unchainedSelect: Parser[Select] =
-    SELECT() ~> distinct ~ selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-      case d ~ s ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(d, s, w, gb, h, ord, lim, off, sr)
+    SELECT() ~> distinct ~ selectList ~ opt(joinList) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+      case d ~ s ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(d, s, j, w, gb, h, ord, lim, off, sr)
     }
 
   def distinct: Parser[Boolean] = opt(DISTINCT()) ^^ (_.isDefined)
@@ -127,6 +126,15 @@ abstract class AbstractParser extends Parsers with PackratParsers {
   def offsetClause = OFFSET() ~> integer
   def searchClause = SEARCH() ~> stringLiteral
 
+  def joinClause: PackratParser[((TableName, Position), Expression)] =
+    JOIN() ~ tableIdentifier ~ opt(AS() ~> simpleIdentifier) ~ ON() ~ expr ^^ {
+      case j ~ t ~ None ~ o ~ e => ((TableName(t._1, None), t._2), e)
+      // TODO: finish table aliases
+      case j ~ t ~ Some((alias, pos)) ~ o ~ e => ((TableName(t._1, Some(TableName.SodaFountainTableNamePrefix + alias)), t._2), e)
+    }
+
+  def joinList = rep1(joinClause)
+
   /*
    *               ********************
    *               * COLUMN-SELECTION *
@@ -150,21 +158,27 @@ abstract class AbstractParser extends Parsers with PackratParsers {
   def expressionSelectList = rep1sep(namedSelection, COMMA()) ^^ (Selection(None, None, _))
 
   def allSystemSelection =
-    COLONSTAR() ~ opt(selectExceptions(systemIdentifier)) ^^ { case star ~ exceptions => StarSelection(exceptions.getOrElse(Seq.empty)).positionedAt(star.position) }
+    opt(tableIdentifier ~ DOT()) ~ COLONSTAR() ~ opt(selectExceptions(systemIdentifier)) ^^ {
+      case None ~ star ~ exceptions => StarSelection(None, exceptions.getOrElse(Seq.empty)).positionedAt(star.position)
+      case Some(qual ~ _) ~ star ~ exceptions => StarSelection(Some(qual._1), exceptions.getOrElse(Seq.empty)).positionedAt(qual._2)
+    }
 
   def allUserSelection =
-    STAR() ~ opt(selectExceptions(userIdentifier)) ^^ { case star ~ exceptions => StarSelection(exceptions.getOrElse(Seq.empty)).positionedAt(star.position) }
+    opt(tableIdentifier ~ DOT()) ~ STAR() ~ opt(selectExceptions(userIdentifier)) ^^ {
+      case None ~ star ~ exceptions => StarSelection(None, exceptions.getOrElse(Seq.empty)).positionedAt(star.position)
+      case Some(qual ~ _) ~ star ~ exceptions => StarSelection(Some(qual._1), exceptions.getOrElse(Seq.empty)).positionedAt(qual._2)
+    }
 
-  def selectExceptions(identifierType: Parser[(String, Position)]): Parser[Seq[(ColumnName, Position)]] =
+  def selectExceptions(identifierType: Parser[(Option[String], String, Position)]): Parser[Seq[(ColumnName, Position)]] =
     LPAREN() ~ EXCEPT() ~> rep1sep(identifierType, COMMA()) <~ (RPAREN() | failure(errors.missingArg)) ^^ { namePoses =>
-      namePoses.map { case (name, pos) =>
-        (ColumnName(name), pos)
+      namePoses.map { case (qual, name, pos) =>
+        (ColumnName(qual, name), pos)
       }
     }
 
   def namedSelection = expr ~ opt(AS() ~> userIdentifier) ^^ {
     case e ~ None => SelectedExpression(e, None)
-    case e ~ Some((name, pos)) => SelectedExpression(e, Some((ColumnName(name), pos)))
+    case e ~ Some((qual, name, pos)) => SelectedExpression(e, Some((ColumnName(qual, name), pos)))
   }
 
   /*
@@ -220,18 +234,40 @@ abstract class AbstractParser extends Parsers with PackratParsers {
       case n: NULL => NullLiteral()(n.position)
     }
 
+  def userIdentifier: Parser[(Option[String], String, Position)] =
+     opt(tableIdentifier ~ DOT()) ~ simpleUserIdentifier ^^ {
+       case None ~ uid =>
+         (None, uid._1, uid._2)
+       case Some(qual ~ _) ~ uid =>
+         (Some(qual._1), uid._1, qual._2)
+    }
 
-  val userIdentifier: Parser[(String, Position)] =
+  val tableIdentifier: Parser[(String, Position)] =
+    accept[tokens.TableIdentifier] ^^ { t =>
+      (TableName.SodaFountainTableNamePrefix + t.value.substring(1) /* remove prefix @ */, t.position)
+    } | failure(errors.missingUserIdentifier)
+
+  val simpleUserIdentifier: Parser[(String, Position)] =
     accept[tokens.Identifier] ^^ { t =>
       (t.value, t.position)
     } | failure(errors.missingUserIdentifier)
 
-  val systemIdentifier: Parser[(String, Position)] =
+  val systemIdentifier: Parser[(Option[String], String, Position)] =
+    opt(tableIdentifier ~ DOT()) ~ simpleSystemIdentifier ^^ {
+      case None ~ sid =>
+        (None, sid._1, sid._2)
+      case Some(qual ~ _) ~ sid =>
+        (Some(qual._1), sid._1, qual._2)
+    }
+
+  val simpleSystemIdentifier: Parser[(String, Position)] =
     accept[tokens.SystemIdentifier] ^^ { t =>
       (t.value, t.position)
     } | failure(errors.missingSystemIdentifier)
 
-  val identifier: Parser[(String, Position)] = systemIdentifier | userIdentifier | failure(errors.missingIdentifier)
+  val identifier: Parser[(Option[String], String, Position)] = systemIdentifier | userIdentifier | failure(errors.missingIdentifier)
+
+  val simpleIdentifier: Parser[(String, Position)] = simpleSystemIdentifier | simpleUserIdentifier | failure(errors.missingIdentifier)
 
   def paramList: Parser[Either[Position, Seq[Expression]]] =
     // the clauses have to be in this order, or it can't backtrack enough to figure out it's allowed to take
@@ -244,11 +280,11 @@ abstract class AbstractParser extends Parsers with PackratParsers {
 
   def identifier_or_funcall: Parser[Expression] =
     identifier ~ opt(params) ^^ {
-      case ((ident, identPos)) ~ None =>
-        ColumnOrAliasRef(ColumnName(ident))(identPos)
-      case ((ident, identPos)) ~ Some(Right(params)) =>
+      case ((qual, ident, identPos)) ~ None =>
+        ColumnOrAliasRef(ColumnName(qual, ident))(identPos)
+      case ((_, ident, identPos)) ~ Some(Right(params)) =>
         FunctionCall(FunctionName(ident), params)(identPos, identPos)
-      case ((ident, identPos)) ~ Some(Left(position)) =>
+      case ((_, ident, identPos)) ~ Some(Left(position)) =>
         FunctionCall(SpecialFunctions.StarFunc(ident), Seq.empty)(identPos, identPos)
     }
 
@@ -259,7 +295,7 @@ abstract class AbstractParser extends Parsers with PackratParsers {
     literal | identifier_or_funcall | paren | failure(errors.missingExpr)
 
   lazy val dereference: PackratParser[Expression] =
-    dereference ~ DOT() ~ identifier ^^ {
+    dereference ~ DOT() ~ simpleIdentifier ^^ {
       case a ~ dot ~ ((b, bPos)) =>
         FunctionCall(SpecialFunctions.Subscript, Seq(a, ast.StringLiteral(b)(bPos)))(a.position, dot.position)
     } |
@@ -270,7 +306,7 @@ abstract class AbstractParser extends Parsers with PackratParsers {
     atom
 
   lazy val cast: PackratParser[Expression] =
-    cast ~ COLONCOLON() ~ identifier ^^ {
+    cast ~ COLONCOLON() ~ simpleIdentifier ^^ {
       case a ~ colcol ~ ((b, bPos)) =>
         FunctionCall(SpecialFunctions.Cast(TypeName(b)), Seq(a))(a.position, bPos)
     } |

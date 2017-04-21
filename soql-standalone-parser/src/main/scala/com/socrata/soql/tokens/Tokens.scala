@@ -53,9 +53,12 @@ case class RIGHT() extends Token
 case class QUERYPIPE() extends Token
 
 // Subscripting
-case class DOT() extends FormattedToken(".")
+// DOT() share with qualifying
 case class LBRACKET() extends FormattedToken("[")
 case class RBRACKET() extends FormattedToken("]")
+
+// Qualifying
+case class DOT() extends FormattedToken(".")
 
 // Math
 case class PLUS() extends FormattedToken("+")

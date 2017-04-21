@@ -70,7 +70,8 @@ object AliasAnalysis extends AliasAnalysis {
    * @throws com.socrata.soql.exceptions.NoSuchColumn if a column not on the dataset is excepted.
    */
   def processStar(starSelection: StarSelection, columns: OrderedSet[ColumnName])(implicit ctx: UntypedDatasetContext): Seq[SelectedExpression] = {
-    val StarSelection(exceptions) = starSelection
+    // TODO: Actually handle qualifier
+    val StarSelection(qual, exceptions) = starSelection
     val exceptedColumnNames = new mutable.HashSet[ColumnName]
     for((column, position) <- exceptions) {
       if(exceptedColumnNames.contains(column)) throw RepeatedException(column, position)
@@ -151,13 +152,13 @@ object AliasAnalysis extends AliasAnalysis {
     def inUse(name: ColumnName) = existingAliases.contains(name) || ctx.columns.contains(name)
 
     val base = selection.toSyntheticIdentifierBase
-    val firstTry = ColumnName(base)
+    val firstTry = ColumnName(None, base) // TODO: columnname qualifier
 
     if(inUse(firstTry)) {
       val prefix = if(base.endsWith("_") || base.endsWith("-")) base
                    else base + "_"
       Iterator.from(1).
-        map { i => ColumnName(prefix + i) }.
+        map { i => ColumnName(None, prefix + i) }. // TODO: columnname qualifier
         dropWhile(inUse).
         next()
     } else {

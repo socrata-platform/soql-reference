@@ -1,6 +1,6 @@
 package com.socrata.soql.environment
 
-final class TypeName(name: String) extends AbstractName[TypeName](name) {
+final class TypeName(name: String) extends AbstractName[TypeName](None, name) {
   protected def hashCodeSeed = 0x32fa2313
 }
 

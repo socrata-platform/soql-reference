@@ -2,8 +2,7 @@ package com.socrata.soql.ast
 
 import scala.util.parsing.input.Position
 import scala.runtime.ScalaRunTime
-
-import com.socrata.soql.environment.{TypeName, FunctionName, ColumnName}
+import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
 
 sealed abstract class Expression extends Product {
   val position: Position
@@ -90,7 +89,15 @@ object SpecialFunctions {
 }
 
 case class ColumnOrAliasRef(column: ColumnName)(val position: Position) extends Expression {
-  protected def asString = "`" + column.toString + "`"
+
+  protected def asString = {
+    column.qualifier.map { q =>
+      TableName.Prefix +
+        q.substring(TableName.SodaFountainTableNamePrefixSubStringIndex) +
+        TableName.Field
+    }.getOrElse("") + "`" + column.name + "`"
+  }
+
   def allColumnRefs = Set(this)
 }
 

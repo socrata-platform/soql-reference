@@ -14,7 +14,7 @@ import com.socrata.soql.collection.{OrderedSet, OrderedMap}
 
 class AliasAnalysisTest extends WordSpec with MustMatchers {
   def columnNames(names: String*) =
-    OrderedSet(names.map(ColumnName): _*)
+    OrderedSet(names.map(ColumnName(_)): _*)
 
   def fixtureContext(cols: String*) =
     new UntypedDatasetContext {
@@ -44,7 +44,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
   }
   def ident(e: String): ColumnName = {
     val p = new Parser()
-    p.identifier(new LexerReader(new Lexer(e))) match {
+    p.simpleIdentifier(new LexerReader(new Lexer(e))) match {
       case p.Success(parsed, _) => ColumnName(parsed._1)
       case failure => fail("Unable to parse expression fixture " + e + ": " + failure)
     }
@@ -57,26 +57,26 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
 
     "expand to all input columns when there are no exceptions" in {
       // TODO: check the positions
-      AliasAnalysis.processStar(StarSelection(Seq.empty).positionedAt(pos), columnNames("a","b","c")) must equal (unaliased("a", "b", "c")(pos))
+      AliasAnalysis.processStar(StarSelection(None, Seq.empty).positionedAt(pos), columnNames("a","b","c")) must equal (unaliased("a", "b", "c")(pos))
     }
 
     "expand to the empty list when there are no columns" in {
-      AliasAnalysis.processStar(StarSelection(Seq.empty).positionedAt(pos), columnNames()) must equal (Seq.empty)
+      AliasAnalysis.processStar(StarSelection(None, Seq.empty).positionedAt(pos), columnNames()) must equal (Seq.empty)
     }
 
     "expand with exclusions exluded" in {
       // TODO: check the positions
-      AliasAnalysis.processStar(StarSelection(Seq((ident("b"), fixturePosition(5, 3)))).positionedAt(pos), columnNames("a","b","c")) must equal (unaliased("a","c")(pos))
+      AliasAnalysis.processStar(StarSelection(None, Seq((ident("b"), fixturePosition(5, 3)))).positionedAt(pos), columnNames("a","b","c")) must equal (unaliased("a","c")(pos))
     }
 
     "throw an exception if an exception does not occur in the column-set" in {
       // TODO: Check the position
-      a [NoSuchColumn] must be thrownBy { AliasAnalysis.processStar(StarSelection(Seq((ident("not_there"), NoPosition))).positionedAt(pos), columnNames("a","c")) }
+      a [NoSuchColumn] must be thrownBy { AliasAnalysis.processStar(StarSelection(None, Seq((ident("not_there"), NoPosition))).positionedAt(pos), columnNames("a","c")) }
     }
 
     "throw an exception if an exception occurs more than once" in {
         // TODO: Check the position
-      a [RepeatedException] must be thrownBy { AliasAnalysis.processStar(StarSelection(Seq((ident("a"), NoPosition), (ident("a"), NoPosition))).positionedAt(pos), columnNames("a","c")) }
+      a [RepeatedException] must be thrownBy { AliasAnalysis.processStar(StarSelection(None, Seq((ident("a"), NoPosition), (ident("a"), NoPosition))).positionedAt(pos), columnNames("a","c")) }
     }
   }
 
@@ -92,27 +92,27 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
 
     "return the system columns if there was a :*" in {
       // TODO: check the positions
-      AliasAnalysis.expandSelection(Selection(Some(StarSelection(Seq.empty).positionedAt(pos)), None, someSelections)) must equal (unaliased(":a",":b")(pos) ++ someSelections)
+      AliasAnalysis.expandSelection(Selection(Some(StarSelection(None, Seq.empty).positionedAt(pos)), None, someSelections)) must equal (unaliased(":a",":b")(pos) ++ someSelections)
     }
 
     "return the un-excepted columns if there was a :*" in {
       // TODO: check the positions
-      AliasAnalysis.expandSelection(Selection(Some(StarSelection(Seq((ident(":a"), NoPosition))).positionedAt(pos)), None, someSelections)) must equal (unaliased(":b")(pos) ++ someSelections)
+      AliasAnalysis.expandSelection(Selection(Some(StarSelection(None, Seq((ident(":a"), NoPosition))).positionedAt(pos)), None, someSelections)) must equal (unaliased(":b")(pos) ++ someSelections)
     }
 
     "return the user columns if there was a *" in {
       // TODO: check the positions
-      AliasAnalysis.expandSelection(Selection(None, Some(StarSelection(Seq.empty).positionedAt(pos)), someSelections)) must equal (unaliased("c","d","e")(pos) ++ someSelections)
+      AliasAnalysis.expandSelection(Selection(None, Some(StarSelection(None, Seq.empty).positionedAt(pos)), someSelections)) must equal (unaliased("c","d","e")(pos) ++ someSelections)
     }
 
     "return the un-excepted user columns if there was a *" in {
       // TODO: check the positions
-      AliasAnalysis.expandSelection(Selection(None, Some(StarSelection(Seq((ident("d"), NoPosition),(ident("e"), NoPosition))).positionedAt(pos)), someSelections)) must equal (unaliased("c")(pos) ++ someSelections)
+      AliasAnalysis.expandSelection(Selection(None, Some(StarSelection(None, Seq((ident("d"), NoPosition),(ident("e"), NoPosition))).positionedAt(pos)), someSelections)) must equal (unaliased("c")(pos) ++ someSelections)
     }
 
     "return the all user columns if there was a :* and a *" in {
       // TODO: check the positions
-      AliasAnalysis.expandSelection(Selection(Some(StarSelection(Seq.empty).positionedAt(pos)), Some(StarSelection(Seq.empty).positionedAt(pos2)), someSelections)) must equal (unaliased(":a",":b")(pos) ++ unaliased("c","d","e")(pos2) ++ someSelections)
+      AliasAnalysis.expandSelection(Selection(Some(StarSelection(None, Seq.empty).positionedAt(pos)), Some(StarSelection(None, Seq.empty).positionedAt(pos2)), someSelections)) must equal (unaliased(":a",":b")(pos) ++ unaliased("c","d","e")(pos2) ++ someSelections)
     }
   }
 
@@ -248,7 +248,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
           ColumnName("d") -> expr("d"),
           ColumnName("e") -> expr("e")
         ),
-        Seq("c","d","e").map(ColumnName)
+        Seq("c","d","e").map(ColumnName(_))
       ))
     }
 
@@ -258,7 +258,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
           ColumnName(":a") -> expr(":a"),
           ColumnName(":b") -> expr(":b")
         ),
-        Seq(":a", ":b").map(ColumnName)
+        Seq(":a", ":b").map(ColumnName(_))
       ))
     }
 
@@ -271,7 +271,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
           ColumnName("d") -> expr("d"),
           ColumnName("e") -> expr("e")
         ),
-        Seq(":a", ":b", "c", "d", "e").map(ColumnName)
+        Seq(":a", ":b", "c", "d", "e").map(ColumnName(_))
       ))
     }
 
@@ -280,7 +280,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
         OrderedMap(
           ColumnName("c_1") -> expr("(c)")
         ),
-        Seq("c_1").map(ColumnName)
+        Seq("c_1").map(ColumnName(_))
       ))
     }
 
@@ -290,7 +290,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
           ColumnName("c_d") -> expr("c"),
           ColumnName("c_d_1") -> expr("c - d")
         ),
-        Seq("c_d", "c_d_1").map(ColumnName)
+        Seq("c_d", "c_d_1").map(ColumnName(_))
       ))
     }
 
@@ -300,7 +300,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
           ColumnName("c_d") -> expr("c + d"),
           ColumnName("c_d_1") -> expr("c - d")
         ),
-        Seq("c_d", "c_d_1").map(ColumnName)
+        Seq("c_d", "c_d_1").map(ColumnName(_))
       ))
     }
 
@@ -332,7 +332,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
           ColumnName("d") -> expr("c"),
           ColumnName("e") -> expr("e")
         ),
-        Seq("c", "e", "d").map(ColumnName)
+        Seq("c", "e", "d").map(ColumnName(_))
       ))
     }
 

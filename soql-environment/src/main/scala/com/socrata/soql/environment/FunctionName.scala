@@ -1,6 +1,6 @@
 package com.socrata.soql.environment
 
-final class FunctionName(name: String) extends AbstractName[FunctionName](name) {
+final class FunctionName(name: String) extends AbstractName[FunctionName](None, name) {
   protected def hashCodeSeed = 0xfb392dda
 }
 
