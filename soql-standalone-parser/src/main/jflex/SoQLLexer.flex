@@ -132,7 +132,6 @@ TableIdentifier = "@" ("-" | [:jletterdigit:])+
   "`" / ":" { stringStart = pos(); yybegin(QUOTEDSYSTEMIDENTIFIER); }
 
   {TableIdentifier} { return token(new TableIdentifier(yytext())); }
-  "" { stringStart = pos(); yybegin(QUOTEDIDENTIFIER); }
 
   // Punctuation
   ","  { return token(new COMMA()); }
