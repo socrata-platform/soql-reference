@@ -123,7 +123,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
                  joins: Option[List[Tuple2[TableName, Expression]]],
                  where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) =
       selection match {
-        case None => analyzeNoSelectionInOuterSelectionContext(lastQuery, distinct, None, where, groupBy, having, orderBy, limit, offset, search)
+        case None => analyzeNoSelectionInOuterSelectionContext(lastQuery, distinct, joins, where, groupBy, having, orderBy, limit, offset, search)
         case Some(s) => analyzeInOuterSelectionContext(lastQuery, Select(distinct, s, joins, where, groupBy, having, orderBy, limit, offset, search))
       }
 
