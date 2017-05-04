@@ -27,9 +27,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("address") -> TestLocation,
       ColumnName("balance") -> TestMoney,
       ColumnName("object") -> TestObject,
-      ColumnName("array") -> TestArray,
-      ColumnName("last_name") -> TestText,
-      ColumnName("first_name") -> TestText
+      ColumnName("array") -> TestArray
     )
   }
 
@@ -38,7 +36,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName(":id") -> TestNumber,
       ColumnName(":updated_at") -> TestFixedTimestamp,
       ColumnName(":created_at") -> TestFixedTimestamp,
-      ColumnName("last_name") -> TestText
+      ColumnName("name_last") -> TestText
     )
   }
 
@@ -47,7 +45,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName(":id") -> TestNumber,
       ColumnName(":updated_at") -> TestFixedTimestamp,
       ColumnName(":created_at") -> TestFixedTimestamp,
-      ColumnName("first_name") -> TestText
+      ColumnName("name_first") -> TestText
     )
   }
 
@@ -288,45 +286,53 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     analysis.distinct must be (true)
   }
 
+  test("alias reuse") {
+    val analysis = analyzer.analyzeUnchainedQuery("select name_last as last_name, last_name as ln")
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName("last_name") -> typedExpression("name_last"),
+      ColumnName("ln") -> typedExpression("name_last")
+    ))
+  }
+
   test("qualified column name") {
-    val analysis = analyzer.analyzeUnchainedQuery("select object.a, object.b as ob, visits, @aaaa-aaaa.last_name, @a1.first_name")
+    val analysis = analyzer.analyzeUnchainedQuery("select object.a, object.b as ob, visits, @aaaa-aaaa.name_last, @a1.name_first")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("object_a") -> typedExpression("object.a"),
       ColumnName("ob") -> typedExpression("object.b"),
       ColumnName("visits") -> typedExpression("visits"),
-      ColumnName("last_name") -> typedExpression("@aaaa-aaaa.last_name"),
-      ColumnName("first_name") -> typedExpression("@a1.first_name")
+      ColumnName("name_last") -> typedExpression("@aaaa-aaaa.name_last"),
+      ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
   }
 
   test("join") {
-    val analysis = analyzer.analyzeUnchainedQuery("select visits, @aaaa-aaaa.last_name join @aaaa-aaaa on name_last = @aaaa-aaaa.last_name")
+    val analysis = analyzer.analyzeUnchainedQuery("select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on name_last = @aaaa-aaaa.name_last")
     val visit: ColumnRef[_, _] = typedExpression("visits").asInstanceOf[ColumnRef[_, _]]
     visit.qualifier must equal(None)
-    val lastName: ColumnRef[_, _] = typedExpression("@aaaa-aaaa.last_name").asInstanceOf[ColumnRef[_, _]]
+    val lastName: ColumnRef[_, _] = typedExpression("@aaaa-aaaa.name_last").asInstanceOf[ColumnRef[_, _]]
     lastName.qualifier must equal(Some("_aaaa-aaaa"))
     println(lastName.toString)
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> visit,
-      ColumnName("last_name") -> lastName
+      ColumnName("name_last") -> lastName
     ))
-    analysis.join must equal (Some(List((TableName("_aaaa-aaaa", None), typedExpression("name_last = @aaaa-aaaa.last_name")))))
+    analysis.join must equal (Some(List((TableName("_aaaa-aaaa", None), typedExpression("name_last = @aaaa-aaaa.name_last")))))
   }
 
   test("join with table alias") {
-      val analysis = analyzer.analyzeUnchainedQuery("select visits, @a1.first_name join @aaaa-aaaa as a1 on visits > 10")
-      analysis.selection.toSeq must equal (Seq(
-        ColumnName("visits") -> typedExpression("visits"),
-        ColumnName("first_name") -> typedExpression("@a1.first_name")
-      ))
-      analysis.join must equal (Some(List((TableName("_aaaa-aaaa", Some("_a1")), typedExpression("visits > 10")))))
-    }
+    val analysis = analyzer.analyzeUnchainedQuery("select visits, @a1.name_first join @aaaa-aaaa as a1 on visits > 10")
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName("visits") -> typedExpression("visits"),
+      ColumnName("name_first") -> typedExpression("@a1.name_first")
+    ))
+    analysis.join must equal (Some(List((TableName("_aaaa-aaaa", Some("_a1")), typedExpression("visits > 10")))))
+  }
 
   test("join to string") {
-    val soql = "select visits, @a1.first_name join @aaaa-aaaa as a1 on name_last = @a1.last_name"
+    val soql = "select visits, @a1.name_first join @aaaa-aaaa as a1 on name_last = @a1.name_last"
     val parsed = new Parser().unchainedSelectStatement(soql)
 
-    val expected = "SELECT `visits`, @a1.`first_name` JOIN @aaaa-aaaa AS a1 ON `name_last` = @a1.`last_name`"
+    val expected = "SELECT `visits`, @a1.`name_first` JOIN @aaaa-aaaa AS a1 ON `name_last` = @a1.`name_last`"
     parsed.toString must equal(expected)
 
     val parsedAgain = new Parser().unchainedSelectStatement(expected)

@@ -21,11 +21,13 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
   private def typecheck(e: Expression, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = e match {
     case r@ColumnOrAliasRef(qual, col) =>
       aliases.get(col) match {
-        case Some(typed.ColumnRef(qual, name, typ)) if name == col =>
+        case Some(typed.ColumnRef(aQual, name, typ)) if name == col && qual == aQual =>
           // special case: if this is an alias that refers directly to itself, position the typed tree _here_
           // (as if there were no alias at all) to make error messages that much clearer.  This will only catch
           // semi-implicitly assigned aliases, so it's better anyway.
-          Right(Seq(typed.ColumnRef(qual, col, typ)(r.position)))
+          Right(Seq(typed.ColumnRef(aQual, col, typ)(r.position)))
+        case Some(typed.ColumnRef(aQual, name, typ)) if name == col && qual != aQual =>
+          typecheck(e, Map.empty) // TODO: Revisit aliases from multiple schemas
         case Some(tree) =>
           Right(Seq(tree))
         case None =>
