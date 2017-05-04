@@ -110,7 +110,9 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val pos = readPosition()
       in.readRawByte() match {
         case 1 =>
-          val qual = maybeRead(in.readString())
+          val qual =
+            if (version >= 3 || version == TestVersion) maybeRead(in.readString())
+            else None
           val name = dictionary.columns(in.readUInt32())
           val typ = dictionary.types(in.readUInt32())
           ColumnRef(qual, name, typ)(pos)
