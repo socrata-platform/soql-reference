@@ -17,21 +17,22 @@ CoreExpr[+ColumnId, Type] extends Product with Typable[Type] {
   override final def toString = if(CoreExpr.pretty) (asString + " :: " + typ) else ScalaRunTime._toString(this)
   override final lazy val hashCode = ScalaRunTime._hashCode(this)
 
-  def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId): CoreExpr[NewColumnId, Type]
+  def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): CoreExpr[NewColumnId, Type]
 }
 
 object CoreExpr {
   val pretty = true
 }
 
-case class ColumnRef[ColumnId, Type](qualifier: Option[String], column: ColumnId, typ: Type)(val position: Position) extends CoreExpr[ColumnId, Type] {
+case class ColumnRef[ColumnId, Type](qualifier: Qualifier, column: ColumnId, typ: Type)(val position: Position) extends CoreExpr[ColumnId, Type] {
   protected def asString = column.toString
-  def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId) = copy(column = f(column))(position)
+  def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId) = copy(column = f(column, qualifier))(position)
   val size = 0
 }
 
 sealed abstract class TypedLiteral[Type] extends CoreExpr[Nothing, Type] {
-  def mapColumnIds[NewColumnId](f: Nothing => NewColumnId) = this
+  def mapColumnIds[NewColumnId](f: (Nothing, Qualifier) => NewColumnId) = this
+
   val size = 0
 }
 case class NumberLiteral[Type](value: BigDecimal, typ: Type)(val position: Position) extends TypedLiteral[Type] {
@@ -57,6 +58,6 @@ case class FunctionCall[ColumnId, Type](function: MonomorphicFunction[Type], par
   protected def asString = parameters.mkString(function.name.toString + "(", ",", ")")
   def typ = function.result
 
-  def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId) = copy(parameters = parameters.map(_.mapColumnIds(f)))(position, functionNamePosition)
+  def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId) = copy(parameters = parameters.map(_.mapColumnIds(f)))(position, functionNamePosition)
   val size = parameters.foldLeft(1) { (acc, param) => acc + param.size }
 }

@@ -11,6 +11,7 @@ import com.socrata.soql.parsing.Parser
 import com.socrata.soql.typechecker._
 import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, TypeName}
 import com.socrata.soql.collection.OrderedMap
+import com.socrata.soql.typed.Qualifier
 
 class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type]) {
   type Analysis = SoQLAnalysis[ColumnName, Type]
@@ -356,7 +357,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                         limit: Option[BigInt],
                                         offset: Option[BigInt],
                                         search: Option[String]) {
-  def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId): SoQLAnalysis[NewColumnId, Type] =
+  def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): SoQLAnalysis[NewColumnId, Type] =
     copy(
       selection = selection.mapValues(_.mapColumnIds(f)),
       join = join.map { joins => joins.map { case((table, expr)) =>
