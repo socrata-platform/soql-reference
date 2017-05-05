@@ -1,18 +1,18 @@
 package com.socrata.soql
 
-import scala.util.parsing.input.{NoPosition, Position}
-import scala.collection.immutable.VectorBuilder
-
 import java.io.InputStream
 
-import com.google.protobuf.CodedInputStream
-import gnu.trove.map.hash.TIntObjectHashMap
+import scala.collection.immutable.VectorBuilder
+import scala.collection.mutable.ListBuffer
+import scala.util.parsing.input.{NoPosition, Position}
 
-import com.socrata.soql.environment.ColumnName
-import com.socrata.soql.functions.{MonomorphicFunction, Function}
+import com.google.protobuf.CodedInputStream
+import com.socrata.soql.collection.OrderedMap
+import com.socrata.soql.environment.{ColumnName, TableName}
+import com.socrata.soql.functions.{Function, MonomorphicFunction}
 import com.socrata.soql.parsing.SoQLPosition
 import com.socrata.soql.typed._
-import com.socrata.soql.collection.OrderedMap
+import gnu.trove.map.hash.TIntObjectHashMap
 
 private case class SimplePosition(line: Int, column: Int, lineContents: String) extends Position
 
@@ -29,6 +29,8 @@ private trait DeserializationDictionary[C, T] {
 class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializer: String => T, functionMap: String => Function[T]) extends (InputStream => Seq[SoQLAnalysis[C, T]]) {
   type Expr = CoreExpr[C, T]
   type Order = OrderBy[C, T]
+
+  private val TestVersion = 0 // This is odd and for smooth deploy transition.  0 is used by test.
 
   private class DeserializationDictionaryImpl(typesRegistry: TIntObjectHashMap[T],
                                       stringsRegistry: TIntObjectHashMap[String],
@@ -108,9 +110,12 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val pos = readPosition()
       in.readRawByte() match {
         case 1 =>
+          val qual =
+            if (version >= 3 || version == TestVersion) maybeRead(in.readString())
+            else None
           val name = dictionary.columns(in.readUInt32())
           val typ = dictionary.types(in.readUInt32())
-          ColumnRef(name, typ)(pos)
+          ColumnRef(qual, name, typ)(pos)
         case 2 =>
           val value = dictionary.strings(in.readUInt32())
           val typ = dictionary.types(in.readUInt32())
@@ -142,7 +147,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     def readDistinct(): Boolean = {
       version match {
         case 1 => false
-        case 0 | 2 => in.readBool() // This is odd and for smooth deploy transition.  0 is used by test.
+        case TestVersion | 2 => in.readBool()
         case _ => in.readBool()
       }
     }
@@ -160,6 +165,25 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         elems += name -> expr
       }
       OrderedMap(elems.result() : _*)
+    }
+
+    def readJoins(): Option[List[Tuple2[TableName, Expr]]] = {
+      if (version < 3 && version != TestVersion) {
+        None
+      } else {
+        val count = in.readUInt32()
+        if (count == 0) {
+          None
+        } else {
+          val elems = new ListBuffer[(TableName, Expr)]
+          for (_ <- 1 to count) {
+            val tableName = TableName(in.readString(), maybeRead(in.readString()))
+            val expr = readExpr()
+            elems += (tableName -> expr)
+          }
+          Some(elems.result())
+        }
+      }
     }
 
     def readWhere(): Option[Expr] =
@@ -205,6 +229,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val isGrouped = readIsGrouped()
       val distinct = readDistinct()
       val selection = readSelection()
+      val join = readJoins()
       val where = readWhere()
       val groupBy = readGroupBy()
       val having = readHaving()
@@ -216,6 +241,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         isGrouped,
         distinct,
         selection,
+        join,
         where,
         groupBy,
         having,
@@ -238,7 +264,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, 0)
         Seq(deserializer.readAnalysis())
-      case v if v == 1 || v == 2 =>
+      case v if v >= 1 && v <= 3 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
         deserializer.read()

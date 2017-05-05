@@ -1,9 +1,10 @@
 package com.socrata.soql
 
 import org.scalatest.FunSuite
-import com.socrata.soql.environment.{TypeName, ColumnName, DatasetContext}
+import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, TypeName}
 import com.socrata.soql.types._
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+
 import org.scalatest.MustMatchers
 
 class AnalysisSerializationTest extends FunSuite with MustMatchers {
@@ -22,6 +23,8 @@ class AnalysisSerializationTest extends FunSuite with MustMatchers {
       ColumnName("array") -> TestArray
     )
   }
+
+  implicit val datasetCtxMap = Map(TableName.PrimaryTable.qualifier -> datasetCtx)
 
   val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo)
 
