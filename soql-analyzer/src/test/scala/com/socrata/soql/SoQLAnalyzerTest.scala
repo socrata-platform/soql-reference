@@ -242,6 +242,26 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
   }
 
+  test("Merging join") {
+    val analysis1 = analyzer.analyzeFullQuery("select name_last, visits where visits > 1 |> select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = name_last where @aaaa-aaaa.name_last='Almond'")
+    val analysis2 = analyzer.analyzeFullQuery("select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = name_last where visits > 1 and @aaaa-aaaa.name_last='Almond'")
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1)
+    merged must equal (analysis2)
+  }
+
+  test("Merging join with table alias") {
+    val analysis1 = analyzer.analyzeFullQuery("select name_last, name_first, visits where visits > 1 |> select visits as vis, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first where @a1.name_first='John'")
+    val analysis2 = analyzer.analyzeFullQuery("select visits as vis, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first where visits > 1 and @a1.name_first='John'")
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1)
+    merged must equal (analysis2)
+  }
+
+  test("Back to back joins do not merge") {
+    val analysis = analyzer.analyzeFullQuery("select name_first, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = name_last |> select name_last, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first")
+    val notMerged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    notMerged must equal (analysis)
+  }
+
   test("Limit-combining produces the intersection of the two regions") {
     forAll { (aLim0: Option[BigInt], aOff0: Option[BigInt], bLim0: Option[BigInt], bOff0: Option[BigInt]) =>
       val aLim = aLim0.map(_.abs)

@@ -42,7 +42,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
     selects.headOption match {
       case Some(firstSelect) =>
         val firstAnalysis = analyzeWithSelection(firstSelect)(ctx)
-        selects.tail.scanLeft(firstAnalysis)(analyzeInOuterSelectionContext)
+        selects.tail.scanLeft(firstAnalysis)(analyzeInOuterSelectionContext(ctx))
       case None =>
         Seq.empty
     }
@@ -125,7 +125,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
                  where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) =
       selection match {
         case None => analyzeNoSelectionInOuterSelectionContext(lastQuery, distinct, joins, where, groupBy, having, orderBy, limit, offset, search)
-        case Some(s) => analyzeInOuterSelectionContext(lastQuery, Select(distinct, s, joins, where, groupBy, having, orderBy, limit, offset, search))
+        case Some(s) => analyzeInOuterSelectionContext(ctx)(lastQuery, Select(distinct, s, joins, where, groupBy, having, orderBy, limit, offset, search))
       }
 
     dispatch(
@@ -245,9 +245,10 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
       search)
   }
 
-  def analyzeInOuterSelectionContext(lastQuery: Analysis, query: Select): Analysis = {
-    implicit val fakeCtx = contextFromAnalysis(lastQuery)
-    analyzeWithSelection(query)
+  def analyzeInOuterSelectionContext(initialCtx: AnalysisContext)(lastQuery: Analysis, query: Select): Analysis = {
+    val prevCtx = contextFromAnalysis(lastQuery)
+    val nextCtx = prevCtx ++ initialCtx.filterKeys(qualifier => TableName.PrimaryTable.qualifier != qualifier)
+    analyzeWithSelection(query)(nextCtx)
   }
 
   def contextFromAnalysis(a: Analysis): AnalysisContext = {
@@ -393,13 +394,13 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   // for a query that contains a search.
   private def tryMerge(a: Analysis, b: Analysis): Option[Analysis] = (a, b) match {
     case (SoQLAnalysis(aIsGroup, false, aSelect, None, aWhere, aGroup, aHaving, aOrder, aLim, aOff, aSearch),
-          SoQLAnalysis(false,    false, bSelect, None, None,   None,   None,    None,   bLim, bOff, None)) =>
+          SoQLAnalysis(false,    false, bSelect, bJoin, None,   None,   None,    None,   bLim, bOff, None)) =>
       // we can merge a change of only selection and limit + offset onto anything
       val (newLim, newOff) = Merger.combineLimits(aLim, aOff, bLim, bOff)
       Some(SoQLAnalysis(isGrouped = aIsGroup,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        join = None,
+                        join = bJoin,
                         where = aWhere,
                         groupBy = aGroup,
                         having = aHaving,
@@ -408,12 +409,12 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         offset = newOff,
                         search = aSearch))
     case (SoQLAnalysis(false, false, aSelect, None, aWhere, None, None, aOrder, None, None, aSearch),
-          SoQLAnalysis(false, false, bSelect, None, bWhere, None, None, bOrder, bLim, bOff, None)) =>
+          SoQLAnalysis(false, false, bSelect, bJoin, bWhere, None, None, bOrder, bLim, bOff, None)) =>
       // Can merge a change of filter or order only if no window was specified on the left
       Some(SoQLAnalysis(isGrouped = false,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        join = None,
+                        join = bJoin,
                         where = mergeWhereLike(aSelect, aWhere, bWhere),
                         groupBy = None,
                         having = None,
@@ -422,12 +423,12 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         offset = bOff,
                         search = aSearch))
     case (SoQLAnalysis(false, false, aSelect, None, aWhere, None,     None,    _,      None, None, aSearch),
-          SoQLAnalysis(true, false, bSelect, None, bWhere, bGroupBy, bHaving, bOrder, bLim, bOff, None)) =>
+          SoQLAnalysis(true, false, bSelect, bJoin, bWhere, bGroupBy, bHaving, bOrder, bLim, bOff, None)) =>
       // an aggregate on a non-aggregate
       Some(SoQLAnalysis(isGrouped = true,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        join = None,
+                        join = bJoin,
                         where = mergeWhereLike(aSelect, aWhere, bWhere),
                         groupBy = mergeGroupBy(aSelect, bGroupBy),
                         having = mergeWhereLike(aSelect, None, bHaving),
@@ -485,7 +486,9 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   private def replaceRefs(a: OrderedMap[ColumnName, Expr],
                              b: Expr): Expr =
     b match {
-      case cr@typed.ColumnRef(qual, c, t) =>
+      case cr@typed.ColumnRef(Some(q), c, t) =>
+        cr
+      case cr@typed.ColumnRef(None, c, t) =>
         a.getOrElse(c, cr)
       case tl: typed.TypedLiteral[T] =>
         tl
