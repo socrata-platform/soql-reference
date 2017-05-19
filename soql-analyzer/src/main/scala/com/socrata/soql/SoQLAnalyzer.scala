@@ -394,7 +394,11 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   // for a query that contains a search.
   private def tryMerge(a: Analysis, b: Analysis): Option[Analysis] = (a, b) match {
     case (SoQLAnalysis(aIsGroup, false, aSelect, None, aWhere, aGroup, aHaving, aOrder, aLim, aOff, aSearch),
-          SoQLAnalysis(false,    false, bSelect, bJoin, None,   None,   None,    None,   bLim, bOff, None)) =>
+          SoQLAnalysis(false,    false, bSelect, bJoin, None,   None,   None,    None,   bLim, bOff, None)) if
+          // Do not merge when the previous soql is grouped and the next soql has joins
+          // select g, count(x) as cx group by g |> select g, cx, @b.a join @b on @b.g=g
+          // Newly introduced columns from joins cannot be merged and brought in w/o grouping and aggregate functions.
+          !(aIsGroup && bJoin.nonEmpty) =>
       // we can merge a change of only selection and limit + offset onto anything
       val (newLim, newOff) = Merger.combineLimits(aLim, aOff, bLim, bOff)
       Some(SoQLAnalysis(isGrouped = aIsGroup,
