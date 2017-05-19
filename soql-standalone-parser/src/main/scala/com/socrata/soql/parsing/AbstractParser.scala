@@ -130,7 +130,6 @@ abstract class AbstractParser extends Parsers with PackratParsers {
   def joinClause: PackratParser[(TableName, Expression)] =
     JOIN() ~ tableIdentifier ~ opt(AS() ~> simpleIdentifier) ~ ON() ~ expr ^^ {
       case j ~ t ~ None ~ o ~ e => (TableName(t._1, None), e)
-      // TODO: finish table aliases
       case j ~ t ~ Some((alias, pos)) ~ o ~ e => (TableName(t._1, Some(TableName.SodaFountainTableNamePrefix + alias)), e)
     }
 
