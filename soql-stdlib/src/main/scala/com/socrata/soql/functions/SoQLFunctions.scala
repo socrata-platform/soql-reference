@@ -141,6 +141,9 @@ object SoQLFunctions {
   val ModMoneyNum = mf("%MN", SpecialFunctions.Operator("%"), Seq(SoQLMoney, SoQLNumber), Seq.empty, SoQLMoney)
   val ModMoneyMoney = mf("%MM", SpecialFunctions.Operator("%"), Seq(SoQLMoney, SoQLMoney), Seq.empty, SoQLNumber)
 
+  val Ceiling = f("ceil", FunctionName("ceil"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
+  val Floor = f("floor", FunctionName("floor"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
+
   val NumberToMoney = mf("number to money", SpecialFunctions.Cast(SoQLMoney.name), Seq(SoQLNumber), Seq.empty, SoQLMoney)
   val NumberToDouble = mf("number to double", SpecialFunctions.Cast(SoQLDouble.name), Seq(SoQLNumber), Seq.empty, SoQLDouble)
 
