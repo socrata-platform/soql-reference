@@ -9,10 +9,14 @@ import com.socrata.soql.ast
 import com.socrata.soql.ast._
 import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
 
-// This can't be an "object" because parsers are not thread safe at least
-// through 2.9.2.  Might revisit when we drop 2.9 support, but it's hardly
-// critical.
-abstract class AbstractParser extends Parsers with PackratParsers {
+object AbstractParser {
+  class Parameters(val allowJoins: Boolean = true)
+  val defaultParameters = new Parameters()
+}
+
+abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractParser.defaultParameters) extends Parsers with PackratParsers {
+  import parameters._
+
   type Elem = Token
 
   /*
@@ -95,8 +99,14 @@ abstract class AbstractParser extends Parsers with PackratParsers {
   def pipedSelect: Parser[Seq[Select]] = rep1sep(unchainedSelect, QUERYPIPE())
 
   def unchainedSelect: Parser[Select] =
-    SELECT() ~> distinct ~ selectList ~ opt(joinList) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-      case d ~ s ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(d, s, j, w, gb, h, ord, lim, off, sr)
+    if(allowJoins) {
+      SELECT() ~> distinct ~ selectList ~ opt(joinList) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+        case d ~ s ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(d, s, j, w, gb, h, ord, lim, off, sr)
+      }
+    } else {
+      SELECT() ~> distinct ~ selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+        case d ~ s ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(d, s, None, w, gb, h, ord, lim, off, sr)
+      }
     }
 
   def distinct: Parser[Boolean] = opt(DISTINCT()) ^^ (_.isDefined)
@@ -235,11 +245,15 @@ abstract class AbstractParser extends Parsers with PackratParsers {
     }
 
   def userIdentifier: Parser[(Option[String], String, Position)] =
-     opt(tableIdentifier ~ DOT()) ~ simpleUserIdentifier ^^ {
-       case None ~ uid =>
-         (None, uid._1, uid._2)
-       case Some(qual ~ _) ~ uid =>
-         (Some(qual._1), uid._1, qual._2)
+    if(allowJoins) {
+      opt(tableIdentifier ~ DOT()) ~ simpleUserIdentifier ^^ {
+        case None ~ uid =>
+          (None, uid._1, uid._2)
+        case Some(qual ~ _) ~ uid =>
+          (Some(qual._1), uid._1, qual._2)
+      }
+    } else {
+      simpleUserIdentifier ^^ { uid => (None, uid._1, uid._2) }
     }
 
   val tableIdentifier: Parser[(String, Position)] =
@@ -252,12 +266,16 @@ abstract class AbstractParser extends Parsers with PackratParsers {
       (t.value, t.position)
     } | failure(errors.missingUserIdentifier)
 
-  val systemIdentifier: Parser[(Option[String], String, Position)] =
-    opt(tableIdentifier ~ DOT()) ~ simpleSystemIdentifier ^^ {
-      case None ~ sid =>
-        (None, sid._1, sid._2)
-      case Some(qual ~ _) ~ sid =>
-        (Some(qual._1), sid._1, qual._2)
+  def systemIdentifier: Parser[(Option[String], String, Position)] =
+    if(allowJoins) {
+      opt(tableIdentifier ~ DOT()) ~ simpleSystemIdentifier ^^ {
+        case None ~ sid =>
+          (None, sid._1, sid._2)
+        case Some(qual ~ _) ~ sid =>
+          (Some(qual._1), sid._1, qual._2)
+      }
+    } else {
+      simpleSystemIdentifier ^^ { sid => (None, sid._1, sid._2) }
     }
 
   val simpleSystemIdentifier: Parser[(String, Position)] =

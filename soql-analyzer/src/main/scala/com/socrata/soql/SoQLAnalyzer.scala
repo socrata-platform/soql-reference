@@ -7,13 +7,16 @@ import scala.util.parsing.input.{NoPosition, Position}
 import com.socrata.soql.aliases.AliasAnalysis
 import com.socrata.soql.aggregates.AggregateChecker
 import com.socrata.soql.ast._
-import com.socrata.soql.parsing.Parser
+import com.socrata.soql.parsing.{AbstractParser, Parser}
 import com.socrata.soql.typechecker._
 import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, TypeName}
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.typed.Qualifier
 
-class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type]) {
+class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
+                         functionInfo: FunctionInfo[Type],
+                         parserParameters: AbstractParser.Parameters = AbstractParser.defaultParameters)
+{
   type Analysis = SoQLAnalysis[ColumnName, Type]
   type Expr = typed.CoreExpr[ColumnName, Type]
   type Qualifier = String
@@ -32,7 +35,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
   def analyzeFullQuery(query: String)(implicit ctx: AnalysisContext): Seq[Analysis] = {
     log.debug("Analyzing full query {}", query)
     val start = System.nanoTime()
-    val parsed = new Parser().selectStatement(query)
+    val parsed = new Parser(parserParameters).selectStatement(query)
     val end = System.nanoTime()
     log.trace("Parsing took {}ms", ns2ms(end - start))
     analyze(parsed)
@@ -55,7 +58,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
   def analyzeUnchainedQuery(query: String)(implicit ctx: AnalysisContext): Analysis = {
     log.debug("Analyzing full unchained query {}", query)
     val start = System.nanoTime()
-    val parsed = new Parser().unchainedSelectStatement(query)
+    val parsed = new Parser(parserParameters).unchainedSelectStatement(query)
     val end = System.nanoTime()
     log.trace("Parsing took {}ms", ns2ms(end - start))
 
@@ -114,7 +117,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Ty
                         sourceFrom: Seq[Analysis] = Nil)(implicit ctx: AnalysisContext): Analysis = {
     log.debug("analyzing split query")
 
-    val p = new Parser
+    val p = new Parser(parserParameters)
 
     val lastQuery =
       if(sourceFrom.isEmpty) baseAnalysis

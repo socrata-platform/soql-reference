@@ -4,7 +4,7 @@ import com.socrata.soql.parsing.standalone_exceptions.BadParse
 import scala.util.parsing.input.Position
 import java.io.StringReader
 
-class StandaloneParser extends AbstractParser {
+class StandaloneParser(parameters: AbstractParser.Parameters = AbstractParser.defaultParameters) extends AbstractParser(parameters) {
   protected def badParse(msg: String, nextPos: Position): Nothing =
     throw BadParse(msg, nextPos)
 
