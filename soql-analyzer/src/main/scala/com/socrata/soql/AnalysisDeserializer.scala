@@ -167,7 +167,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       OrderedMap(elems.result() : _*)
     }
 
-    def readJoins(): Option[List[Tuple2[TableName, Expr]]] = {
+    def readJoins(): Option[List[Join[C, T]]] = {
       if (version < 3 && version != TestVersion) {
         None
       } else {
@@ -175,11 +175,12 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         if (count == 0) {
           None
         } else {
-          val elems = new ListBuffer[(TableName, Expr)]
+          val elems = new ListBuffer[Join[C, T]]
           for (_ <- 1 to count) {
+            val joinType = in.readString()
             val tableName = TableName(in.readString(), maybeRead(in.readString()))
             val expr = readExpr()
-            elems += (tableName -> expr)
+            elems += Join(joinType, tableName, expr)
           }
           Some(elems.result())
         }

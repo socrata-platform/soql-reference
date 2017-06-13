@@ -25,7 +25,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
    *               *************
    */
   def selection(soql: String): Selection = parseFull(selectList, soql)
-  def joins(soql: String): List[Tuple2[TableName, Expression]] = parseFull(joinList, soql)
+  def joins(soql: String): List[Join] = parseFull(joinList, soql)
   def expression(soql: String): Expression = parseFull(expr, soql)
   def orderings(soql: String): Seq[OrderBy] = parseFull(orderingList, soql)
   def groupBys(soql: String): Seq[Expression] = parseFull(groupByList, soql)
@@ -137,10 +137,12 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def offsetClause = OFFSET() ~> integer
   def searchClause = SEARCH() ~> stringLiteral
 
-  def joinClause: PackratParser[(TableName, Expression)] =
-    JOIN() ~ tableIdentifier ~ opt(AS() ~> simpleIdentifier) ~ ON() ~ expr ^^ {
-      case j ~ t ~ None ~ o ~ e => (TableName(t._1, None), e)
-      case j ~ t ~ Some((alias, pos)) ~ o ~ e => (TableName(t._1, Some(TableName.SodaFountainTableNamePrefix + alias)), e)
+  def joinClause: PackratParser[Join] =
+    opt((LEFT() | RIGHT()) ~ OUTER()) ~ JOIN() ~ tableIdentifier ~ opt(AS() ~> simpleIdentifier) ~ ON() ~ expr ^^ {
+      case None ~ j ~ t ~ None ~ o ~ e => InnerJoin(TableName(t._1, None), e)
+      case None ~ j ~ t ~ Some((alias, pos)) ~ o ~ e => InnerJoin(TableName(t._1, Some(TableName.SodaFountainTableNamePrefix + alias)), e)
+      case Some(jd) ~ j ~ t ~ None ~ o ~ e => OuterJoin(jd._1, TableName(t._1, None), e)
+      case Some(jd) ~ j ~ t ~ Some((alias, pos)) ~ o ~ e => OuterJoin(jd._1, TableName(t._1, Some(TableName.SodaFountainTableNamePrefix + alias)), e)
     }
 
   def joinList = rep1(joinClause)
