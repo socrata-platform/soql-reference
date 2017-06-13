@@ -219,7 +219,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       val size = joins.map(_.size).getOrElse(0)
       out.writeUInt32NoTag(size)
       joins.toList.flatten.foreach { join =>
-        out.writeStringNoTag(join.name)
+        out.writeStringNoTag(join.typ.toString)
         out.writeStringNoTag(join.tableName.name)
         maybeWrite(join.tableName.alias)(alias => out.writeStringNoTag(alias))
         writeExpr(join.expr)

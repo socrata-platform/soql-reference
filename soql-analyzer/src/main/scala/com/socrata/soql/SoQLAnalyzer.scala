@@ -231,7 +231,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     }
 
     val checkedJoin = join.map {
-      _.map { j => typed.Join(j.name, j.tableName, typecheck(j.expr)) }
+      _.map { j => typed.Join(j.typ, j.tableName, typecheck(j.expr)) }
     }
 
     finishAnalysis(
@@ -306,7 +306,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     }
 
     val checkedJoin = query.join.map { js => js.map { j: Join =>
-      typed.Join(j.name, j.tableName, typecheck(j.expr))
+      typed.Join(j.typ, j.tableName, typecheck(j.expr))
     }}
 
     finishAnalysis(isGrouped, query.distinct,
@@ -365,7 +365,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
     copy(
       selection = selection.mapValues(_.mapColumnIds(f)),
       join = join.map { joins => joins.map { join =>
-        typed.Join(join.name, join.tableName, join.expr.mapColumnIds(f))
+        typed.Join(join.typ, join.tableName, join.expr.mapColumnIds(f))
       }},
       where = where.map(_.mapColumnIds(f)),
       groupBy = groupBy.map(_.map(_.mapColumnIds(f))),

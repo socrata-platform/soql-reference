@@ -1,6 +1,5 @@
 package com.socrata.soql
 
-import com.socrata.soql.ast.Join
 import com.socrata.soql.exceptions.{NonBooleanHaving, NonBooleanWhere, NonGroupableGroupBy, UnorderableOrderBy}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.PropertyChecks
@@ -337,7 +336,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> visit,
       ColumnName("name_last") -> lastName
     ))
-    analysis.join must equal (Some(List(typed.Join(Join.InnerJoinName, TableName("_aaaa-aaaa", None), typedExpression("name_last = @aaaa-aaaa.name_last")))))
+    analysis.join must equal (Some(List(typed.InnerJoin(TableName("_aaaa-aaaa", None), typedExpression("name_last = @aaaa-aaaa.name_last")))))
   }
 
   test("join with table alias") {
@@ -346,7 +345,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    analysis.join must equal (Some(List(typed.Join(Join.InnerJoinName, TableName("_aaaa-aaaa", Some("_a1")), typedExpression("visits > 10")))))
+    analysis.join must equal (Some(List(typed.InnerJoin(TableName("_aaaa-aaaa", Some("_a1")), typedExpression("visits > 10")))))
   }
 
   test("join to string") {

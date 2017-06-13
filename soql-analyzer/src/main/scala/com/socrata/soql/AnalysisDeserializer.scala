@@ -7,6 +7,7 @@ import scala.collection.mutable.ListBuffer
 import scala.util.parsing.input.{NoPosition, Position}
 
 import com.google.protobuf.CodedInputStream
+import com.socrata.soql.ast.JoinType
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ColumnName, TableName}
 import com.socrata.soql.functions.{Function, MonomorphicFunction}
@@ -177,7 +178,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         } else {
           val elems = new ListBuffer[Join[C, T]]
           for (_ <- 1 to count) {
-            val joinType = in.readString()
+            val joinType = JoinType(in.readString())
             val tableName = TableName(in.readString(), maybeRead(in.readString()))
             val expr = readExpr()
             elems += Join(joinType, tableName, expr)
