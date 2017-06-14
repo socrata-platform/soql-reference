@@ -206,7 +206,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       val beforeAliasAnalysis = System.nanoTime()
       val count_* = FunctionCall(SpecialFunctions.StarFunc("count"), Nil)(NoPosition, NoPosition)
       val untypedSelectedExpressions = groupBy.getOrElse(Nil) :+ count_*
-      val names = AliasAnalysis(Selection(None, None, untypedSelectedExpressions.map(SelectedExpression(_, None)))).expressions.keys.toSeq
+      val names = AliasAnalysis(Selection(None, Seq.empty, untypedSelectedExpressions.map(SelectedExpression(_, None)))).expressions.keys.toSeq
       val afterAliasAnalysis = System.nanoTime()
 
       log.trace("alias analysis took {}ms", ns2ms(afterAliasAnalysis - beforeAliasAnalysis))
@@ -218,7 +218,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       log.debug("It is not grouped; selecting *")
 
       val beforeAliasAnalysis = System.nanoTime()
-      val names = AliasAnalysis(Selection(None, Some(StarSelection(None, Nil)), Nil)).expressions.keys.toSeq
+      val names = AliasAnalysis(Selection(None, Seq(StarSelection(None, Nil)), Nil)).expressions.keys.toSeq
       val afterAliasAnalyis = System.nanoTime()
 
       log.trace("alias analysis took {}ms", ns2ms(afterAliasAnalyis - beforeAliasAnalysis))

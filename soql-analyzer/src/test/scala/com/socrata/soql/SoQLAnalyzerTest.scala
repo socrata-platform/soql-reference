@@ -49,10 +49,22 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     )
   }
 
+  val joinAliasWoOverlapCtx = new DatasetContext[TestType] {
+    val schema = com.socrata.soql.collection.OrderedMap(
+      ColumnName(":id") -> TestNumber,
+      ColumnName(":updated_at") -> TestFixedTimestamp,
+      ColumnName(":created_at") -> TestFixedTimestamp,
+      ColumnName("x") -> TestText,
+      ColumnName("y") -> TestText,
+      ColumnName("z") -> TestText
+    )
+  }
+
   implicit val datasetCtxMap =
     Map(TableName.PrimaryTable.qualifier -> datasetCtx,
         TableName("_aaaa-aaaa", None).qualifier -> joinCtx,
-        TableName("_aaaa-aaab", Some("_a1")).qualifier -> joinAliasCtx)
+        TableName("_aaaa-aaab", Some("_a1")).qualifier -> joinAliasCtx,
+        TableName("_aaaa-aaax", Some("_x1")).qualifier -> joinAliasWoOverlapCtx)
 
   val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo)
 
@@ -122,7 +134,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("Giving no values to the split-query analyzer returns the equivalent of `SELECT *'") {
-    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, None, None, None, None, None, None)
+    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, None, None, None, None, None, None)(Map(TableName.PrimaryTable.qualifier -> datasetCtx))
     analysis must equal (analyzer.analyzeUnchainedQuery("SELECT *"))
   }
 
@@ -348,7 +360,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     analysis.join must equal (Some(List(typed.InnerJoin(TableName("_aaaa-aaaa", Some("_a1")), typedExpression("visits > 10")))))
   }
 
-  test("join to string") {
+  test("join toString") {
     val soql = "select visits, @a1.name_first join @aaaa-aaaa as a1 on name_last = @a1.name_last"
     val parsed = new Parser().unchainedSelectStatement(soql)
 
@@ -359,7 +371,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     parsedAgain.toString must equal(expected)
   }
 
-  test("left outer join to string") {
+  test("left outer join toString") {
     val soql = "select visits, @a1.name_first left outer join @aaaa-aaaa as a1 on name_last = @a1.name_last"
     val parsed = new Parser().unchainedSelectStatement(soql)
 
@@ -370,7 +382,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     parsedAgain.toString must equal(expected)
   }
 
-  test("right join to string") {
+  test("right outer join toString") {
     val soql = "select visits, @a1.name_first right outer join @aaaa-aaaa as a1 on name_last = @a1.name_last"
     val parsed = new Parser().unchainedSelectStatement(soql)
 
@@ -379,5 +391,25 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
 
     val parsedAgain = new Parser().unchainedSelectStatement(expected)
     parsedAgain.toString must equal(expected)
+  }
+
+  test("multiple `SELECT *`'s") {
+    val analysis = analyzer.analyzeUnchainedQuery("select :*, *, @x1.* join @aaaa-aaax as x1 on visits > 10")
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName(":id") -> typedExpression(":id"),
+      ColumnName(":updated_at") -> typedExpression(":updated_at"),
+      ColumnName(":created_at") -> typedExpression(":created_at"),
+      ColumnName("name_last") -> typedExpression("name_last"),
+      ColumnName("name_first") -> typedExpression("name_first"),
+      ColumnName("visits") -> typedExpression("visits"),
+      ColumnName("last_visit") -> typedExpression("last_visit"),
+      ColumnName("address") -> typedExpression("address"),
+      ColumnName("balance") -> typedExpression("balance"),
+      ColumnName("object") -> typedExpression("object"),
+      ColumnName("array") -> typedExpression("array"),
+      ColumnName("x") -> typedExpression("@x1.x"),
+      ColumnName("y") -> typedExpression("@x1.y"),
+      ColumnName("z") -> typedExpression("@x1.z")
+    ))
   }
 }

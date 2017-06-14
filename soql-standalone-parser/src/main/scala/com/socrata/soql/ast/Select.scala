@@ -27,7 +27,7 @@ case class Select(distinct: Boolean, selection: Selection, join: Option[List[Joi
   }
 }
 
-case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Option[StarSelection], expressions: Seq[SelectedExpression]) {
+case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[StarSelection], expressions: Seq[SelectedExpression]) {
   override def toString = {
     if(AST.pretty) {
       def star(s: StarSelection, token: String) = {
