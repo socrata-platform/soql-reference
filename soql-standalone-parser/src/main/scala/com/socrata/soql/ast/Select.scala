@@ -3,18 +3,15 @@ package com.socrata.soql.ast
 import scala.util.parsing.input.{NoPosition, Position}
 import com.socrata.soql.environment.{ColumnName, TableName}
 
-case class Select(distinct: Boolean, selection: Selection, join: Option[List[(TableName, Expression)]], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) {
+case class Select(distinct: Boolean, selection: Selection, join: Option[List[Join]], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) {
   override def toString = {
     if(AST.pretty) {
       val sb = new StringBuilder("SELECT ")
       if (distinct) sb.append("DISTINCT ")
       sb.append(selection)
       join.toList.flatten.foreach { j =>
-        val (tableName, joinExpr) = j
-        sb.append(" JOIN ")
-        sb.append(tableName)
-        sb.append(" ON ")
-        sb.append(joinExpr)
+        sb.append(" ")
+        sb.append(j.toString)
       }
       where.foreach(sb.append(" WHERE ").append(_))
       groupBy.foreach { gb => sb.append(gb.mkString(" GROUP BY ", ", ", "")) }

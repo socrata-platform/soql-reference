@@ -336,7 +336,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> visit,
       ColumnName("name_last") -> lastName
     ))
-    analysis.join must equal (Some(List((TableName("_aaaa-aaaa", None), typedExpression("name_last = @aaaa-aaaa.name_last")))))
+    analysis.join must equal (Some(List(typed.InnerJoin(TableName("_aaaa-aaaa", None), typedExpression("name_last = @aaaa-aaaa.name_last")))))
   }
 
   test("join with table alias") {
@@ -345,7 +345,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    analysis.join must equal (Some(List((TableName("_aaaa-aaaa", Some("_a1")), typedExpression("visits > 10")))))
+    analysis.join must equal (Some(List(typed.InnerJoin(TableName("_aaaa-aaaa", Some("_a1")), typedExpression("visits > 10")))))
   }
 
   test("join to string") {
@@ -353,6 +353,28 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     val parsed = new Parser().unchainedSelectStatement(soql)
 
     val expected = "SELECT `visits`, @a1.`name_first` JOIN @aaaa-aaaa AS a1 ON `name_last` = @a1.`name_last`"
+    parsed.toString must equal(expected)
+
+    val parsedAgain = new Parser().unchainedSelectStatement(expected)
+    parsedAgain.toString must equal(expected)
+  }
+
+  test("left outer join to string") {
+    val soql = "select visits, @a1.name_first left outer join @aaaa-aaaa as a1 on name_last = @a1.name_last"
+    val parsed = new Parser().unchainedSelectStatement(soql)
+
+    val expected = "SELECT `visits`, @a1.`name_first` LEFT OUTER JOIN @aaaa-aaaa AS a1 ON `name_last` = @a1.`name_last`"
+    parsed.toString must equal(expected)
+
+    val parsedAgain = new Parser().unchainedSelectStatement(expected)
+    parsedAgain.toString must equal(expected)
+  }
+
+  test("right join to string") {
+    val soql = "select visits, @a1.name_first right outer join @aaaa-aaaa as a1 on name_last = @a1.name_last"
+    val parsed = new Parser().unchainedSelectStatement(soql)
+
+    val expected = "SELECT `visits`, @a1.`name_first` RIGHT OUTER JOIN @aaaa-aaaa AS a1 ON `name_last` = @a1.`name_last`"
     parsed.toString must equal(expected)
 
     val parsedAgain = new Parser().unchainedSelectStatement(expected)

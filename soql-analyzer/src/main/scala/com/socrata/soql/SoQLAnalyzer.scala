@@ -124,7 +124,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       else sourceFrom.last
 
     def dispatch(distinct: Boolean, selection: Option[Selection],
-                 joins: Option[List[Tuple2[TableName, Expression]]],
+                 joins: Option[List[Join]],
                  where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) =
       selection match {
         case None => analyzeNoSelectionInOuterSelectionContext(lastQuery, distinct, joins, where, groupBy, having, orderBy, limit, offset, search)
@@ -147,7 +147,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
   def analyzeNoSelectionInOuterSelectionContext(lastQuery: Analysis,
                                                 distinct: Boolean,
-                                                joins: Option[List[Tuple2[TableName, Expression]]],
+                                                joins: Option[List[Join]],
                                                 where: Option[Expression],
                                                 groupBy: Option[Seq[Expression]],
                                                 having: Option[Expression],
@@ -160,7 +160,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   }
 
   def analyzeNoSelection(distinct: Boolean,
-                         join: Option[List[Tuple2[TableName, Expression]]],
+                         join: Option[List[Join]],
                          where: Option[Expression],
                          groupBy: Option[Seq[Expression]],
                          having: Option[Expression],
@@ -231,7 +231,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     }
 
     val checkedJoin = join.map {
-      _.map { j => (j._1, typecheck(j._2)) }
+      _.map { j => typed.Join(j.typ, j.tableName, typecheck(j.expr)) }
     }
 
     finishAnalysis(
@@ -305,8 +305,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       log.trace("checking for aggregation took {}ms", ns2ms(t7 - t6))
     }
 
-    val checkedJoin = query.join.map { js => js.map { j: Tuple2[TableName, Expression] =>
-      (j._1, typecheck(j._2))
+    val checkedJoin = query.join.map { js => js.map { j: Join =>
+      typed.Join(j.typ, j.tableName, typecheck(j.expr))
     }}
 
     finishAnalysis(isGrouped, query.distinct,
@@ -317,7 +317,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   def finishAnalysis(isGrouped: Boolean,
                      distinct: Boolean,
                      output: OrderedMap[ColumnName, Expr],
-                     join: Option[List[Tuple2[TableName, Expr]]],
+                     join: Option[List[typed.Join[ColumnName, Type]]],
                      where: Option[Expr],
                      groupBy: Option[Seq[Expr]],
                      having: Option[Expr],
@@ -353,7 +353,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                         distinct: Boolean,
                                         selection: OrderedMap[ColumnName, typed.CoreExpr[ColumnId, Type]],
-                                        join: Option[List[Tuple2[TableName, typed.CoreExpr[ColumnId, Type]]]],
+                                        join: Option[List[typed.Join[ColumnId, Type]]],
                                         where: Option[typed.CoreExpr[ColumnId, Type]],
                                         groupBy: Option[Seq[typed.CoreExpr[ColumnId, Type]]],
                                         having: Option[typed.CoreExpr[ColumnId, Type]],
@@ -364,8 +364,8 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
   def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): SoQLAnalysis[NewColumnId, Type] =
     copy(
       selection = selection.mapValues(_.mapColumnIds(f)),
-      join = join.map { joins => joins.map { case((table, expr)) =>
-        (table, expr.mapColumnIds(f))
+      join = join.map { joins => joins.map { join =>
+        typed.Join(join.typ, join.tableName, join.expr.mapColumnIds(f))
       }},
       where = where.map(_.mapColumnIds(f)),
       groupBy = groupBy.map(_.map(_.mapColumnIds(f))),
