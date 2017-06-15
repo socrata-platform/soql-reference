@@ -158,16 +158,16 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     * all system column names are always identical and it does not support the same column twice w/o rename.
     */
   def selectList =
-    allSystemSelection ~ opt(COMMA() ~> onlyUserStarSelectList) ^^ {
+    allSystemSelection ~ opt(COMMA() ~> onlyUserStarsSelectList) ^^ {
       case star ~ Some(rest) => rest.copy(allSystemExcept = Some(star))
       case star ~ None => Selection(Some(star), Seq.empty, Seq.empty)
     } |
-    onlyUserStarSelectList
+    onlyUserStarsSelectList
 
-  def onlyUserStarSelectList =
+  def onlyUserStarsSelectList =
     allUserSelectionList ~ opt(COMMA() ~> expressionSelectList) ^^ {
-      case star ~ Some(rest) => rest.copy(allUserExcept = star)
-      case star ~ None => Selection(None, star, Seq.empty)
+      case stars ~ Some(rest) => rest.copy(allUserExcept = stars)
+      case stars ~ None => Selection(None, stars, Seq.empty)
     } |
     expressionSelectList
 
