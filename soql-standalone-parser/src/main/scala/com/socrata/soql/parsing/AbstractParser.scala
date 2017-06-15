@@ -153,27 +153,33 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
    *               ********************
    */
 
+  /**
+    * There can be only one [table.]:* but multiple [table.]* because
+    * all system column names are always identical and it does not support the same column twice w/o rename.
+    */
   def selectList =
-    allSystemSelection ~ opt(COMMA() ~> onlyUserStarSelectList) ^^ {
+    allSystemSelection ~ opt(COMMA() ~> onlyUserStarsSelectList) ^^ {
       case star ~ Some(rest) => rest.copy(allSystemExcept = Some(star))
-      case star ~ None => Selection(Some(star), None, Seq.empty)
+      case star ~ None => Selection(Some(star), Seq.empty, Seq.empty)
     } |
-    onlyUserStarSelectList
+    onlyUserStarsSelectList
 
-  def onlyUserStarSelectList =
-    allUserSelection ~ opt(COMMA() ~> expressionSelectList) ^^ {
-      case star ~ Some(rest) => rest.copy(allUserExcept = Some(star))
-      case star ~ None => Selection(None, Some(star), Seq.empty)
+  def onlyUserStarsSelectList =
+    allUserSelectionList ~ opt(COMMA() ~> expressionSelectList) ^^ {
+      case stars ~ Some(rest) => rest.copy(allUserExcept = stars)
+      case stars ~ None => Selection(None, stars, Seq.empty)
     } |
     expressionSelectList
 
-  def expressionSelectList = rep1sep(namedSelection, COMMA()) ^^ (Selection(None, None, _))
+  def expressionSelectList = rep1sep(namedSelection, COMMA()) ^^ (Selection(None, Seq.empty, _))
 
   def allSystemSelection =
     opt(tableIdentifier ~ DOT()) ~ COLONSTAR() ~ opt(selectExceptions(systemIdentifier)) ^^ {
       case None ~ star ~ exceptions => StarSelection(None, exceptions.getOrElse(Seq.empty)).positionedAt(star.position)
       case Some(qual ~ _) ~ star ~ exceptions => StarSelection(Some(qual._1), exceptions.getOrElse(Seq.empty)).positionedAt(qual._2)
     }
+
+  def allUserSelectionList = rep1sep(allUserSelection, COMMA()) ^^ ( _.map { star => star } )
 
   def allUserSelection =
     opt(tableIdentifier ~ DOT()) ~ STAR() ~ opt(selectExceptions(userIdentifier)) ^^ {

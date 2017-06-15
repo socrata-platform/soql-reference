@@ -84,32 +84,32 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     val someSelections = selections("2+2,hello,avg(gnu) as average").expressions
 
     "return the input if there were no stars" in {
-      AliasAnalysis.expandSelection(Selection(None, None, someSelections)) must equal (someSelections)
+      AliasAnalysis.expandSelection(Selection(None, Seq.empty, someSelections)) must equal (someSelections)
     }
 
     "return the system columns if there was a :*" in {
       // TODO: check the positions
-      AliasAnalysis.expandSelection(Selection(Some(StarSelection(None, Seq.empty).positionedAt(pos)), None, someSelections)) must equal (unaliased(":a",":b")(pos) ++ someSelections)
+      AliasAnalysis.expandSelection(Selection(Some(StarSelection(None, Seq.empty).positionedAt(pos)), Seq.empty, someSelections)) must equal (unaliased(":a",":b")(pos) ++ someSelections)
     }
 
     "return the un-excepted columns if there was a :*" in {
       // TODO: check the positions
-      AliasAnalysis.expandSelection(Selection(Some(StarSelection(None, Seq((ident(":a"), NoPosition))).positionedAt(pos)), None, someSelections)) must equal (unaliased(":b")(pos) ++ someSelections)
+      AliasAnalysis.expandSelection(Selection(Some(StarSelection(None, Seq((ident(":a"), NoPosition))).positionedAt(pos)), Seq.empty, someSelections)) must equal (unaliased(":b")(pos) ++ someSelections)
     }
 
     "return the user columns if there was a *" in {
       // TODO: check the positions
-      AliasAnalysis.expandSelection(Selection(None, Some(StarSelection(None, Seq.empty).positionedAt(pos)), someSelections)) must equal (unaliased("c","d","e")(pos) ++ someSelections)
+      AliasAnalysis.expandSelection(Selection(None, Seq(StarSelection(None, Seq.empty).positionedAt(pos)), someSelections)) must equal (unaliased("c","d","e")(pos) ++ someSelections)
     }
 
     "return the un-excepted user columns if there was a *" in {
       // TODO: check the positions
-      AliasAnalysis.expandSelection(Selection(None, Some(StarSelection(None, Seq((ident("d"), NoPosition),(ident("e"), NoPosition))).positionedAt(pos)), someSelections)) must equal (unaliased("c")(pos) ++ someSelections)
+      AliasAnalysis.expandSelection(Selection(None, Seq(StarSelection(None, Seq((ident("d"), NoPosition),(ident("e"), NoPosition))).positionedAt(pos)), someSelections)) must equal (unaliased("c")(pos) ++ someSelections)
     }
 
     "return the all user columns if there was a :* and a *" in {
       // TODO: check the positions
-      AliasAnalysis.expandSelection(Selection(Some(StarSelection(None, Seq.empty).positionedAt(pos)), Some(StarSelection(None, Seq.empty).positionedAt(pos2)), someSelections)) must equal (unaliased(":a",":b")(pos) ++ unaliased("c","d","e")(pos2) ++ someSelections)
+      AliasAnalysis.expandSelection(Selection(Some(StarSelection(None, Seq.empty).positionedAt(pos)), Seq(StarSelection(None, Seq.empty).positionedAt(pos2)), someSelections)) must equal (unaliased(":a",":b")(pos) ++ unaliased("c","d","e")(pos2) ++ someSelections)
     }
   }
 

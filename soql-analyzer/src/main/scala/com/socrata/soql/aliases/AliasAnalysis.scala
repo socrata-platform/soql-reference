@@ -50,10 +50,15 @@ object AliasAnalysis extends AliasAnalysis {
    * @throws com.socrata.soql.exceptions.NoSuchColumn if a column not on the dataset is excepted
    */
   def expandSelection(selection: Selection)(implicit ctx: AnalysisContext): Seq[SelectedExpression] = {
-    val Selection(systemStar, userStar, expressions) = selection
-    val (systemColumns, userColumns) = ctx(TableName.PrimaryTable.qualifier).columns.partition(_.name.startsWith(":"))
+    val Selection(systemStar, userStars, expressions) = selection
+    val ctxKeyForSystem = systemStar.flatMap(_.qualifier).getOrElse(TableName.PrimaryTable.qualifier)
+    val systemColumns = ctx(ctxKeyForSystem).columns.filter(_.name.startsWith(":"))
     systemStar.toSeq.flatMap(processStar(_, systemColumns)) ++
-      userStar.toSeq.flatMap(processStar(_, userColumns)) ++
+      userStars.flatMap { userStar =>
+        val ctxKeyForUser = userStar.qualifier.getOrElse(TableName.PrimaryTable.qualifier)
+        val userColumns = ctx(ctxKeyForUser).columns.filterNot(_.name.startsWith(":"))
+        processStar(userStar, userColumns)
+      } ++
       expressions
   }
 
