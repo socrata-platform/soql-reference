@@ -412,4 +412,15 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("z") -> typedExpression("@x1.z")
     ))
   }
+
+  test("`SELECT *` toString") {
+    val soql = "SELECT @a1.:*, @a1.*, * JOIN @aaaa-aaax AS x1 ON visits > 10"
+    val parsed = new Parser().unchainedSelectStatement(soql)
+
+    val expected = "SELECT @a1.:*, @a1.*, * JOIN @aaaa-aaax AS x1 ON `visits` > 10"
+    parsed.toString must equal(expected)
+
+    val parsedAgain = new Parser().unchainedSelectStatement(expected)
+    parsedAgain.toString must equal(expected)
+  }
 }

@@ -179,7 +179,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       case Some(qual ~ _) ~ star ~ exceptions => StarSelection(Some(qual._1), exceptions.getOrElse(Seq.empty)).positionedAt(qual._2)
     }
 
-  def allUserSelectionList = rep1sep(allUserSelection, COMMA()) ^^ ( _.map { star =>  star } )
+  def allUserSelectionList = rep1sep(allUserSelection, COMMA()) ^^ ( _.map { star => star } )
 
   def allUserSelection =
     opt(tableIdentifier ~ DOT()) ~ STAR() ~ opt(selectExceptions(userIdentifier)) ^^ {

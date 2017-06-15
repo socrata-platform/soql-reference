@@ -31,7 +31,12 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[
   override def toString = {
     if(AST.pretty) {
       def star(s: StarSelection, token: String) = {
-        val sb = new StringBuilder(token)
+        val sb = new StringBuilder()
+        s.qualifier.foreach { x =>
+          sb.append(x.replaceFirst(TableName.SodaFountainTableNamePrefix, TableName.Prefix))
+          sb.append(TableName.Field)
+        }
+        sb.append(token)
         if(s.exceptions.nonEmpty) {
           sb.append(s.exceptions.map(e => e._1).mkString(" (EXCEPT ", ", ", ")"))
         }
