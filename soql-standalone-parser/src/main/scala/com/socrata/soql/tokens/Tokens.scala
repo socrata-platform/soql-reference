@@ -30,6 +30,7 @@ case class ORDER() extends Token
 case class LIMIT() extends Token
 case class OFFSET() extends Token
 case class SEARCH() extends Token
+case class FROM() extends Token
 
 // Joins
 case class JOIN() extends Token
@@ -47,9 +48,6 @@ case class DESC() extends Token with OrderDirection
 sealed trait NullPlacement
 case class FIRST() extends Token with NullPlacement
 case class LAST() extends Token with NullPlacement
-
-// Presently unused keywords
-case class FROM() extends Token
 
 // Query chaining
 case class QUERYPIPE() extends Token

@@ -64,7 +64,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     Map(TableName.PrimaryTable.qualifier -> datasetCtx,
         TableName("_aaaa-aaaa", None).qualifier -> joinCtx,
         TableName("_aaaa-aaab", Some("_a1")).qualifier -> joinAliasCtx,
-        TableName("_aaaa-aaax", Some("_x1")).qualifier -> joinAliasWoOverlapCtx)
+        TableName("_aaaa-aaax", Some("_x1")).qualifier -> joinAliasWoOverlapCtx,
+        TableName("_aaaa-aaab", None).qualifier -> joinAliasCtx,
+        TableName("_aaaa-aaax", None).qualifier -> joinAliasWoOverlapCtx)
 
   val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo)
 
@@ -348,7 +350,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> visit,
       ColumnName("name_last") -> lastName
     ))
-    analysis.join must equal (Some(List(typed.InnerJoin(TableName("_aaaa-aaaa", None), typedExpression("name_last = @aaaa-aaaa.name_last")))))
+    analysis.join must equal (Some(List(typed.InnerJoin(Seq(SimpleSoQLAnalysis[ColumnName, TestType]("_aaaa-aaaa")), None, typedExpression("name_last = @aaaa-aaaa.name_last")))))
   }
 
   test("join with table alias") {
@@ -357,7 +359,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    analysis.join must equal (Some(List(typed.InnerJoin(TableName("_aaaa-aaaa", Some("_a1")), typedExpression("visits > 10")))))
+    analysis.join must equal (Some(List(typed.InnerJoin(Seq(SimpleSoQLAnalysis[ColumnName, TestType]("_aaaa-aaaa")), Some("_a1"), typedExpression("visits > 10")))))
   }
 
   test("join toString") {
@@ -422,5 +424,29 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
 
     val parsedAgain = new Parser().unchainedSelectStatement(expected)
     parsedAgain.toString must equal(expected)
+  }
+
+  test("join with sub-query") {
+    val joinSubSoql = "select * from @aaaa-aaab where name_first = 'xxx'"
+    val subAnalysis = analyzer.analyzeUnchainedQuery(joinSubSoql)(Map(TableName.PrimaryTable.qualifier -> joinAliasCtx))
+    val analysis = analyzer.analyzeUnchainedQuery(s"select visits, @a1.name_first join ($joinSubSoql) as a1 on name_first = @a1.name_first")
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName("visits") -> typedExpression("visits"),
+      ColumnName("name_first") -> typedExpression("@a1.name_first")
+    ))
+    val expected = Some(Seq(typed.InnerJoin(Seq(subAnalysis), Some("_a1"), typedExpression("name_first = @a1.name_first"))))
+    analysis.join must equal (expected)
+  }
+
+  test("join with sub-chained-query") {
+    val joinSubSoql = "select * from @aaaa-aaab where name_first = 'aaa' |> select * where name_first = 'bbb'"
+    val subAnalyses = analyzer.analyzeFullQuery(joinSubSoql)(Map(TableName.PrimaryTable.qualifier -> joinAliasCtx))
+    val analysis = analyzer.analyzeUnchainedQuery(s"select visits, @a1.name_first join ($joinSubSoql) as a1 on name_first = @a1.name_first")
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName("visits") -> typedExpression("visits"),
+      ColumnName("name_first") -> typedExpression("@a1.name_first")
+    ))
+    val expected = Some(Seq(typed.InnerJoin(subAnalyses, Some("_a1"), typedExpression("name_first = @a1.name_first"))))
+    analysis.join must equal (expected)
   }
 }

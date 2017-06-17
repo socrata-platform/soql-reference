@@ -3,12 +3,13 @@ package com.socrata.soql.ast
 import scala.util.parsing.input.{NoPosition, Position}
 import com.socrata.soql.environment.{ColumnName, TableName}
 
-case class Select(distinct: Boolean, selection: Selection, join: Option[List[Join]], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) {
+case class Select(distinct: Boolean, selection: Selection, from: Option[TableName], join: Option[List[Join]], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) {
   override def toString = {
     if(AST.pretty) {
       val sb = new StringBuilder("SELECT ")
       if (distinct) sb.append("DISTINCT ")
       sb.append(selection)
+      from.foreach(sb.append(" FROM ").append(_))
       join.toList.flatten.foreach { j =>
         sb.append(" ")
         sb.append(j.toString)
@@ -78,3 +79,33 @@ case class OrderBy(expression: Expression, ascending: Boolean, nullLast: Boolean
     }
 }
 
+object SimpleSelect {
+  def apply(resource: String): Select = {
+    Select(distinct = false,
+           selection = Selection(None, Seq.empty, Seq.empty),
+           from = Some(TableName(resource)),
+           join = None,
+           where = None,
+           groupBy = None,
+           having = None,
+           orderBy = None,
+           limit = None,
+           offset = None,
+           search = None)
+  }
+
+  /**
+    * Simple Select is a select created by a join where a sub-query is not used like "JOIN @aaaa-aaaa"
+    */
+  def isSimple(select: Select): Boolean = {
+    val s = select.selection
+    select.from.isDefined && s.allSystemExcept.isEmpty && s.allUserExcept.isEmpty && s.expressions.isEmpty
+  }
+
+  def isSimple(selects: Seq[Select]): Boolean = {
+    selects match {
+      case Seq(s) => isSimple(s)
+      case _ => false
+    }
+  }
+}
