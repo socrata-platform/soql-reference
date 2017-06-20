@@ -31,6 +31,15 @@ case class LIMIT() extends Token
 case class OFFSET() extends Token
 case class SEARCH() extends Token
 
+// Joins
+case class JOIN() extends Token
+case class ON() extends Token
+case class INNER() extends Token
+case class OUTER() extends Token
+case class LEFT() extends Token
+case class RIGHT() extends Token
+case class FULL() extends Token
+
 sealed trait OrderDirection
 case class ASC() extends Token with OrderDirection
 case class DESC() extends Token with OrderDirection
@@ -41,13 +50,6 @@ case class LAST() extends Token with NullPlacement
 
 // Presently unused keywords
 case class FROM() extends Token
-case class FULL() extends Token
-case class INNER() extends Token
-case class JOIN() extends Token
-case class LEFT() extends Token
-case class ON() extends Token
-case class OUTER() extends Token
-case class RIGHT() extends Token
 
 // Query chaining
 case class QUERYPIPE() extends Token

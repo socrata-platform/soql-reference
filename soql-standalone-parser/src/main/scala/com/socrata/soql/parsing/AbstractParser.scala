@@ -138,7 +138,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def searchClause = SEARCH() ~> stringLiteral
 
   def joinClause: PackratParser[Join] =
-    opt((LEFT() | RIGHT()) ~ OUTER()) ~ JOIN() ~ tableIdentifier ~ opt(AS() ~> simpleIdentifier) ~ ON() ~ expr ^^ {
+    opt((LEFT() | RIGHT() | FULL()) ~ OUTER()) ~ JOIN() ~ tableIdentifier ~ opt(AS() ~> simpleIdentifier) ~ ON() ~ expr ^^ {
       case None ~ j ~ t ~ None ~ o ~ e => InnerJoin(TableName(t._1, None), e)
       case None ~ j ~ t ~ Some((alias, pos)) ~ o ~ e => InnerJoin(TableName(t._1, Some(TableName.SodaFountainTableNamePrefix + alias)), e)
       case Some(jd) ~ j ~ t ~ None ~ o ~ e => OuterJoin(jd._1, TableName(t._1, None), e)
