@@ -1,7 +1,7 @@
 package com.socrata.soql.typed
 
 import com.socrata.soql.environment.TableName
-import com.socrata.soql.ast.{InnerJoinType, JoinType, LeftOuterJoinType, RightOuterJoinType}
+import com.socrata.soql.ast._
 
 
 sealed trait Join[ColumnId, Type] {
@@ -26,6 +26,10 @@ case class RightOuterJoin[ColumnId, Type](tableName: TableName, expr: CoreExpr[C
   val typ: JoinType = RightOuterJoinType
 }
 
+case class FullOuterJoin[ColumnId, Type](tableName: TableName, expr: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
+  val typ: JoinType = FullOuterJoinType
+}
+
 object Join {
 
   def apply[ColumnId, Type](joinType: JoinType, tableName: TableName, expr: CoreExpr[ColumnId, Type]): Join[ColumnId, Type] = {
@@ -33,6 +37,7 @@ object Join {
       case InnerJoinType => InnerJoin(tableName, expr)
       case LeftOuterJoinType => LeftOuterJoin(tableName, expr)
       case RightOuterJoinType => RightOuterJoin(tableName, expr)
+      case FullOuterJoinType => FullOuterJoin(tableName, expr)
     }
   }
 }
