@@ -449,4 +449,57 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     val expected = Some(Seq(typed.InnerJoin(subAnalyses, Some("_a1"), typedExpression("name_first = @a1.name_first"))))
     analysis.join must equal (expected)
   }
+
+  test("nested join") {
+    val analysis = analyzer.analyzeUnchainedQuery(s"""
+SELECT visits, @x3.x
+  JOIN (SELECT @x2.x, @a1.name_first FROM @aaaa-aaab as a1
+          JOIN (SELECT @x1.x FROM @aaaa-aaax as x1) as x2 on @x2.x = @a1.name_first
+       ) as x3 on @x3.x = name_first
+      """)
+
+    val Some(innermostJoin) = analysis.join.get.head.tableLike.head.join
+    val innermostAnalysis = innermostJoin.head.tableLike.head
+    innermostAnalysis.selection.toSeq must equal (Seq(
+      ColumnName("x") -> ColumnRef(Some("_x1"), ColumnName("x"), TestText)(NoPosition)
+    ))
+
+    val Some(join) = analysis.join
+    val joinAnalysis = analysis.join.get.head.tableLike.head
+    joinAnalysis.selection.toSeq must equal (Seq(
+      ColumnName("x") -> ColumnRef(Some("_x2"), ColumnName("x"), TestText)(NoPosition),
+      ColumnName("name_first") -> ColumnRef(Some("_a1"), ColumnName("name_first"), TestText)(NoPosition)
+    ))
+
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName("visits") -> ColumnRef(None, ColumnName("visits"), TestNumber)(NoPosition),
+      ColumnName("x") -> ColumnRef(Some("_x3"), ColumnName("x"), TestText)(NoPosition)
+    ))
+  }
+
+  test("nested join re-using table alias - x2") {
+    val analysis = analyzer.analyzeUnchainedQuery(s"""
+SELECT visits, @x2.zx
+ RIGHT OUTER JOIN (SELECT @x2.x as zx FROM @aaaa-aaab as a1
+          LEFT OUTER JOIN (SELECT @x1.x FROM @aaaa-aaax as x1) as x2 on @x2.x = @a1.name_first
+       ) as x2 on @x2.zx = name_first
+      """)
+
+    val Some(innermostLeftOuterJoin) = analysis.join.get.head.tableLike.head.join
+    val innermostAnalysis = innermostLeftOuterJoin.head.tableLike.head
+    innermostAnalysis.selection.toSeq must equal (Seq(
+      ColumnName("x") -> ColumnRef(Some("_x1"), ColumnName("x"), TestText)(NoPosition)
+    ))
+
+    val Some(rightOuterJoin) = analysis.join
+    val rightOuterJoinAnalysis = analysis.join.get.head.tableLike.head
+    rightOuterJoinAnalysis.selection.toSeq must equal (Seq(
+      ColumnName("zx") -> ColumnRef(Some("_x2"), ColumnName("x"), TestText)(NoPosition)
+    ))
+
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName("visits") -> ColumnRef(None, ColumnName("visits"), TestNumber)(NoPosition),
+      ColumnName("zx") -> ColumnRef(Some("_x2"), ColumnName("zx"), TestText)(NoPosition)
+    ))
+  }
 }
