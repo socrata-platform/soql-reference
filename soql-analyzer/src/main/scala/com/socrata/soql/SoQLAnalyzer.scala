@@ -29,6 +29,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   val aggregateChecker = new AggregateChecker[Type]
 
   /** Turn a SoQL SELECT statement into a sequence of typed `Analysis` objects.
+    *
     * @param query The SELECT to parse and analyze
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
     * @return The analysis of the query */
@@ -52,6 +53,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   }
 
   /** Turn a simple SoQL SELECT statement into an `Analysis` object.
+    *
     * @param query The SELECT to parse and analyze
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
     * @return The analysis of the query */
@@ -416,6 +418,57 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
       having = having.map(_.mapColumnIds(f)),
       orderBy = orderBy.map(_.map(_.mapColumnIds(f)))
     )
+
+  def mapColumnIds[NewColumnId](qColumnIdNewColumnIdMap: Map[(ColumnId, Qualifier), NewColumnId],
+                                qColumnNameToQColumnId: (Qualifier, ColumnName) => (ColumnId, Qualifier),
+                                columnNameToNewColumnId: ColumnName => NewColumnId,
+                                columnIdToNewColumnId: ColumnId => NewColumnId): SoQLAnalysis[NewColumnId, Type] = {
+    val newColumnsFromJoin = join.toSeq.flatten.filter(x => !SimpleSoQLAnalysis.isSimple(x.tableLike)).flatMap { j =>
+      j.tableLike.last.selection.map { case (columnName, _) =>
+        qColumnNameToQColumnId(j.alias, columnName) -> columnNameToNewColumnId(columnName)
+      }}.toMap
+
+    val qColumnIdNewColumnIdWithJoinsMap = qColumnIdNewColumnIdMap ++ newColumnsFromJoin
+
+    copy(
+      selection = selection.mapValues(_.mapColumnIds(t2ToF2(qColumnIdNewColumnIdWithJoinsMap))),
+      join = join.map { joins => joins.map { j =>
+        val analysesInColIds = j.tableLike.foldLeft(Seq.empty[SoQLAnalysis[NewColumnId, Type]]) { (convertedAnalyses, analysis) =>
+          val joinMap =
+            convertedAnalyses.lastOption match {
+              case None =>
+                qColumnIdNewColumnIdMap.foldLeft(Map.empty[(ColumnId, Qualifier), NewColumnId]) { (acc, kv) =>
+                  val ((cid, qual), ncid) = kv
+                  if (qual == j.tableLike.head.from) acc + ((cid, None) -> ncid)
+                  else acc
+                }
+              case Some(prevAnalysis) =>
+                prevAnalysis.selection.foldLeft(qColumnIdNewColumnIdMap) { (acc, selCol) =>
+                  val (colName, expr) = selCol
+                  acc + (qColumnNameToQColumnId(None, colName) -> columnNameToNewColumnId(colName))
+                }
+            }
+
+          val a = analysis.mapColumnIds(joinMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
+          convertedAnalyses :+ a
+        }
+
+        val remappedJoin = analysesInColIds
+        typed.Join(j.typ, remappedJoin, j.alias, j.expr.mapColumnIds(t2ToF2(qColumnIdNewColumnIdWithJoinsMap)))
+      }},
+      where = where.map(_.mapColumnIds(t2ToF2(qColumnIdNewColumnIdWithJoinsMap))),
+      groupBy = groupBy.map(_.map(_.mapColumnIds(t2ToF2(qColumnIdNewColumnIdWithJoinsMap)))),
+      having = having.map(_.mapColumnIds(t2ToF2(qColumnIdNewColumnIdWithJoinsMap))),
+      orderBy = orderBy.map(_.map(_.mapColumnIds(t2ToF2(qColumnIdNewColumnIdWithJoinsMap))))
+    )
+  }
+
+  /**
+    * Change function from taking tuple2 to function taking two parameters.
+    */
+  private def t2ToF2[A, B, X](f: Tuple2[A, B] => X)(a: A, b: B): X = {
+    f(Tuple2(a, b))
+  }
 }
 
 object SoQLAnalysis {

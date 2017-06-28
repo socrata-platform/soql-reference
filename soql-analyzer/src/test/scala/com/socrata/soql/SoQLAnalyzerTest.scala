@@ -345,7 +345,6 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     visit.qualifier must equal(None)
     val lastName: ColumnRef[_, _] = typedExpression("@aaaa-aaaa.name_last").asInstanceOf[ColumnRef[_, _]]
     lastName.qualifier must equal(Some("_aaaa-aaaa"))
-    println(lastName.toString)
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> visit,
       ColumnName("name_last") -> lastName
