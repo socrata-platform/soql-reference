@@ -179,9 +179,10 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
           val elems = new ListBuffer[Join[C, T]]
           for (_ <- 1 to count) {
             val joinType = JoinType(in.readString())
-            val tableName = TableName(in.readString(), maybeRead(in.readString()))
+            val tableLike = read()
+            val alias = maybeRead(in.readString)
             val expr = readExpr()
-            elems += Join(joinType, tableName, expr)
+            elems += Join(joinType, tableLike, alias, expr)
           }
           Some(elems.result())
         }
@@ -231,6 +232,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val isGrouped = readIsGrouped()
       val distinct = readDistinct()
       val selection = readSelection()
+      val from = maybeRead(in.readString)
       val join = readJoins()
       val where = readWhere()
       val groupBy = readGroupBy()
@@ -243,6 +245,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         isGrouped,
         distinct,
         selection,
+        from,
         join,
         where,
         groupBy,

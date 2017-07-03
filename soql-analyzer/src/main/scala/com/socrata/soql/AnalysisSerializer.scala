@@ -220,8 +220,8 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       out.writeUInt32NoTag(size)
       joins.toList.flatten.foreach { join =>
         out.writeStringNoTag(join.typ.toString)
-        out.writeStringNoTag(join.tableName.name)
-        maybeWrite(join.tableName.alias)(alias => out.writeStringNoTag(alias))
+        write(join.tableLike)
+        maybeWrite(join.alias)(x => out.writeStringNoTag(x))
         writeExpr(join.expr)
       }
     }
@@ -278,6 +278,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       val SoQLAnalysis(isGrouped,
                        distinct,
                        selection,
+                       from,
                        join,
                        where,
                        groupBy,
@@ -289,6 +290,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       writeGrouped(isGrouped)
       writeDistinct(analysis.distinct)
       writeSelection(selection)
+      maybeWrite(from) { x => out.writeStringNoTag(x) }
       writeJoins(join)
       writeWhere(where)
       writeGroupBy(groupBy)

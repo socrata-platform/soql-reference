@@ -143,7 +143,6 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
       """{ "type": "MultiPoint", "coordinates": [ [0.0, 0.0], [0.0, 20.0], [20.0, 20.0]]}""".stripMargin
     val wkt = "MULTIPOINT ((0 0), (0 20), (20 20))"
     val pts = Seq(SoQLMultiPoint.JsonRep.unapply(json), SoQLMultiPoint.WktRep.unapply(wkt))
-    println(pts.toString)
     pts.foreach {
       pt =>
         pt must not be (None)

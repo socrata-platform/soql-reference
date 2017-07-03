@@ -100,12 +100,13 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
 
   def unchainedSelect: Parser[Select] =
     if(allowJoins) {
-      SELECT() ~> distinct ~ selectList ~ opt(joinList) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-        case d ~ s ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(d, s, j, w, gb, h, ord, lim, off, sr)
+      SELECT() ~> distinct ~ selectList ~ opt(FROM() ~> tableIdentifier ~ opt(AS() ~> simpleIdentifier)) ~
+        opt(joinList) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+        case d ~ s ~ f ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(d, s, f.map(x => TableName(x._1._1, x._2.map(TableName.SodaFountainTableNamePrefix + _._1))), j, w, gb, h, ord, lim, off, sr)
       }
     } else {
-      SELECT() ~> distinct ~ selectList ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-        case d ~ s ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(d, s, None, w, gb, h, ord, lim, off, sr)
+      SELECT() ~> distinct ~ selectList ~ opt(FROM() ~> tableIdentifier ~ opt(AS() ~> simpleIdentifier)) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+        case d ~ s ~ f ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(d, s, f.map(x => TableName(x._1._1, x._2.map(TableName.SodaFountainTableNamePrefix + _._1))), None, w, gb, h, ord, lim, off, sr)
       }
     }
 
@@ -138,14 +139,20 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def searchClause = SEARCH() ~> stringLiteral
 
   def joinClause: PackratParser[Join] =
-    opt((LEFT() | RIGHT() | FULL()) ~ OUTER()) ~ JOIN() ~ tableIdentifier ~ opt(AS() ~> simpleIdentifier) ~ ON() ~ expr ^^ {
-      case None ~ j ~ t ~ None ~ o ~ e => InnerJoin(TableName(t._1, None), e)
-      case None ~ j ~ t ~ Some((alias, pos)) ~ o ~ e => InnerJoin(TableName(t._1, Some(TableName.SodaFountainTableNamePrefix + alias)), e)
-      case Some(jd) ~ j ~ t ~ None ~ o ~ e => OuterJoin(jd._1, TableName(t._1, None), e)
-      case Some(jd) ~ j ~ t ~ Some((alias, pos)) ~ o ~ e => OuterJoin(jd._1, TableName(t._1, Some(TableName.SodaFountainTableNamePrefix + alias)), e)
+    opt((LEFT() | RIGHT() | FULL()) ~ OUTER()) ~ JOIN() ~ tableLike ~ opt(AS() ~> simpleIdentifier) ~ ON() ~ expr ^^ {
+      case None ~ j ~ t ~ None ~ o ~ e => InnerJoin(t, None, e)
+      case None ~ j ~ t ~ Some((alias, pos)) ~ o ~ e => InnerJoin(t, Some(TableName.SodaFountainTableNamePrefix + alias), e)
+      case Some(jd) ~ j ~ t ~ None ~ o ~ e => OuterJoin(jd._1, t, None, e)
+      case Some(jd) ~ j ~ t ~ Some((alias, pos)) ~ o ~ e => OuterJoin(jd._1, t, Some(TableName.SodaFountainTableNamePrefix + alias), e)
     }
 
   def joinList = rep1(joinClause)
+
+  def tableLike: Parser[Seq[Select]] =
+    LPAREN() ~ pipedSelect ~ RPAREN() ^^ { case _ ~ x ~ _=> x} |
+    tableIdentifier ^^ {
+      case (tid: String, _) => Seq(Select(false, Selection(None, Seq.empty, Seq.empty), Some(TableName(tid, None)), None, None, None, None, None, None, None, None))
+    }
 
   /*
    *               ********************

@@ -22,6 +22,7 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
       ss.updated(0, Select(
         distinct = s.distinct,
         selection = mapSelection(s.selection),
+        from = s.from,
         join = None,
         where = s.where map mapExpression,
         groupBy = s.groupBy.map(_ map mapExpression),
