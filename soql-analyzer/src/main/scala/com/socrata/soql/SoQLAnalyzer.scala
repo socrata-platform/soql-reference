@@ -431,7 +431,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
     val qColumnIdNewColumnIdWithJoinsMap = qColumnIdNewColumnIdMap ++ newColumnsFromJoin
 
     copy(
-      selection = selection.mapValues(_.mapColumnIds(t2ToF2(qColumnIdNewColumnIdWithJoinsMap))),
+      selection = selection.mapValues(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
       join = join.map { joins => joins.map { j =>
         val analysesInColIds = j.tableLike.foldLeft(Seq.empty[SoQLAnalysis[NewColumnId, Type]]) { (convertedAnalyses, analysis) =>
           val joinMap =
@@ -454,20 +454,13 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
         }
 
         val remappedJoin = analysesInColIds
-        typed.Join(j.typ, remappedJoin, j.alias, j.expr.mapColumnIds(t2ToF2(qColumnIdNewColumnIdWithJoinsMap)))
+        typed.Join(j.typ, remappedJoin, j.alias, j.expr.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
       }},
-      where = where.map(_.mapColumnIds(t2ToF2(qColumnIdNewColumnIdWithJoinsMap))),
-      groupBy = groupBy.map(_.map(_.mapColumnIds(t2ToF2(qColumnIdNewColumnIdWithJoinsMap)))),
-      having = having.map(_.mapColumnIds(t2ToF2(qColumnIdNewColumnIdWithJoinsMap))),
-      orderBy = orderBy.map(_.map(_.mapColumnIds(t2ToF2(qColumnIdNewColumnIdWithJoinsMap))))
+      where = where.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
+      groupBy = groupBy.map(_.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))),
+      having = having.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
+      orderBy = orderBy.map(_.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))))
     )
-  }
-
-  /**
-    * Change function from taking tuple2 to function taking two parameters.
-    */
-  private def t2ToF2[A, B, X](f: Tuple2[A, B] => X)(a: A, b: B): X = {
-    f(Tuple2(a, b))
   }
 }
 
