@@ -111,9 +111,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val pos = readPosition()
       in.readRawByte() match {
         case 1 =>
-          val qual =
-            if (version >= 3 || version == TestVersion) maybeRead(in.readString())
-            else None
+          val qual = maybeRead(in.readString())
           val name = dictionary.columns(in.readUInt32())
           val typ = dictionary.types(in.readUInt32())
           ColumnRef(qual, name, typ)(pos)
@@ -145,13 +143,8 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     def readIsGrouped(): Boolean =
       in.readBool()
 
-    def readDistinct(): Boolean = {
-      version match {
-        case 1 => false
-        case TestVersion | 2 => in.readBool()
-        case _ => in.readBool()
-      }
-    }
+    def readDistinct(): Boolean =
+      in.readBool()
 
     def maybeRead[A](f: => A): Option[A] =
       if(in.readBool()) Some(f)
@@ -169,23 +162,19 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     }
 
     def readJoins(): Option[List[Join[C, T]]] = {
-      if (version < 3 && version != TestVersion) {
+      val count = in.readUInt32()
+      if (count == 0) {
         None
       } else {
-        val count = in.readUInt32()
-        if (count == 0) {
-          None
-        } else {
-          val elems = new ListBuffer[Join[C, T]]
-          for (_ <- 1 to count) {
-            val joinType = JoinType(in.readString())
-            val tableLike = read()
-            val alias = maybeRead(in.readString)
-            val expr = readExpr()
-            elems += Join(joinType, tableLike, alias, expr)
-          }
-          Some(elems.result())
+        val elems = new ListBuffer[Join[C, T]]
+        for (_ <- 1 to count) {
+          val joinType = JoinType(in.readString())
+          val tableLike = read()
+          val alias = maybeRead(in.readString)
+          val expr = readExpr()
+          elems += Join(joinType, tableLike, alias, expr)
         }
+        Some(elems.result())
       }
     }
 
@@ -269,7 +258,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, 0)
         Seq(deserializer.readAnalysis())
-      case v if v >= 1 && v <= 3 =>
+      case v if v == 3 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
         deserializer.read()
