@@ -10,6 +10,7 @@ trait TypeInfo[Type] {
   def booleanLiteralExpr(b: Boolean, pos: Position): Seq[CoreExpr[Nothing, Type]]
   def stringLiteralExpr(s: String, pos: Position): Seq[CoreExpr[Nothing, Type]]
   def numberLiteralExpr(n: BigDecimal, pos: Position): Seq[CoreExpr[Nothing, Type]]
+  def longLiteralExpr(l: Long, pos: Position): Seq[CoreExpr[Nothing, Type]]
   def nullLiteralExpr(pos: Position): Seq[CoreExpr[Nothing, Type]]
 
   def typeFor(name: TypeName): Option[Type]

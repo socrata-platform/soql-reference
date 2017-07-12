@@ -198,6 +198,10 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
           out.writeUInt32NoTag(registerFunction(func))
           out.writeUInt32NoTag(params.length)
           for(param <- params) writeExpr(param)
+        case LongLiteral(value, typ) =>
+          out.writeRawByte(7)
+          out.writeUInt64NoTag(value)
+          out.writeUInt32NoTag(registerType(typ))
       }
     }
 

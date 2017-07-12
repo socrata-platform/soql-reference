@@ -84,6 +84,8 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       Right(stringLiteralExpr(s, sl.position))
     case nl@NumberLiteral(n) =>
       Right(numberLiteralExpr(n, nl.position))
+    case ll@LongLiteral(l) =>
+      Right(longLiteralExpr(l, ll.position))
     case nl@NullLiteral() =>
       Right(nullLiteralExpr(nl.position))
   }

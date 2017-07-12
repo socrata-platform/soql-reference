@@ -91,6 +91,8 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
     )
   }
 
+  def longLiteralExpr(n: Long, pos: Position) = Seq(typed.LongLiteral(n, SoQLNumber.t)(pos))
+
   def nullLiteralExpr(pos: Position) = typeParameterUniverse.toSeq.map(typed.NullLiteral(_)(pos))
 
   def typeFor(name: TypeName) =

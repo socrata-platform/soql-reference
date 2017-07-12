@@ -34,6 +34,8 @@ object TestTypeInfo extends TypeInfo[TestType] {
     )
   }
 
+  def longLiteralExpr(l: Long, pos: Position) = Seq(typed.LongLiteral(l, TestNumber.t)(pos))
+
   def nullLiteralExpr(pos: Position) = typeParameterUniverse.toSeq.map(typed.NullLiteral(_)(pos))
 
   def typeFor(name: TypeName) =

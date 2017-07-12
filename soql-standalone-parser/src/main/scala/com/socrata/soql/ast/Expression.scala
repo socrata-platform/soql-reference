@@ -107,6 +107,9 @@ sealed abstract class Literal extends Expression {
 case class NumberLiteral(value: BigDecimal)(val position: Position) extends Literal {
   protected def asString = value.toString
 }
+case class LongLiteral(value: Long)(val position: Position) extends Literal {
+  protected def asString = value.toString
+}
 case class StringLiteral(value: String)(val position: Position) extends Literal {
   protected def asString = "'" + value.replaceAll("'", "''") + "'"
 }

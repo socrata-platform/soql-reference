@@ -38,6 +38,9 @@ sealed abstract class TypedLiteral[Type] extends CoreExpr[Nothing, Type] {
 case class NumberLiteral[Type](value: BigDecimal, typ: Type)(val position: Position) extends TypedLiteral[Type] {
   protected def asString = value.toString
 }
+case class LongLiteral[Type](value: Long, typ: Type)(val position: Position) extends TypedLiteral[Type] {
+  protected def asString = value.toString
+}
 case class StringLiteral[Type](value: String, typ: Type)(val position: Position) extends TypedLiteral[Type] {
   protected def asString = Expression.escapeString(value)
 }
