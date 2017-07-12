@@ -137,6 +137,10 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
             readExpr()
           }
           FunctionCall(func, params)(pos, functionNamePosition)
+        case 7 =>
+          val value = java.lang.Long.parseLong(dictionary.strings(in.readUInt32()))
+          val typ = dictionary.types(in.readUInt32())
+          LongLiteral(value, typ)(pos)
       }
     }
 
