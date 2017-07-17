@@ -261,7 +261,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, 0)
         Seq(deserializer.readAnalysis())
-      case v if v == 3 =>
+      case v if v >= 3 && v <= 4 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
         deserializer.read()
