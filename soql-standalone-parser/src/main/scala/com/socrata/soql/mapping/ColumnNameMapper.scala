@@ -23,7 +23,7 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
         distinct = s.distinct,
         selection = mapSelection(s.selection),
         from = s.from,
-        join = None,
+        join = s.join.map(_ map mapJoin),
         where = s.where map mapExpression,
         groupBy = s.groupBy.map(_ map mapExpression),
         having = s.having map mapExpression,
@@ -33,6 +33,21 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
         search = s.search))
     } else {
       ss
+    }
+  }
+
+  def mapJoin(join: Join): Join =  {
+    val mappedTableLike = mapSelect(join.tableLike)
+    val mappedExpr = mapExpression(join.expr)
+    join match {
+      case j: InnerJoin =>
+        InnerJoin(mappedTableLike, j.alias, mappedExpr)
+      case j: LeftOuterJoin =>
+        j.copy(tableLike = mappedTableLike, expr = mappedExpr)
+      case j: RightOuterJoin =>
+        j.copy(tableLike = mappedTableLike, expr = mappedExpr)
+      case j: FullOuterJoin =>
+        j.copy(tableLike = mappedTableLike, expr = mappedExpr)
     }
   }
 
