@@ -171,6 +171,16 @@ object SoQLFunctions {
   val FloatingTimeStampExtractDow = mf("floating timestamp extract day of week", FunctionName("date_extract_dow"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
   val FloatingTimeStampExtractWoy = mf("floating timestamp extract week of year", FunctionName("date_extract_woy"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
 
+  // property notation for timestamp - timestamp.field
+  val FloatingTimeStampDotYear = mf("floating_timestamp_year", FunctionName("floating_timestamp_year"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
+  val FloatingTimeStampDotMonth = mf("floating_timestamp_month", FunctionName("floating_timestamp_month"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
+  val FloatingTimeStampDotDay = mf("floating_timestamp_day", FunctionName("floating_timestamp_day"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
+  val FloatingTimeStampDotHour = mf("floating_timestamp_hour", FunctionName("floating_timestamp_hour"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
+  val FloatingTimeStampDotMinute = mf("floating_timestamp_minute", FunctionName("floating_timestamp_minute"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
+  val FloatingTimeStampDotSecond = mf("floating_timestamp_second", FunctionName("floating_timestamp_second"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
+  val FloatingTimeStampDotWeekOfYear = mf("floating_timestamp_week_of_year", FunctionName("floating_timestamp_week_of_year"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
+  val FloatingTimeStampDotDayOfWeek = mf("floating_timestamp_day_of_week", FunctionName("floating_timestamp_day_of_week"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
+
   val castIdentities = for ((n, t) <- SoQLType.typesByName.toSeq) yield {
     f(n.caseFolded + "::" + n.caseFolded, SpecialFunctions.Cast(n), Map.empty, Seq(FixedType(t)), Seq.empty, FixedType(t))
   }
