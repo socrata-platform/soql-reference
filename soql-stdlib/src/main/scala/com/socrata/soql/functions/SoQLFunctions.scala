@@ -171,6 +171,9 @@ object SoQLFunctions {
   val FloatingTimeStampExtractDow = mf("floating timestamp extract day of week", FunctionName("date_extract_dow"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
   val FloatingTimeStampExtractWoy = mf("floating timestamp extract week of year", FunctionName("date_extract_woy"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
 
+  // Ansi SQL Style timestamp date part extract
+  val FloatingTimeStampExtract = mf("floating timestamp extract", FunctionName("extract"), Seq(SoQLText, SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
+
   // property notation for timestamp - timestamp.field
   val FloatingTimeStampDotYear = mf("floating_timestamp_year", FunctionName("floating_timestamp_year"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
   val FloatingTimeStampDotMonth = mf("floating_timestamp_month", FunctionName("floating_timestamp_month"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)

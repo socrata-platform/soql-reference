@@ -62,6 +62,8 @@ object TestFunctions {
   val FloatingTimeStampExtractHh = mf("floating timestamp extract hour", FunctionName("date_extract_hh"), Seq(TestFloatingTimestamp), Seq.empty, TestNumber)
   val FloatingTimeStampExtractDow = mf("floating timestamp extract day of week", FunctionName("date_extract_dow"), Seq(TestFloatingTimestamp), Seq.empty, TestNumber)
 
+  val FloatingTimeStampExtract = mf("floating timestamp extract", FunctionName("extract"), Seq(TestText, TestFloatingTimestamp), Seq.empty, TestNumber)
+
   val LocationToPoint = mf("loc to point", SpecialFunctions.Cast(TestPoint.name), Seq(TestLocation), Seq.empty, TestPoint)
   val LocationToLatitude = mf("location_latitude", FunctionName("location_latitude"), Seq(TestLocation), Seq.empty, TestNumber)
   val LocationToLongitude = mf("location_longitude", FunctionName("location_longitude"), Seq(TestLocation), Seq.empty, TestNumber)

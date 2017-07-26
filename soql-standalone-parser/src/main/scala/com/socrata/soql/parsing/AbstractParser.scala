@@ -391,6 +391,16 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b))(a.position, op.position)
     }
 
+  val date_part = SECOND() | MINUTE() | HOUR() | DAY() | MONTH() | YEAR() | DOW() | WOY()
+
+  lazy val extractExpr: PackratParser[Expression] = {
+    EXTRACT() ~ LPAREN() ~ date_part ~ FROM() ~ extractExpr ~ RPAREN() ^^ {
+      case fn ~ _ ~ dp ~ _ ~ t ~ _ =>
+        FunctionCall(FunctionName(fn.printable.toLowerCase), Seq(ast.StringLiteral(dp.printable)(fn.position), t))(fn.position, dp.position)
+    } |
+    order
+  }
+
   lazy val isLikeBetweenIn: PackratParser[Expression] =
     isLikeBetweenIn ~ IS() ~ NULL() ^^ {
       case a ~ is ~ _ => FunctionCall(SpecialFunctions.IsNull, Seq(a))(a.position, is.position)
@@ -421,7 +431,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     isLikeBetweenIn ~ (IN() | failure(errors.missingKeywords(NOT(), BETWEEN(), IN(), LIKE()))) ~ LPAREN() ~ rep1sep(expr, COMMA()) ~ RPAREN() ^^  {
       case a ~ in ~ _ ~ es ~ _ => FunctionCall(SpecialFunctions.In, a +: es)(a.position, in.position)
     } |
-    order
+    extractExpr
 
   lazy val negation: PackratParser[Expression] =
     NOT() ~ negation ^^ { case op ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(b))(op.position, op.position) } |
