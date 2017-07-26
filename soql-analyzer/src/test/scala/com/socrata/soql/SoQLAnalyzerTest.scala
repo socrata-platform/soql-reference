@@ -23,6 +23,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("name_last") -> TestText,
       ColumnName("name_first") -> TestText,
       ColumnName("visits") -> TestNumber,
+      ColumnName("first_visit") -> TestFloatingTimestamp,
       ColumnName("last_visit") -> TestFixedTimestamp,
       ColumnName("address") -> TestLocation,
       ColumnName("balance") -> TestMoney,
@@ -75,6 +76,11 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   def typedExpression(s: String) = {
     val tc = new Typechecker(TestTypeInfo, TestFunctionInfo)
     tc(expression(s), Map.empty)
+  }
+
+  test("timestamp date part extract") {
+    val analysis = analyzer.analyzeUnchainedQuery("select extract(minute from first_visit) as x")
+    analysis.selection.toSeq must equal(Seq(ColumnName("x") -> typedExpression("extract(minute from first_visit)")))
   }
 
   test("analysis succeeds in a most minimal query") {
@@ -403,6 +409,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("name_last") -> typedExpression("name_last"),
       ColumnName("name_first") -> typedExpression("name_first"),
       ColumnName("visits") -> typedExpression("visits"),
+      ColumnName("first_visit") -> typedExpression("first_visit"),
       ColumnName("last_visit") -> typedExpression("last_visit"),
       ColumnName("address") -> typedExpression("address"),
       ColumnName("balance") -> typedExpression("balance"),

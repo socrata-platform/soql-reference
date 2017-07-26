@@ -49,6 +49,17 @@ sealed trait NullPlacement
 case class FIRST() extends Token with NullPlacement
 case class LAST() extends Token with NullPlacement
 
+// Date extract / Date parts
+case class EXTRACT() extends Token
+case class SECOND() extends Token
+case class MINUTE() extends Token
+case class HOUR() extends Token
+case class DAY() extends Token
+case class MONTH() extends Token
+case class YEAR() extends Token
+case class DOW() extends Token
+case class WOY() extends Token
+
 // Query chaining
 case class QUERYPIPE() extends Token
 

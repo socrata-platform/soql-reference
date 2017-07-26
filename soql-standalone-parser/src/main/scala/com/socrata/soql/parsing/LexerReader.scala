@@ -94,6 +94,17 @@ object LexerReader {
     BETWEEN,
     LIKE,
 
+    // Date extract / Date parts
+    EXTRACT,
+    SECOND,
+    MINUTE,
+    HOUR,
+    DAY,
+    MONTH,
+    YEAR,
+    DOW,
+    WOY,
+
     // Literals
     () => BooleanLiteral(true),
     () => BooleanLiteral(false),
