@@ -167,7 +167,12 @@ object SoQLFunctions {
   val FloatingTimeStampTruncYm = mf("floating timestamp trunc month", FunctionName("date_trunc_ym"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)
   val FloatingTimeStampTruncY = mf("floating timestamp trunc year", FunctionName("date_trunc_y"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)
 
+  val FloatingTimeStampExtractY = mf("floating timestamp extract year", FunctionName("date_extract_y"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
+  val FloatingTimeStampExtractM = mf("floating timestamp extract month", FunctionName("date_extract_m"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
+  val FloatingTimeStampExtractD = mf("floating timestamp extract day", FunctionName("date_extract_d"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
   val FloatingTimeStampExtractHh = mf("floating timestamp extract hour", FunctionName("date_extract_hh"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
+  val FloatingTimeStampExtractMm = mf("floating timestamp extract minute", FunctionName("date_extract_mm"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
+  val FloatingTimeStampExtractSs = mf("floating timestamp extract second", FunctionName("date_extract_ss"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
   val FloatingTimeStampExtractDow = mf("floating timestamp extract day of week", FunctionName("date_extract_dow"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
   val FloatingTimeStampExtractWoy = mf("floating timestamp extract week of year", FunctionName("date_extract_woy"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
 
