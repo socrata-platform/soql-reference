@@ -6,7 +6,7 @@ case class MonomorphicFunction[Type](function: Function[Type], bindings: Map[Str
   def this(identity: String, name: FunctionName, parameters: Seq[Type], repeated: Seq[Type], result: Type, isAggregate: Boolean = false) =
     this(Function(identity, name, Map.empty, parameters.map(FixedType(_)), repeated.map(FixedType(_)), FixedType(result), isAggregate), Map.empty)
 
-  require(bindings.keySet == function.parameters.collect { case VariableType(n) => n }.toSet, "bindings do not match")
+  require(bindings.keySet.filterNot(_ == "?") == function.parameters.collect { case VariableType(n) => n }.toSet, "bindings do not match")
 
   def name: FunctionName = function.name
   lazy val parameters: Seq[Type] = function.parameters.map(bind)
@@ -22,6 +22,10 @@ case class MonomorphicFunction[Type](function: Function[Type], bindings: Map[Str
   private def bind[B >: Type](typeLike: TypeLike[B]) = typeLike match {
     case FixedType(t) => t
     case VariableType(n) => bindings(n)
+  }
+
+  def isWindowFunction: Boolean = {
+    isAggregate && bindings.contains("?")
   }
 
   override def toString = {

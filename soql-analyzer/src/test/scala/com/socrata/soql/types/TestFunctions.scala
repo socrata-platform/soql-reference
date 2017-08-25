@@ -34,6 +34,12 @@ object TestFunctions {
 
   val Max = f("max", FunctionName("max"), Map("a" -> Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
   val Sum = f("sum", FunctionName("sum"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
+  val Avg = f("avg", FunctionName("avg"),
+              Map("a" -> Set(TestNumber), "?" -> AllTypes),
+              Seq(VariableType("a")),
+              Seq(VariableType("?")),
+              VariableType("a"),
+              isAggregate = true)
   val CountStar = mf("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, TestNumber, isAggregate = true)
 
   val Mul = f("*", SpecialFunctions.Operator("*"), Map("a" -> NumLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"), isAggregate = false)

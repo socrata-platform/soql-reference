@@ -3,9 +3,8 @@ package com.socrata.soql.parsing
 import scala.reflect.ClassTag
 import scala.util.parsing.combinator.{PackratParsers, Parsers}
 import util.parsing.input.Position
-import com.socrata.soql.tokens
+import com.socrata.soql.{ast, tokens}
 import com.socrata.soql.tokens._
-import com.socrata.soql.ast
 import com.socrata.soql.ast._
 import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
 
@@ -311,14 +310,24 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def params: Parser[Either[Position, Seq[Expression]]] =
     LPAREN() ~> paramList <~ (RPAREN() | failure(errors.missingArg))
 
+
+  def windowFunctionParamList: Parser[Either[Position, Seq[Expression]]] =
+    repsep(expr, COMMA()) ^^ (Right(_))
+
+  def windowFunctionParams: Parser[Either[Position, Seq[Expression]]] =
+    LPAREN() ~> PARTITION() ~> BY() ~> windowFunctionParamList <~ (RPAREN() | failure(errors.missingArg))
+
   def identifier_or_funcall: Parser[Expression] =
-    identifier ~ opt(params) ^^ {
-      case ((qual, ident, identPos)) ~ None =>
+    identifier ~ opt(params) ~ opt(OVER() ~ windowFunctionParams) ^^ {
+      case ((qual, ident, identPos)) ~ None ~ None =>
         ColumnOrAliasRef(qual, ColumnName(ident))(identPos)
-      case ((_, ident, identPos)) ~ Some(Right(params)) =>
+      case ((_, ident, identPos)) ~ Some(Right(params)) ~ None =>
         FunctionCall(FunctionName(ident), params)(identPos, identPos)
-      case ((_, ident, identPos)) ~ Some(Left(position)) =>
+      case ((_, ident, identPos)) ~ Some(Left(position)) ~ None =>
         FunctionCall(SpecialFunctions.StarFunc(ident), Seq.empty)(identPos, identPos)
+      case ((_, ident, identPos)) ~ Some(Right(params)) ~ Some(wfParams) =>
+        val allParams = params ++ wfParams._2.right.get
+        FunctionCall(FunctionName(ident), allParams)(identPos, identPos)
     }
 
   def paren: Parser[Expression] =

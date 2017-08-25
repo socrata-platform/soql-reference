@@ -97,6 +97,10 @@ case class OR() extends Token
 case class NOT() extends Token
 case class BANG() extends FormattedToken("!")
 
+// Window functions
+case class OVER() extends Token
+case class PARTITION() extends Token
+
 // Literals
 
 case class NULL() extends Token with LiteralToken

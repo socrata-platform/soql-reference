@@ -59,8 +59,16 @@ class FunctionCallTypechecker[Type](typeInfo: TypeInfo[Type], functionInfo: Func
 
   def evaluateMonomorphicCandidate(candidate: MFunc, parameters: Seq[Set[Type]]): CandidateEvaluation[Type] = {
     require(goodArity(candidate.function, parameters))
-    (candidate.allParameters, parameters, Stream.from(0)).zipped.foreach { (expectedType, availableTypes, idx) =>
-      if(!availableTypes(expectedType)) return TypeMismatchFailure(Set(expectedType), availableTypes, idx)
+
+    val checkedParameters = if (candidate.isWindowFunction) parameters.take(candidate.parameters.size)
+                            else parameters
+    val checkedCandidateAllParameters = if (candidate.isWindowFunction) candidate.parameters
+                                        else candidate.allParameters
+
+    (checkedCandidateAllParameters, checkedParameters, Stream.from(0)).zipped.foreach { (expectedType, availableTypes, idx) =>
+      if(!availableTypes(expectedType)) {
+        return TypeMismatchFailure(Set(expectedType), availableTypes, idx)
+      }
     }
     log.debug("Successfully type-checked {}", candidate.name)
     Passed(candidate)

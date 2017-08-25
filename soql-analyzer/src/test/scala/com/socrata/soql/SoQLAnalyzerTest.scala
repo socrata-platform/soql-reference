@@ -1,6 +1,6 @@
 package com.socrata.soql
 
-import com.socrata.soql.exceptions.{NonBooleanHaving, NonBooleanWhere, NonGroupableGroupBy, UnorderableOrderBy}
+import com.socrata.soql.exceptions._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.PropertyChecks
 
@@ -500,5 +500,22 @@ SELECT visits, @x2.zx
       ColumnName("visits") -> ColumnRef(None, ColumnName("visits"), TestNumber)(NoPosition),
       ColumnName("zx") -> ColumnRef(Some("_x2"), ColumnName("zx"), TestText)(NoPosition)
     ))
+  }
+
+  test("window function") {
+    val analysisWordStyle = analyzer.analyzeUnchainedQuery("SELECT avg(visits) OVER (PARTITION BY name_last, 2, 3)")
+    val select = analysisWordStyle.selection.toSeq
+    select must equal (Seq(
+      ColumnName("avg_visits_name_last_2_3") -> typedExpression("avg(visits, name_last, 2, 3)")
+    ))
+
+    val analysis = analyzer.analyzeUnchainedQuery("SELECT avg(visits)")
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName("avg_visits") -> typedExpression("avg(visits)")
+    ))
+
+    intercept[TypeMismatch] {
+      analyzer.analyzeUnchainedQuery("SELECT avg(name_last)")
+    }
   }
 }
