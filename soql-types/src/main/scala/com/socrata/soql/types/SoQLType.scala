@@ -172,6 +172,14 @@ case object SoQLBoolean extends SoQLType("boolean") {
 
 case class SoQLNumber(value: java.math.BigDecimal) extends SoQLValue {
   def typ = SoQLNumber
+
+  override def equals(that: Any) =
+    that match {
+      case SoQLNumber(thatValue) => this.value.compareTo(thatValue) == 0
+      case _ => false
+    }
+
+  override def hashCode = value.stripTrailingZeros.hashCode
 }
 case object SoQLNumber extends SoQLType("number")
 

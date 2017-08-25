@@ -22,4 +22,14 @@ class SoQLValueTest extends FunSuite with MustMatchers {
       companionType.name.toString must equal (sym.name.toString)
     }
   }
+
+  test("SoQLNumber's equals ignores scale") {
+    def bd(s: String) = new java.math.BigDecimal(s)
+    SoQLNumber(bd("5.00")) must equal (SoQLNumber(bd("5")))
+  }
+
+  test("SoQLNumber's hashCode ignores scala") {
+    def bd(s: String) = new java.math.BigDecimal(s)
+    SoQLNumber(bd("5.00")).hashCode must equal (SoQLNumber(bd("5")).hashCode)
+  }
 }
