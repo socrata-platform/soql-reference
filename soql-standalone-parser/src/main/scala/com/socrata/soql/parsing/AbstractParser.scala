@@ -315,7 +315,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     repsep(expr, COMMA()) ^^ (Right(_))
 
   def windowFunctionParams: Parser[Either[Position, Seq[Expression]]] =
-    LPAREN() ~> PARTITION() ~> BY() ~> windowFunctionParamList <~ (RPAREN() | failure(errors.missingArg))
+    LPAREN() ~> opt(PARTITION() ~> BY()) ~> windowFunctionParamList <~ (RPAREN() | failure(errors.missingArg))
 
   def identifier_or_funcall: Parser[Expression] =
     identifier ~ opt(params) ~ opt(OVER() ~ windowFunctionParams) ^^ {
