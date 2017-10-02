@@ -59,8 +59,10 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
         Left(TypeMismatch(name, typeNameFor(found.head), parameters(idx).position))
       } else {
         Right(resolved.flatMap { f =>
-          val selectedParameters = (f.allParameters, typedParameters).zipped.map { (expected, options) =>
-            val choices = options.filter(_.typ == expected)
+          val skipTypeCheckAfter = if (f.isWindowFunction) f.parameters.size else typedParameters.size
+          val selectedParameters = (f.allParameters, typedParameters, Stream.from(0)).zipped.map { (expected, options, idx) =>
+            val choices = if (idx < skipTypeCheckAfter) options.filter(_.typ == expected)
+                          else options.headOption.toSeq // any type is ok for window functions
             if(choices.isEmpty) sys.error("Can't happen, we passed typechecking")
             // we can't commit to a choice here.  Because if we decide this is ambiguous, we have to wait to find out
             // later if "f" is eliminated as a contender by typechecking.  It's only an error if f survives
