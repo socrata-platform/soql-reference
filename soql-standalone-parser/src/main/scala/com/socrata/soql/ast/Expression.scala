@@ -64,6 +64,9 @@ object SpecialFunctions {
   val NotIn = FunctionName("#NOT_IN")
   val NotLike = FunctionName("#NOT_LIKE")
 
+  // window function: aggregatefunction(x) over (partition by a,b,c...)
+  val WindowFunctionOver = FunctionName("#WF_OVER")
+
   object Operator {
     def apply(op: String) = FunctionName("op$" + op)
     def unapply(f: FunctionName) = f.name match {
@@ -139,6 +142,9 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
     case SpecialFunctions.NotIn => parameters.drop(1).mkString(parameters(0) + " NOT IN (", ",", ")")
     case SpecialFunctions.Like => parameters.mkString(" LIKE ")
     case SpecialFunctions.NotLike => parameters.mkString(" NOT LIKE ")
+    case SpecialFunctions.WindowFunctionOver =>
+      val partitionBy = if (parameters.size > 1) "PARTITION BY " else ""
+      parameters.drop(1).mkString(parameters(0) + " OVER (" + partitionBy, ",", ")")
     case other => parameters.mkString(other + "(", ",", ")")
   }
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)

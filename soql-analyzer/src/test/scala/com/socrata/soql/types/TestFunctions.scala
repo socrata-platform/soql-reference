@@ -38,7 +38,7 @@ object TestFunctions {
   val CountStar = mf("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, TestNumber, isAggregate = true)
 
   val WindowFunctionOver = f("wf_over",
-                             FunctionName("wf_over"),
+                             SpecialFunctions.WindowFunctionOver,
                              Map("a" -> AllTypes),
                              Seq(VariableType("a")),
                              Seq(WildcardType()),

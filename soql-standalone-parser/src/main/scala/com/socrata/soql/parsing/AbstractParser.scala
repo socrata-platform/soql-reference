@@ -327,7 +327,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
         FunctionCall(SpecialFunctions.StarFunc(ident), Seq.empty)(identPos, identPos)
       case ((_, ident, identPos)) ~ Some(Right(params)) ~ Some(wfParams) =>
         val innerFc = FunctionCall(FunctionName(ident), params)(identPos, identPos)
-        FunctionCall(FunctionName("wf_over"), innerFc +: wfParams._2.right.get)(identPos, identPos)
+        FunctionCall(SpecialFunctions.WindowFunctionOver, innerFc +: wfParams._2.right.get)(identPos, identPos)
     }
 
   def paren: Parser[Expression] =

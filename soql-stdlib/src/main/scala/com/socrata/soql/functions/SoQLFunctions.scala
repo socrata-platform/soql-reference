@@ -116,11 +116,11 @@ object SoQLFunctions {
   val StddevSamp = f("stddev_samp", FunctionName("stddev_samp"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
 
   val WindowFunctionOver = f("wf_over",
-    FunctionName("wf_over"),
-    Map("a" -> AllTypes),
-    Seq(VariableType("a")),
-    Seq(WildcardType()),
-    VariableType("a"))
+                             SpecialFunctions.WindowFunctionOver,
+                             Map("a" -> AllTypes),
+                             Seq(VariableType("a")),
+                             Seq(WildcardType()),
+                             VariableType("a"))
 
   val UnaryPlus = f("unary +", SpecialFunctions.Operator("+"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
   val UnaryMinus = f("unary -", SpecialFunctions.Operator("-"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
