@@ -506,7 +506,7 @@ SELECT visits, @x2.zx
     val analysisWordStyle = analyzer.analyzeUnchainedQuery("SELECT avg(visits) OVER (PARTITION BY name_last, 2, 3)")
     val select = analysisWordStyle.selection.toSeq
     select must equal (Seq(
-      ColumnName("avg_visits_over_name_last_2_3") -> typedExpression("avg(visits) OVER (PARTITION BY name_last, 2, 3)")
+      ColumnName("avg_visits_over_partition_by_name_last_2_3") -> typedExpression("avg(visits) OVER (PARTITION BY name_last, 2, 3)")
     ))
 
     val analysisWordStyleOverEmpty = analyzer.analyzeUnchainedQuery("SELECT avg(visits) OVER ()")

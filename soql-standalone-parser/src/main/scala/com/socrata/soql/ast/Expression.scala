@@ -39,7 +39,10 @@ object Expression {
         case FunctionCall(SpecialFunctions.NotBetween, Seq(a,b,c)) =>
           findIdentsAndLiterals(a) ++ Vector("not", "between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
         case FunctionCall(SpecialFunctions.WindowFunctionOver, args) =>
-          Seq(args.head).flatMap(findIdentsAndLiterals) ++ Vector("over") ++ args.tail.flatMap(findIdentsAndLiterals)
+          Seq(args.head).flatMap(findIdentsAndLiterals) ++
+            Vector("over") ++
+            (if (args.tail.isEmpty) Vector.empty else Vector("partition", "by")) ++
+            args.tail.flatMap(findIdentsAndLiterals)
         case FunctionCall(other, args) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals)
       }
   }
