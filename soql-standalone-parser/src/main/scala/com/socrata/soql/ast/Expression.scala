@@ -38,6 +38,8 @@ object Expression {
           findIdentsAndLiterals(a) ++ Vector("between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
         case FunctionCall(SpecialFunctions.NotBetween, Seq(a,b,c)) =>
           findIdentsAndLiterals(a) ++ Vector("not", "between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
+        case FunctionCall(SpecialFunctions.WindowFunctionOver, args) =>
+          Seq(args.head).flatMap(findIdentsAndLiterals) ++ Vector("over") ++ args.tail.flatMap(findIdentsAndLiterals)
         case FunctionCall(other, args) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals)
       }
   }
