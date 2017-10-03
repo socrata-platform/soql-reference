@@ -52,6 +52,7 @@ class AggregateChecker[Type] {
 
   def checkPregroupExpression(clause: String, e: Expr) {
     e match {
+      case FunctionCall(function, _) if function.isWindowFunction =>
       case FunctionCall(function, _) if function.isAggregate =>
         throw AggregateInUngroupedContext(function.name, clause, e.position)
       case FunctionCall(_, params) =>
