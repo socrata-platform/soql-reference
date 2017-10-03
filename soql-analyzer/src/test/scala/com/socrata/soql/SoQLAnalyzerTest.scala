@@ -503,9 +503,11 @@ SELECT visits, @x2.zx
   }
 
   test("window function") {
-    val analysisWordStyle = analyzer.analyzeUnchainedQuery("SELECT avg(visits) OVER (PARTITION BY name_last, 2, 3)")
+    val analysisWordStyle = analyzer.analyzeUnchainedQuery("SELECT name_last, avg(visits) OVER (PARTITION BY name_last, 2, 3)")
+    analysisWordStyle.isGrouped must equal (false)
     val select = analysisWordStyle.selection.toSeq
     select must equal (Seq(
+      ColumnName("name_last") -> typedExpression("name_last"),
       ColumnName("avg_visits_over_partition_by_name_last_2_3") -> typedExpression("avg(visits) OVER (PARTITION BY name_last, 2, 3)")
     ))
 
@@ -516,6 +518,7 @@ SELECT visits, @x2.zx
     ))
 
     val analysis = analyzer.analyzeUnchainedQuery("SELECT avg(visits)")
+    analysis.isGrouped must equal (true)
     analysis.selection.toSeq must equal (Seq(
       ColumnName("avg_visits") -> typedExpression("avg(visits)")
     ))
