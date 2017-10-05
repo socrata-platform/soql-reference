@@ -526,5 +526,16 @@ SELECT visits, @x2.zx
     intercept[TypeMismatch] {
       analyzer.analyzeUnchainedQuery("SELECT avg(name_last)")
     }
+
+    val expressionExpected = intercept[BadParse] {
+      analyzer.analyzeUnchainedQuery("SELECT name_last, avg(visits) OVER (PARTITION BY)")
+    }
+    expressionExpected.message must startWith("Expression expected")
+
+
+    val partitionExpected = intercept[BadParse] {
+      analyzer.analyzeUnchainedQuery("SELECT name_last, avg(visits) OVER (name_last, 2, 3)")
+    }
+    partitionExpected.message must startWith("`PARTITION' expected")
   }
 }
