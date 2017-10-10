@@ -388,6 +388,10 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   }
 }
 
+/**
+  * @param isGrouped true iff there is a group by or aggregation function applied.  Can be derived from the selection
+  *                  and the groupBy
+  */
 case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                         distinct: Boolean,
                                         selection: OrderedMap[ColumnName, typed.CoreExpr[ColumnId, Type]],
