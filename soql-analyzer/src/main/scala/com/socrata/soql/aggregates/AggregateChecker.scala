@@ -52,6 +52,7 @@ class AggregateChecker[Type] {
 
   def checkPregroupExpression(clause: String, e: Expr) {
     e match {
+      case FunctionCall(function, _) if function.isWindowFunction =>
       case FunctionCall(function, _) if function.isAggregate =>
         throw AggregateInUngroupedContext(function.name, clause, e.position)
       case FunctionCall(_, params) =>
@@ -64,6 +65,9 @@ class AggregateChecker[Type] {
   def checkPostgroupExpression(clause: String, e: Expr, groupExpressions: Iterable[Expr]) {
     if(!isGroupExpression(e, groupExpressions)) {
       e match {
+        case FunctionCall(function, params) if function.isWindowFunction =>
+          // Skip the first parameter which is supposedly an aggregate function.
+          params.tail.foreach(checkPregroupExpression(clause, _))
         case FunctionCall(function, params) if function.isAggregate =>
           params.foreach(checkPregroupExpression(clause, _))
         case FunctionCall(_, params) =>

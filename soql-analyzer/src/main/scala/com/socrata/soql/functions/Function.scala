@@ -5,6 +5,11 @@ import com.socrata.soql.environment.FunctionName
 sealed trait TypeLike[+Type]
 case class FixedType[Type](typ: Type) extends TypeLike[Type]
 case class VariableType(name: String) extends TypeLike[Nothing]
+class WildcardType() extends VariableType("?")
+
+object WildcardType {
+  def apply() = new WildcardType()
+}
 
 /**
  * @note This class has identity equality semantics even though it's a case class.  This
@@ -34,6 +39,13 @@ case class Function[Type](identity: String,
       Some(MonomorphicFunction(this, Map.empty))
     else
       None
+
+  lazy val wildcards = repeated.foldLeft(Set.empty[String]) { (acc, repeatedParam) =>
+    repeatedParam match {
+      case x: WildcardType => acc + x.name
+      case _ => acc
+    }
+  }
 
   override def toString = {
     val sb = new StringBuilder(name.toString).append(" :: ")

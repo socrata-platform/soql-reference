@@ -94,6 +94,10 @@ object LexerReader {
     BETWEEN,
     LIKE,
 
+    // Window functions
+    OVER,
+    PARTITION,
+
     // Literals
     () => BooleanLiteral(true),
     () => BooleanLiteral(false),

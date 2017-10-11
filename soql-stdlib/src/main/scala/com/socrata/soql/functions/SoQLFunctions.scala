@@ -121,6 +121,13 @@ object SoQLFunctions {
   val StddevPop = f("stddev_pop", FunctionName("stddev_pop"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
   val StddevSamp = f("stddev_samp", FunctionName("stddev_samp"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
 
+  val WindowFunctionOver = f("wf_over",
+                             SpecialFunctions.WindowFunctionOver,
+                             Map("a" -> AllTypes),
+                             Seq(VariableType("a")),
+                             Seq(WildcardType()),
+                             VariableType("a"))
+
   val UnaryPlus = f("unary +", SpecialFunctions.Operator("+"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
   val UnaryMinus = f("unary -", SpecialFunctions.Operator("-"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
 

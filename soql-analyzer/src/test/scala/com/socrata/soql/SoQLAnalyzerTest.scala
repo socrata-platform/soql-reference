@@ -1,6 +1,6 @@
 package com.socrata.soql
 
-import com.socrata.soql.exceptions.{NonBooleanHaving, NonBooleanWhere, NonGroupableGroupBy, UnorderableOrderBy}
+import com.socrata.soql.exceptions._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.PropertyChecks
 
@@ -500,5 +500,42 @@ SELECT visits, @x2.zx
       ColumnName("visits") -> ColumnRef(None, ColumnName("visits"), TestNumber)(NoPosition),
       ColumnName("zx") -> ColumnRef(Some("_x2"), ColumnName("zx"), TestText)(NoPosition)
     ))
+  }
+
+  test("window function") {
+    val analysisWordStyle = analyzer.analyzeUnchainedQuery("SELECT name_last, avg(visits) OVER (PARTITION BY name_last, 2, 3)")
+    analysisWordStyle.isGrouped must equal (false)
+    val select = analysisWordStyle.selection.toSeq
+    select must equal (Seq(
+      ColumnName("name_last") -> typedExpression("name_last"),
+      ColumnName("avg_visits_over_partition_by_name_last_2_3") -> typedExpression("avg(visits) OVER (PARTITION BY name_last, 2, 3)")
+    ))
+
+    val analysisWordStyleOverEmpty = analyzer.analyzeUnchainedQuery("SELECT avg(visits) OVER ()")
+    val selectOverEmpty = analysisWordStyleOverEmpty.selection.toSeq
+    selectOverEmpty must equal (Seq(
+      ColumnName("avg_visits_over") -> typedExpression("avg(visits) OVER ()")
+    ))
+
+    val analysis = analyzer.analyzeUnchainedQuery("SELECT avg(visits)")
+    analysis.isGrouped must equal (true)
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName("avg_visits") -> typedExpression("avg(visits)")
+    ))
+
+    intercept[TypeMismatch] {
+      analyzer.analyzeUnchainedQuery("SELECT avg(name_last)")
+    }
+
+    val expressionExpected = intercept[BadParse] {
+      analyzer.analyzeUnchainedQuery("SELECT name_last, avg(visits) OVER (PARTITION BY)")
+    }
+    expressionExpected.message must startWith("Expression expected")
+
+
+    val partitionExpected = intercept[BadParse] {
+      analyzer.analyzeUnchainedQuery("SELECT name_last, avg(visits) OVER (name_last, 2, 3)")
+    }
+    partitionExpected.message must startWith("`PARTITION' expected")
   }
 }

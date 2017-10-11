@@ -38,6 +38,11 @@ object Expression {
           findIdentsAndLiterals(a) ++ Vector("between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
         case FunctionCall(SpecialFunctions.NotBetween, Seq(a,b,c)) =>
           findIdentsAndLiterals(a) ++ Vector("not", "between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
+        case FunctionCall(SpecialFunctions.WindowFunctionOver, args) =>
+          Seq(args.head).flatMap(findIdentsAndLiterals) ++
+            Vector("over") ++
+            (if (args.tail.isEmpty) Vector.empty else Vector("partition", "by")) ++
+            args.tail.flatMap(findIdentsAndLiterals)
         case FunctionCall(other, args) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals)
       }
   }
@@ -63,6 +68,9 @@ object SpecialFunctions {
   val In = FunctionName("#IN")
   val NotIn = FunctionName("#NOT_IN")
   val NotLike = FunctionName("#NOT_LIKE")
+
+  // window function: aggregatefunction(x) over (partition by a,b,c...)
+  val WindowFunctionOver = FunctionName("#WF_OVER")
 
   object Operator {
     def apply(op: String) = FunctionName("op$" + op)
@@ -139,6 +147,9 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
     case SpecialFunctions.NotIn => parameters.drop(1).mkString(parameters(0) + " NOT IN (", ",", ")")
     case SpecialFunctions.Like => parameters.mkString(" LIKE ")
     case SpecialFunctions.NotLike => parameters.mkString(" NOT LIKE ")
+    case SpecialFunctions.WindowFunctionOver =>
+      val partitionBy = if (parameters.size > 1) "PARTITION BY " else ""
+      parameters.drop(1).mkString(parameters(0) + " OVER (" + partitionBy, ",", ")")
     case other => parameters.mkString(other + "(", ",", ")")
   }
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
