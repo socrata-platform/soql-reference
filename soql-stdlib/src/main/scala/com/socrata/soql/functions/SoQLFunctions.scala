@@ -85,8 +85,14 @@ object SoQLFunctions {
              FunctionName("simplify_preserve_topology"),
              Map("a" -> GeospatialLike, "b" -> NumLike),
              Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
-  val SnapToGrid = f("snap_to_grid", FunctionName("snap_to_grid"), Map("a" -> GeospatialLike, "b" -> NumLike),
-    Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
+  val SnapToGrid = f("snap_to_grid",
+                     FunctionName("snap_to_grid"),
+                     Map("a" -> GeospatialLike, "b" -> NumLike),
+                     Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
+  val SnapForZoom = f("snap_for_zoom",
+                      FunctionName("snap_for_zoom"),
+                      Map("a" -> GeospatialLike, "b" -> NumLike),
+                      Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
   val CuratedRegionTest = f("curated_region_test", FunctionName("curated_region_test"), Map("a" -> GeospatialLike, "b" -> NumLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))
   val VisibleAt = f("visible_at",
