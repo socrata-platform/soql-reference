@@ -31,7 +31,7 @@ object SoQLType {
     SoQLID, SoQLVersion, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
     SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLJson, SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine,
     SoQLPolygon, SoQLMultiPolygon, SoQLBlob,
-    SoQLPhone, SoQLLocation, SoQLUrl, SoQLDocument
+    SoQLPhone, SoQLLocation, SoQLUrl, SoQLDocument, SoQLPhoto
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
   }
@@ -63,6 +63,7 @@ object SoQLType {
     SoQLVersion,
     SoQLJson,
     SoQLDocument,
+    SoQLPhoto,
     SoQLBlob
   )
 
@@ -334,6 +335,11 @@ case class SoQLBlob(value: String) extends SoQLValue {
   def typ = SoQLBlob
 }
 case object SoQLBlob extends SoQLType("blob")
+
+case class SoQLPhoto(value: String) extends SoQLValue {
+  def typ = SoQLPhoto
+}
+case object SoQLPhoto extends SoQLType("photo")
 
 case class SoQLLocation(latitude: Option[java.math.BigDecimal],
                         longitude: Option[java.math.BigDecimal],
