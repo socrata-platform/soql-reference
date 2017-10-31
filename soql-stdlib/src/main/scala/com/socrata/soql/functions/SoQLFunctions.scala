@@ -254,6 +254,10 @@ object SoQLFunctions {
     Seq(FixedType(SoQLText), FixedType(SoQLText)), Seq.empty,
     FixedType(SoQLUrl))
 
+  val DocumentToFilename = mf("document_filename", FunctionName("document_filename"), Seq(SoQLDocument), Seq.empty, SoQLText)
+  val DocumentToFileId = mf("document_file_id", FunctionName("document_file_id"), Seq(SoQLDocument), Seq.empty, SoQLText)
+  val DocumentToContentType = mf("document_content_type", FunctionName("document_content_type"), Seq(SoQLDocument), Seq.empty, SoQLText)
+
   val JsonToText = mf("json to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLJson), Seq.empty, SoQLText)
   val JsonToNumber = mf("json to number", SpecialFunctions.Cast(SoQLNumber.name), Seq(SoQLJson), Seq.empty, SoQLNumber)
   val JsonToBool = mf("json to bool", SpecialFunctions.Cast(SoQLBoolean.name), Seq(SoQLJson), Seq.empty, SoQLBoolean)

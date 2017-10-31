@@ -31,7 +31,7 @@ object SoQLType {
     SoQLID, SoQLVersion, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
     SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLJson, SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine,
     SoQLPolygon, SoQLMultiPolygon, SoQLBlob,
-    SoQLPhone, SoQLLocation, SoQLUrl
+    SoQLPhone, SoQLLocation, SoQLUrl, SoQLDocument, SoQLPhoto
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
   }
@@ -62,6 +62,8 @@ object SoQLType {
     SoQLID,
     SoQLVersion,
     SoQLJson,
+    SoQLDocument,
+    SoQLPhoto,
     SoQLBlob
   )
 
@@ -334,6 +336,11 @@ case class SoQLBlob(value: String) extends SoQLValue {
 }
 case object SoQLBlob extends SoQLType("blob")
 
+case class SoQLPhoto(value: String) extends SoQLValue {
+  def typ = SoQLPhoto
+}
+case object SoQLPhoto extends SoQLType("photo")
+
 case class SoQLLocation(latitude: Option[java.math.BigDecimal],
                         longitude: Option[java.math.BigDecimal],
                         @JsonKey("human_address") address: Option[String]
@@ -434,6 +441,28 @@ case object SoQLUrl extends SoQLType("url") {
       }
     } catch {
       case e: SAXParseException => None
+    }
+  }
+}
+
+case class SoQLDocument(@JsonKey("file_id") fileId: String,
+                        @JsonKey("content_type") contentType: Option[String],
+                        @JsonKey("filename") filename: Option[String]) extends SoQLValue {
+  def typ = SoQLDocument
+}
+
+case object SoQLDocument extends SoQLType("document") {
+  implicit val jCodec = AutomaticJsonCodecBuilder[SoQLDocument]
+
+  def isPossible(s: String): Boolean =  parseAsJson(s).isDefined
+
+  def isPossible(s: CaseInsensitiveString): Boolean = isPossible(s.getString)
+
+  private def parseAsJson(value: String): Option[SoQLDocument] = {
+    try {
+      JsonUtil.parseJson[SoQLDocument](value).right.toOption
+    } catch {
+      case ex: JsonReaderException => None
     }
   }
 }
