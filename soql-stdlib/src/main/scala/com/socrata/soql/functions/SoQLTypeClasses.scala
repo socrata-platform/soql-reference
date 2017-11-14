@@ -18,7 +18,11 @@ object SoQLTypeClasses {
     SoQLUrl
   )
 
-  val GeospatialLike = Set[SoQLType](SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine, SoQLPolygon, SoQLMultiPolygon)
+  val SingleGeospatialLike = Set[SoQLType](SoQLPoint, SoQLLine, SoQLPolygon)
+
+  val MultiGeospatialLike = Set[SoQLType](SoQLMultiPoint, SoQLMultiLine, SoQLMultiPolygon)
+
+  val GeospatialLike = MultiGeospatialLike ++ SingleGeospatialLike
 
   val Equatable = Ordered ++ GeospatialLike ++ Set[SoQLType](
     SoQLBlob,

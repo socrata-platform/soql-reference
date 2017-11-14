@@ -11,7 +11,7 @@ sealed abstract class SoQLFunctions
 object SoQLFunctions {
   private val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLFunctions])
 
-  import SoQLTypeClasses.{Ordered, Equatable, NumLike, RealNumLike, GeospatialLike}
+  import SoQLTypeClasses.{Ordered, Equatable, NumLike, RealNumLike, GeospatialLike, MultiGeospatialLike}
   private val AllTypes = SoQLType.typesByName.values.toSet
 
   // helpers to guide type inference (specifically forces SoQLType to be inferred)
@@ -67,9 +67,15 @@ object SoQLFunctions {
     Seq(VariableType("a")), Seq.empty, VariableType("a"))
 
   // multi to multi conversion
+  @Deprecated // use GeoMultiFromMulti
   val GeoMultiPolygonFromMultiPolygon = mf("geo_multi_mpg_mpg", FunctionName("geo_multi"), Seq(SoQLMultiPolygon), Seq.empty, SoQLMultiPolygon)
+  @Deprecated // use GeoMultiFromMulti
   val GeoMultiLineFromMultiLine = mf("geo_multi_mln_mln", FunctionName("geo_multi"), Seq(SoQLMultiLine), Seq.empty, SoQLMultiLine)
+  @Deprecated // use GeoMultiFromMulti
   val GeoMultiPointFromMultiPoint = mf("geo_multi_mpt_mpt", FunctionName("geo_multi"), Seq(SoQLMultiPoint), Seq.empty, SoQLMultiPoint)
+
+  val GeoMultiFromMulti = f("geo_multi_multi", FunctionName("geo_multi"),
+                            Map("a" -> MultiGeospatialLike),  Seq(VariableType("a")), Seq.empty, VariableType("a"))
 
   // geo to multi geo conversion
   val GeoMultiPolygonFromPolygon = mf("geo_multi_mpg_pg", FunctionName("geo_multi"), Seq(SoQLPolygon), Seq.empty, SoQLMultiPolygon)
@@ -77,9 +83,9 @@ object SoQLFunctions {
   val GeoMultiPointFromPoint = mf("geo_multi_mpt_pt", FunctionName("geo_multi"), Seq(SoQLPoint), Seq.empty, SoQLMultiPoint)
 
   // collection to multi geo conversion
-  val GeoCollectionExtractMultiPolygonFromPolygon = mf("geo_collection_extract_mpg_mpg", FunctionName("geo_collection_extract"), Seq(SoQLMultiPolygon), Seq.empty, SoQLMultiPolygon)
-  val GeoCollectionExtractMultiLineFromLine = mf("geo_multi_collection_mln_mln", FunctionName("geo_collection_extract"), Seq(SoQLMultiLine), Seq.empty, SoQLMultiLine)
-  val GeoCollectionExtractMultiPointFromPoint = mf("geo_multi_collection_mpt_mpt", FunctionName("geo_collection_extract"), Seq(SoQLMultiPoint), Seq.empty, SoQLMultiPoint)
+  val GeoCollectionExtractMultiGeometry = f("geo_collection_extract_mgeo", FunctionName("geo_collection_extract"),
+                                            Map("a" -> MultiGeospatialLike),  Seq(VariableType("a")), Seq.empty,
+                                            VariableType("a"))
 
   val NumberOfPoints = f("num_points", FunctionName("num_points"), Map("a" -> GeospatialLike),
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber))
