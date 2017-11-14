@@ -76,6 +76,11 @@ object SoQLFunctions {
   val GeoMultiLineFromLine = mf("geo_multi_mln_ln", FunctionName("geo_multi"), Seq(SoQLLine), Seq.empty, SoQLMultiLine)
   val GeoMultiPointFromPoint = mf("geo_multi_mpt_pt", FunctionName("geo_multi"), Seq(SoQLPoint), Seq.empty, SoQLMultiPoint)
 
+  // collection to multi geo conversion
+  val GeoCollectionExtractMultiPolygonFromPolygon = mf("geo_collection_extract_mpg_mpg", FunctionName("geo_collection_extract"), Seq(SoQLMultiPolygon), Seq.empty, SoQLMultiPolygon)
+  val GeoCollectionExtractMultiLineFromLine = mf("geo_multi_collection_mln_mln", FunctionName("geo_collection_extract"), Seq(SoQLMultiLine), Seq.empty, SoQLMultiLine)
+  val GeoCollectionExtractMultiPointFromPoint = mf("geo_multi_collection_mpt_mpt", FunctionName("geo_collection_extract"), Seq(SoQLMultiPoint), Seq.empty, SoQLMultiPoint)
+
   val NumberOfPoints = f("num_points", FunctionName("num_points"), Map("a" -> GeospatialLike),
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber))
   val Simplify = f("simplify", FunctionName("simplify"), Map("a" -> GeospatialLike, "b" -> NumLike),
