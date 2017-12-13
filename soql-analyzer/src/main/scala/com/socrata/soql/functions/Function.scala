@@ -34,6 +34,11 @@ case class Function[Type](identity: String,
       case VariableType(typeParameter) => typeParameter
     }.toSet
 
+  lazy val typeParametersLessWildcards: Set[String] =
+    (parameters ++ List(result) ++ repeated).collect {
+      case t@VariableType(typeParameter) if !t.isInstanceOf[WildcardType] => typeParameter
+    }.toSet
+
   lazy val monomorphic: Option[MonomorphicFunction[Type]] =
     if(result.isInstanceOf[FixedType[_]] && parameters.forall(_.isInstanceOf[FixedType[_]]))
       Some(MonomorphicFunction(this, Map.empty))
