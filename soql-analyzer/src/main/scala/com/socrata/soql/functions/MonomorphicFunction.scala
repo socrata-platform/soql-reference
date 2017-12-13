@@ -7,7 +7,7 @@ case class MonomorphicFunction[Type](function: Function[Type], bindings: Map[Str
     this(Function(identity, name, Map.empty, parameters.map(FixedType(_)), repeated.map(FixedType(_)), FixedType(result), isAggregate), Map.empty)
 
   val bindingsLessWildcards = bindings.keySet.diff(function.wildcards)
-  require(bindingsLessWildcards == function.parameters.collect { case VariableType(n) => n }.toSet, "bindings do not match")
+  require(bindingsLessWildcards == function.typeParametersLessWildcards, "bindings do not match")
 
   def name: FunctionName = function.name
   lazy val parameters: Seq[Type] = function.parameters.map(bind)
