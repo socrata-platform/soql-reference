@@ -12,7 +12,7 @@ object SoQLFunctionInfo extends FunctionInfo[SoQLType] {
           case Some(fs) =>
             fs
           case None =>
-            variadicFunctionsWithArity(name ,n)
+            variadicFunctionsWithArity(name, n)
         }
       case None =>
         variadicFunctionsWithArity(name, n)
@@ -25,7 +25,7 @@ object SoQLFunctionInfo extends FunctionInfo[SoQLType] {
         var i = n
         while(i >= 0) {
           funcsByArity.get(i) match {
-            case Some(fs) => result ++= fs
+            case Some(fs) => result ++= fs.filter(_.willAccept(n))
             case None => // nothing
           }
           i -= 1

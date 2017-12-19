@@ -25,7 +25,7 @@ object TestFunctionInfo extends FunctionInfo[TestType] {
         var i = n
         while(i >= 0) {
           funcsByArity.get(i) match {
-            case Some(fs) => result ++= fs
+            case Some(fs) => result ++= fs.filter(_.willAccept(n))
             case None => // nothing
           }
           i -= 1
