@@ -28,6 +28,15 @@ case class Function[Type](identity: String,
 
   val minArity = parameters.length
   def isVariadic = repeated.nonEmpty
+  val varargsMultiplicity = repeated.length
+
+  final def willAccept(n: Int): Boolean = {
+    if(isVariadic && n > minArity) {
+      (n - minArity) % varargsMultiplicity == 0
+    } else {
+      n == minArity
+    }
+  }
 
   lazy val typeParameters: Set[String] =
     (parameters ++ List(result) ++ repeated).collect {
