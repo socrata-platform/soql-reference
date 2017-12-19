@@ -12,25 +12,28 @@ object SoQLFunctionInfo extends FunctionInfo[SoQLType] {
           case Some(fs) =>
             fs
           case None =>
-            variadicFunctionsWithArity(name ,n)
+            variadicFunctionsWithArity(name, n)
         }
       case None =>
         variadicFunctionsWithArity(name, n)
     }
 
   def variadicFunctionsWithArity(name: FunctionName, n: Int): Set[Function[SoQLType]] = {
-    SoQLFunctions.variadicFunctionsByNameThenMinArity.get(name) match {
-      case Some(funcsByArity) =>
-        var result = Set.empty[Function[SoQLType]]
-        var i = n
-        while(i >= 0) {
-          funcsByArity.get(i) match {
-            case Some(fs) => result ++= fs
-            case None => // nothing
+    SoQLFunctions.variadicFunctionsByName.get(name) match {
+      case Some(funcs) =>
+
+        funcs.foldLeft(Set.empty[Function[SoQLType]])((acc, fun) => {
+          var i = n
+          while(i >= 0) {
+            if (i == fun.minArity) {
+              return acc + fun
+            } else {
+              i -= fun.minArity
+            }
           }
-          i -= 1
-        }
-        result
+
+          acc
+        })
       case None =>
         Set.empty
     }

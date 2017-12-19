@@ -307,8 +307,6 @@ object SoQLFunctions {
       fs.groupBy(_.minArity).mapValues(_.toSet).toMap
     }.toMap
 
-  val variadicFunctionsByNameThenMinArity: Map[FunctionName, Map[Int, Set[Function[SoQLType]]]] =
-    variadicFunctions.groupBy(_.name).mapValues { fs =>
-      fs.groupBy(_.minArity).mapValues(_.toSet).toMap
-    }.toMap
+  val variadicFunctionsByName: Map[FunctionName, Seq[Function[SoQLType]]] =
+    variadicFunctions.groupBy(_.name)
 }
