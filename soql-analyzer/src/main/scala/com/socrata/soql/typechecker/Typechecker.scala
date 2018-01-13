@@ -58,7 +58,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
         val TypeMismatchFailure(expected, found, idx) = failed.maxBy(_.idx)
         Left(TypeMismatch(name, typeNameFor(found.head), parameters(idx).position))
       } else {
-        Right(resolved.flatMap { f =>
+        val potentials = resolved.flatMap { f =>
           val skipTypeCheckAfter = if (f.isWindowFunction) f.parameters.size else typedParameters.size
           val selectedParameters = (f.allParameters, typedParameters, Stream.from(0)).zipped.map { (expected, options, idx) =>
             val choices = if (idx < skipTypeCheckAfter) options.filter(_.typ == expected)
@@ -78,7 +78,17 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
           selectedParameters.foldRight(Seq(List.empty[Expr])) { (choices, remainingParams) =>
             choices.flatMap { choice => remainingParams.map(choice :: _) }
           }.map(typed.FunctionCall(f, _)(fc.position, fc.functionNamePosition))
-        })
+        }
+
+        // If all possibilities result in the same type, we can disambiguate here.
+        // In principle, this could be
+        //   potentials.groupBy(_.typ).values.map(disambiguate)
+        // which would be strictly more general, but I am uncertain whether
+        // that will preserve the preference-order assumption that disambiguate
+        // relies on.
+        val collapsed = if(potentials.forall(_.typ == potentials.head.typ)) Seq(disambiguate(potentials)) else potentials
+
+        Right(collapsed)
       }
     case bl@BooleanLiteral(b) =>
       Right(booleanLiteralExpr(b, bl.position))
