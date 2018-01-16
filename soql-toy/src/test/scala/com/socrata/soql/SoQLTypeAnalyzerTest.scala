@@ -95,6 +95,9 @@ class SoQLTypeAnalyzerTest extends FunSuite with MustMatchers with PropertyCheck
     val analysis = analyzer.analyzeUnchainedQuery(soql)
     val elapsed = (System.currentTimeMillis() - start) / 1000
     analysis.where must not be empty
-    elapsed must be < 2L
+
+    // Really this should finish in milliseconds but build servers are
+    // slow.  Slow enough that 2s isn't enough to reliably complete!
+    elapsed must be < 10L
   }
 }
