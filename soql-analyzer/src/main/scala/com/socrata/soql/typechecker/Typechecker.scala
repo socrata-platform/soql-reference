@@ -75,7 +75,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
             choices
           }
 
-          selectedParameters.foldRight(Seq(List.empty[Expr])) { (choices, remainingParams) =>
+          selectedParameters.toVector.foldRight(Seq(List.empty[Expr])) { (choices, remainingParams) =>
             choices.flatMap { choice => remainingParams.map(choice :: _) }
           }.map(typed.FunctionCall(f, _)(fc.position, fc.functionNamePosition))
         }
