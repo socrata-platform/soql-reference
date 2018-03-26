@@ -200,9 +200,9 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       }
     }
 
-  def namedSelection = expr ~ opt(AS() ~> userIdentifier) ^^ {
+  def namedSelection = expr ~ opt(AS() ~> simpleUserIdentifier) ^^ {
     case e ~ None => SelectedExpression(e, None)
-    case e ~ Some((qual, name, pos)) => SelectedExpression(e, Some((ColumnName(name), pos)))
+    case e ~ Some((name, pos)) => SelectedExpression(e, Some((ColumnName(name), pos)))
   }
 
   /*
