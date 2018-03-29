@@ -5,7 +5,7 @@ import org.scalatest._
 import org.scalatest.MustMatchers
 import com.socrata.soql.parsing.{Lexer, LexerReader, Parser}
 import com.socrata.soql.ast._
-import com.socrata.soql.exceptions.{CircularAliasDefinition, DuplicateAlias, NoSuchColumn, RepeatedException}
+import com.socrata.soql.exceptions._
 import com.socrata.soql.environment.{ColumnName, TableName, UntypedDatasetContext}
 import com.socrata.soql.collection.{OrderedMap, OrderedSet}
 
@@ -347,6 +347,21 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
 
     "forbid excluding a non-existant system column" in {
       a [NoSuchColumn] must be thrownBy { AliasAnalysis(selections(":* (except :gnu)")) }
+    }
+
+    "allow standard system columns in aliases" in {
+      AliasAnalysis(selections("max(:id) as :id, max(:created_at) as :created_at, max(:updated_at) as :updated_at")) must equal(AliasAnalysis.Analysis(
+        OrderedMap(
+          ColumnName(":id") -> expr("max(:id)"),
+          ColumnName(":created_at") -> expr("max(:created_at)"),
+          ColumnName(":updated_at") -> expr("max(:updated_at)")
+        ),
+        Seq(":id", ":created_at", ":updated_at").map(ColumnName)
+      ))
+    }
+
+    "forbid aliases starting with colon and not a standard system column" in {
+      a [BadParse] must be thrownBy { AliasAnalysis(selections(":id as :other")) }
     }
   }
 }

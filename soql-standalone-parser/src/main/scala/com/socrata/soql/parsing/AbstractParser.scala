@@ -200,9 +200,16 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       }
     }
 
-  def namedSelection = expr ~ opt(AS() ~> simpleUserIdentifier) ^^ {
+  private val standardSystemColumns = Set(":id", ":created_at", ":updated_at")
+
+  def namedSelection = expr ~ opt(AS() ~> simpleIdentifier) ^^ {
     case e ~ None => SelectedExpression(e, None)
-    case e ~ Some((name, pos)) => SelectedExpression(e, Some((ColumnName(name), pos)))
+    case e ~ Some((name, pos)) =>
+      if (!name.startsWith(":") || standardSystemColumns.contains(name)) {
+        SelectedExpression(e, Some((ColumnName(name), pos)))
+      } else {
+        badParse(s"column alias cannot start with colon - $name", pos)
+      }
   }
 
   /*
