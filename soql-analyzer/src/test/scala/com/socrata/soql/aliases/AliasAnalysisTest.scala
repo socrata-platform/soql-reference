@@ -8,6 +8,7 @@ import com.socrata.soql.ast._
 import com.socrata.soql.exceptions._
 import com.socrata.soql.environment.{ColumnName, TableName, UntypedDatasetContext}
 import com.socrata.soql.collection.{OrderedMap, OrderedSet}
+import com.socrata.soql.parsing.AbstractParser.Parameters
 
 class AliasAnalysisTest extends WordSpec with MustMatchers {
   def columnNames(names: String*) =
@@ -350,7 +351,8 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     }
 
     "allow standard system columns in aliases" in {
-      AliasAnalysis(selections("max(:id) as :id, max(:created_at) as :created_at, max(:updated_at) as :updated_at")) must equal(AliasAnalysis.Analysis(
+      val parser = new Parser(new Parameters(true, Set(":id", ":created_at", ":updated_at")))
+      AliasAnalysis(parser.selection("max(:id) as :id, max(:created_at) as :created_at, max(:updated_at) as :updated_at")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
           ColumnName(":id") -> expr("max(:id)"),
           ColumnName(":created_at") -> expr("max(:created_at)"),
