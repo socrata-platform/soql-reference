@@ -351,7 +351,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     }
 
     "allow standard system columns in aliases" in {
-      val parser = new Parser(new Parameters(true, Set(":id", ":created_at", ":updated_at")))
+      val parser = new Parser(new Parameters(true, Set(":id", ":created_at", ":updated_at").map(ColumnName(_))))
       AliasAnalysis(parser.selection("max(:id) as :id, max(:created_at) as :created_at, max(:updated_at) as :updated_at")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
           ColumnName(":id") -> expr("max(:id)"),

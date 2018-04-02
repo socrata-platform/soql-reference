@@ -9,7 +9,7 @@ import com.socrata.soql.ast._
 import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
 
 object AbstractParser {
-  class Parameters(val allowJoins: Boolean = true, val systemColumnAliasesAllowed: Set[String] = Set.empty)
+  class Parameters(val allowJoins: Boolean = true, val systemColumnAliasesAllowed: Set[ColumnName] = Set.empty)
   val defaultParameters = new Parameters()
 }
 
@@ -203,8 +203,9 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def namedSelection = expr ~ opt(AS() ~> simpleIdentifier) ^^ {
     case e ~ None => SelectedExpression(e, None)
     case e ~ Some((name, pos)) =>
-      if (!name.startsWith(":") || parameters.systemColumnAliasesAllowed.contains(name)) {
-        SelectedExpression(e, Some((ColumnName(name), pos)))
+      val columnName = ColumnName(name)
+      if (!name.startsWith(":") || parameters.systemColumnAliasesAllowed.contains(columnName)) {
+        SelectedExpression(e, Some(columnName, pos))
       } else {
         badParse(s"column alias cannot start with colon - $name", pos)
       }
