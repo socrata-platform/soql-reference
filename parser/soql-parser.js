@@ -8,15 +8,16 @@ var grammar = {
            ["\\s+", "/* skip whitespace */"],
            ["SELECT", "return 'SELECT';"],
            ["[0-9]+", "return 'NUMBER';"],
-           [":\\*", "return ':*';"]
+           [":\\*", "return ':*';"],
+           ["$", "return 'EOF';"]
         ]
     },
 
     "bnf": {
-        "program": [["select EOF", "return $1"]],
-        "select": [ ["SELECT selectList", "return $2"]],
-        "selectList": [ ["systemStar", "return $1"] ],
-        "systemStar": [[":*", "return $1"]]
+        "query": ["select EOF"],
+        "select": [ "SELECT select-list"],
+        "select-list": [ "system-star"],
+        "system-star": [":*"]
     }
 };
 
@@ -29,8 +30,7 @@ var parserSource = parser.generate();
 // you can also use the parser directly from memory
 
 // returns true
-parser.parse("SELECT THING");
+parser.parse("SELECT :*");
 
 // throws lexical error
 parser.parse("SELECT *");
-console.log("hi")

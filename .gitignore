@@ -4,3 +4,7 @@
 /.idea/
 /.idea_modules/
 */target/
+node_modules/
+
+# Compilation artifacts from latex
+*.gz
