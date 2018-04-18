@@ -2,9 +2,27 @@
 
 %%
 \s+      /* skip whitespace */
-"SELECT"  return 'SELECT';
-"AS"      return 'AS';
+
+
 "AND"     return 'AND';
+
+"ASC"     return 'ASC';
+"BETWEEN" return 'BETWEEN';
+"BY"      return 'BY';
+"DESC"    return 'DESC';
+"EXCEPT"  return 'EXCEPT';
+"FIRST"   return 'FIRST';
+"GROUP"   return 'GROUP';
+"IN"      return 'IN';
+"IS"      return 'IS';
+"LAST"    return 'LAST';
+"LIMIT"   return 'LIMIT';
+"NOT"     return 'NOT';
+"NULL"    return 'NULL';
+"OFFSET"  return 'OFFSET';
+"OR"      return 'OR';
+"ORDER"   return 'ORDER';
+"SELECT"  return 'SELECT';
 "OR"      return 'OR';
 "NOT"     return 'NOT';
 ":*"   return ':*';
