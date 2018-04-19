@@ -72,6 +72,14 @@ $      return 'EOF';
 
 /lex
 
+/* operator associations and precedence */
+
+/* "(" ")"
+ * "." "[" "]"
+ * "::"
+ * "+" "-" (unary)
+ */
+
 %right "^"
 %left "*" "/" "%"
 %left "+" "-" "||"
@@ -87,6 +95,7 @@ $      return 'EOF';
 /* Select */
 query
     : select EOF
+        {return $1;}
     ;
 
 select
@@ -280,7 +289,8 @@ identifier-or-funcall
     ;
 
 literal
-    : "NUMBER_LITERAL"
+    : "INTEGER_LITERAL"
+    | "NUMBER_LITERAL"
     | "STRING_LITERAL"
     | "BOOLEAN_LITERAL"
     | "NULL"
