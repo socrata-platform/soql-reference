@@ -114,46 +114,32 @@ select
 /* Selection lists */
 select-list
     : system-star
-        {$$ = {
-            type: 'selection',
-            arguments: [$1]
-            };
-        }
+        {$$ = [$1];}
     | system-star "," only-user-star-select-list
-        {$$ = {
-            type: 'selection-list',
-            arguments: [$1, $3]
-            };
-        }
+        {$$ = [$1, $3];}
     | only-user-star-select-list
+        {$$ = [$1];}
     ;
 
 only-user-star-select-list
     : user-star
-        {$$ = {
-            type: 'selection',
-            arguments: [$1]
-            };
-        }
+        {$$ = $1;}
     | user-star "," expression-select-list
-        {$$ = {
-            type: 'selection-list',
-            arguments: [$1, $3]
-            };
-        }
+        {$$ = [$1, $3];}
     | expression-select-list
+        {$$ = [$1];}
     ;
 
 expression-select-list
     : selection
         {$$ = {
-            type: 'selection',
+            type: 'expression-select-list',
             arguments: [$1]
             };
         }
     | selection "," expression-select-list
         {$$ = {
-            type: 'selection-list',
+            type: 'expression-select-list',
             arguments: [$1, $3]
             };
         }
@@ -161,24 +147,24 @@ expression-select-list
 
 system-star
     : ":*"
-        {$$ = {type: 'system-star'};}
+        {$$ = {type: 'system-star', arguments: []};}
     ;
 
 user-star
     : "*"
-        {$$ = {type: 'user-star'};}
+        {$$ = {type: 'user-star', arguments: []};}
     ;
 
 selection
     : expression
         {$$ = {
-            type: 'expression',
+            type: 'selection',
             arguments: [$1]
             };
         }
-    | expression "AS" "USER_IDENTIFIER"
+    | expression "AS" user-identifier
         {$$ = {
-            type: 'expression-with-alias',
+            type: 'selection',
             arguments: [$1, $3]
             };
         }
@@ -187,25 +173,33 @@ selection
 /* WHERE clause */
 where-clause
     : "WHERE" expression
+        {$$ = [$2];}
     |
+        {$$ = [];}
     ;
 
 /* GROUP BY clause */
 group-by-clause
     : "GROUP" "BY" expression-list having-clause
+        {$$ = [$3, $4];}
     |
+        {$$ = [];}
     ;
 
 /* HAVING clause */
 having-clause
     : "HAVING" expression
+        {$$ = $2;}
     |
+        {$$ = [];}
     ;
 
 /* ORDER BY clause */
 order-by-clause
     : "ORDER" "BY" ordering-list
+        {$$ = [$3];}
     |
+        {$$ = [];}
     ;
 
 ordering-list
@@ -244,6 +238,11 @@ offset-clause
 /* Expressions */
 expression
     : disjunction
+        {$$ = {
+            type: 'expression',
+            arguments: [$1]
+            };
+        }
     ;
 
 disjunction
@@ -263,7 +262,17 @@ negation
 
 is-between-in
     : is-between-in "IS" "NULL"
+        {$$ = {
+            type: 'is',
+            arguments: [$1, {type: 'null'}]
+            };
+        }
     | is-between-in "IS" "NOT" "NULL"
+        {$$ = {
+            type: 'is-not',
+            arguments: [$1, {type: 'null'}]
+            };
+        }
     | is-between-in "BETWEEN" is-between-in "AND" is-between-in
     | is-between-in "NOT" "BETWEEN" is-between-in "AND" is-between-in
     | is-between-in "IN" "(" expression-list ")"
@@ -311,39 +320,113 @@ unary
     : "+" unary
     | "-" unary
     | cast
+        {$$ = $1;}
     ;
 
 cast
     : cast "::" identifier
+        {$$ = {
+            type: 'cast',
+            arguments: [$1, $3]
+            };
+        }
     | dereference
+        {$$ = $1;}
     ;
 
 identifier
-    : "USER_IDENTIFIER"
+    : user-identifier
+        {$$ = $1;}
     | "SYSTEM_IDENTIFIER"
+        {$$ = {
+            type: 'system-identifier',
+            arguments: [$1]
+            };
+        }
+    ;
+
+user-identifier
+    : "USER_IDENTIFIER"
+        {$$ = {
+            type: 'user-identifier',
+            arguments: [$1]
+            };
+        }
     ;
 
 dereference
     : dereference "." identifier
+        {$$ = {
+            type: 'dereference-dot',
+            arguments: [$1, $3]
+            };
+        }
     | dereference "[" expression "]"
+        {$$ = {
+            type: 'dereference-brackets',
+            arguments: [$1, $3]
+            };
+        }
     | value
+        {$$ = $1;}
     ;
 
 value
     : identifier-or-funcall
+        {$$ = $1;}
     | literal
+        {$$ = $1;}
     | "(" expression ")"
+        {$$ = {
+            type: 'expression-in-parentheses',
+            arguments: [$2]
+            };
+        }
     ;
 
 identifier-or-funcall
     : identifier
+        {$$ = $1;}
+    | identifier "(" user-star ")"
+        {$$ = {
+            type: 'funcall',
+            arguments: [$1, $3]
+            };
+        }
+    | identifier "(" expression-list ")"
+        {$$ = {
+            type: 'funcall',
+            arguments: [$1, $3]
+            };
+        }
     ;
 
 literal
     : "NUMBER_LITERAL"
+        {$$ = {
+            type: 'number-literal',
+            arguments: [$1]
+            };
+        }
     | "INTEGER_LITERAL"
+        {$$ = {
+            type: 'integer-literal',
+            arguments: [$1]
+            };
+        }
     | "STRING_LITERAL"
+        {$$ = {
+            type: 'string-literal',
+            arguments: [$1]
+            };
+        }
     | "BOOLEAN_LITERAL"
+        {$$ = {
+            type: 'boolean-literal',
+            arguments: [$1]
+            };
+        }
     | "NULL"
+        {$$ = {type: 'null', arguments: []};}
     ;
 %%
