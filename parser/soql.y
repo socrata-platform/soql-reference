@@ -150,6 +150,7 @@ having-clause
 
 order-by-clause
     : "ORDER" "BY" ordering-list
+    |
     ;
 
 ordering-list
