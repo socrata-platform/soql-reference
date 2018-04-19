@@ -100,6 +100,15 @@ query
 
 select
     : "SELECT" select-list where-clause group-by-clause order-by-clause limit-clause offset-clause
+        {$$ = {
+          'select-list': $2,
+          'where-clause': $3,
+          'group-by-clause': $4,
+          'order-by-clause': $5,
+          'limit-clause': $6,
+          'offset-clause': $7
+          };
+        }
     ;
 
 /* Selection lists */
@@ -117,7 +126,19 @@ only-user-star-select-list
 
 expression-select-list
     : selection
+      {
+        $$ = {
+          type: 'selection',
+          arguments: [$1]
+        };
+      }
     | selection "," expression-select-list
+      {
+        $$ = {
+          type: 'selection-list',
+          arguments: [$1]
+        };
+      }
     ;
 
 system-star
@@ -130,6 +151,12 @@ user-star
 
 selection
     : expression
+      {
+        $$ = {
+          type: 'expression',
+          arguments: [$1]
+        };
+      }
     | expression "AS" "USER_IDENTIFER"
     ;
 
@@ -289,8 +316,8 @@ identifier-or-funcall
     ;
 
 literal
-    : "INTEGER_LITERAL"
-    | "NUMBER_LITERAL"
+    : "NUMBER_LITERAL"
+    | "INTEGER_LITERAL"
     | "STRING_LITERAL"
     | "BOOLEAN_LITERAL"
     | "NULL"
