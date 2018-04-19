@@ -16,6 +16,6 @@ var parser = new Parser(bnf);
 // console.log(result);
 
 console.log(JSON.stringify(
-    parser.parse("SELECT blah, fdagfd, fdsag WHERE 1 + 1 == 4 ORDER BY fdsgfsd ASC")
+    parser.parse("SELECT :*, *, blah, fdagfd AS frog, fdsag WHERE 1 + 1 == 4 ORDER BY fdsgfsd ASC")
 )
 );

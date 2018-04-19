@@ -101,63 +101,87 @@ query
 select
     : "SELECT" select-list where-clause group-by-clause order-by-clause limit-clause offset-clause
         {$$ = {
-          'select-list': $2,
-          'where-clause': $3,
-          'group-by-clause': $4,
-          'order-by-clause': $5,
-          'limit-clause': $6,
-          'offset-clause': $7
-          };
+            'select-list': $2,
+            'where-clause': $3,
+            'group-by-clause': $4,
+            'order-by-clause': $5,
+            'limit-clause': $6,
+            'offset-clause:': $7
+            };
         }
     ;
 
 /* Selection lists */
 select-list
-    : system-star 
+    : system-star
+        {$$ = {
+            type: 'selection',
+            arguments: [$1]
+            };
+        }
     | system-star "," only-user-star-select-list
+        {$$ = {
+            type: 'selection-list',
+            arguments: [$1, $3]
+            };
+        }
     | only-user-star-select-list
     ;
 
 only-user-star-select-list
     : user-star
+        {$$ = {
+            type: 'selection',
+            arguments: [$1]
+            };
+        }
     | user-star "," expression-select-list
+        {$$ = {
+            type: 'selection-list',
+            arguments: [$1, $3]
+            };
+        }
     | expression-select-list
     ;
 
 expression-select-list
     : selection
-      {
-        $$ = {
-          type: 'selection',
-          arguments: [$1]
-        };
-      }
+        {$$ = {
+            type: 'selection',
+            arguments: [$1]
+            };
+        }
     | selection "," expression-select-list
-      {
-        $$ = {
-          type: 'selection-list',
-          arguments: [$1]
-        };
-      }
+        {$$ = {
+            type: 'selection-list',
+            arguments: [$1, $3]
+            };
+        }
     ;
 
 system-star
     : ":*"
+        {$$ = {type: 'system-star'};}
     ;
 
 user-star
     : "*"
+        {$$ = {type: 'user-star'};}
     ;
 
 selection
     : expression
-      {
-        $$ = {
-          type: 'expression',
-          arguments: [$1]
-        };
-      }
-    | expression "AS" "USER_IDENTIFER"
+        {$$ = {
+            type: 'expression',
+            arguments: [$1]
+            };
+        }
+    | expression "AS" "USER_IDENTIFIER"
+        {$$ = {
+            type: 'expression-with-alias',
+            arguments: [$1, $3]
+            };
+        }
     ;
 
 /* WHERE clause */
