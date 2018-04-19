@@ -85,7 +85,6 @@ $      return 'EOF';
 %%
 
 /* Select */
-
 query
     : select EOF
         {return $1;}
@@ -105,7 +104,6 @@ select
     ;
 
 /* Selection lists */
-
 select-list
     : system-star 
     | system-star "," only-user-star-select-list
@@ -155,28 +153,24 @@ selection
     ;
 
 /* WHERE clause */
-
 where-clause
     : "WHERE" expression
     |
     ;
 
 /* GROUP BY clause */
-
 group-by-clause
     : "GROUP" "BY" expression-list having-clause
     |
     ;
 
 /* HAVING clause */
-
 having-clause
     : "HAVING" expression
     |
     ;
 
 /* ORDER BY clause */
-
 order-by-clause
     : "ORDER" "BY" ordering-list
     |
@@ -203,20 +197,19 @@ null-ordering
     |
     ;
 
-/* Limit clause */
+/* LIMIT clause */
 limit-clause
     : "LIMIT" "INTEGER_LITERAL"
     |
     ;
 
-/* Offset clause */
+/* OFFSET clause */
 offset-clause
     : "OFFSET" "INTEGER_LITERAL"
     |
     ;
 
 /* Expressions */
-
 expression
     : disjunction
     ;
