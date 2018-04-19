@@ -74,7 +74,7 @@ $      return 'EOF';
 %right "^"
 %left "*" "/" "%"
 %left "+" "-" "||"
-%left "=" "==" "!=" "<>"" "<" "<=" ">=" ">"
+%left "=" "==" "!=" "<>" "<" "<=" ">=" ">"
 %left "IS" "BETWEEN" "IN"
 %left "NOT"
 %left "AND"
