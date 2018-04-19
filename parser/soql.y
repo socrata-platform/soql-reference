@@ -33,15 +33,11 @@
 "SELECT"  return 'SELECT';
 "WHERE"   return 'WHERE';
 
-"*"     return '*';
-":*"   return ':*';
-
 ","     return ',';
-
+"*"     return '*';
+":*"    return ':*';
 "("     return "(";
 ")"     return ")";
-"["     return "[";
-"]"     return "]";
 
 "="     return "=";
 "=="    return "==";
@@ -53,7 +49,16 @@
 ">"     return ">";
 
 "+"     return "+";
+"-"     return "-";
+"||"    return "||";
+"/"     return "/";
+"%"     return "%";
+"^"     return "^";
 
+"::"    return "::";
+"."     return ".";
+"["     return "[";
+"]"     return "]";
 
 [0-9]+(\.[0-9]*)?([eE][+-]?[0-9]+)? return 'NUMBER_LITERAL';
 \".*\"         return 'STRING_LITERAL';
@@ -65,6 +70,15 @@
 $      return 'EOF';
 
 /lex
+
+%right "^"
+%left "*" "/" "%"
+%left "+" "-" "||"
+%left "=" "==" "!=" "<>"" "<" "<=" ">=" ">"
+%left "IS" "BETWEEN" "IN"
+%left "NOT"
+%left "AND"
+%left "OR"
 
 %start query
 %%
@@ -194,7 +208,7 @@ identifier
     | "SYSTEM_IDENTIFIER"
     ;
 
-dereference:
+dereference
     : dereference "." identifier
     | dereference "[" expression "]"
     | value
