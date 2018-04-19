@@ -39,8 +39,8 @@
 "("     return "(";
 ")"     return ")";
 
-"="     return "=";
 "=="    return "==";
+"="     return "=";
 "!="    return "!=";
 "<>"    return "<>";
 "<"     return "<";
@@ -90,8 +90,10 @@ query
     ;
 
 select
-    : "SELECT" select-list
+    : "SELECT" select-list where-clause group-by-clause order-by-clause limit-clause offset-clause
     ;
+
+/* Selection lists */
 
 select-list
     : system-star 
@@ -123,7 +125,26 @@ selection
     | expression "AS" "USER_IDENTIFER"
     ;
 
+/* WHERE clause */
 
+where-clause
+    : "WHERE" expression
+    |
+    ;
+
+/* GROUP BY clause */
+
+group-by-clause
+    : "GROUP" "BY" expression-list having-clause
+    |
+    ;
+
+/* HAVING clause */
+
+having-clause
+    : "HAVING" expression
+    |
+    ;
 
 /* Expressions */
 
