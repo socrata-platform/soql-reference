@@ -126,11 +126,13 @@ selection
 /* Limit */
 limit-clause
     : "LIMIT" "INTEGER_LITERAL"
+    |
     ;
 
 /* Offset */
 offset-clause
     : "OFFSET" "INTEGER_LITERAL"
+    |
     ;
 
 /* Expressions */
