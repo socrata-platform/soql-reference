@@ -147,13 +147,41 @@ having-clause
     |
     ;
 
-/* Limit */
+/* ORDER BY clause */
+
+order-by-clause
+    : "ORDER" "BY" ordering-list
+    |
+    ;
+
+ordering-list
+    : ordering
+    | ordering "," ordering-list
+    ;
+
+ordering
+    : expression sort-ordering null-ordering
+    ;
+
+sort-ordering
+    : "ASC"
+    | "DESC"
+    |
+    ;
+
+null-ordering
+    : "NULL" "FIRST"
+    | "NULL" "LAST"
+    |
+    ;
+
+/* Limit clause */
 limit-clause
     : "LIMIT" "INTEGER_LITERAL"
     |
     ;
 
-/* Offset */
+/* Offset clause */
 offset-clause
     : "OFFSET" "INTEGER_LITERAL"
     |
