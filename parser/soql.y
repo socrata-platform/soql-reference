@@ -60,6 +60,7 @@
 "["     return "[";
 "]"     return "]";
 
+[0-9]+    return 'INTEGER_LITERAL';
 [0-9]+(\.[0-9]*)?([eE][+-]?[0-9]+)? return 'NUMBER_LITERAL';
 \".*\"         return 'STRING_LITERAL';
 [TRUE|FALSE]   return 'BOOLEAN_LITERAL';
