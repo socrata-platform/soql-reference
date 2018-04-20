@@ -114,20 +114,44 @@ select
 /* Selection lists */
 select-list
     : system-star
-        {$$ = [$1];}
+        {$$ = {
+            type: 'select-list',
+            arguments: [$1, null]
+            };
+        }
     | system-star "," only-user-star-select-list
-        {$$ = [$1, $3];}
+        {$$ = {
+            type: 'select-list',
+            arguments: [$1, $3]
+            };
+        }
     | only-user-star-select-list
-        {$$ = [$1];}
+        {$$ = {
+            type: 'select-list',
+            arguments: [null, $1]
+            };
+        }
     ;
 
 only-user-star-select-list
     : user-star
-        {$$ = $1;}
+        {$$ = {
+            type: 'only-user-star-select-list',
+            arguments: [$1, null]
+            };
+        }
     | user-star "," expression-select-list
-        {$$ = [$1, $3];}
+        {$$ = {
+            type: 'only-user-star-select-list',
+            arguments: [$1, $3]
+            };
+        }
     | expression-select-list
-        {$$ = [$1];}
+        {$$ = {
+            type: 'only-user-star-select-list',
+            arguments: [null, $1]
+            };
+        }
     ;
 
 expression-select-list
@@ -147,19 +171,27 @@ expression-select-list
 
 system-star
     : ":*"
-        {$$ = {type: 'system-star', arguments: []};}
+        {$$ = {
+            type: 'system-star',
+            arguments: []
+            };
+        }
     ;
 
 user-star
     : "*"
-        {$$ = {type: 'user-star', arguments: []};}
+        {$$ = {
+            type: 'user-star',
+            arguments: []
+            };
+        }
     ;
 
 selection
     : expression
         {$$ = {
             type: 'selection',
-            arguments: [$1]
+            arguments: [$1, null]
             };
         }
     | expression "AS" user-identifier
@@ -204,35 +236,70 @@ order-by-clause
 
 ordering-list
     : ordering
+        {$$ = $1;}
     | ordering "," ordering-list
+        {$$ = {
+            type: 'ordering-list',
+            arguments: [$1, $3]
+            };
+        }
     ;
 
 ordering
     : expression sort-ordering null-ordering
+        {$$ = {
+            type: 'ordering',
+            arguments: [$1, $2, $3]
+            };
+        }
     ;
 
 sort-ordering
     : "ASC"
+        {$$ = {
+            type: 'sort-ordering',
+            arguments: [$1]
+            };
+        }
     | "DESC"
+        {$$ = {
+            type: 'sort-ordering',
+            arguments: [$1]
+            };
+        }
     |
     ;
 
 null-ordering
     : "NULL" "FIRST"
+        {$$ = {
+            type: 'null-ordering',
+            arguments: [$2]
+            };
+        }
     | "NULL" "LAST"
+        {$$ = {
+            type: 'null-ordering',
+            arguments: [$2]
+            };
+        }
     |
     ;
 
 /* LIMIT clause */
 limit-clause
-    : "LIMIT" "INTEGER_LITERAL"
+    : "LIMIT" integer-literal
+        {$$ = [$2];}
     |
+        {$$ = [];}
     ;
 
 /* OFFSET clause */
 offset-clause
-    : "OFFSET" "INTEGER_LITERAL"
+    : "OFFSET" integer-literal
+        {$$ = [$2];}
     |
+        {$$ = [];}
     ;
 
 /* Expressions */
@@ -410,7 +477,7 @@ literal
         }
     | "INTEGER_LITERAL"
         {$$ = {
-            type: 'integer-literal',
+            type: 'number-literal',
             arguments: [$1]
             };
         }
@@ -428,5 +495,14 @@ literal
         }
     | "NULL"
         {$$ = {type: 'null', arguments: []};}
+    ;
+
+integer-literal
+    : "INTEGER_LITERAL"
+        {$$ = {
+            type: 'integer-literal',
+            arguments: [$1]
+            };
+        }
     ;
 %%

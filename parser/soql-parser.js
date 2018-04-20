@@ -22,7 +22,10 @@ var examples = [
   "SELECT :*, cat AS kitten",
   "SELECT :*, *, cat AS kitten",
   "SELECT count(*)",
-  "SELECT count(cat) AS catcount"
+  "SELECT count(cat) AS catcount",
+  "SELECT * ORDER BY cat",
+  "SELECT * ORDER BY cat DESC NULL FIRST",
+  "SELECT * LIMIT 10"
 ];
 
 for (index in examples) {
