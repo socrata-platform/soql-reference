@@ -103,6 +103,8 @@ object TestFunctions {
   val FixedTimeStampTruncYmAtTimeZone = mf("fixed timestamp trunc month at time zone", FunctionName("date_trunc_ym"), Seq(TestFixedTimestamp, TestText), Seq.empty, TestFloatingTimestamp)
   val FixedTimeStampTruncYAtTimeZone = mf("fixed timestamp trunc year at time zone", FunctionName("date_trunc_y"), Seq(TestFixedTimestamp, TestText), Seq.empty, TestFloatingTimestamp)
 
+  val ToFloatingTimestamp = mf("to floating timestamp", FunctionName("to_floating_timestamp"), Seq(TestFixedTimestamp, TestText), Seq.empty, TestFloatingTimestamp)
+
   val Case = f("case", FunctionName("case"),
     Map("a" -> AllTypes),
     Seq(FixedType(TestBoolean), VariableType("a")),
