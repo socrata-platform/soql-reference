@@ -198,9 +198,9 @@ object SoQLFunctions {
   // This set of date_trunc functions for fixed_timestamp are for obe compatibility purpose.
   // The truncated boundary does not aligned with the client time zone unless it happens to have the same time zone as the server.
   // The FixedTimeStampTrunc*AtTimeZone set give the client more control to align at particular time zone.
-  val FixedTimeStampTruncYmd = mf("fixed timestamp trunc day", FunctionName("date_trunc_ymd"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)
-  val FixedTimeStampTruncYm = mf("fixed timestamp trunc month", FunctionName("date_trunc_ym"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)
-  val FixedTimeStampTruncY = mf("fixed timestamp trunc year", FunctionName("date_trunc_y"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)
+  val FixedTimeStampTruncYmd = mf("fixed timestamp trunc day", FunctionName("datez_trunc_ymd"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)
+  val FixedTimeStampTruncYm = mf("fixed timestamp trunc month", FunctionName("datez_trunc_ym"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)
+  val FixedTimeStampTruncY = mf("fixed timestamp trunc year", FunctionName("datez_trunc_y"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)
 
 
   val FixedTimeStampTruncYmdAtTimeZone = mf("fixed timestamp trunc day at time zone", FunctionName("date_trunc_ymd"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)
