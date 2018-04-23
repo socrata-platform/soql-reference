@@ -539,7 +539,7 @@ SELECT visits, @x2.zx
     partitionExpected.message must startWith("`PARTITION' expected")
   }
 
-  test("date_trunc fixed_timestamp with and without time zone") {
+  test("overloading and aliases work") {
     val analysisWordStyle = analyzer.analyzeUnchainedQuery("SELECT date_trunc_ymd(:created_at) as dt, date_trunc_ymd(:created_at, 'PDT') as dt_pdt")
     analysisWordStyle.isGrouped must equal(false)
     val select = analysisWordStyle.selection.toSeq
