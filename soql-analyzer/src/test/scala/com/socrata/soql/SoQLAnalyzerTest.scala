@@ -539,8 +539,8 @@ SELECT visits, @x2.zx
     partitionExpected.message must startWith("`PARTITION' expected")
   }
 
-  test("overloading and aliases work") {
-    val analysisWordStyle = analyzer.analyzeUnchainedQuery("SELECT date_trunc_ymd(:created_at) as dt, date_trunc_ymd(:created_at, 'PDT') as dt_pdt")
+  test("aliases work") {
+    val analysisWordStyle = analyzer.analyzeUnchainedQuery("SELECT datez_trunc_ymd(:created_at) as dt, date_trunc_ymd(:created_at, 'PDT') as dt_pdt")
     analysisWordStyle.isGrouped must equal(false)
     val select = analysisWordStyle.selection.toSeq
     select must equal(Seq(

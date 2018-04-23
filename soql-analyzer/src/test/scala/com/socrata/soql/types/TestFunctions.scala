@@ -95,9 +95,9 @@ object TestFunctions {
   val FloatingTimeStampTruncYm = mf("floating timestamp trunc month", FunctionName("date_trunc_ym"), Seq(TestFloatingTimestamp), Seq.empty, TestFloatingTimestamp)
   val FloatingTimeStampTruncY = mf("floating timestamp trunc year", FunctionName("date_trunc_y"), Seq(TestFloatingTimestamp), Seq.empty, TestFloatingTimestamp)
 
-  val FixedTimeStampTruncYmd = mf("fixed timestamp trunc day", FunctionName("date_trunc_ymd"), Seq(TestFixedTimestamp), Seq.empty, TestFixedTimestamp)
-  val FixedTimeStampTruncYm = mf("fixed timestamp trunc month", FunctionName("date_trunc_ym"), Seq(TestFixedTimestamp), Seq.empty, TestFixedTimestamp)
-  val FixedTimeStampTruncY = mf("fixed timestamp trunc year", FunctionName("date_trunc_y"), Seq(TestFixedTimestamp), Seq.empty, TestFixedTimestamp)
+  val FixedTimeStampTruncYmd = mf("fixed timestamp trunc day", FunctionName("datez_trunc_ymd"), Seq(TestFixedTimestamp), Seq.empty, TestFixedTimestamp)
+  val FixedTimeStampTruncYm = mf("fixed timestamp trunc month", FunctionName("datez_trunc_ym"), Seq(TestFixedTimestamp), Seq.empty, TestFixedTimestamp)
+  val FixedTimeStampTruncY = mf("fixed timestamp trunc year", FunctionName("datez_trunc_y"), Seq(TestFixedTimestamp), Seq.empty, TestFixedTimestamp)
 
   val FixedTimeStampTruncYmdAtTimeZone = mf("fixed timestamp trunc day at time zone", FunctionName("date_trunc_ymd"), Seq(TestFixedTimestamp, TestText), Seq.empty, TestFloatingTimestamp)
   val FixedTimeStampTruncYmAtTimeZone = mf("fixed timestamp trunc month at time zone", FunctionName("date_trunc_ym"), Seq(TestFixedTimestamp, TestText), Seq.empty, TestFloatingTimestamp)
