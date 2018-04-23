@@ -194,6 +194,22 @@ object SoQLFunctions {
   val FloatingTimeStampExtractDow = mf("floating timestamp extract day of week", FunctionName("date_extract_dow"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
   val FloatingTimeStampExtractWoy = mf("floating timestamp extract week of year", FunctionName("date_extract_woy"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
 
+
+  // This set of date_trunc functions for fixed_timestamp are for obe compatibility purpose.
+  // The truncated boundary does not aligned with the client time zone unless it happens to have the same time zone as the server.
+  // The FixedTimeStampTrunc*AtTimeZone set give the client more control to align at particular time zone.
+  val FixedTimeStampTruncYmd = mf("fixed timestamp trunc day", FunctionName("date_trunc_ymd"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)
+  val FixedTimeStampTruncYm = mf("fixed timestamp trunc month", FunctionName("date_trunc_ym"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)
+  val FixedTimeStampTruncY = mf("fixed timestamp trunc year", FunctionName("date_trunc_y"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)
+
+
+  val FixedTimeStampTruncYmdAtTimeZone = mf("fixed timestamp trunc day at time zone", FunctionName("date_trunc_ymd"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)
+  val FixedTimeStampTruncYmAtTimeZone = mf("fixed timestamp trunc month at time zone", FunctionName("date_trunc_ym"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)
+  val FixedTimeStampTruncYAtTimeZone = mf("fixed timestamp trunc year at time zone", FunctionName("date_trunc_y"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)
+
+  // Translate a fixed timestamp to a given time zone and convert it to a floating timestamp.
+  val ToFloatingTimestamp = mf("to floating timestamp", FunctionName("to_floating_timestamp"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)
+
   val castIdentities = for ((n, t) <- SoQLType.typesByName.toSeq) yield {
     f(n.caseFolded + "::" + n.caseFolded, SpecialFunctions.Cast(n), Map.empty, Seq(FixedType(t)), Seq.empty, FixedType(t))
   }

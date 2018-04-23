@@ -91,6 +91,20 @@ object TestFunctions {
   val CuratedRegionTest = f("curated_region_test", FunctionName("curated_region_test"), Map("a" -> GeospatialLike, "b" -> NumLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(TestText))
 
+  val FloatingTimeStampTruncYmd = mf("floating timestamp trunc day", FunctionName("date_trunc_ymd"), Seq(TestFloatingTimestamp), Seq.empty, TestFloatingTimestamp)
+  val FloatingTimeStampTruncYm = mf("floating timestamp trunc month", FunctionName("date_trunc_ym"), Seq(TestFloatingTimestamp), Seq.empty, TestFloatingTimestamp)
+  val FloatingTimeStampTruncY = mf("floating timestamp trunc year", FunctionName("date_trunc_y"), Seq(TestFloatingTimestamp), Seq.empty, TestFloatingTimestamp)
+
+  val FixedTimeStampTruncYmd = mf("fixed timestamp trunc day", FunctionName("date_trunc_ymd"), Seq(TestFixedTimestamp), Seq.empty, TestFixedTimestamp)
+  val FixedTimeStampTruncYm = mf("fixed timestamp trunc month", FunctionName("date_trunc_ym"), Seq(TestFixedTimestamp), Seq.empty, TestFixedTimestamp)
+  val FixedTimeStampTruncY = mf("fixed timestamp trunc year", FunctionName("date_trunc_y"), Seq(TestFixedTimestamp), Seq.empty, TestFixedTimestamp)
+
+  val FixedTimeStampTruncYmdAtTimeZone = mf("fixed timestamp trunc day at time zone", FunctionName("date_trunc_ymd"), Seq(TestFixedTimestamp, TestText), Seq.empty, TestFloatingTimestamp)
+  val FixedTimeStampTruncYmAtTimeZone = mf("fixed timestamp trunc month at time zone", FunctionName("date_trunc_ym"), Seq(TestFixedTimestamp, TestText), Seq.empty, TestFloatingTimestamp)
+  val FixedTimeStampTruncYAtTimeZone = mf("fixed timestamp trunc year at time zone", FunctionName("date_trunc_y"), Seq(TestFixedTimestamp, TestText), Seq.empty, TestFloatingTimestamp)
+
+  val ToFloatingTimestamp = mf("to floating timestamp", FunctionName("to_floating_timestamp"), Seq(TestFixedTimestamp, TestText), Seq.empty, TestFloatingTimestamp)
+
   val Case = f("case", FunctionName("case"),
     Map("a" -> AllTypes),
     Seq(FixedType(TestBoolean), VariableType("a")),
