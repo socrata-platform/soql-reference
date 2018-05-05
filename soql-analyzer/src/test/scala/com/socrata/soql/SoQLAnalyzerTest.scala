@@ -539,12 +539,15 @@ SELECT visits, @x2.zx
     partitionExpected.message must startWith("`PARTITION' expected")
   }
 
-  test("aliases work") {
-    val analysisWordStyle = analyzer.analyzeUnchainedQuery("SELECT datez_trunc_ymd(:created_at) as dt, date_trunc_ymd(:created_at, 'PDT') as dt_pdt")
+  test("overloading and aliases work") {
+    val analysisWordStyle = analyzer.analyzeUnchainedQuery(
+      "SELECT datez_trunc_ymd(:created_at) as dt, date_trunc_ymd(:created_at) as dt2, date_trunc_ymd(:created_at, 'PDT') as dt_pdt")
     analysisWordStyle.isGrouped must equal(false)
     val select = analysisWordStyle.selection.toSeq
     select must equal(Seq(
-      ColumnName("dt") -> typed.FunctionCall(TestFunctions.FixedTimeStampTruncYmd.monomorphic.get,
+      ColumnName("dt") -> typed.FunctionCall(TestFunctions.FixedTimeStampZTruncYmd.monomorphic.get,
+        Seq(typed.ColumnRef(None, ColumnName(":created_at"), TestFixedTimestamp.t)(NoPosition)))(NoPosition, NoPosition),
+      ColumnName("dt2") -> typed.FunctionCall(TestFunctions.FixedTimeStampTruncYmd.monomorphic.get,
         Seq(typed.ColumnRef(None, ColumnName(":created_at"), TestFixedTimestamp.t)(NoPosition)))(NoPosition, NoPosition),
       ColumnName("dt_pdt") -> typed.FunctionCall(TestFunctions.FixedTimeStampTruncYmdAtTimeZone.monomorphic.get,
         Seq(typed.ColumnRef(None, ColumnName(":created_at"), TestFixedTimestamp.t)(NoPosition),
