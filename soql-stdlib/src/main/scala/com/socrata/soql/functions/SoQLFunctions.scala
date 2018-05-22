@@ -202,11 +202,6 @@ object SoQLFunctions {
   val FixedTimeStampZTruncYm = mf("fixed timestamp z trunc month", FunctionName("datez_trunc_ym"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)
   val FixedTimeStampZTruncY = mf("fixed timestamp z trunc year", FunctionName("datez_trunc_y"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)
 
-  // These are aliases of FixedTimeStampZTrunc*.
-  val FixedTimeStampTruncYmd = mf("fixed timestamp trunc day", FunctionName("date_trunc_ymd"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)
-  val FixedTimeStampTruncYm = mf("fixed timestamp trunc month", FunctionName("date_trunc_ym"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)
-  val FixedTimeStampTruncY = mf("fixed timestamp trunc year", FunctionName("date_trunc_y"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)
-
   val FixedTimeStampTruncYmdAtTimeZone = mf("fixed timestamp trunc day at time zone", FunctionName("date_trunc_ymd"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)
   val FixedTimeStampTruncYmAtTimeZone = mf("fixed timestamp trunc month at time zone", FunctionName("date_trunc_ym"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)
   val FixedTimeStampTruncYAtTimeZone = mf("fixed timestamp trunc year at time zone", FunctionName("date_trunc_y"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)
