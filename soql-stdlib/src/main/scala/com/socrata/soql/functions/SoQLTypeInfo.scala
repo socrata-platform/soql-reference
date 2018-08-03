@@ -38,6 +38,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
   private val textToPhoneFunc = getMonomorphically(SoQLFunctions.TextToPhone)
   private val textToUrlFunc = getMonomorphically(SoQLFunctions.TextToUrl)
   private val textToLocationFunc = getMonomorphically(SoQLFunctions.TextToLocation)
+  private val textToBooleanFunc = getMonomorphically(SoQLFunctions.TextToBoolean)
 
   private def isNumberLiteral(s: String) = try {
     val lexer = new Lexer(s)
@@ -58,6 +59,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
     (SoQLID.isPossibleId, Seq(textToRowIdFunc)),
     (SoQLVersion.isPossibleVersion, Seq(textToRowVersionFunc)),
     (isNumberLiteral, Seq(textToNumberFunc, textToMoneyFunc)),
+    (SoQLBoolean.StringRep.unapply(_).isDefined, Seq(textToBooleanFunc)),
     (SoQLPoint.WktRep.unapply(_).isDefined, Seq(textToPointFunc)),
     (SoQLMultiPoint.WktRep.unapply(_).isDefined, Seq(textToMultiPointFunc)),
     (SoQLLine.WktRep.unapply(_).isDefined, Seq(textToLineFunc)),

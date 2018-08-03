@@ -170,6 +170,18 @@ case object SoQLBoolean extends SoQLType("boolean") {
   val canonicalTrue = SoQLBoolean(true)
   val canonicalFalse = SoQLBoolean(false)
   def canonicalValue(b: Boolean) = if(b) canonicalTrue else canonicalFalse
+
+  object StringRep {
+    def unapply(text: String): Option[Boolean] =
+      text match {
+        case "true" => Some(true)
+        case "false" => Some(false)
+        case _ => None
+      }
+
+    def apply(b: Boolean) =
+      if(b) "true" else "false"
+  }
 }
 
 case class SoQLNumber(value: java.math.BigDecimal) extends SoQLValue {
