@@ -6,10 +6,14 @@ import util.parsing.input.Position
 import com.socrata.soql.{ast, tokens}
 import com.socrata.soql.tokens._
 import com.socrata.soql.ast._
-import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
+import com.socrata.soql.environment.{ColumnName, FunctionName, HoleName, TableName, TypeName}
 
 object AbstractParser {
-  class Parameters(val allowJoins: Boolean = true, val systemColumnAliasesAllowed: Set[ColumnName] = Set.empty)
+  class Parameters(
+    val allowJoins: Boolean = true,
+    val systemColumnAliasesAllowed: Set[ColumnName] = Set.empty,
+    val allowHoles: Boolean = false
+  )
   val defaultParameters = new Parameters()
 }
 
@@ -120,7 +124,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       case None => (None, None)
     }
 
-  def limitOffset: Parser[(Option[BigInt], Option[BigInt])] =
+  def limitOffset: Parser[(Option[HoleInt], Option[HoleInt])] =
     limitClause ~ opt(offsetClause) ^^ {
       case l ~ o => (Some(l), o)
     } |
@@ -133,8 +137,8 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def groupByClause = GROUP() ~ BY() ~> groupByList
   def havingClause = HAVING() ~> expr
   def orderByClause = ORDER() ~ BY() ~> orderingList
-  def limitClause = LIMIT() ~> integer
-  def offsetClause = OFFSET() ~> integer
+  def limitClause = LIMIT() ~> integerHole
+  def offsetClause = OFFSET() ~> integerHole
   def searchClause = SEARCH() ~> stringLiteral
 
   def joinClause: PackratParser[Join] =
@@ -247,8 +251,18 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   val integer =
     accept[IntegerLiteral] ^^ (_.asInt) | failure(errors.missingInteger)
 
+  val integerHole: Parser[HoleInt] =
+    if(allowHoles) {
+      integer ^^ HoleIntInt | hole ^^ HoleIntHole
+    } else {
+      integer ^^ HoleIntInt
+    }
+
   val stringLiteral =
     accept[tokens.StringLiteral] ^^ (_.value)
+
+  val hole =
+    accept[HoleIdentifier] ^^ { n => ast.Hole(HoleName(n.value))(n.position) }
 
   /*
    *               ***************
@@ -342,8 +356,11 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def paren: Parser[Expression] =
     LPAREN() ~> expr <~ RPAREN() ^^ { e => FunctionCall(SpecialFunctions.Parens, Seq(e))(e.position, e.position) }
 
-  def atom =
-    literal | identifier_or_funcall | paren | failure(errors.missingExpr)
+  def atom = {
+    def base = literal | identifier_or_funcall | paren | failure(errors.missingExpr)
+    if(allowHoles) base | hole
+    else base
+  }
 
   lazy val dereference: PackratParser[Expression] =
     dereference ~ DOT() ~ simpleIdentifier ^^ {

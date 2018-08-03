@@ -142,26 +142,26 @@ class ParserTest extends WordSpec with MustMatchers {
 
     "allow offset/limit" in {
       val x = parseFull("select * offset 6 limit 5")
-      x.offset must be (Some(BigInt(6)))
-      x.limit must be (Some(BigInt(5)))
+      x.offset must be (Some(HoleIntInt(BigInt(6))))
+      x.limit must be (Some(HoleIntInt(BigInt(5))))
     }
 
     "allow limit/offset" in {
       val x = parseFull("select * limit 6 offset 5")
-      x.limit must be (Some(BigInt(6)))
-      x.offset must be (Some(BigInt(5)))
+      x.limit must be (Some(HoleIntInt(BigInt(6))))
+      x.offset must be (Some(HoleIntInt(BigInt(5))))
     }
 
     "allow only limit" in {
       val x = parseFull("select * limit 32")
-      x.limit must be (Some(BigInt(32)))
+      x.limit must be (Some(HoleIntInt(BigInt(32))))
       x.offset must be (None)
     }
 
     "allow only offset" in {
       val x = parseFull("select * offset 7")
       x.limit must be (None)
-      x.offset must be (Some(BigInt(7)))
+      x.offset must be (Some(HoleIntInt(BigInt(7))))
     }
 
     "allow search" in {

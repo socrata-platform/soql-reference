@@ -3,22 +3,22 @@ package com.socrata.soql.typechecker
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions._
 import com.socrata.soql.typed
-import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
+import com.socrata.soql.environment.{ColumnName, DatasetContext, HoleName, TableName}
 
-class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: String => DatasetContext[Type]) extends ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]]) => typed.CoreExpr[ColumnName, Type]) { self =>
+class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: String => DatasetContext[Type]) extends ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]], Map[HoleName, String]) => typed.CoreExpr[ColumnName, Type]) { self =>
   import typeInfo._
 
   type Expr = typed.CoreExpr[ColumnName, Type]
 
   val functionCallTypechecker = new FunctionCallTypechecker(typeInfo, functionInfo)
 
-  def apply(e: Expression, aliases: Map[ColumnName, Expr]) = typecheck(e, aliases) match {
+  def apply(e: Expression, aliases: Map[ColumnName, Expr], holeValues: Map[HoleName, String]) = typecheck(e, aliases, holeValues) match {
     case Left(tm) => throw tm
     case Right(es) => disambiguate(es)
   }
 
   // never returns an empty value
-  private def typecheck(e: Expression, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = e match {
+  private def typecheck(e: Expression, aliases: Map[ColumnName, Expr], holeValues: Map[HoleName, String]): Either[TypecheckException, Seq[Expr]] = e match {
     case r@ColumnOrAliasRef(qual, col) =>
       aliases.get(col) match {
         case Some(typed.ColumnRef(aQual, name, typ)) if name == col && qual == aQual =>
@@ -27,7 +27,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
           // semi-implicitly assigned aliases, so it's better anyway.
           Right(Seq(typed.ColumnRef(aQual, col, typ)(r.position)))
         case Some(typed.ColumnRef(aQual, name, typ)) if name == col && qual != aQual =>
-          typecheck(e, Map.empty) // TODO: Revisit aliases from multiple schemas
+          typecheck(e, Map.empty, holeValues) // TODO: Revisit aliases from multiple schemas
         case Some(tree) =>
           Right(Seq(tree))
         case None =>
@@ -41,9 +41,9 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       }
     case FunctionCall(SpecialFunctions.Parens, params) =>
       assert(params.length == 1, "Parens with more than one parameter?!")
-      typecheck(params(0), aliases)
+      typecheck(params(0), aliases, holeValues)
     case fc@FunctionCall(name, parameters) =>
-      val typedParameters = parameters.map(typecheck(_, aliases)).map {
+      val typedParameters = parameters.map(typecheck(_, aliases, holeValues)).map {
         case Left(tm) => return Left(tm)
         case Right(es) => es
       }
@@ -98,6 +98,13 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       Right(numberLiteralExpr(n, nl.position))
     case nl@NullLiteral() =>
       Right(nullLiteralExpr(nl.position))
+    case hole@Hole(name) =>
+      holeValues.get(name) match {
+        case Some(s) =>
+          Right(stringLiteralExpr(s, hole.position))
+        case None =>
+          Right(nullLiteralExpr(hole.position))
+      }
   }
 
   def divide[T, L, R](xs: TraversableOnce[T])(f: T => Either[L, R]): (Seq[L], Seq[R]) = {

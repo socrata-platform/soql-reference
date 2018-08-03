@@ -2,7 +2,7 @@ package com.socrata.soql.ast
 
 import scala.util.parsing.input.Position
 import scala.runtime.ScalaRunTime
-import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
+import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName, HoleName}
 
 sealed abstract class Expression extends Product {
   val position: Position
@@ -45,6 +45,8 @@ object Expression {
             args.tail.flatMap(findIdentsAndLiterals)
         case FunctionCall(other, args) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals)
       }
+    case Hole(name) =>
+      Vector(name.name)
   }
 }
 
@@ -153,4 +155,9 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
     case other => parameters.mkString(other + "(", ",", ")")
   }
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
+}
+
+case class Hole(name: HoleName)(val position: Position) extends Expression {
+  def allColumnRefs = Set.empty
+  protected def asString = "?" + name
 }

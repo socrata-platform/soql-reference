@@ -33,20 +33,20 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     * @param query The SELECT to parse and analyze
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
     * @return The analysis of the query */
-  def analyzeFullQuery(query: String)(implicit ctx: AnalysisContext): Seq[Analysis] = {
+  def analyzeFullQuery(query: String, holeValues: Map[HoleName, String] = Map.empty)(implicit ctx: AnalysisContext): Seq[Analysis] = {
     log.debug("Analyzing full query {}", query)
     val start = System.nanoTime()
     val parsed = new Parser(parserParameters).selectStatement(query)
     val end = System.nanoTime()
     log.trace("Parsing took {}ms", ns2ms(end - start))
-    analyze(parsed)
+    analyze(parsed, holeValues)
   }
 
-  def analyze(selects: Seq[Select])(implicit ctx: AnalysisContext): Seq[Analysis] = {
+  def analyze(selects: Seq[Select], holeValues: Map[HoleName, String] = Map.empty)(implicit ctx: AnalysisContext): Seq[Analysis] = {
     selects.headOption match {
       case Some(firstSelect) =>
-        val firstAnalysis = analyzeWithSelection(firstSelect)(ctx)
-        selects.tail.scanLeft(firstAnalysis)(analyzeInOuterSelectionContext(ctx))
+        val firstAnalysis = analyzeWithSelection(firstSelect, holeValues)(ctx)
+        selects.tail.scanLeft(firstAnalysis)(analyzeInOuterSelectionContext(ctx, holeValues))
       case None =>
         Seq.empty
     }
@@ -57,14 +57,14 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     * @param query The SELECT to parse and analyze
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
     * @return The analysis of the query */
-  def analyzeUnchainedQuery(query: String)(implicit ctx: AnalysisContext): Analysis = {
+  def analyzeUnchainedQuery(query: String, holeValues: Map[HoleName, String] = Map.empty)(implicit ctx: AnalysisContext): Analysis = {
     log.debug("Analyzing full unchained query {}", query)
     val start = System.nanoTime()
     val parsed = new Parser(parserParameters).unchainedSelectStatement(query)
     val end = System.nanoTime()
     log.trace("Parsing took {}ms", ns2ms(end - start))
 
-    analyzeWithSelection(parsed)(ctx)
+    analyzeWithSelection(parsed, holeValues)(ctx)
   }
 
   private def baseAnalysis(implicit ctx: AnalysisContext) = {
@@ -131,7 +131,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                  where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) =
       selection match {
         case None => analyzeNoSelectionInOuterSelectionContext(lastQuery, distinct, joins, where, groupBy, having, orderBy, limit, offset, search)
-        case Some(s) => analyzeInOuterSelectionContext(ctx)(lastQuery, Select(distinct, s, None, joins, where, groupBy, having, orderBy, limit, offset, search))
+        case Some(s) => analyzeInOuterSelectionContext(ctx)(lastQuery, Select(distinct, s, None, joins, where, groupBy, having, orderBy, limit.map(HoleIntInt), offset.map(HoleIntInt), search))
       }
 
     dispatch(
@@ -194,7 +194,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     val subscriptConverter = new SubscriptConverter(typeInfo, functionInfo)
 
     // Rewrite subscript before typecheck
-    val typecheck = subscriptConverter andThen (e => typechecker(e, Map.empty))
+    val typecheck = subscriptConverter andThen (e => typechecker(e, Map.empty, Map.empty))
 
     val t0 = System.nanoTime()
     val checkedWhere = where.map(typecheck)
@@ -227,7 +227,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
       log.trace("alias analysis took {}ms", ns2ms(afterAliasAnalysis - beforeAliasAnalysis))
 
-      val typedSelectedExpressions = checkedGroupBy.getOrElse(Nil) :+ typechecker(count_*, Map.empty)
+      val typedSelectedExpressions = checkedGroupBy.getOrElse(Nil) :+ typechecker(count_*, Map.empty, Map.empty)
 
       (names, typedSelectedExpressions)
     } else { // ok, no group by...
@@ -270,10 +270,10 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       search)
   }
 
-  def analyzeInOuterSelectionContext(initialCtx: AnalysisContext)(lastQuery: Analysis, query: Select): Analysis = {
+  def analyzeInOuterSelectionContext(initialCtx: AnalysisContext, holeValues: Map[HoleName, String] = Map.empty)(lastQuery: Analysis, query: Select): Analysis = {
     val prevCtx = contextFromAnalysis(lastQuery)
     val nextCtx = prevCtx ++ initialCtx.filterKeys(qualifier => TableName.PrimaryTable.qualifier != qualifier)
-    analyzeWithSelection(query)(nextCtx)
+    analyzeWithSelection(query, holeValues)(nextCtx)
   }
 
   def contextFromAnalysis(a: Analysis): AnalysisContext = {
@@ -290,7 +290,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     (qualifier -> ctx)
   }
 
-  def analyzeWithSelection(query: Select)(implicit ctx: AnalysisContext): Analysis = {
+  def analyzeWithSelection(query: Select, holeValues: Map[HoleName, String] = Map.empty)(implicit ctx: AnalysisContext): Analysis = {
     log.debug("There is a selection; typechecking all parts")
 
     val ctxFromJoins = joinCtx(query.join)
@@ -303,11 +303,11 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     val aliasAnalysis = AliasAnalysis(query.selection)
     val t1 = System.nanoTime()
     val typedAliases = aliasAnalysis.evaluationOrder.foldLeft(Map.empty[ColumnName, Expr]) { (acc, alias) =>
-      acc + (alias -> typechecker(subscriptConverter(aliasAnalysis.expressions(alias)), acc))
+      acc + (alias -> typechecker(subscriptConverter(aliasAnalysis.expressions(alias)), acc, holeValues))
     }
 
     // Rewrite subscript before typecheck
-    val typecheck = subscriptConverter andThen (e => typechecker(e, typedAliases))
+    val typecheck = subscriptConverter andThen (e => typechecker(e, typedAliases, holeValues))
 
     val checkedJoin = query.join.map { js => js.map { j: Join =>
       val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx +
@@ -347,8 +347,19 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     finishAnalysis(isGrouped, query.distinct,
                    outputs, query.from.map(_.name),
                    checkedJoin, checkedWhere, checkedGroupBy, checkedHaving, checkedOrderBy,
-                   query.limit, query.offset, query.search)
+                   query.limit.flatMap(fillIntHole(_, holeValues)), query.offset.flatMap(fillIntHole(_, holeValues)), query.search)
   }
+
+  private def fillIntHole(n: HoleInt, holeValues: Map[HoleName, String]): Option[BigInt] =
+    n match {
+      case HoleIntInt(v) =>
+        Some(v)
+      case HoleIntHole(Hole(name)) =>
+        holeValues.get(name).map { v =>
+          try { BigInt(v) }
+          catch { case _ : NumberFormatException => throw new Exception("Something") }
+        }
+    }
 
   def finishAnalysis(isGrouped: Boolean,
                      distinct: Boolean,

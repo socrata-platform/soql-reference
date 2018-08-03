@@ -37,6 +37,7 @@ class SubscriptConverter[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionI
       }
     case fc@FunctionCall(_, _) =>
       convertFunctionCall(fc)
+    case h: Hole => h
   }
 
   private def convertFunctionCall(fc: FunctionCall): Expression = {

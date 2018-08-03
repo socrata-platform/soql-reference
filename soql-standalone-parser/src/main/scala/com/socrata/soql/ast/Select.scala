@@ -1,9 +1,9 @@
 package com.socrata.soql.ast
 
 import scala.util.parsing.input.{NoPosition, Position}
-import com.socrata.soql.environment.{ColumnName, TableName}
+import com.socrata.soql.environment.{ColumnName, HoleName, TableName}
 
-case class Select(distinct: Boolean, selection: Selection, from: Option[TableName], join: Option[List[Join]], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) {
+case class Select(distinct: Boolean, selection: Selection, from: Option[TableName], join: Option[List[Join]], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[HoleInt], offset: Option[HoleInt], search: Option[String]) {
   override def toString = {
     if(AST.pretty) {
       val sb = new StringBuilder("SELECT ")
@@ -22,6 +22,26 @@ case class Select(distinct: Boolean, selection: Selection, from: Option[TableNam
       offset.foreach(sb.append(" OFFSET ").append(_))
       search.foreach(s => sb.append(" SEARCH ").append(Expression.escapeString(s)))
       sb.toString
+    } else {
+      AST.unpretty(this)
+    }
+  }
+}
+
+sealed abstract class HoleInt
+case class HoleIntHole(hole: Hole) extends HoleInt {
+  override def toString = {
+    if(AST.pretty) {
+      hole.toString
+    } else {
+      AST.unpretty(this)
+    }
+  }
+}
+case class HoleIntInt(int: BigInt) extends HoleInt {
+  override def toString = {
+    if(AST.pretty) {
+      int.toString
     } else {
       AST.unpretty(this)
     }

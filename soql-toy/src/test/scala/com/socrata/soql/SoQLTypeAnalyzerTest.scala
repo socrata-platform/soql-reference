@@ -70,7 +70,7 @@ class SoQLTypeAnalyzerTest extends FunSuite with MustMatchers with PropertyCheck
 
   def typedExpression(s: String) = {
     val tc = new Typechecker(SoQLTypeInfo, SoQLFunctionInfo)
-    tc(expression(s), Map.empty)
+    tc(expression(s), Map.empty, Map.empty)
   }
 
   /**

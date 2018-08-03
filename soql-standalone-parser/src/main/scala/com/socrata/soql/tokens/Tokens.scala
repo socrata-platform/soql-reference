@@ -122,6 +122,11 @@ case class SystemIdentifier(value: String, quoted: Boolean) extends ValueToken[S
 }
 case class TableIdentifier(value: String) extends ValueToken[String] // For #abcd-2345 syntax
 
+// Holes
+case class HoleIdentifier(value: String) extends ValueToken[String] {
+  override def printable = "?" + value
+}
+
 // Punctuation
 case class COMMA() extends Token
 case class COLONSTAR() extends FormattedToken(":*")

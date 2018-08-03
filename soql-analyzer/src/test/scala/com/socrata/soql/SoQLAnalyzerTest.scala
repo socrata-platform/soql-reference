@@ -7,8 +7,8 @@ import org.scalatest.prop.PropertyChecks
 import scala.util.parsing.input.NoPosition
 import org.scalatest.FunSuite
 import org.scalatest.MustMatchers
-import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
-import com.socrata.soql.parsing.Parser
+import com.socrata.soql.environment.{ColumnName, DatasetContext, HoleName, TableName}
+import com.socrata.soql.parsing.{AbstractParser, Parser}
 import com.socrata.soql.typechecker.Typechecker
 import com.socrata.soql.types._
 import com.socrata.soql.functions.MonomorphicFunction
@@ -69,12 +69,13 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
         TableName("_aaaa-aaax", None).qualifier -> joinAliasWoOverlapCtx)
 
   val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo)
+  def analyzerWithParams(parserParameters: AbstractParser.Parameters) = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo, parserParameters)
 
   def expression(s: String) = new Parser().expression(s)
 
   def typedExpression(s: String) = {
     val tc = new Typechecker(TestTypeInfo, TestFunctionInfo)
-    tc(expression(s), Map.empty)
+    tc(expression(s), Map.empty, Map.empty)
   }
 
   test("analysis succeeds in a most minimal query") {
@@ -554,5 +555,16 @@ SELECT visits, @x2.zx
         )
         (NoPosition, NoPosition)
     ))
+  }
+
+  test("holes work") {
+    val analysis = analyzerWithParams(new AbstractParser.Parameters(allowHoles = true)).
+      analyzeUnchainedQuery("SELECT visits WHERE name_first = ?name",
+                            Map(HoleName("name") → "Robert"))
+    val select = analysis.where
+    select must equal(Some(
+      typed.FunctionCall(MonomorphicFunction(TestFunctions.Eq, Map("a" → TestText.t)),
+        Seq(typed.ColumnRef(None, ColumnName("name_first"), TestText.t)(NoPosition),
+            typed.StringLiteral("Robert", TestText.t)(NoPosition)))(NoPosition, NoPosition)))
   }
 }
