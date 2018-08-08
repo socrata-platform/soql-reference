@@ -97,17 +97,17 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
 
   def pipedSelect: Parser[Seq[Select]] = rep1sep(unchainedSelect, QUERYPIPE())
 
-  def unchainedSelect: Parser[Select] =
-    if(allowJoins) {
-      SELECT() ~> distinct ~ selectList ~ opt(FROM() ~> tableIdentifier ~ opt(AS() ~> simpleIdentifier)) ~
-        opt(joinList) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-        case d ~ s ~ f ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(d, s, f.map(x => TableName(x._1._1, x._2.map(TableName.SodaFountainTableNamePrefix + _._1))), j, w, gb, h, ord, lim, off, sr)
-      }
-    } else {
-      SELECT() ~> distinct ~ selectList ~ opt(FROM() ~> tableIdentifier ~ opt(AS() ~> simpleIdentifier)) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-        case d ~ s ~ f ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(d, s, f.map(x => TableName(x._1._1, x._2.map(TableName.SodaFountainTableNamePrefix + _._1))), None, w, gb, h, ord, lim, off, sr)
-      }
+  def onlyIf[T](b: Boolean)(p: Parser[T]): Parser[T] = p ^? { case x if b => x }
+
+  def ifCanJoin[T](p: Parser[T]): Parser[Option[T]] = opt(onlyIf(allowJoins)(p))
+
+  def unchainedSelect: Parser[Select] = {
+    SELECT() ~> distinct ~ selectList ~ opt(FROM() ~> tableIdentifier ~ opt(AS() ~> simpleIdToAlias)) ~
+      ifCanJoin(joinList) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+      case d ~ s ~ f ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
+        Select(d, s, f.map(x => TableName(x._1._1, x._2)), j, w, gb, h, ord, lim, off, sr)
     }
+  }
 
   def distinct: Parser[Boolean] = opt(DISTINCT()) ^^ (_.isDefined)
 
@@ -137,20 +137,20 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def offsetClause = OFFSET() ~> integer
   def searchClause = SEARCH() ~> stringLiteral
 
+  // the alias here is aliasing an entire subquery in a join
   def joinClause: PackratParser[Join] =
-    opt((LEFT() | RIGHT() | FULL()) ~ OUTER()) ~ JOIN() ~ tableLike ~ opt(AS() ~> simpleIdentifier) ~ ON() ~ expr ^^ {
-      case None ~ j ~ t ~ None ~ o ~ e => InnerJoin(t, None, e)
-      case None ~ j ~ t ~ Some((alias, pos)) ~ o ~ e => InnerJoin(t, Some(TableName.SodaFountainTableNamePrefix + alias), e)
-      case Some(jd) ~ j ~ t ~ None ~ o ~ e => OuterJoin(jd._1, t, None, e)
-      case Some(jd) ~ j ~ t ~ Some((alias, pos)) ~ o ~ e => OuterJoin(jd._1, t, Some(TableName.SodaFountainTableNamePrefix + alias), e)
+    opt((LEFT() | RIGHT() | FULL()) ~ OUTER()) ~ JOIN() ~ tableLike ~ opt(AS() ~> simpleIdToAlias) ~ ON() ~ expr ^^ {
+      case None ~ _ ~ t ~ a ~ _ ~ e => InnerJoin(t, a, e)
+      case Some(jd) ~ _ ~ t ~ a ~ _ ~ e => OuterJoin(jd._1, t, a, e)
     }
 
   def joinList = rep1(joinClause)
 
   def tableLike: Parser[Seq[Select]] =
     LPAREN() ~ pipedSelect ~ RPAREN() ^^ { case _ ~ x ~ _=> x} |
-    tableIdentifier ^^ {
-      case (tid: String, _) => Seq(Select(false, Selection(None, Seq.empty, Seq.empty), Some(TableName(tid, None)), None, None, None, None, None, None, None, None))
+    tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ { // the alias here is aliasing a table name within the select
+      case (tid: String, _) ~ alias =>
+        Seq(Select(false, Selection(None, Seq.empty, Seq.empty), Some(TableName(tid, alias)), None, None, None, None, None, None, None, None))
     }
 
   /*
@@ -264,17 +264,14 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       case n: NULL => NullLiteral()(n.position)
     }
 
-  def userIdentifier: Parser[(Option[String], String, Position)] =
-    if(allowJoins) {
-      opt(tableIdentifier ~ DOT()) ~ simpleUserIdentifier ^^ {
-        case None ~ uid =>
-          (None, uid._1, uid._2)
-        case Some(qual ~ _) ~ uid =>
-          (Some(qual._1), uid._1, qual._2)
-      }
-    } else {
-      simpleUserIdentifier ^^ { uid => (None, uid._1, uid._2) }
+  def userIdentifier: Parser[(Option[String], String, Position)] = {
+    ifCanJoin(tableIdentifier ~ DOT()) ~ simpleUserIdentifier ^^ {
+      case None ~ uid =>
+        (None, uid._1, uid._2)
+      case Some(qual ~ _) ~ uid =>
+        (Some(qual._1), uid._1, qual._2)
     }
+  }
 
   val tableIdentifier: Parser[(String, Position)] =
     accept[tokens.TableIdentifier] ^^ { t =>
@@ -286,17 +283,14 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       (t.value, t.position)
     } | failure(errors.missingUserIdentifier)
 
-  def systemIdentifier: Parser[(Option[String], String, Position)] =
-    if(allowJoins) {
-      opt(tableIdentifier ~ DOT()) ~ simpleSystemIdentifier ^^ {
-        case None ~ sid =>
-          (None, sid._1, sid._2)
-        case Some(qual ~ _) ~ sid =>
-          (Some(qual._1), sid._1, qual._2)
-      }
-    } else {
-      simpleSystemIdentifier ^^ { sid => (None, sid._1, sid._2) }
+  def systemIdentifier: Parser[(Option[String], String, Position)] = {
+    ifCanJoin(tableIdentifier ~ DOT()) ~ simpleSystemIdentifier ^^ {
+      case None ~ sid =>
+        (None, sid._1, sid._2)
+      case Some(qual ~ _) ~ sid =>
+        (Some(qual._1), sid._1, qual._2)
     }
+  }
 
   val simpleSystemIdentifier: Parser[(String, Position)] =
     accept[tokens.SystemIdentifier] ^^ { t =>
@@ -306,6 +300,10 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   val identifier: Parser[(Option[String], String, Position)] = systemIdentifier | userIdentifier | failure(errors.missingIdentifier)
 
   val simpleIdentifier: Parser[(String, Position)] = simpleSystemIdentifier | simpleUserIdentifier | failure(errors.missingIdentifier)
+
+  val simpleIdToAlias: Parser[String] = simpleIdentifier ^^ {
+    case (alias, _) => TableName.withSodaFountainPrefix(alias)
+  }
 
   def paramList: Parser[Either[Position, Seq[Expression]]] =
     // the clauses have to be in this order, or it can't backtrack enough to figure out it's allowed to take

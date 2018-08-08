@@ -25,4 +25,6 @@ object TableName {
   // To remove this "feature", re-define this with an empty string "" or completely remove this variable.
   val SodaFountainTableNamePrefix = "_"
   val SodaFountainTableNamePrefixSubStringIndex = 1
+
+  def withSodaFountainPrefix(s: String) = s"$SodaFountainTableNamePrefix$s"
 }

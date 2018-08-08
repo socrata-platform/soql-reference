@@ -1,13 +1,11 @@
 package com.socrata.soql.parsing
 
 import scala.util.parsing.input.NoPosition
-
 import org.scalatest._
 import org.scalatest.MustMatchers
-
 import com.socrata.soql.ast._
 import com.socrata.soql.parsing.standalone_exceptions.BadParse
-import com.socrata.soql.environment.{FunctionName, ColumnName}
+import com.socrata.soql.environment.{ColumnName, FunctionName, TableName}
 
 class ParserTest extends WordSpec with MustMatchers {
   def parseExpression(soql: String) = new StandaloneParser().expression(soql)
@@ -218,6 +216,27 @@ class ParserTest extends WordSpec with MustMatchers {
     "window function empty over round trip" in {
       val x = parseFull("select avg(x) over()")
       x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ()")
+    }
+
+    "alias tables within joins" in {
+      val x = parseFull("select thisColumn, @z.thatColumn join @b as z on id = b.id join @c as y on b.x = c.x")
+      val join1Table = TableName("_b", Some("_z"))
+      val join2Table = TableName("_c", Some("_y"))
+      x.join match {
+        case Some((a: InnerJoin) :: (b: InnerJoin) :: Nil) =>
+          a.tableLike.map(_.from) must equal(Seq(Some(join1Table)))
+          b.tableLike.map(_.from) must equal(Seq(Some(join2Table)))
+        case x => fail(s"join must be defined, containing a list of two elements, not: $x")
+      }
+    }
+
+    "alias subqueries in joins" in {
+      val x = parseFull("select thisColumn, @z.thatColumn join (select * from @b as z) as f on id = b.id")
+      x.join match {
+        case Some((a: InnerJoin) :: Nil) =>
+          a.alias must equal (Some("_f"))
+          a.tableLike.map(_.from) must equal(Seq(Some(TableName("_b", Some("_z")))))
+      }
     }
 
     // def show[T](x: => T) {

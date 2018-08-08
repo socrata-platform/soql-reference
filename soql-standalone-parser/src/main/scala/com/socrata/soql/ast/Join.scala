@@ -41,7 +41,7 @@ object JoinType {
 
 sealed trait Join {
   val tableLike: Seq[Select]
-  val alias: Option[String]
+  val alias: Option[String] // alias modifies a sub-select
   val expr: Expression
   val typ: JoinType
 
