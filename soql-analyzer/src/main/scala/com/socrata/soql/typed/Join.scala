@@ -4,6 +4,10 @@ import com.socrata.soql.{SimpleSoQLAnalysis, SoQLAnalysis}
 import com.socrata.soql.ast._
 import com.socrata.soql.environment.TableName
 
+object X extends App {
+  println("hi")
+}
+
 
 sealed trait Join[ColumnId, Type] {
   val tableLike: Seq[SoQLAnalysis[ColumnId, Type]]

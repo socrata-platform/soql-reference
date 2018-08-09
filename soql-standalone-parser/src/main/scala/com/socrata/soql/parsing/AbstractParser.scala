@@ -97,17 +97,10 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
 
   def pipedSelect: Parser[List[Select]] = rep1sep(unchainedSelect, QUERYPIPE())
 
-  val acceptJoins = acceptIf(_ => allowJoins)(_ => "joins are disallowed")
-//  def ifCanJoin[T](p: Parser[T]): Parser[Option[T]] = opt(acceptJoins ~> p)
-  def ifCanJoin[T](p: Parser[T]): Parser[Option[T]] = opt(p)
+  def onlyIf[T](b: Boolean)(p: Parser[T]): Parser[T] = p ^? { case x if b => x }
 
-//  def unchainedSelect: Parser[Select] = {
-//    SELECT() ~> distinct ~ selectList ~ opt(FROM() ~> tableIdentifier ~ opt(AS() ~> simpleIdToAlias)) ~
-//      ifCanJoin(joinList) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-//      case d ~ s ~ f ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
-//        Select(d, s, f.map(x => TableName(x._1._1, x._2)), j, w, gb, h, ord, lim, off, sr)
-//    }
-//  }
+  // is there a way to do this with accept(If)?
+  def ifCanJoin[T](p: Parser[T]): Parser[Option[T]] = opt(onlyIf(allowJoins)(p))
 
   def unchainedSelect: Parser[Select] = {
     SELECT() ~> distinct ~ selectList ~ ifCanJoin(joinList) ~ opt(whereClause) ~
@@ -135,7 +128,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def joinList = rep1(joinClause)
 
   def from: Parser[From] = {
-    LPAREN() ~> basedSelect ~ opt(pipedSelect) ~ (RPAREN() ~> opt(AS() ~> simpleIdToAlias)) ^^ {
+    LPAREN() ~> basedSelect ~ opt(QUERYPIPE() ~> pipedSelect) ~ (RPAREN() ~> opt(AS() ~> simpleIdToAlias)) ^^ {
       case x ~ ref ~ a => From(x, ref.getOrElse(Nil), a)
     } |
       tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ {

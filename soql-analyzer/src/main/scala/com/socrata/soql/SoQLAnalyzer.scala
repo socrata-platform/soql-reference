@@ -70,7 +70,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   private def baseAnalysis(implicit ctx: AnalysisContext) = {
 
     val selections = ctx.map { case (qual, dsCtx) =>
-      val q = if (qual == TableName.PrimaryTable.qualifier) None else Some(qual)
+      val q = if (qual == TableName.PrimaryTable.name) None else Some(qual) // selectRework TODO: table alias?
       dsCtx.schema.transform(typed.ColumnRef(q, _, _)(NoPosition))
     }
     // TODO: Enhance resolution of column name conflict from different tables in chained SoQLs
