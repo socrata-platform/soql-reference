@@ -12,9 +12,10 @@ import scala.util.parsing.input.{Position, NoPosition}
  * @param columnNameMap Map from current names to new names.  The map must be defined
  *                      for all column names passed in.
  */
+/* only used in test?
 class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
 
-  def mapSelect(ss: Seq[Select]): Seq[Select] = {
+  def mapSelect(ss: List[Select]): List[Select] = {
     if(ss.nonEmpty) {
       // this only needs to apply to the first query in the chain; subsequent elements
       // take their names from the output of the first query.
@@ -22,12 +23,11 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
       ss.updated(0, Select(
         distinct = s.distinct,
         selection = mapSelection(s.selection),
-        from = s.from,
-        join = s.join.map(_ map mapJoin),
+        join = s.join.map(mapJoin),
         where = s.where map mapExpression,
-        groupBy = s.groupBy.map(_ map mapExpression),
+        groupBy = s.groupBy.map(mapExpression),
         having = s.having map mapExpression,
-        orderBy = s.orderBy.map(_ map mapOrderBy),
+        orderBy = s.orderBy.map(mapOrderBy),
         limit = s.limit,
         offset = s.offset,
         search = s.search))
@@ -36,12 +36,16 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
     }
   }
 
+  def mapFrom(from: From) = from match {
+    case From(select: BasedSelect, l, a) => From(mapSelect(List(select)).head.contextualize(mapFrom(select.from)), l, a)
+    case x => x
+  }
+
   def mapJoin(join: Join): Join =  {
-    val mappedTableLike = mapSelect(join.tableLike)
     val mappedExpr = mapExpression(join.on)
     join match {
       case j: InnerJoin =>
-        InnerJoin(mappedTableLike, j.alias, mappedExpr)
+        InnerJoin(mappedTableLike, mappedExpr)
       case j: LeftOuterJoin =>
         j.copy(tableLike = mappedTableLike, on = mappedExpr)
       case j: RightOuterJoin =>
@@ -86,3 +90,4 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
     s.expressions map mapSelectedExpression)
 
 }
+*/

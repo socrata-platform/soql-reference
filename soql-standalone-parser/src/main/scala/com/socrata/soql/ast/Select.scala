@@ -1,7 +1,7 @@
 package com.socrata.soql.ast
 
 import scala.util.parsing.input.{NoPosition, Position}
-import com.socrata.soql.environment.{ColumnName, TableName}
+import com.socrata.soql.environment.{ColumnName, TableName, TableSource}
 
 
 case class Select(
@@ -18,10 +18,12 @@ case class Select(
 ) {
   def contextualize(fromTableName: String) =
     BasedSelect(distinct, selection, From(TableName(fromTableName), Nil, None), join, where, groupBy, having, orderBy, limit, offset, search)
+
+  def contextualize(from: From) =
+    BasedSelect(distinct, selection, from, join, where, groupBy, having, orderBy, limit, offset, search)
 }
 
-sealed abstract class TableSource
-
+// can be represented as [Select with From]?
 case class BasedSelect(
   distinct: Boolean,
   selection: Selection,
@@ -40,7 +42,6 @@ case class BasedSelect(
 
 case class From(source: TableSource, refinements: List[Select], alias: Option[String])
 
-case class TableName(name: String) extends TableSource
 case object NoContext extends TableSource // context for a 1-row, 1-column virtual table, like "select 1"
 
 case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[StarSelection], expressions: Seq[SelectedExpression]) {
@@ -95,34 +96,36 @@ case class OrderBy(expression: Expression, ascending: Boolean, nullLast: Boolean
 }
 
 object SimpleSelect {
-  def apply(resource: String): Select = {
-    Select(distinct = false,
-           selection = Selection(None, Seq.empty, Seq.empty),
-           from = Some(TableName(resource)),
-           join = None,
-           where = None,
-           groupBy = None,
-           having = None,
-           orderBy = None,
-           limit = None,
-           offset = None,
-           search = None)
-  }
+//  def apply(resource: String): Select = {
+//    Select(distinct = false,
+//           selection = Selection(None, Seq.empty, Seq.empty),
+//           from = Some(TableName(resource)),
+//           join = None,
+//           where = None,
+//           groupBy = None,
+//           having = None,
+//           orderBy = None,
+//           limit = None,
+//           offset = None,
+//           search = None)
+//  }
 
   /**
     * Simple Select is a select created by a join where a sub-query is not used like "JOIN @aaaa-aaaa"
     */
-  def isSimple(select: Select): Boolean = {
-    val s = select.selection
-    select.from.isDefined && s.allSystemExcept.isEmpty && s.allUserExcept.isEmpty && s.expressions.isEmpty
-  }
-
-  def isSimple(selects: Seq[Select]): Boolean = {
-    selects match {
-      case Seq(s) => isSimple(s)
+  def isSimple(from: From): Boolean = {
+    from.source match {
+      case _: TableName => true
       case _ => false
     }
   }
+
+//  def isSimple(selects: Seq[Select]): Boolean = {
+//    selects match {
+//      case Seq(s) => isSimple(s)
+//      case _ => false
+//    }
+//  }
 }
 
 //case class Select(distinct: Boolean, selection: Selection, from: Option[TableName], join: Option[List[Join]], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) {

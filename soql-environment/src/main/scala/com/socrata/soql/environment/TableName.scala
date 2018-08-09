@@ -1,15 +1,24 @@
 package com.socrata.soql.environment
 
-case class TableName(name: String, alias: Option[String] = None) {
+//case class TableName(name: String, alias: Option[String] = None) {
+//
+//  import TableName._
+//
+//  override def toString(): String = {
+//    val unPrefixedName = name.substring(SodaFountainTableNamePrefixSubStringIndex)
+//    "@" + unPrefixedName + alias.map(" AS " + _.substring(SodaFountainTableNamePrefixSubStringIndex)).getOrElse("")
+//  }
+//
+//  def qualifier: String = alias.getOrElse(name)
+//}
 
-  import TableName._
-
+// why does this have to be here
+abstract class TableSource
+case class TableName(name: String) extends TableSource {
   override def toString(): String = {
-    val unPrefixedName = name.substring(SodaFountainTableNamePrefixSubStringIndex)
-    "@" + unPrefixedName + alias.map(" AS " + _.substring(SodaFountainTableNamePrefixSubStringIndex)).getOrElse("")
+    val unPrefixedName = name.substring(TableName.SodaFountainTableNamePrefixSubStringIndex)
+    s"@$unPrefixedName"
   }
-
-  def qualifier: String = alias.getOrElse(name)
 }
 
 object TableName {

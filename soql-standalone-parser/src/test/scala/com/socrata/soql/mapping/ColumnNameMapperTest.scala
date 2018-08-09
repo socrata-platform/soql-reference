@@ -5,6 +5,7 @@ import com.socrata.soql.parsing.StandaloneParser
 import org.scalatest.{Assertions, FunSuite}
 import org.scalatest.MustMatchers
 
+/*
 class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
 
   lazy val parser = new StandaloneParser()
@@ -90,3 +91,4 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
     assert(mapper.mapSelect(s).toString === expS.toString)
   }
 }
+*/

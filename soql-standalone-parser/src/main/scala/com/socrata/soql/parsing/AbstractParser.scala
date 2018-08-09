@@ -95,53 +95,57 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
    *               *************************
    */
 
-  def pipedSelect: Parser[Seq[Select]] = rep1sep(unchainedSelect, QUERYPIPE())
+  def pipedSelect: Parser[List[Select]] = rep1sep(unchainedSelect, QUERYPIPE())
 
-  def onlyIf[T](b: Boolean)(p: Parser[T]): Parser[T] = p ^? { case x if b => x }
+  val acceptJoins = acceptIf(_ => allowJoins)(_ => "joins are disallowed")
+//  def ifCanJoin[T](p: Parser[T]): Parser[Option[T]] = opt(acceptJoins ~> p)
+  def ifCanJoin[T](p: Parser[T]): Parser[Option[T]] = opt(p)
 
-  // is there a way to do this with accept(If)?
-  def ifCanJoin[T](p: Parser[T]): Parser[Option[T]] = opt(onlyIf(allowJoins)(p))
-
-  def unchainedSelect: Parser[Select] = {
-    SELECT() ~> distinct ~ selectList ~ opt(FROM() ~> tableIdentifier ~ opt(AS() ~> simpleIdToAlias)) ~
-      ifCanJoin(joinList) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-      case d ~ s ~ f ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
-        Select(d, s, f.map(x => TableName(x._1._1, x._2)), j, w, gb, h, ord, lim, off, sr)
-    }
-  }
-
-  object NewParsers {
-    def select: Parser[Select] = {
-      SELECT() ~> distinct ~ selectList ~ ifCanJoin(joinList)
-    }
-
-    def joinClause: PackratParser[Join] =
-      opt((LEFT() | RIGHT() | FULL()) ~ OUTER()) ~ JOIN() ~ tableLike ~ opt(AS() ~> simpleIdToAlias) ~ ON() ~ expr ^^ {
-        case None ~ _ ~ t ~ a ~ _ ~ e => InnerJoin(t, a, e)
-        case Some(jd) ~ _ ~ t ~ a ~ _ ~ e => OuterJoin(jd._1, t, a, e)
-      }
-
-    def joinList = rep1(joinClause)
-
-    def tableLike: Parser[From] =
-      LPAREN() ~ pipedSelect ~ RPAREN() ^^ { case _ ~ x ~ _=> x} |
-        tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ { // the alias here is aliasing a table name within the select
-          case (tid: String, _) ~ alias =>
-            Seq(Select(false, Selection(None, Seq.empty, Seq.empty), Some(TableName(tid, alias)), None, None, None, None, None, None, None, None))
-        }
-  }
-
-//  def unchainedMultiSelect: Parser[Select] = {
-//    SELECT() ~> distinct ~ selectList ~ rep(selectList ~ opt(FROM() ~> tableIdentifier ~ opt(AS() ~> simpleIdToAlias)) ~ ifCanJoin(joinList)) ~
+//  def unchainedSelect: Parser[Select] = {
+//    SELECT() ~> distinct ~ selectList ~ opt(FROM() ~> tableIdentifier ~ opt(AS() ~> simpleIdToAlias)) ~
 //      ifCanJoin(joinList) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
 //      case d ~ s ~ f ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
 //        Select(d, s, f.map(x => TableName(x._1._1, x._2)), j, w, gb, h, ord, lim, off, sr)
 //    }
 //  }
 
+  def unchainedSelect: Parser[Select] = {
+    SELECT() ~> distinct ~ selectList ~ ifCanJoin(joinList) ~ opt(whereClause) ~
+      opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+      case d ~ s ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
+      Select(d, s, j.getOrElse(Nil), w, gb.getOrElse(Nil), h, ord.getOrElse(Nil), lim, off, sr)
+    }
+  }
+
+  def basedSelect: Parser[BasedSelect] = {
+    SELECT() ~> distinct ~ selectList ~ (FROM() ~> from) ~ ifCanJoin(joinList) ~
+      opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+      case d ~ s ~ f ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
+        BasedSelect(d, s, f, j.getOrElse(Nil), w, gb.getOrElse(Nil), h, ord.getOrElse(Nil), lim, off, sr)
+    }
+  }
+
+  def joinClause: PackratParser[Join] =
+    opt((LEFT() | RIGHT() | FULL()) ~ OUTER()) ~ (JOIN() ~> from) ~ (ON() ~> expr) ^^ {
+      case None ~ f ~ e =>
+        InnerJoin(f, e)
+      case Some(jd) ~ f ~ e => OuterJoin(jd._1, f, e)
+    }
+
+  def joinList = rep1(joinClause)
+
+  def from: Parser[From] = {
+    LPAREN() ~> basedSelect ~ opt(pipedSelect) ~ (RPAREN() ~> opt(AS() ~> simpleIdToAlias)) ^^ {
+      case x ~ ref ~ a => From(x, ref.getOrElse(Nil), a)
+    } |
+      tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ {
+        case (tid: String, _) ~ alias => From(TableName(tid), Nil, alias)
+      }
+  }
+
   def distinct: Parser[Boolean] = opt(DISTINCT()) ^^ (_.isDefined)
 
-  def orderByAndSearch: Parser[(Option[Seq[OrderBy]], Option[String])] =
+  def orderByAndSearch: Parser[(Option[List[OrderBy]], Option[String])] =
     orderByClause ~ opt(searchClause) ^^ { //backward-compat.  We should prefer putting the search first.
       case ob ~ sr => (Some(ob), sr)
     } |
@@ -166,22 +170,6 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def limitClause = LIMIT() ~> integer
   def offsetClause = OFFSET() ~> integer
   def searchClause = SEARCH() ~> stringLiteral
-
-  // the alias here is aliasing an entire subquery in a join
-  def joinClause: PackratParser[Join] =
-    opt((LEFT() | RIGHT() | FULL()) ~ OUTER()) ~ JOIN() ~ tableLike ~ opt(AS() ~> simpleIdToAlias) ~ ON() ~ expr ^^ {
-      case None ~ _ ~ t ~ a ~ _ ~ e => InnerJoin(t, a, e)
-      case Some(jd) ~ _ ~ t ~ a ~ _ ~ e => OuterJoin(jd._1, t, a, e)
-    }
-
-  def joinList = rep1(joinClause)
-
-  def tableLike: Parser[Seq[Select]] =
-    LPAREN() ~ pipedSelect ~ RPAREN() ^^ { case _ ~ x ~ _=> x} |
-    tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ { // the alias here is aliasing a table name within the select
-      case (tid: String, _) ~ alias =>
-        Seq(Select(false, Selection(None, Seq.empty, Seq.empty), Some(TableName(tid, alias)), None, None, None, None, None, None, None, None))
-    }
 
   /*
    *               ********************
