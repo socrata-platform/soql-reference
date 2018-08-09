@@ -3,30 +3,45 @@ package com.socrata.soql.ast
 import scala.util.parsing.input.{NoPosition, Position}
 import com.socrata.soql.environment.{ColumnName, TableName}
 
-case class Select(distinct: Boolean, selection: Selection, from: Option[TableName], join: Option[List[Join]], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) {
-  override def toString = {
-    if(AST.pretty) {
-      val sb = new StringBuilder("SELECT ")
-      if (distinct) sb.append("DISTINCT ")
-      sb.append(selection)
-      from.foreach(sb.append(" FROM ").append(_))
-      join.toList.flatten.foreach { j =>
-        sb.append(" ")
-        sb.append(j.toString)
-      }
-      where.foreach(sb.append(" WHERE ").append(_))
-      groupBy.foreach { gb => sb.append(gb.mkString(" GROUP BY ", ", ", "")) }
-      having.foreach(sb.append(" HAVING ").append(_))
-      orderBy.foreach { ob => sb.append(ob.mkString(" ORDER BY ", ", ", "")) }
-      limit.foreach(sb.append(" LIMIT ").append(_))
-      offset.foreach(sb.append(" OFFSET ").append(_))
-      search.foreach(s => sb.append(" SEARCH ").append(Expression.escapeString(s)))
-      sb.toString
-    } else {
-      AST.unpretty(this)
-    }
-  }
+
+case class Select(
+  distinct: Boolean,
+  selection: Selection,
+  join: List[Join],
+  where: Option[Expression],
+  groupBy: List[Expression],
+  having: Option[Expression],
+  orderBy: List[OrderBy],
+  limit: Option[BigInt],
+  offset: Option[BigInt],
+  search: Option[String]
+) {
+  def contextualize(fromTableName: String) =
+    BasedSelect(distinct, selection, From(TableName(fromTableName), Nil, None), join, where, groupBy, having, orderBy, limit, offset, search)
 }
+
+sealed abstract class TableSource
+
+case class BasedSelect(
+  distinct: Boolean,
+  selection: Selection,
+  from: From,
+  join: List[Join],
+  where: Option[Expression],
+  groupBy: List[Expression],
+  having: Option[Expression],
+  orderBy: List[OrderBy],
+  limit: Option[BigInt],
+  offset: Option[BigInt],
+  search: Option[String]
+) extends TableSource {
+  def decontextualized = Select(distinct, selection, join, where, groupBy, having, orderBy, limit, offset, search)
+}
+
+case class From(source: TableSource, refinements: List[Select], alias: Option[String])
+
+case class TableName(name: String) extends TableSource
+case object NoContext extends TableSource // context for a 1-row, 1-column virtual table, like "select 1"
 
 case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[StarSelection], expressions: Seq[SelectedExpression]) {
   override def toString = {
@@ -109,3 +124,28 @@ object SimpleSelect {
     }
   }
 }
+
+//case class Select(distinct: Boolean, selection: Selection, from: Option[TableName], join: Option[List[Join]], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) {
+//  override def toString = {
+//    if(AST.pretty) {
+//      val sb = new StringBuilder("SELECT ")
+//      if (distinct) sb.append("DISTINCT ")
+//      sb.append(selection)
+//      from.foreach(sb.append(" FROM ").append(_))
+//      join.toList.flatten.foreach { j =>
+//        sb.append(" ")
+//        sb.append(j.toString)
+//      }
+//      where.foreach(sb.append(" WHERE ").append(_))
+//      groupBy.foreach { gb => sb.append(gb.mkString(" GROUP BY ", ", ", "")) }
+//      having.foreach(sb.append(" HAVING ").append(_))
+//      orderBy.foreach { ob => sb.append(ob.mkString(" ORDER BY ", ", ", "")) }
+//      limit.foreach(sb.append(" LIMIT ").append(_))
+//      offset.foreach(sb.append(" OFFSET ").append(_))
+//      search.foreach(s => sb.append(" SEARCH ").append(Expression.escapeString(s)))
+//      sb.toString
+//    } else {
+//      AST.unpretty(this)
+//    }
+//  }
+//}

@@ -38,16 +38,16 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
 
   def mapJoin(join: Join): Join =  {
     val mappedTableLike = mapSelect(join.tableLike)
-    val mappedExpr = mapExpression(join.expr)
+    val mappedExpr = mapExpression(join.on)
     join match {
       case j: InnerJoin =>
         InnerJoin(mappedTableLike, j.alias, mappedExpr)
       case j: LeftOuterJoin =>
-        j.copy(tableLike = mappedTableLike, expr = mappedExpr)
+        j.copy(tableLike = mappedTableLike, on = mappedExpr)
       case j: RightOuterJoin =>
-        j.copy(tableLike = mappedTableLike, expr = mappedExpr)
+        j.copy(tableLike = mappedTableLike, on = mappedExpr)
       case j: FullOuterJoin =>
-        j.copy(tableLike = mappedTableLike, expr = mappedExpr)
+        j.copy(tableLike = mappedTableLike, on = mappedExpr)
     }
   }
 

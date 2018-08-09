@@ -99,6 +99,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
 
   def onlyIf[T](b: Boolean)(p: Parser[T]): Parser[T] = p ^? { case x if b => x }
 
+  // is there a way to do this with accept(If)?
   def ifCanJoin[T](p: Parser[T]): Parser[Option[T]] = opt(onlyIf(allowJoins)(p))
 
   def unchainedSelect: Parser[Select] = {
@@ -108,6 +109,35 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
         Select(d, s, f.map(x => TableName(x._1._1, x._2)), j, w, gb, h, ord, lim, off, sr)
     }
   }
+
+  object NewParsers {
+    def select: Parser[Select] = {
+      SELECT() ~> distinct ~ selectList ~ ifCanJoin(joinList)
+    }
+
+    def joinClause: PackratParser[Join] =
+      opt((LEFT() | RIGHT() | FULL()) ~ OUTER()) ~ JOIN() ~ tableLike ~ opt(AS() ~> simpleIdToAlias) ~ ON() ~ expr ^^ {
+        case None ~ _ ~ t ~ a ~ _ ~ e => InnerJoin(t, a, e)
+        case Some(jd) ~ _ ~ t ~ a ~ _ ~ e => OuterJoin(jd._1, t, a, e)
+      }
+
+    def joinList = rep1(joinClause)
+
+    def tableLike: Parser[From] =
+      LPAREN() ~ pipedSelect ~ RPAREN() ^^ { case _ ~ x ~ _=> x} |
+        tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ { // the alias here is aliasing a table name within the select
+          case (tid: String, _) ~ alias =>
+            Seq(Select(false, Selection(None, Seq.empty, Seq.empty), Some(TableName(tid, alias)), None, None, None, None, None, None, None, None))
+        }
+  }
+
+//  def unchainedMultiSelect: Parser[Select] = {
+//    SELECT() ~> distinct ~ selectList ~ rep(selectList ~ opt(FROM() ~> tableIdentifier ~ opt(AS() ~> simpleIdToAlias)) ~ ifCanJoin(joinList)) ~
+//      ifCanJoin(joinList) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+//      case d ~ s ~ f ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
+//        Select(d, s, f.map(x => TableName(x._1._1, x._2)), j, w, gb, h, ord, lim, off, sr)
+//    }
+//  }
 
   def distinct: Parser[Boolean] = opt(DISTINCT()) ^^ (_.isDefined)
 

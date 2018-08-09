@@ -168,7 +168,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
         (TableName.PrimaryTable.qualifier -> ctx(j.tableLike.head.from.get.name))
       val analyses = analyze(j.tableLike)(joinCtx)
       contextFromAnalysis(j.alias.getOrElse(
-        throw new BadParse("Sub-query join must use alias.  Hint: JOIN (SELECT ...) AS T1", j.expr.position)),
+        throw new BadParse("Sub-query join must use alias.  Hint: JOIN (SELECT ...) AS T1", j.on.position)),
         analyses.last)
     }
   }
@@ -251,7 +251,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
         val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx +
           (TableName.PrimaryTable.qualifier -> ctx(j.tableLike.head.from.get.name))
         val analyses = analyze(j.tableLike)(joinCtx)
-        typed.Join(j.typ, analyses, j.alias, typecheck(j.expr))
+        typed.Join(j.typ, analyses, j.alias, typecheck(j.on))
       }
     }
 
@@ -313,7 +313,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx +
         (TableName.PrimaryTable.qualifier -> ctx(j.tableLike.head.from.get.name))
       val analyses = analyze(j.tableLike)(joinCtx)
-      typed.Join(j.typ, analyses, j.alias, typecheck(j.expr))
+      typed.Join(j.typ, analyses, j.alias, typecheck(j.on))
     }}
 
     val outputs = OrderedMap(aliasAnalysis.expressions.keys.map { k => k -> typedAliases(k) }.toSeq : _*)
