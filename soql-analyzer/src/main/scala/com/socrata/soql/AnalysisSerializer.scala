@@ -220,9 +220,9 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       out.writeUInt32NoTag(size)
       joins.toList.flatten.foreach { join =>
         out.writeStringNoTag(join.typ.toString)
-        write(join.tableLike)
+        write(join.from)
         maybeWrite(join.alias)(x => out.writeStringNoTag(x))
-        writeExpr(join.expr)
+        writeExpr(join.on)
       }
     }
 

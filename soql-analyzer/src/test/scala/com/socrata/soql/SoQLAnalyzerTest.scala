@@ -349,7 +349,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> visit,
       ColumnName("name_last") -> lastName
     ))
-    analysis.join must equal (Some(List(typed.InnerJoin(Seq(SimpleSoQLAnalysis[ColumnName, TestType]("_aaaa-aaaa")), None, typedExpression("name_last = @aaaa-aaaa.name_last")))))
+    analysis.joins must equal (Some(List(typed.InnerJoin(Seq(SimpleSoQLAnalysis[ColumnName, TestType]("_aaaa-aaaa")), None, typedExpression("name_last = @aaaa-aaaa.name_last")))))
   }
 
   test("join with table alias") {
@@ -358,7 +358,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    analysis.join must equal (Some(List(typed.InnerJoin(Seq(SimpleSoQLAnalysis[ColumnName, TestType]("_aaaa-aaaa")), Some("_a1"), typedExpression("visits > 10")))))
+    analysis.joins must equal (Some(List(typed.InnerJoin(Seq(SimpleSoQLAnalysis[ColumnName, TestType]("_aaaa-aaaa")), Some("_a1"), typedExpression("visits > 10")))))
   }
 
   test("join toString") {
@@ -434,7 +434,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
     val expected = Some(Seq(typed.InnerJoin(Seq(subAnalysis), Some("_a1"), typedExpression("name_first = @a1.name_first"))))
-    analysis.join must equal (expected)
+    analysis.joins must equal (expected)
   }
 
   test("join with sub-chained-query") {
@@ -446,7 +446,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
     val expected = Some(Seq(typed.InnerJoin(subAnalyses, Some("_a1"), typedExpression("name_first = @a1.name_first"))))
-    analysis.join must equal (expected)
+    analysis.joins must equal (expected)
   }
 
   test("nested join") {
@@ -457,14 +457,14 @@ SELECT visits, @x3.x
        ) as x3 on @x3.x = name_first
       """)
 
-    val Some(innermostJoin) = analysis.join.get.head.tableLike.head.join
+    val Some(innermostJoin) = analysis.joins.get.head.from.head.join
     val innermostAnalysis = innermostJoin.head.tableLike.head
     innermostAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x1"), ColumnName("x"), TestText)(NoPosition)
     ))
 
-    val Some(join) = analysis.join
-    val joinAnalysis = analysis.join.get.head.tableLike.head
+    val Some(join) = analysis.joins
+    val joinAnalysis = analysis.joins.get.head.from.head
     joinAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x2"), ColumnName("x"), TestText)(NoPosition),
       ColumnName("name_first") -> ColumnRef(Some("_a1"), ColumnName("name_first"), TestText)(NoPosition)
@@ -484,14 +484,14 @@ SELECT visits, @x2.zx
        ) as x2 on @x2.zx = name_first
       """)
 
-    val Some(innermostLeftOuterJoin) = analysis.join.get.head.tableLike.head.join
+    val Some(innermostLeftOuterJoin) = analysis.joins.get.head.from.head.join
     val innermostAnalysis = innermostLeftOuterJoin.head.tableLike.head
     innermostAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x1"), ColumnName("x"), TestText)(NoPosition)
     ))
 
-    val Some(rightOuterJoin) = analysis.join
-    val rightOuterJoinAnalysis = analysis.join.get.head.tableLike.head
+    val Some(rightOuterJoin) = analysis.joins
+    val rightOuterJoinAnalysis = analysis.joins.get.head.from.head
     rightOuterJoinAnalysis.selection.toSeq must equal (Seq(
       ColumnName("zx") -> ColumnRef(Some("_x2"), ColumnName("x"), TestText)(NoPosition)
     ))

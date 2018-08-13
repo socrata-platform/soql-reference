@@ -13,9 +13,9 @@ package com.socrata.soql.environment
 //}
 
 // why does this have to be here
-abstract class TableSource
+trait TableSource
 case class TableName(name: String) extends TableSource {
-  override def toString(): String = {
+  override def toString: String = {
     val unPrefixedName = name.substring(TableName.SodaFountainTableNamePrefixSubStringIndex)
     s"@$unPrefixedName"
   }

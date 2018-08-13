@@ -38,7 +38,7 @@ object JoinType {
 }
 
 sealed trait Join {
-  val tableLike: From
+  val from: From
   val on: Expression
   val typ: JoinType
 
@@ -70,19 +70,19 @@ sealed trait Join {
 //  }
 }
 
-case class InnerJoin(tableLike: From, on: Expression) extends Join {
+case class InnerJoin(from: From, on: Expression) extends Join {
   val typ: JoinType = InnerJoinType
 }
 
-case class LeftOuterJoin(tableLike: From, on: Expression) extends Join {
+case class LeftOuterJoin(from: From, on: Expression) extends Join {
   val typ: JoinType = LeftOuterJoinType
 }
 
-case class RightOuterJoin(tableLike: From, on: Expression) extends Join {
+case class RightOuterJoin(from: From, on: Expression) extends Join {
   val typ: JoinType = RightOuterJoinType
 }
 
-case class FullOuterJoin(tableLike: From, on: Expression) extends Join {
+case class FullOuterJoin(from: From, on: Expression) extends Join {
   val typ: JoinType = FullOuterJoinType
 }
 

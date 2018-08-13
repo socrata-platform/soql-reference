@@ -22,10 +22,10 @@ class AggregateChecker[Type] {
     *                             in the GROUP BY expressions in a location where only aggregate expressions
     *                             are allowed.
     */
-  def apply(outputs: Seq[Expr], where: Option[Expr], groupBy: Option[Seq[Expr]], having: Option[Expr], orderBy: Seq[Expr]): Boolean = {
-    if(groupBy.isDefined || having.isDefined) { // ok, definitely a grouped query
-      checkGrouped(outputs, where, groupBy.getOrElse(Nil), having, orderBy)
-      true
+  def apply(outputs: Seq[Expr], where: Option[Expr], groupBy: Seq[Expr], having: Option[Expr], orderBy: Seq[Expr]): Boolean = {
+    val isGrouped = groupBy.nonEmpty || having.isDefined
+    if(isGrouped) { // ok, definitely a grouped query
+      checkGrouped(outputs, where, groupBy, having, orderBy)
     } else {
       // neither GROUP BY nor HAVING are set.  It could still be a grouped
       // query if there are aggregate calls in outputs or order by though...
@@ -38,8 +38,8 @@ class AggregateChecker[Type] {
           return true
       }
       where.foreach(checkPregroupExpression("WHERE", _))
-      false
     }
+    isGrouped
   }
 
   def checkGrouped(outputs: Seq[Expr], where: Option[Expr], groupBy: Seq[Expr], having: Option[Expr], orderBy: Seq[Expr]) {
