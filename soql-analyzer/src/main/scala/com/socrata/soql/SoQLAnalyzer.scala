@@ -178,7 +178,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   }
 
 
-  // TODO: does this work for triply-nested joins? I don't think so
+  // TODO: can we just make joins here instead of only creating a context?
   private def joinCtx(joins: List[Join])(implicit ctx: AnalysisContext) = {
     joins.filterNot(j => SimpleSelect.isSimple(j.from)).map { j: Join =>
       val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx +
