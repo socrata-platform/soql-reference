@@ -464,7 +464,6 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     analysis.joins must equal (expected)
   }
 
-  /*
   test("nested join") {
     val analysis = analyzer.analyzeUnchainedQuery(s"""
 SELECT visits, @x3.x
@@ -473,14 +472,14 @@ SELECT visits, @x3.x
        ) as x3 on @x3.x = name_first
       """)
 
-    val Some(innermostJoin) = analysis.joins.get.head.from.head.join
-    val innermostAnalysis = innermostJoin.head.tableLike.head
+    val List(innermostJoin) = analysis.joins.head.from.source.asInstanceOf[BasedSoQLAnalysis[_, _]].joins
+    val innermostAnalysis = innermostJoin.from.source.asInstanceOf[BasedSoQLAnalysis[_, _]]
     innermostAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x1"), ColumnName("x"), TestText)(NoPosition)
     ))
 
-    val Some(join) = analysis.joins
-    val joinAnalysis = analysis.joins.get.head.from.head
+    val List(join) = analysis.joins
+    val joinAnalysis = join.from.source.asInstanceOf[BasedSoQLAnalysis[_, _]]
     joinAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x2"), ColumnName("x"), TestText)(NoPosition),
       ColumnName("name_first") -> ColumnRef(Some("_a1"), ColumnName("name_first"), TestText)(NoPosition)
@@ -492,6 +491,7 @@ SELECT visits, @x3.x
     ))
   }
 
+  /*
   test("nested join re-using table alias - x2") {
     val analysis = analyzer.analyzeUnchainedQuery(s"""
 SELECT visits, @x2.zx

@@ -113,18 +113,8 @@ object SimpleSelect {
 //  }
 
 
-  /**
-    * Simple Select is a select created by a join where a sub-query is not used like "JOIN @aaaa-aaaa"
-    */
-  def isSimple(select: BasedSelect): Boolean = {
-     select.from.source match {
-      case _: TableName => select.selection.isSimple
-      case _ => false
-    }
-  }
-
   def isSimple(from: From): Boolean = from match {
-    case From(bs: BasedSelect, refs, alias) => isSimple(bs) // TODO: do refs need to be Nil for true?
+    case From(tn: TableName, _, _) => true // TODO: do refs need to be Nil for true?
     case _ => false
   }
 

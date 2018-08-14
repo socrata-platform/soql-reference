@@ -167,38 +167,27 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     analyzeNoSelection(distinct, joins, where, groupBy, having, orderBy, limit, offset, search)
   }
 
-  /* do we need this?
-  private def joinCtx(join: List[Join])(implicit ctx: AnalysisContext) = {
-    join.foldLeft()
-
-
-
-    join.filterNot(j => SimpleSelect.isSimple(j.from)).map { j: Join =>
-      val sourceDataset = j.from match {
-        case From(TableName(name), _, alias) => ctx.get(name).orElse(alias.flatMap(ctx.get))
-        case _ => None
-      }
-      val joinContext = sourceDataset.foldLeft(ctx) { (context, sourceDs) =>
-        context + (TableName.PrimaryTable.name -> sourceDs) // TODO (selectRework): should the old context even be in there? or entirely new?
-      }
-
-
-      "select @b.id join (select * from @aaaa-aaaa as b)"
-
-      "select @aaaa-aaaa.id join @aaaa-aaaa on @c.id = id"
-
-      // bad
-      "select @b.id join (select * from @aaaa-aaaa as b) as c on @c.id = id"
-
-
-
-      val analyses = analyze(j.from)(joinContext)
-      contextFromAnalysis(j.from.alias.getOrElse(
-        throw new BadParse("Sub-query join must use alias.  Hint: JOIN (SELECT ...) AS T1", j.on.position)),
-        analyses.last)
+  private def getNestedTableName(from: From): String = {
+    from match {
+      case From(bs: BasedSelect, _, _) =>
+        bs.from match {
+          case From(TableName(name), _, _) => name
+        }
     }
   }
-  */
+
+
+  // TODO: does this work for triply-nested joins? I don't think so
+  private def joinCtx(joins: List[Join])(implicit ctx: AnalysisContext) = {
+    joins.filterNot(j => SimpleSelect.isSimple(j.from)).map { j: Join =>
+      val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx +
+        (TableName.PrimaryTable.name -> ctx(getNestedTableName(j.from)))
+      val from = analyzeFrom(j.from)(joinCtx)
+      contextFromAnalysis(j.from.alias.getOrElse(
+        throw new BadParse("Sub-query join must use alias.  Hint: JOIN (SELECT ...) AS T1", j.on.position)),
+        from.source.asInstanceOf[BasedSoQLAnalysis[ColumnName, Type]].decontextualized)
+    }
+  }
 
   def analyzeNoSelection(distinct: Boolean,
                          join: List[Join],
@@ -211,9 +200,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                          search: Option[String])(implicit ctx: AnalysisContext): Analysis = {
     log.debug("No selection; doing typechecking of the other parts then deciding what to make the selection")
 
-//    val ctxFromJoins = joinCtx(join)
-//    val ctxWithJoins = ctx ++ ctxFromJoins
-    val ctxWithJoins = ctx
+    val ctxFromJoins = joinCtx(join)
+    val ctxWithJoins = ctx ++ ctxFromJoins
 
     // ok, so the only tricky thing here is the selection itself.  Since it isn't provided, there are two cases:
     //   1. If there are groupBys, having, or aggregates in orderBy, then selection should be the equivalent of
@@ -328,12 +316,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   def analyzeWithSelection(query: Select)(implicit ctx: AnalysisContext): Analysis = {
     log.debug("There is a selection; typechecking all parts")
 
-    /*
     val ctxFromJoins = joinCtx(query.join)
     val ctxWithJoins = ctx ++ ctxFromJoins
-    */ // is this necessary? shouldn't the ctx already contain the aliasing information we need?
-
-    val ctxWithJoins = ctx
     val typechecker = new Typechecker(typeInfo, functionInfo)(ctxWithJoins)
 
     val subscriptConverter = new SubscriptConverter(typeInfo, functionInfo)
@@ -349,11 +333,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     val typecheck = subscriptConverter andThen (e => typechecker(e, typedAliases))
 
     val checkedJoin = query.join.map { j: Join =>
-      val sourceName = j.from match {
-        case From(TableName(name), _, _) => name
-        case f => f.alias.get
-      }
-      val joinCtx = ctx + (TableName.PrimaryTable.name -> ctx(sourceName)) // overwriting primary table but keeping other info?
+      val joinCtx = ctx + (TableName.PrimaryTable.name -> ctx(getNestedTableName(j.from))) // overwriting primary table but keeping other info?
       val from = analyzeFrom(j.from)(joinCtx)
       typed.Join(j.typ, from, typecheck(j.on))
     }
@@ -538,6 +518,8 @@ case class BasedSoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
     ???
   }
 
+  def decontextualized =
+    SoQLAnalysis(isGrouped, distinct, selection, joins, where, groupBy, having, orderBy, limit, offset, search)
 
 }
 
