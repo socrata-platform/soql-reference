@@ -173,6 +173,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
         bs.from match {
           case From(TableName(name), _, _) => name
         }
+      case From(TableName(name), _, alias) => alias.getOrElse(name)
     }
   }
 

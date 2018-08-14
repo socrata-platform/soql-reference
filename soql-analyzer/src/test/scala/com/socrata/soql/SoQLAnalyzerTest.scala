@@ -491,7 +491,6 @@ SELECT visits, @x3.x
     ))
   }
 
-  /*
   test("nested join re-using table alias - x2") {
     val analysis = analyzer.analyzeUnchainedQuery(s"""
 SELECT visits, @x2.zx
@@ -500,15 +499,15 @@ SELECT visits, @x2.zx
        ) as x2 on @x2.zx = name_first
       """)
 
-    val Some(innermostLeftOuterJoin) = analysis.joins.get.head.from.head.join
-    val innermostAnalysis = innermostLeftOuterJoin.head.tableLike.head
+    val List(innermostJoin) = analysis.joins.head.from.source.asInstanceOf[BasedSoQLAnalysis[_, _]].joins
+    val innermostAnalysis = innermostJoin.from.source.asInstanceOf[BasedSoQLAnalysis[_, _]]
     innermostAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x1"), ColumnName("x"), TestText)(NoPosition)
     ))
 
-    val Some(rightOuterJoin) = analysis.joins
-    val rightOuterJoinAnalysis = analysis.joins.get.head.from.head
-    rightOuterJoinAnalysis.selection.toSeq must equal (Seq(
+    val List(join) = analysis.joins
+    val joinAnalysis = join.from.source.asInstanceOf[BasedSoQLAnalysis[_, _]]
+    joinAnalysis.selection.toSeq must equal (Seq(
       ColumnName("zx") -> ColumnRef(Some("_x2"), ColumnName("x"), TestText)(NoPosition)
     ))
 
@@ -571,5 +570,4 @@ SELECT visits, @x2.zx
         (NoPosition, NoPosition)
     ))
   }
-  */
 }
