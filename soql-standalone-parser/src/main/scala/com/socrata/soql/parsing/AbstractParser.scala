@@ -30,6 +30,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def groupBys(soql: String): List[Expression] = parseFull(groupByList, soql)
   def selectStatement(soql: String): List[Select] = parseFull(pipedSelect, soql)
   def unchainedSelectStatement(soql: String): Select = parseFull(unchainedSelect, soql) // a select statement without pipes or subselects
+  def standaloneFrom(soql: String): From = parseFull(from, soql)
   def limit(soql: String): BigInt = parseFull(integer, soql)
   def offset(soql: String): BigInt = parseFull(integer, soql)
   def search(soql: String): String = parseFull(stringLiteral, soql)
@@ -95,26 +96,27 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
    *               *************************
    */
 
-  def pipedSelect: Parser[List[Select]] = rep1sep(unchainedSelect, QUERYPIPE())
+  val pipedSelect: Parser[List[Select]] = rep1sep(unchainedSelect, QUERYPIPE())
 
-  def onlyIf[T](b: Boolean)(p: Parser[T]): Parser[T] = p ^? { case x if b => x }
+  def onlyIf[T](b: Boolean)(p: Parser[T]): Parser[T] = p.filter(_ => b)
 
-  // is there a way to do this with accept(If)?
   def ifCanJoin[T](p: Parser[T]): Parser[Option[T]] = opt(onlyIf(allowJoins)(p))
 
+  def ifCanJoinList[T](p: Parser[List[T]]) = ifCanJoin(p).map(_.getOrElse(Nil))
+
   def unchainedSelect: Parser[Select] = {
-    SELECT() ~> distinct ~ selectList ~ ifCanJoin(joinList) ~ opt(whereClause) ~
+    SELECT() ~> distinct ~ selectList ~ ifCanJoinList(joinList) ~ opt(whereClause) ~
       opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
       case d ~ s ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
-      Select(d, s, j.getOrElse(Nil), w, gb.getOrElse(Nil), h, ord.getOrElse(Nil), lim, off, sr)
+        Select(d, s, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr)
     }
   }
 
   def basedSelect: Parser[BasedSelect] = {
-    SELECT() ~> distinct ~ selectList ~ (FROM() ~> from) ~ ifCanJoin(joinList) ~
+    SELECT() ~> distinct ~ selectList ~ (FROM() ~> from) ~ ifCanJoinList(joinList) ~
       opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
       case d ~ s ~ f ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
-        BasedSelect(d, s, f, j.getOrElse(Nil), w, gb.getOrElse(Nil), h, ord.getOrElse(Nil), lim, off, sr)
+        BasedSelect(d, s, f, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr)
     }
   }
 
@@ -127,24 +129,32 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
 
   def joinList = rep1(joinClause)
 
-  def from: Parser[From] = {
-    LPAREN() ~> basedSelect ~ opt(QUERYPIPE() ~> pipedSelect) ~ (RPAREN() ~> opt(AS() ~> simpleIdToAlias)) ^^ {
-      case x ~ ref ~ a => From(x, ref.getOrElse(Nil), a)
+  // TODO: select 1? parens on just table name?
+  val from: Parser[From] = {
+    LPAREN() ~> basedWithRefinements ~ (RPAREN() ~> opt(AS() ~> simpleIdToAlias)) ^^ {
+      case (based, refinements) ~ alias => From(based, refinements, alias)
     } |
       tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ {
         case (tid: String, _) ~ alias => From(TableName(tid), Nil, alias)
       }
   }
 
+  // TODO: can this return Parser[BasedSelect ~ List[Select]]?
+  val basedWithRefinements: Parser[(BasedSelect, List[Select])] = {
+    basedSelect ~ opt(QUERYPIPE() ~> pipedSelect) ^^ {
+      case based ~ refinements => (based, refinements.getOrElse(Nil))
+    }
+  }
+
   def distinct: Parser[Boolean] = opt(DISTINCT()) ^^ (_.isDefined)
 
-  def orderByAndSearch: Parser[(Option[List[OrderBy]], Option[String])] =
+  def orderByAndSearch: Parser[(List[OrderBy], Option[String])] =
     orderByClause ~ opt(searchClause) ^^ { //backward-compat.  We should prefer putting the search first.
-      case ob ~ sr => (Some(ob), sr)
+      case ob ~ sr => (ob, sr)
     } |
     opt(searchClause ~ opt(orderByClause)) ^^ {
-      case Some(sr ~ ob) => (ob, Some(sr))
-      case None => (None, None)
+      case Some(sr ~ ob) => (ob.getOrElse(Nil), Some(sr))
+      case None => (Nil, None)
     }
 
   def limitOffset: Parser[(Option[BigInt], Option[BigInt])] =

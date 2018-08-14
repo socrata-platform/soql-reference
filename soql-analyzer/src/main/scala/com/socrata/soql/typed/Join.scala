@@ -14,7 +14,7 @@ trait TableSource[ColumnId, Type]
 // TODO: can these just extend TableSource[Nothing, Nothing]?
 case class TableName[ColumnId, Type](name: String) extends TableSource[ColumnId, Type] {
   override def toString: String = {
-    val unPrefixedName = name.substring(TableName.SodaFountainTableNamePrefixSubStringIndex)
+    val unPrefixedName = name.substring(com.socrata.soql.environment.TableName.SodaFountainTableNamePrefixSubStringIndex)
     s"@$unPrefixedName"
   }
 }

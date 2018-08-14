@@ -1,5 +1,6 @@
 package com.socrata.soql
 
+import com.socrata.soql.ast.{BasedSelect, From}
 import com.socrata.soql.exceptions._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.PropertyChecks
@@ -61,12 +62,12 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   implicit val datasetCtxMap =
-    Map(TableName.PrimaryTable.qualifier -> datasetCtx,
-        TableName("_aaaa-aaaa", None).qualifier -> joinCtx,
-        TableName("_aaaa-aaab", Some("_a1")).qualifier -> joinAliasCtx,
-        TableName("_aaaa-aaax", Some("_x1")).qualifier -> joinAliasWoOverlapCtx,
-        TableName("_aaaa-aaab", None).qualifier -> joinAliasCtx,
-        TableName("_aaaa-aaax", None).qualifier -> joinAliasWoOverlapCtx)
+    Map(TableName.PrimaryTable.name -> datasetCtx,
+        "_aaaa-aaaa" -> joinCtx,
+        "_a1" -> joinAliasCtx,
+        "_x1" -> joinAliasWoOverlapCtx,
+        "_aaaa-aaab" -> joinAliasCtx,
+        "_aaaa-aaax" -> joinAliasWoOverlapCtx)
 
   val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo)
 
@@ -81,9 +82,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     val analysis = analyzer.analyzeUnchainedQuery("select :id")
     analysis.selection.toSeq must equal (Seq(ColumnName(":id") -> typedExpression(":id")))
     analysis.where must be (None)
-    analysis.groupBy must be (None)
+    analysis.groupBy must be (Nil)
     analysis.having must be (None)
-    analysis.orderBy must be (None)
+    analysis.orderBy must be (Nil)
     analysis.limit must be (None)
     analysis.offset must be (None)
     analysis.isGrouped must be (false)
@@ -98,14 +99,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     analysis.where must equal (Some(typedExpression("visits > 0")))
     analysis.where.get.position.column must equal (37)
     analysis.where.get.asInstanceOf[typed.FunctionCall[_,_]].functionNamePosition.column must equal (44)
-    analysis.groupBy must equal (Some(Seq(typedExpression(":id"))))
-    analysis.groupBy.get(0).position.column must equal (8)
+    analysis.groupBy must equal (List(typedExpression(":id")))
+    analysis.groupBy.head.position.column must equal (8)
     analysis.having must equal (Some(typedExpression("sum(balance) < 5")))
     analysis.having.get.position.column must equal (66)
     analysis.having.get.asInstanceOf[typed.FunctionCall[_,_]].parameters(0).position.column must equal (18)
     analysis.having.get.asInstanceOf[typed.FunctionCall[_,_]].functionNamePosition.column must equal (78)
-    analysis.orderBy must equal (Some(Seq(typed.OrderBy(typedExpression(":id"), false, true), typed.OrderBy(typedExpression("sum(balance)"), true, false))))
-    analysis.orderBy.get.map(_.expression.position.column) must equal (Seq(8, 109))
+    analysis.orderBy must equal (List(typed.OrderBy(typedExpression(":id"), false, true), typed.OrderBy(typedExpression("sum(balance)"), true, false)))
+    analysis.orderBy.map(_.expression.position.column) must equal (List(8, 109))
     analysis.limit must equal (Some(BigInt(5)))
     analysis.offset must equal (Some(BigInt(10)))
   }
@@ -127,16 +128,16 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     analysis.where.get.position.column must equal (112)
     analysis.where.get.asInstanceOf[typed.FunctionCall[_,_]].functionNamePosition.column must equal (115)
     analysis.where.get.asInstanceOf[typed.FunctionCall[_,_]].parameters(0).position.column must equal (90)
-    analysis.groupBy must equal (None)
+    analysis.groupBy must equal (Nil)
     analysis.having must equal (None)
-    analysis.orderBy must equal (Some(Seq(typed.OrderBy(typedExpression("name_first || (' ' || name_last)"), false, false), typed.OrderBy(typedExpression("visits"), true, true))))
-    analysis.orderBy.get.map(_.expression.position.column) must equal (Seq(45, 141))
+    analysis.orderBy must equal (List(typed.OrderBy(typedExpression("name_first || (' ' || name_last)"), false, false), typed.OrderBy(typedExpression("visits"), true, true)))
+    analysis.orderBy.map(_.expression.position.column) must equal (Seq(45, 141))
     analysis.limit must equal (Some(BigInt(5)))
     analysis.offset must equal (Some(BigInt(10)))
   }
 
   test("Giving no values to the split-query analyzer returns the equivalent of `SELECT *'") {
-    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, None, None, None, None, None, None)(Map(TableName.PrimaryTable.qualifier -> datasetCtx))
+    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, None, None, None, None, None, None)(Map(TableName.PrimaryTable.name -> datasetCtx))
     analysis must equal (analyzer.analyzeUnchainedQuery("SELECT *"))
   }
 
@@ -181,7 +182,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     ))
     analysis.where must equal (Some(typedExpression("location_latitude(address) > 1.1")))
     analysis.where.get.position.column must equal (36)
-    analysis.orderBy must equal (Some(Seq(typed.OrderBy(typedExpression("location_longitude(address)"), true, true))))
+    analysis.orderBy must equal (List(typed.OrderBy(typedExpression("location_longitude(address)"), true, true)))
   }
 
   test("null :: number succeeds") {
@@ -349,7 +350,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> visit,
       ColumnName("name_last") -> lastName
     ))
-    analysis.joins must equal (Some(List(typed.InnerJoin(Seq(SimpleSoQLAnalysis[ColumnName, TestType]("_aaaa-aaaa")), None, typedExpression("name_last = @aaaa-aaaa.name_last")))))
+    analysis.joins must equal (List(typed.InnerJoin(typed.From(typed.TableName[ColumnName, TestType]("_aaaa-aaaa"), Nil, None), typedExpression("name_last = @aaaa-aaaa.name_last"))))
   }
 
   test("join with table alias") {
@@ -358,7 +359,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    analysis.joins must equal (Some(List(typed.InnerJoin(Seq(SimpleSoQLAnalysis[ColumnName, TestType]("_aaaa-aaaa")), Some("_a1"), typedExpression("visits > 10")))))
+    analysis.joins must equal (List(typed.InnerJoin(typed.From(typed.TableName[ColumnName, TestType]("_aaaa-aaaa"), Nil, Some("_a1")), typedExpression("visits > 10"))))
   }
 
   test("join toString") {
@@ -427,28 +428,43 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
 
   test("join with sub-query") {
     val joinSubSoql = "select * from @aaaa-aaab where name_first = 'xxx'"
-    val subAnalysis = analyzer.analyzeUnchainedQuery(joinSubSoql)(Map(TableName.PrimaryTable.qualifier -> joinAliasCtx))
-    val analysis = analyzer.analyzeUnchainedQuery(s"select visits, @a1.name_first join ($joinSubSoql) as a1 on name_first = @a1.name_first")
+    val join = s"($joinSubSoql) as a1"
+    val subAnalysis = analyzer.analyzeFrom(join)(Map(TableName.PrimaryTable.name -> joinAliasCtx))
+
+    subAnalysis.alias must equal (Some("_a1"))
+    val fromFrom = subAnalysis.source.asInstanceOf[BasedSoQLAnalysis[_, _]].from
+    fromFrom must equal (typed.From(typed.TableName("_aaaa-aaab"), Nil, None))
+
+    val analysis = analyzer.analyzeUnchainedQuery(s"select visits, @a1.name_first join $join on name_first = @a1.name_first")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    val expected = Some(Seq(typed.InnerJoin(Seq(subAnalysis), Some("_a1"), typedExpression("name_first = @a1.name_first"))))
+    val expected = List(typed.InnerJoin(subAnalysis, typedExpression("name_first = @a1.name_first")))
     analysis.joins must equal (expected)
   }
 
   test("join with sub-chained-query") {
     val joinSubSoql = "select * from @aaaa-aaab where name_first = 'aaa' |> select * where name_first = 'bbb'"
-    val subAnalyses = analyzer.analyzeFullQuery(joinSubSoql)(Map(TableName.PrimaryTable.qualifier -> joinAliasCtx))
-    val analysis = analyzer.analyzeUnchainedQuery(s"select visits, @a1.name_first join ($joinSubSoql) as a1 on name_first = @a1.name_first")
+    val join = s"($joinSubSoql) as a1"
+    val subAnalysis = analyzer.analyzeFrom(join)(Map(TableName.PrimaryTable.name -> joinAliasCtx))
+
+    subAnalysis.alias must equal (Some("_a1"))
+    subAnalysis.refs.size must equal (1)
+    subAnalysis.refs.head.where.isDefined must equal (true)
+    val joinFrom = subAnalysis.source.asInstanceOf[BasedSoQLAnalysis[_, _]].from
+    joinFrom must equal (typed.From(typed.TableName("_aaaa-aaab"), Nil, None))
+
+    val analysis = analyzer.analyzeUnchainedQuery(s"select visits, @a1.name_first join $join on name_first = @a1.name_first")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    val expected = Some(Seq(typed.InnerJoin(subAnalyses, Some("_a1"), typedExpression("name_first = @a1.name_first"))))
+    val expected = List(typed.InnerJoin(subAnalysis, typedExpression("name_first = @a1.name_first")))
     analysis.joins must equal (expected)
   }
 
+  /*
   test("nested join") {
     val analysis = analyzer.analyzeUnchainedQuery(s"""
 SELECT visits, @x3.x
@@ -555,4 +571,5 @@ SELECT visits, @x2.zx
         (NoPosition, NoPosition)
     ))
   }
+  */
 }

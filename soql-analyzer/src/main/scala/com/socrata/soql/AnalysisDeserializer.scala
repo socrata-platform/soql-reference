@@ -146,9 +146,15 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     def readDistinct(): Boolean =
       in.readBool()
 
-    def maybeRead[A](f: => A): Option[A] =
-      if(in.readBool()) Some(f)
+    def maybeRead[A](f: => A): Option[A] = {
+      if (in.readBool()) Some(f)
       else None
+    }
+
+    def maybeReadList[A](f: => Seq[A]): List[A] = {
+      if (in.readBool()) f.toList
+      else Nil
+    }
 
     def readSelection(): OrderedMap[ColumnName, Expr] = {
       val count = in.readUInt32()
@@ -161,20 +167,19 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       OrderedMap(elems.result() : _*)
     }
 
-    def readJoins(): Option[List[Join[C, T]]] = {
+    def readJoins(): List[Join[C, T]] = {
       val count = in.readUInt32()
       if (count == 0) {
-        None
+        Nil
       } else {
         val elems = new ListBuffer[Join[C, T]]
         for (_ <- 1 to count) {
           val joinType = JoinType(in.readString())
-          val tableLike = read()
-          val alias = maybeRead(in.readString)
+          val from = readFrom
           val expr = readExpr()
-          elems += Join(joinType, tableLike, alias, expr)
+          elems += Join(joinType, from, expr)
         }
-        Some(elems.result())
+        elems.result()
       }
     }
 
@@ -183,18 +188,18 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         readExpr()
       }
 
-    def readGroupBy(): Option[Seq[Expr]] =
-      maybeRead {
-        val count = in.readUInt32()
-        (1 to count) map { _ =>
+    def readGroupBy: List[Expr] = {
+      maybeReadList {
+        (1 to in.readUInt32()) map { _ =>
           readExpr()
         }
       }
+    }
 
     def readHaving() = readWhere()
 
-    def readOrderBy(): Option[Seq[Order]] =
-      maybeRead {
+    def readOrderBy: List[Order] =
+      maybeReadList {
         val count = in.readUInt32()
         (1 to count) map { _ =>
           val expr = readExpr()
@@ -211,25 +216,52 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
     def readOffset() = readLimit()
 
+    def readFrom: From[C, T] = {
+      null
+    }
+
     def readSearch(): Option[String] =
       maybeRead {
         dictionary.strings(in.readUInt32())
       }
 
+    def readBasedAnalysis(): BasedSoQLAnalysis[C, T] = {
+      val isGrouped = readIsGrouped()
+      val distinct = readDistinct()
+      val selection = readSelection()
+      val from = readFrom
+      val join = readJoins()
+      val where = readWhere()
+      val groupBy = readGroupBy
+      val having = readHaving()
+      val orderBy = readOrderBy
+      val limit = readLimit()
+      val offset = readOffset()
+      val search = readSearch()
+      BasedSoQLAnalysis(
+        isGrouped,
+        distinct,
+        selection,
+        from,
+        join,
+        where,
+        groupBy,
+        having,
+        orderBy,
+        limit,
+        offset,
+        search)
+    }
 
     def readAnalysis(): SoQLAnalysis[C, T] = {
       val isGrouped = readIsGrouped()
       val distinct = readDistinct()
       val selection = readSelection()
-      val from = version match {
-        case 4 | TestVersion => maybeRead(in.readString)
-        case _ => None
-      }
       val join = readJoins()
       val where = readWhere()
-      val groupBy = readGroupBy()
+      val groupBy = readGroupBy
       val having = readHaving()
-      val orderBy = readOrderBy()
+      val orderBy = readOrderBy
       val limit = readLimit()
       val offset = readOffset()
       val search = readSearch()
@@ -237,7 +269,6 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         isGrouped,
         distinct,
         selection,
-        from,
         join,
         where,
         groupBy,

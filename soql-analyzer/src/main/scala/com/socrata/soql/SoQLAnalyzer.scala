@@ -42,21 +42,21 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     analyze(parsed)
   }
 
-  def analyze(selects: Seq[Select])(implicit ctx: AnalysisContext): Seq[Analysis] = {
+  def analyze(selects: List[Select])(implicit ctx: AnalysisContext): List[Analysis] = {
     selects.headOption match {
       case Some(firstSelect) =>
         val firstAnalysis = analyzeWithSelection(firstSelect)(ctx)
         selects.tail.scanLeft(firstAnalysis)(analyzeInOuterSelectionContext(ctx))
       case None =>
-        Seq.empty
+        Nil
     }
   }
 
   // TODO: refinements?....
-  def analyze(from: From)(implicit ctx: AnalysisContext): typed.From[ColumnName, Type] = from match {
-    case From(TableName(name), _, alias) => typed.From(typed.TableName(name), Nil, alias)
-    case From(bs: BasedSelect, _, alias) => typed.From(analyzeBasedSelect(bs), Nil, alias)
-    case From(NoContext, _, alias) => typed.From(new NoContext, Nil, alias)
+  def analyzeFrom(from: From)(implicit ctx: AnalysisContext): typed.From[ColumnName, Type] = from match {
+    case From(TableName(name), refs, alias) => typed.From(typed.TableName(name), analyze(refs), alias)
+    case From(bs: BasedSelect, refs, alias) => typed.From(analyzeBasedSelect(bs), analyze(refs), alias)
+    case From(NoContext, refs, alias) => typed.From(new NoContext, analyze(refs), alias)
   }
 
   /** Turn a simple SoQL SELECT statement into an `Analysis` object.
@@ -72,6 +72,16 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     log.trace("Parsing took {}ms", ns2ms(end - start))
 
     analyzeWithSelection(parsed)(ctx)
+  }
+
+  def analyzeFrom(query: String)(implicit ctx: AnalysisContext): typed.From[ColumnName, Type] = {
+    log.debug("Analyzing from", query)
+    val start = System.nanoTime()
+    val parsed = new Parser(parserParameters).standaloneFrom(query)
+    val end = System.nanoTime()
+    log.trace("Parsing took {}ms", ns2ms(end - start))
+
+    analyzeFrom(parsed)(ctx)
   }
 
   private def baseAnalysis(implicit ctx: AnalysisContext) = {
@@ -272,7 +282,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
         case f => f.alias.get
       }
       val joinCtx = ctx + (TableName.PrimaryTable.name -> ctx(sourceName)) // overwriting primary table but keeping other info?
-      val from = analyze(j.from)(joinCtx)
+      val from = analyzeFrom(j.from)(joinCtx)
       typed.Join(j.typ, from, typecheck(j.on))
     }
 
@@ -311,8 +321,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   }
 
   def analyzeBasedSelect(basedSelect: BasedSelect)(implicit ctx: AnalysisContext): BasedSoQLAnalysis[ColumnName, Type] = {
-    val from = analyze(basedSelect.from) // TODO(?): include context information from this for analysis of basedSelect?
-    analyze(Seq(basedSelect.decontextualized)).head.contextualize(from) // make this better
+    val from = analyzeFrom(basedSelect.from) // TODO(?): include context information from this for analysis of basedSelect?
+    analyze(List(basedSelect.decontextualized)).head.contextualize(from) // make this better
   }
 
   def analyzeWithSelection(query: Select)(implicit ctx: AnalysisContext): Analysis = {
@@ -344,7 +354,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
         case f => f.alias.get
       }
       val joinCtx = ctx + (TableName.PrimaryTable.name -> ctx(sourceName)) // overwriting primary table but keeping other info?
-      val from = analyze(j.from)(joinCtx)
+      val from = analyzeFrom(j.from)(joinCtx)
       typed.Join(j.typ, from, typecheck(j.on))
     }
 
@@ -576,7 +586,7 @@ object SimpleSoQLAnalysis {
 }
 
 
-// TODO (selectRework): merger should operate on BasedSoQLAnalysis?
+// TODO (selectRework): removed guards on aFrom == bFrom... SoQLAnalysis no longer has a from... implications?
 private class Merger[T](andFunction: MonomorphicFunction[T]) {
   type Analysis = SoQLAnalysis[ColumnName, T]
   type Expr = typed.CoreExpr[ColumnName, T]
@@ -599,13 +609,12 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
           // Do not merge when the previous soql is grouped and the next soql has joins
           // select g, count(x) as cx group by g |> select g, cx, @b.a join @b on @b.g=g
           // Newly introduced columns from joins cannot be merged and brought in w/o grouping and aggregate functions.
-          !(aIsGroup && bJoin.nonEmpty) && aFrom == bFrom =>
+          !(aIsGroup && bJoin.nonEmpty) =>
       // we can merge a change of only selection and limit + offset onto anything
       val (newLim, newOff) = Merger.combineLimits(aLim, aOff, bLim, bOff)
       Some(SoQLAnalysis(isGrouped = aIsGroup,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        from = aFrom,
                         joins = bJoin,
                         where = aWhere,
                         groupBy = aGroup,
@@ -614,47 +623,41 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         limit = newLim,
                         offset = newOff,
                         search = aSearch))
-    case (SoQLAnalysis(false, false, aSelect, aFrom, None, aWhere, None, None, aOrder, None, None, aSearch),
-          SoQLAnalysis(false, false, bSelect, bFrom, bJoin, bWhere, None, None, bOrder, bLim, bOff, None)) if
-          aFrom == bFrom =>
+    case (SoQLAnalysis(false, false, aSelect, Nil, aWhere, Nil, None, aOrder, None, None, aSearch),
+          SoQLAnalysis(false, false, bSelect, bJoin, bWhere, Nil, None, bOrder, bLim, bOff, None)) =>
       // Can merge a change of filter or order only if no window was specified on the left
       Some(SoQLAnalysis(isGrouped = false,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        from = aFrom,
                         joins = bJoin,
                         where = mergeWhereLike(aSelect, aWhere, bWhere),
-                        groupBy = None,
+                        groupBy = Nil,
                         having = None,
                         orderBy = mergeOrderBy(aSelect, aOrder, bOrder),
                         limit = bLim,
                         offset = bOff,
                         search = aSearch))
-    case (SoQLAnalysis(false, false, aSelect, aFrom, None, aWhere, None,     None,    _,      None, None, aSearch),
-          SoQLAnalysis(true, false, bSelect, bFrom, bJoin, bWhere, bGroupBy, bHaving, bOrder, bLim, bOff, None)) if
-          aFrom == bFrom =>
+    case (SoQLAnalysis(false, false, aSelect, Nil, aWhere, Nil,     None,    _,      None, None, aSearch),
+          SoQLAnalysis(true, false, bSelect, bJoin, bWhere, bGroupBy, bHaving, bOrder, bLim, bOff, None)) =>
       // an aggregate on a non-aggregate
       Some(SoQLAnalysis(isGrouped = true,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        from = aFrom,
                         joins = bJoin,
                         where = mergeWhereLike(aSelect, aWhere, bWhere),
                         groupBy = mergeGroupBy(aSelect, bGroupBy),
                         having = mergeWhereLike(aSelect, None, bHaving),
-                        orderBy = mergeOrderBy(aSelect, None, bOrder),
+                        orderBy = mergeOrderBy(aSelect, Nil, bOrder),
                         limit = bLim,
                         offset = bOff,
                         search = aSearch))
-    case (SoQLAnalysis(true,  false, aSelect, aFrom, None, aWhere, aGroupBy, aHaving, aOrder, None, None, aSearch),
-          SoQLAnalysis(false, false, bSelect, bFrom, None, bWhere, None,     None,    bOrder, bLim, bOff, None)) if
-          aFrom == bFrom =>
+    case (SoQLAnalysis(true,  false, aSelect, Nil, aWhere, aGroupBy, aHaving, aOrder, None, None, aSearch),
+          SoQLAnalysis(false, false, bSelect, Nil, bWhere, Nil,     None,    bOrder, bLim, bOff, None)) =>
       // a non-aggregate on an aggregate -- merge the WHERE of the second with the HAVING of the first
       Some(SoQLAnalysis(isGrouped = true,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        from = aFrom,
-                        joins = None,
+                        joins = Nil,
                         where = aWhere,
                         groupBy = aGroupBy,
                         having = mergeWhereLike(aSelect, aHaving, bWhere),
@@ -672,13 +675,13 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
     b.mapValues(replaceRefs(a, _))
 
   private def mergeOrderBy(aliases: OrderedMap[ColumnName, Expr],
-                           obA: Option[Seq[typed.OrderBy[ColumnName, T]]],
-                           obB: Option[Seq[typed.OrderBy[ColumnName, T]]]): Option[Seq[typed.OrderBy[ColumnName, T]]] =
+                           obA: List[typed.OrderBy[ColumnName, T]],
+                           obB: List[typed.OrderBy[ColumnName, T]]): List[typed.OrderBy[ColumnName, T]] =
     (obA, obB) match {
-      case (None, None) => None
-      case (Some(a), None) => Some(a)
-      case (None, Some(b)) => Some(b.map { ob => ob.copy(expression = replaceRefs(aliases, ob.expression)) })
-      case (Some(a), Some(b)) => Some(b.map { ob => ob.copy(expression = replaceRefs(aliases, ob.expression)) } ++ a)
+      case (Nil, Nil) => Nil
+      case (a, Nil) => a
+      case (Nil, b) => b.map { ob => ob.copy(expression = replaceRefs(aliases, ob.expression)) }
+      case (a, b) => b.map { ob => ob.copy(expression = replaceRefs(aliases, ob.expression)) } ++ a
     }
 
   private def mergeWhereLike(aliases: OrderedMap[ColumnName, Expr],
@@ -691,9 +694,8 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
       case (Some(a), Some(b)) => Some(typed.FunctionCall(andFunction, List(a, replaceRefs(aliases, b)))(NoPosition, NoPosition))
     }
 
-  private def mergeGroupBy(aliases: OrderedMap[ColumnName, Expr],
-                           gb: Option[Seq[Expr]]): Option[Seq[Expr]] =
-    gb.map(_.map(replaceRefs(aliases, _)))
+  private def mergeGroupBy(aliases: OrderedMap[ColumnName, Expr], gb: List[Expr]): List[Expr] =
+    gb.map(replaceRefs(aliases, _))
 
   private def replaceRefs(a: OrderedMap[ColumnName, Expr],
                              b: Expr): Expr =
@@ -715,34 +717,35 @@ private object Merger {
     // the integers, where either segment may end at infinity.  Note that all the inputs are
     // non-negative (enforced by the parser).  This simplifies things somewhat
     // because we can assume that aOff + bOff > aOff
-    require(aLim.fold(true)(_ >= 0), "Negative aLim")
-    require(aOff.fold(true)(_ >= 0), "Negative aOff")
-    require(bLim.fold(true)(_ >= 0), "Negative bLim")
-    require(bOff.fold(true)(_ >= 0), "Negative bOff")
+    require(aLim.forall(_ >= 0), "Negative aLim")
+    require(aOff.forall(_ >= 0), "Negative aOff")
+    require(bLim.forall(_ >= 0), "Negative bLim")
+    require(bOff.forall(_ >= 0), "Negative bOff")
+
     (aLim, aOff, bLim, bOff) match {
-      case (None, None, bLim, bOff) =>
-        (bLim, bOff)
-      case (None, Some(aOff), bLim, bOff) =>
+      case (None, None, bl, bo) =>
+        (bl, bo)
+      case (None, Some(ao), bl, bo) =>
         // first is unbounded to the right
-        (bLim, Some(aOff + bOff.getOrElse(BigInt(0))))
-      case (Some(aLim), aOff, Some(bLim), bOff) =>
+        (bl, Some(ao + bo.getOrElse(BigInt(0))))
+      case (Some(al), ao, Some(bl), bo) =>
         // both are bound to the right
-        val trueAOff = aOff.getOrElse(BigInt(0))
-        val trueBOff = bOff.getOrElse(BigInt(0)) + trueAOff
-        val trueAEnd = trueAOff + aLim
-        val trueBEnd = trueBOff + bLim
+        val trueAOff = ao.getOrElse(BigInt(0))
+        val trueBOff = bo.getOrElse(BigInt(0)) + trueAOff
+        val trueAEnd = trueAOff + al
+        val trueBEnd = trueBOff + bl
 
         val trueOff = trueBOff min trueAEnd
         val trueEnd = trueBEnd min trueAEnd
         val trueLim = trueEnd - trueOff
 
         (Some(trueLim), Some(trueOff))
-      case (Some(aLim), aOff, None, bOff) =>
+      case (Some(al), ao, None, bo) =>
         // first is bound to the right but the second is not
-        val trueAOff = aOff.getOrElse(BigInt(0))
-        val trueBOff = bOff.getOrElse(BigInt(0)) + trueAOff
+        val trueAOff = ao.getOrElse(BigInt(0))
+        val trueBOff = bo.getOrElse(BigInt(0)) + trueAOff
 
-        val trueEnd = trueAOff + aLim
+        val trueEnd = trueAOff + al
         val trueOff = trueBOff min trueEnd
         val trueLim = trueEnd - trueOff
         (Some(trueLim), Some(trueOff))

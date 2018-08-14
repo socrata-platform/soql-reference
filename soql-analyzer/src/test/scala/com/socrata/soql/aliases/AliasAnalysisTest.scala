@@ -10,6 +10,7 @@ import com.socrata.soql.environment.{ColumnName, TableName, UntypedDatasetContex
 import com.socrata.soql.collection.{OrderedMap, OrderedSet}
 import com.socrata.soql.parsing.AbstractParser.Parameters
 
+/*
 class AliasAnalysisTest extends WordSpec with MustMatchers {
   def columnNames(names: String*) =
     OrderedSet(names.map(ColumnName): _*)
@@ -367,3 +368,4 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     }
   }
 }
+*/

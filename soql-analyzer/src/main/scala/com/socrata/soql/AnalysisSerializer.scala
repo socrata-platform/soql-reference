@@ -215,15 +215,19 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       }
     }
 
-    private def writeJoins(joins: Option[List[Join[C, T]]]) {
-      val size = joins.map(_.size).getOrElse(0)
-      out.writeUInt32NoTag(size)
-      joins.toList.flatten.foreach { join =>
+    private def writeJoins(joins: List[Join[C, T]]) {
+      out.writeUInt32NoTag(joins.size)
+      joins.foreach { join =>
         out.writeStringNoTag(join.typ.toString)
-        write(join.from)
-        maybeWrite(join.alias)(x => out.writeStringNoTag(x))
+        writeFrom(join.from)
         writeExpr(join.on)
       }
+    }
+
+    // TODO: this
+    private def writeFrom(from: From[C, T]) = from match {
+      case From(tn: typed.TableName[C, T], _, alias) => "from"
+      case _ => "from"
     }
 
     private def maybeWrite[A](x: Option[A])(f: A => Unit): Unit = x match {
@@ -239,11 +243,10 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
         writeExpr(expr)
       }
 
-    private def writeGroupBy(groupBy: Option[Seq[Expr]]) =
-      maybeWrite(groupBy) { exprs =>
-        out.writeUInt32NoTag(exprs.size)
-        exprs.foreach(writeExpr)
-      }
+    private def writeGroupBy(groupBy: List[Expr]) = {
+      out.writeUInt32NoTag(groupBy.size)
+      groupBy.foreach(writeExpr)
+    }
 
     private def writeHaving(expr: Option[Expr]) =
       writeWhere(expr)
@@ -255,11 +258,10 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       out.writeBoolNoTag(nullsLast)
     }
 
-    private def writeOrderBy(orderBy: Option[Seq[Order]]) =
-      maybeWrite(orderBy) { orderBys =>
-        out.writeUInt32NoTag(orderBys.size)
-        orderBys.foreach(writeSingleOrderBy)
-      }
+    private def writeOrderBy(orderBy: List[Order]) = {
+      out.writeUInt32NoTag(orderBy.size)
+      orderBy.foreach(writeSingleOrderBy)
+    }
 
     private def writeLimit(limit: Option[BigInt]) =
       maybeWrite(limit) { n =>
@@ -278,7 +280,6 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       val SoQLAnalysis(isGrouped,
                        distinct,
                        selection,
-                       from,
                        join,
                        where,
                        groupBy,
@@ -290,7 +291,6 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       writeGrouped(isGrouped)
       writeDistinct(analysis.distinct)
       writeSelection(selection)
-      maybeWrite(from) { x => out.writeStringNoTag(x) }
       writeJoins(join)
       writeWhere(where)
       writeGroupBy(groupBy)

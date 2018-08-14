@@ -80,7 +80,7 @@ case class SelectedExpression(expression: Expression, name: Option[(ColumnName, 
   override def toString =
     if(AST.pretty) {
       name match {
-        case Some(name) => expression + " AS " + name._1
+        case Some(n) => expression + " AS " + n._1
         case None => expression.toString
       }
     } else {
@@ -123,7 +123,7 @@ object SimpleSelect {
     }
   }
 
-  def isSimple(from: From) = from match {
+  def isSimple(from: From): Boolean = from match {
     case From(bs: BasedSelect, refs, alias) => isSimple(bs) // TODO: do refs need to be Nil for true?
     case _ => false
   }

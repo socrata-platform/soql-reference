@@ -7,6 +7,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import org.scalatest.MustMatchers
 
+/*
 class AnalysisSerializationTest extends FunSuite with MustMatchers {
   implicit val datasetCtx = new DatasetContext[TestType] {
     val schema = com.socrata.soql.collection.OrderedMap(
@@ -84,3 +85,4 @@ class AnalysisSerializationTest extends FunSuite with MustMatchers {
     deserializer(new ByteArrayInputStream(baos.toByteArray)) must equal (Seq(analysis))
   }
 }
+*/

@@ -31,7 +31,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
         case Some(tree) =>
           Right(Seq(tree))
         case None =>
-          val columns = ctx(qual.getOrElse(TableName.PrimaryTable.qualifier)).schema
+          val columns = ctx(qual.getOrElse(TableName.PrimaryTable.name)).schema
           columns.get(col) match {
             case Some(typ) =>
               Right(Seq(typed.ColumnRef(qual, col, typ)(r.position)))

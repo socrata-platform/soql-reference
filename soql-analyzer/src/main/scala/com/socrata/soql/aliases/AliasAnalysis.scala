@@ -51,11 +51,11 @@ object AliasAnalysis extends AliasAnalysis {
    */
   def expandSelection(selection: Selection)(implicit ctx: AnalysisContext): Seq[SelectedExpression] = {
     val Selection(systemStar, userStars, expressions) = selection
-    val ctxKeyForSystem = systemStar.flatMap(_.qualifier).getOrElse(TableName.PrimaryTable.qualifier)
+    val ctxKeyForSystem = systemStar.flatMap(_.qualifier).getOrElse(TableName.PrimaryTable.name)
     val systemColumns = ctx(ctxKeyForSystem).columns.filter(_.name.startsWith(":"))
     systemStar.toSeq.flatMap(processStar(_, systemColumns)) ++
       userStars.flatMap { userStar =>
-        val ctxKeyForUser = userStar.qualifier.getOrElse(TableName.PrimaryTable.qualifier)
+        val ctxKeyForUser = userStar.qualifier.getOrElse(TableName.PrimaryTable.name)
         val userColumns = ctx(ctxKeyForUser).columns.filterNot(_.name.startsWith(":"))
         processStar(userStar, userColumns)
       } ++

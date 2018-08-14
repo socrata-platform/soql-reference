@@ -19,7 +19,7 @@ class SubscriptConverter[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionI
     case l: Literal => l
     case fc@FunctionCall(SpecialFunctions.Subscript,
                          params@Seq(ColumnOrAliasRef(qual, columnName), StringLiteral(prop))) =>
-      val columns = ctx(qual.getOrElse(TableName.PrimaryTable.qualifier)).schema
+      val columns = ctx(qual.getOrElse(TableName.PrimaryTable.name)).schema
       columns.get(columnName) match {
         case Some(t) =>
           val typeName = typeInfo.typeNameFor(t)
