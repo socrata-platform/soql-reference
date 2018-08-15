@@ -7,7 +7,7 @@ import com.socrata.soql.environment.{ColumnName, TableName, TableSource}
 case class Select(
   distinct: Boolean,
   selection: Selection,
-  join: List[Join],
+  joins: List[Join],
   where: Option[Expression],
   groupBy: List[Expression],
   having: Option[Expression],
@@ -17,10 +17,32 @@ case class Select(
   search: Option[String]
 ) {
   def contextualize(fromTableName: String) =
-    BasedSelect(distinct, selection, From(TableName(fromTableName), Nil, None), join, where, groupBy, having, orderBy, limit, offset, search)
+    BasedSelect(distinct, selection, From(TableName(fromTableName), Nil, None), joins, where, groupBy, having, orderBy, limit, offset, search)
 
   def contextualize(from: From) =
-    BasedSelect(distinct, selection, from, join, where, groupBy, having, orderBy, limit, offset, search)
+    BasedSelect(distinct, selection, from, joins, where, groupBy, having, orderBy, limit, offset, search)
+
+  override def toString = {
+    if(AST.pretty) {
+      val sb = new StringBuilder("SELECT ")
+      if (distinct) sb.append("DISTINCT ")
+      sb.append(selection)
+      joins.foreach { j =>
+        sb.append(" ")
+        sb.append(j.toString)
+      }
+      where.foreach(sb.append(" WHERE ").append)
+      sb.append(groupBy.mkString(" GROUP BY ", ", ", ""))
+      having.foreach(sb.append(" HAVING ").append)
+      sb.append(orderBy.mkString(" ORDER BY ", ", ", ""))
+      limit.foreach(sb.append(" LIMIT ").append)
+      offset.foreach(sb.append(" OFFSET ").append)
+      search.foreach(s => sb.append(" SEARCH ").append(Expression.escapeString(s)))
+      sb.toString
+    } else {
+      AST.unpretty(this)
+    }
+  }
 }
 
 // can be represented as [Select with From]?

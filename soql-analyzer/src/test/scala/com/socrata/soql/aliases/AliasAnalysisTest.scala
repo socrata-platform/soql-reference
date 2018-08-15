@@ -10,13 +10,12 @@ import com.socrata.soql.environment.{ColumnName, TableName, UntypedDatasetContex
 import com.socrata.soql.collection.{OrderedMap, OrderedSet}
 import com.socrata.soql.parsing.AbstractParser.Parameters
 
-/*
 class AliasAnalysisTest extends WordSpec with MustMatchers {
   def columnNames(names: String*) =
     OrderedSet(names.map(ColumnName): _*)
 
   def fixtureContext(cols: String*) =
-    Map(TableName.PrimaryTable.qualifier -> new UntypedDatasetContext {
+    Map(TableName.PrimaryTable.name -> new UntypedDatasetContext {
         private implicit def dsc = this
         val locale = com.ibm.icu.util.ULocale.US
         lazy val columns = columnNames(cols: _*)
@@ -368,4 +367,3 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     }
   }
 }
-*/

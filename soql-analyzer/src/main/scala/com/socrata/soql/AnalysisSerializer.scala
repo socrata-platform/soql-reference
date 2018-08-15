@@ -215,6 +215,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       }
     }
 
+    // TODO: use maybeWriteList?
     private def writeJoins(joins: List[Join[C, T]]) {
       out.writeUInt32NoTag(joins.size)
       joins.foreach { join =>
@@ -238,14 +239,22 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
         out.writeBoolNoTag(false)
     }
 
+    private def maybeWriteList[A](x: List[A])(f: A => Unit): Unit = x match {
+      case Nil =>
+        out.writeBoolNoTag(false)
+      case list =>
+        out.writeBoolNoTag(true)
+        out.writeUInt32NoTag(list.size)
+        list.foreach(f)
+    }
+
     private def writeWhere(where: Option[Expr]) =
       maybeWrite(where) { expr =>
         writeExpr(expr)
       }
 
     private def writeGroupBy(groupBy: List[Expr]) = {
-      out.writeUInt32NoTag(groupBy.size)
-      groupBy.foreach(writeExpr)
+      maybeWriteList(groupBy)(writeExpr)
     }
 
     private def writeHaving(expr: Option[Expr]) =
@@ -259,8 +268,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     }
 
     private def writeOrderBy(orderBy: List[Order]) = {
-      out.writeUInt32NoTag(orderBy.size)
-      orderBy.foreach(writeSingleOrderBy)
+      maybeWriteList(orderBy)(writeSingleOrderBy)
     }
 
     private def writeLimit(limit: Option[BigInt]) =

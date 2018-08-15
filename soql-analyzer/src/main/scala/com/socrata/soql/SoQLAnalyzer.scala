@@ -43,16 +43,14 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   }
 
   def analyze(selects: List[Select])(implicit ctx: AnalysisContext): List[Analysis] = {
-    selects.headOption match {
-      case Some(firstSelect) =>
+    selects match {
+      case Nil => Nil
+      case firstSelect :: refinements =>
         val firstAnalysis = analyzeWithSelection(firstSelect)(ctx)
-        selects.tail.scanLeft(firstAnalysis)(analyzeInOuterSelectionContext(ctx))
-      case None =>
-        Nil
+        refinements.scanLeft(firstAnalysis)(analyzeInOuterSelectionContext(ctx))
     }
   }
 
-  // TODO: refinements?....
   def analyzeFrom(from: From)(implicit ctx: AnalysisContext): typed.From[ColumnName, Type] = from match {
     case From(TableName(name), refs, alias) => typed.From(typed.TableName(name), analyze(refs), alias)
     case From(bs: BasedSelect, refs, alias) => typed.From(analyzeBasedSelect(bs), analyze(refs), alias)
@@ -317,7 +315,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   def analyzeWithSelection(query: Select)(implicit ctx: AnalysisContext): Analysis = {
     log.debug("There is a selection; typechecking all parts")
 
-    val ctxFromJoins = joinCtx(query.join)
+    val ctxFromJoins = joinCtx(query.joins)
     val ctxWithJoins = ctx ++ ctxFromJoins
     val typechecker = new Typechecker(typeInfo, functionInfo)(ctxWithJoins)
 
@@ -333,7 +331,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     // Rewrite subscript before typecheck
     val typecheck = subscriptConverter andThen (e => typechecker(e, typedAliases))
 
-    val checkedJoin = query.join.map { j: Join =>
+    val checkedJoin = query.joins.map { j: Join =>
       val joinCtx = ctx + (TableName.PrimaryTable.name -> ctx(getNestedTableName(j.from))) // overwriting primary table but keeping other info?
       val from = analyzeFrom(j.from)(joinCtx)
       typed.Join(j.typ, from, typecheck(j.on))
@@ -668,9 +666,9 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
     }
 
   private def mergeWhereLike(aliases: OrderedMap[ColumnName, Expr],
-                             a: Option[Expr],
-                             b: Option[Expr]): Option[Expr] =
-    (a, b) match {
+                             aOpt: Option[Expr],
+                             bOpt: Option[Expr]): Option[Expr] =
+    (aOpt, bOpt) match {
       case (None, None) => None
       case (Some(a), None) => Some(a)
       case (None, Some(b)) => Some(replaceRefs(aliases, b))
