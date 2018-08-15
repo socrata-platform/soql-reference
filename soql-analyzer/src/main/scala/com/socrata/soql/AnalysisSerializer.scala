@@ -249,9 +249,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     }
 
     private def writeWhere(where: Option[Expr]) =
-      maybeWrite(where) { expr =>
-        writeExpr(expr)
-      }
+      maybeWrite(where)(writeExpr)
 
     private def writeGroupBy(groupBy: List[Expr]) = {
       maybeWriteList(groupBy)(writeExpr)

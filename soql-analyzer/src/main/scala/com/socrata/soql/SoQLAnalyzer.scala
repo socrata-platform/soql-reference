@@ -1,5 +1,6 @@
 package com.socrata.soql
 
+//import com.socrata.soql.SoQLAnalysis.SimpleSoQLAnalysis
 import com.socrata.soql.exceptions._
 import com.socrata.soql.functions.MonomorphicFunction
 
@@ -167,10 +168,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
   private def getNestedTableName(from: From): String = {
     from match {
-      case From(bs: BasedSelect, _, _) =>
-        bs.from match {
-          case From(TableName(name), _, _) => name
-        }
+      case From(bs: BasedSelect, _, _) => getNestedTableName(bs.from)
       case From(TableName(name), _, alias) => alias.getOrElse(name)
     }
   }
@@ -429,36 +427,23 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
     BasedSoQLAnalysis(isGrouped, distinct, selection, from, joins, where, groupBy, having, orderBy, limit, offset, search)
   }
 
-  /*
-  def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): SoQLAnalysis[NewColumnId, Type] =
+  def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): SoQLAnalysis[NewColumnId, Type] = {
     copy(
       selection = selection.mapValues(_.mapColumnIds(f)),
-      joins = joins.map { join =>
-
-        def joinMap(c: ColumnId, q: Qualifier): NewColumnId = {
-          val qualifierForJoin = q.orElse(join.from.source match {
-            case typed.TableName(name)[_, _] => Some(name)
-            case _ => None
-          })
-          f(c, qualifierForJoin)
-        }
-
-        val remappedJoin = join.from match {
-          case typed.From[_, _](bs: BasedSoqlAnalysis[ColumnId, Type], refs, alias) => From(bs.mapColumnIds(mapColumnIds(joinMap)), refs.mapColumnIds(joinMap), alias)
-          case typed.From[_, _](_, refs, alias) => From(bs.mapColumnIds(mapColumnIds(joinMap)), refs.mapColumnIds(joinMap), alias)
-        typed.Join(join.typ, remappedJoin, join.alias, join.on.mapColumnIds(f))
-      }},
+      joins = joins.map(_.mapColumnIds(f)),
       where = where.map(_.mapColumnIds(f)),
-      groupBy = groupBy.map(_.map(_.mapColumnIds(f))),
+      groupBy = groupBy.map(_.mapColumnIds(f)),
       having = having.map(_.mapColumnIds(f)),
-      orderBy = orderBy.map(_.map(_.mapColumnIds(f)))
+      orderBy = orderBy.map(_.mapColumnIds(f))
     )
+  }
 
+  /*
   def mapColumnIds[NewColumnId](qColumnIdNewColumnIdMap: Map[(ColumnId, Qualifier), NewColumnId],
                                 qColumnNameToQColumnId: (Qualifier, ColumnName) => (ColumnId, Qualifier),
                                 columnNameToNewColumnId: ColumnName => NewColumnId,
                                 columnIdToNewColumnId: ColumnId => NewColumnId): SoQLAnalysis[NewColumnId, Type] = {
-    val newColumnsFromJoin = joins.toSeq.flatten.filter(x => !SimpleSoQLAnalysis.isSimple(x.from)).flatMap { j =>
+    val newColumnsFromJoin = joins.filterNot(_.from.isTable).flatMap { j =>
       j.tableLike.last.selection.map { case (columnName, _) =>
         qColumnNameToQColumnId(j.alias, columnName) -> columnNameToNewColumnId(columnName)
       }}.toMap
@@ -497,7 +482,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
       orderBy = orderBy.map(_.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))))
     )
   }
-    */
+  */
 }
 
 case class BasedSoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
@@ -514,7 +499,15 @@ case class BasedSoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                             search: Option[String]) extends typed.TableSource[ColumnId, Type] {
 
   def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): BasedSoQLAnalysis[NewColumnId, Type] = {
-    ???
+    copy(
+      selection = selection.mapValues(_.mapColumnIds(f)),
+      from = from.mapColumnIds(f),
+      joins = joins.map(_.mapColumnIds(f)),
+      where = where.map(_.mapColumnIds(f)),
+      groupBy = groupBy.map(_.mapColumnIds(f)),
+      having = having.map(_.mapColumnIds(f)),
+      orderBy = orderBy.map(_.mapColumnIds(f))
+    )
   }
 
   def decontextualized =
@@ -523,8 +516,9 @@ case class BasedSoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
 }
 
 object SoQLAnalysis {
-  def merge[T](andFunction: MonomorphicFunction[T], stages: Seq[SoQLAnalysis[ColumnName, T]]): Seq[SoQLAnalysis[ColumnName, T]] =
+  def merge[T](andFunction: MonomorphicFunction[T], stages: Seq[SoQLAnalysis[ColumnName, T]]): Seq[SoQLAnalysis[ColumnName, T]] = {
     new Merger(andFunction).merge(stages)
+  }
 }
 
 object SimpleSoQLAnalysis {
@@ -547,11 +541,11 @@ object SimpleSoQLAnalysis {
   /**
     * Simple SoQLAnalysis is a soql analysis created by a join where a sub-query is not used like "JOIN @aaaa-aaaa"
     */
-  /*
-  def isSimple[ColumnId, Type](a: SoQLAnalysis[ColumnId, Type]): Boolean = {
-    a.selection.keys.isEmpty && a.from.nonEmpty
+  def isSimple[ColumnId, Type](a: BasedSoQLAnalysis[ColumnId, Type]): Boolean = {
+    a.selection.keys.isEmpty && a.from.isTable
   }
 
+  /*
   def isSimple[ColumnId, Type](a: Seq[SoQLAnalysis[ColumnId, Type]]): Boolean = {
     a.nonEmpty && isSimple(a.last)
   }

@@ -362,6 +362,16 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     analysis.joins must equal (List(typed.InnerJoin(typed.From(typed.TableName[ColumnName, TestType]("_aaaa-aaaa"), Nil, Some("_a1")), typedExpression("visits > 10"))))
   }
 
+  // this should work....
+  test("eddie test") {
+    val analysis = analyzer.analyzeUnchainedQuery("select visits, @a1.name_first join (select * from @aaaa-aaaa) as a1 on visits > 10")
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName("visits") -> typedExpression("visits"),
+      ColumnName("name_first") -> typedExpression("@a1.name_first")
+    ))
+//    analysis.joins must equal (List(typed.InnerJoin(typed.From(typed.TableName[ColumnName, TestType]("_aaaa-aaaa"), Nil, Some("_a1")), typedExpression("visits > 10"))))
+  }
+
   test("join toString") {
     val soql = "select visits, @a1.name_first join @aaaa-aaaa as a1 on name_last = @a1.name_last"
     val parsed = new Parser().unchainedSelectStatement(soql)

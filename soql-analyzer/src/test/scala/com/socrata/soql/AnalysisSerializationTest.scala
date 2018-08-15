@@ -7,6 +7,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import org.scalatest.MustMatchers
 
+// TODO: join serialization test
 class AnalysisSerializationTest extends FunSuite with MustMatchers {
   implicit val datasetCtx = new DatasetContext[TestType] {
     val schema = com.socrata.soql.collection.OrderedMap(

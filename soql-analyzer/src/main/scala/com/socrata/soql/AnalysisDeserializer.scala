@@ -216,6 +216,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
     def readOffset() = readLimit()
 
+    // TODO: this
     def readFrom: From[C, T] = {
       null
     }
