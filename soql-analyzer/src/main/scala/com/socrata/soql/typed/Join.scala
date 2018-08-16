@@ -82,7 +82,7 @@ case class From[ColumnId, Type](source: TableSource[ColumnId, Type], refs: List[
       val joinMap = convertedAnalyses.lastOption match {
         case Some(prevAnalysis) =>
           prevAnalysis.selection.foldLeft(qColumnIdNewColumnIdMap) { (acc, selCol) =>
-            val (colName, expr) = selCol
+            val (colName, _) = selCol
             acc + (qColumnNameToQColumnId(None, colName) -> columnNameToNewColumnId(colName))
           }
         case None => initialJoinMap
@@ -93,7 +93,7 @@ case class From[ColumnId, Type](source: TableSource[ColumnId, Type], refs: List[
 
     bsMapped match {
       case None => typed.From(sourceTableName.map(typed.TableName(_)).getOrElse(new NoContext), mappedRefs, alias)
-      case Some(bs) => typed.From(bs, mappedRefs.tail, alias)
+      case Some(bs) => typed.From(bs, mappedRefs.tail, alias) // mappedRefs.head is actually decontextualized bs
     }
   }
 }

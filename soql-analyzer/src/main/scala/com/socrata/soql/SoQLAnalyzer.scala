@@ -505,10 +505,9 @@ case class BasedSoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
 
     val qColumnIdNewColumnIdWithJoinsMap = qColumnIdNewColumnIdMap ++ newColumnsFromJoins
 
-    /*
     copy(
-      selection = selection.mapValues(_.mapColumnIds(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)),
-      from = from.mapColumnIds(
+      selection = selection.mapValues(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
+      from = from.mapColumnIds(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId),
       joins = joins.map { j =>
         val remappedFrom = j.from.mapColumnIds(qColumnIdNewColumnIdWithJoinsMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
         typed.Join(j.typ, remappedFrom, j.on.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
@@ -518,8 +517,6 @@ case class BasedSoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
       having = having.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
       orderBy = orderBy.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
     )
-    */
-    ???
   }
 
   def decontextualized =
