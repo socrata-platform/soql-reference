@@ -31,12 +31,12 @@ case class Select(
         sb.append(" ")
         sb.append(j.toString)
       }
-      where.foreach(sb.append(" WHERE ").append)
-      sb.append(groupBy.mkString(" GROUP BY ", ", ", ""))
-      having.foreach(sb.append(" HAVING ").append)
-      sb.append(orderBy.mkString(" ORDER BY ", ", ", ""))
-      limit.foreach(sb.append(" LIMIT ").append)
-      offset.foreach(sb.append(" OFFSET ").append)
+      where.foreach(sb.append(" WHERE ").append(_))
+      if (groupBy.nonEmpty) sb.append(groupBy.mkString(" GROUP BY ", ", ", ""))
+      having.foreach(sb.append(" HAVING ").append(_))
+      if (orderBy.nonEmpty) sb.append(orderBy.mkString(" ORDER BY ", ", ", ""))
+      limit.foreach(sb.append(" LIMIT ").append(_))
+      offset.foreach(sb.append(" OFFSET ").append(_))
       search.foreach(s => sb.append(" SEARCH ").append(Expression.escapeString(s)))
       sb.toString
     } else {
@@ -62,7 +62,16 @@ case class BasedSelect(
   def decontextualized = Select(distinct, selection, join, where, groupBy, having, orderBy, limit, offset, search)
 }
 
-case class From(source: TableSource, refinements: List[Select], alias: Option[String])
+case class From(source: TableSource, refinements: List[Select], alias: Option[String]) {
+  def refinementsString = {
+    if (refinements.nonEmpty) refinements.mkString(" |> ", " |> ", " ")
+    else ""
+  }
+
+  override def toString: String = {
+    s"$source$refinementsString${alias.map(a => s" AS ${TableName.removeSodaPrefix(a)}").getOrElse("")}"
+  }
+}
 
 case object NoContext extends TableSource // context for a 1-row, 1-column virtual table, like "select 1"
 

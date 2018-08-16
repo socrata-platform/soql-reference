@@ -438,7 +438,6 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
     )
   }
 
-  /*
   def mapColumnIds[NewColumnId](qColumnIdNewColumnIdMap: Map[(ColumnId, Qualifier), NewColumnId],
                                 qColumnNameToQColumnId: (Qualifier, ColumnName) => (ColumnId, Qualifier),
                                 columnNameToNewColumnId: ColumnName => NewColumnId,
@@ -477,12 +476,11 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
         typed.Join(j.typ, remappedJoin, j.alias, j.on.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
       }},
       where = where.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
-      groupBy = groupBy.map(_.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))),
+      groupBy = groupBy.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
       having = having.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
-      orderBy = orderBy.map(_.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))))
+      orderBy = orderBy.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
     )
   }
-  */
 }
 
 case class BasedSoQLAnalysis[ColumnId, Type](isGrouped: Boolean,

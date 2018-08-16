@@ -1,24 +1,8 @@
 package com.socrata.soql.environment
 
-//case class TableName(name: String, alias: Option[String] = None) {
-//
-//  import TableName._
-//
-//  override def toString(): String = {
-//    val unPrefixedName = name.substring(SodaFountainTableNamePrefixSubStringIndex)
-//    "@" + unPrefixedName + alias.map(" AS " + _.substring(SodaFountainTableNamePrefixSubStringIndex)).getOrElse("")
-//  }
-//
-//  def qualifier: String = alias.getOrElse(name)
-//}
-
-// why does this have to be here
 trait TableSource
 case class TableName(name: String) extends TableSource {
-  override def toString: String = {
-    val unPrefixedName = name.substring(TableName.SodaFountainTableNamePrefixSubStringIndex)
-    s"@$unPrefixedName"
-  }
+  override def toString: String = TableName.replaceSodaPrefix(name)
 }
 
 object TableName {
@@ -36,4 +20,6 @@ object TableName {
   val SodaFountainTableNamePrefixSubStringIndex = 1
 
   def withSodaFountainPrefix(s: String) = s"$SodaFountainTableNamePrefix$s"
+  def replaceSodaPrefix(s: String) = s.replaceFirst(TableName.SodaFountainTableNamePrefix, TableName.Prefix)
+  def removeSodaPrefix(s: String) = s.replaceFirst(TableName.SodaFountainTableNamePrefix, "")
 }

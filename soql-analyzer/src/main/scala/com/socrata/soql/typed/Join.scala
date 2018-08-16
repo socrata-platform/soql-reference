@@ -11,25 +11,26 @@ trait TableSource[ColumnId, Type] {
 // TODO: can these just extend TableSource[Nothing, Nothing]?
 case class TableName[ColumnId, Type](name: String) extends TableSource[ColumnId, Type] {
   override def toString: String = {
-    val unPrefixedName = name.substring(com.socrata.soql.environment.TableName.SodaFountainTableNamePrefixSubStringIndex)
-    s"@$unPrefixedName"
+    name.replaceFirst(com.socrata.soql.environment.TableName.SodaFountainTableNamePrefix, com.socrata.soql.environment.TableName.Prefix)
   }
 
   def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): TableName[NewColumnId, Type] = {
     typed.TableName(name)
   }
 }
+
 class NoContext[ColumnId, Type] extends TableSource[ColumnId, Type] {
   override def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): TableSource[NewColumnId, Type] = {
     new NoContext[NewColumnId, Type]
   }
+  override def toString: String = ""
 }
 
 // TODO: does this From need an alias? what's the point?
 case class From[ColumnId, Type](source: TableSource[ColumnId, Type], refs: List[SoQLAnalysis[ColumnId, Type]], alias: Option[String]) {
-//  override def toString: String = {
-//
-//  }
+  override def toString: String = {
+    source.toString + refs.mkString(" |> ", " |> ", "") + alias.map(a => s" as $a")
+  }
 
   val isTable = source match {
     case _: TableName[_, _] => true
@@ -59,27 +60,7 @@ sealed trait Join[ColumnId, Type] {
     val sb = new StringBuilder
     sb.append(typ.toString)
     sb.append(" ")
-    from match {
-      case From(TableName(name), _, _) => name.replaceFirst(TableName.SodaFountainTableNamePrefix, TableName.Prefix)
-      case f =>
-        sb.append("(")
-        sb.append(f.map(_.toString).mkString(" |> "))
-        sb.append(")")
-    }
-    SimpleSoQLAnalysis.asSoQL(from) match {
-      case Some(x) =>
-        sb.append(x.replaceFirst(TableName.SodaFountainTableNamePrefix, TableName.Prefix))
-      case None =>
-        sb.append("(")
-        sb.append(from.map(_.toString).mkString(" |> "))
-        sb.append(")")
-    }
-
-    alias.foreach { x =>
-      sb.append(" AS ")
-      sb.append(x.substring(TableName.SodaFountainTableNamePrefixSubStringIndex))
-    }
-
+    sb.append(from.toString)
     sb.append(" ON ")
     sb.append(on.toString)
     sb.toString

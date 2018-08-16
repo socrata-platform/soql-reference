@@ -5,19 +5,19 @@ import com.socrata.soql.tokens.{FULL, LEFT, RIGHT, Token}
 sealed trait JoinType
 
 case object InnerJoinType extends JoinType {
-  override def toString(): String = JoinType.InnerJoinName
+  override def toString: String = JoinType.InnerJoinName
 }
 
 case object LeftOuterJoinType extends JoinType {
-  override def toString(): String = JoinType.LeftOuterJoinName
+  override def toString: String = JoinType.LeftOuterJoinName
 }
 
 case object RightOuterJoinType extends JoinType {
-  override def toString(): String = JoinType.RightOuterJoinName
+  override def toString: String = JoinType.RightOuterJoinName
 }
 
 case object FullOuterJoinType extends JoinType {
-  override def toString(): String = JoinType.FullOuterJoinName
+  override def toString: String = JoinType.FullOuterJoinName
 }
 
 object JoinType {
@@ -32,8 +32,7 @@ object JoinType {
       case LeftOuterJoinName => LeftOuterJoinType
       case RightOuterJoinName => RightOuterJoinType
       case FullOuterJoinName => FullOuterJoinType
-      case x =>
-        throw new IllegalArgumentException(s"invalid join type $x")
+      case x => throw new IllegalArgumentException(s"invalid join type $x")
     }
   }
 }
@@ -43,32 +42,15 @@ sealed trait Join {
   val on: Expression
   val typ: JoinType
 
-//  override def toString: String = {
-//    val sb = new StringBuilder
-//    sb.append(typ)
-//    sb.append(" ")
-//
-//    tableLike match {
-//      case Seq(x) if x.from.nonEmpty &&
-//        x.selection.allUserExcept.isEmpty &&
-//        x.selection.allSystemExcept.isEmpty &&
-//        x.selection.expressions.isEmpty =>
-//        x.from.foreach(x => sb.append(x.toString()))
-//      case _ =>
-//        sb.append("(")
-//        sb.append(tableLike.map(_.toString).mkString(" |> "))
-//        sb.append(")")
-//    }
-//
-//    alias.foreach { x =>
-//      sb.append(" AS ")
-//      sb.append(x.substring(TableName.SodaFountainTableNamePrefixSubStringIndex))
-//    }
-//
-//    sb.append(" ON ")
-//    sb.append(on)
-//    sb.toString
-//  }
+  override def toString: String = {
+    val sb = new StringBuilder
+    sb.append(typ)
+    sb.append(s" $from")
+
+    sb.append(" ON ")
+    sb.append(on)
+    sb.toString
+  }
 }
 
 case class InnerJoin(from: From, on: Expression) extends Join {
