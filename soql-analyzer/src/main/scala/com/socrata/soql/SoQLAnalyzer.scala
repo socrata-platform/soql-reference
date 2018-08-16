@@ -442,39 +442,22 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                 qColumnNameToQColumnId: (Qualifier, ColumnName) => (ColumnId, Qualifier),
                                 columnNameToNewColumnId: ColumnName => NewColumnId,
                                 columnIdToNewColumnId: ColumnId => NewColumnId): SoQLAnalysis[NewColumnId, Type] = {
-    val newColumnsFromJoin = joins.filterNot(_.from.isTable).flatMap { j =>
-      j.tableLike.last.selection.map { case (columnName, _) =>
-        qColumnNameToQColumnId(j.alias, columnName) -> columnNameToNewColumnId(columnName)
-      }}.toMap
+    val selectionsFromJoins = joins.map(_.from).map(f => f.lastSelection.map(s => f.alias -> s)).flatten
 
-    val qColumnIdNewColumnIdWithJoinsMap = qColumnIdNewColumnIdMap ++ newColumnsFromJoin
+    val newColumnsFromJoins = selectionsFromJoins.flatMap { case (alias, lastSelection) =>
+      lastSelection.map { case (columnName, _) =>
+        qColumnNameToQColumnId(alias, columnName) -> columnNameToNewColumnId(columnName)
+      }
+    }
+
+    val qColumnIdNewColumnIdWithJoinsMap = qColumnIdNewColumnIdMap ++ newColumnsFromJoins
 
     copy(
       selection = selection.mapValues(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
-      joins = joins.map { joins => joins.map { j =>
-        val analysesInColIds = j.from.foldLeft(Seq.empty[SoQLAnalysis[NewColumnId, Type]]) { (convertedAnalyses, analysis) =>
-          val joinMap =
-            convertedAnalyses.lastOption match {
-              case None =>
-                qColumnIdNewColumnIdMap.foldLeft(Map.empty[(ColumnId, Qualifier), NewColumnId]) { (acc, kv) =>
-                  val ((cid, qual), ncid) = kv
-                  if (qual == j.from.head.from) acc + ((cid, None) -> ncid)
-                  else acc
-                }
-              case Some(prevAnalysis) =>
-                prevAnalysis.selection.foldLeft(qColumnIdNewColumnIdMap) { (acc, selCol) =>
-                  val (colName, expr) = selCol
-                  acc + (qColumnNameToQColumnId(None, colName) -> columnNameToNewColumnId(colName))
-                }
-            }
-
-          val a = analysis.mapColumnIds(joinMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
-          convertedAnalyses :+ a
-        }
-
-        val remappedJoin = analysesInColIds
-        typed.Join(j.typ, remappedJoin, j.alias, j.on.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
-      }},
+      joins = joins.map { j =>
+        val remappedFrom = j.from.mapColumnIds(qColumnIdNewColumnIdWithJoinsMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
+        typed.Join(j.typ, remappedFrom, j.on.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
+      },
       where = where.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
       groupBy = groupBy.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
       having = having.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
@@ -506,6 +489,37 @@ case class BasedSoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
       having = having.map(_.mapColumnIds(f)),
       orderBy = orderBy.map(_.mapColumnIds(f))
     )
+  }
+
+  def mapColumnIds[NewColumnId](qColumnIdNewColumnIdMap: Map[(ColumnId, Qualifier), NewColumnId],
+                                qColumnNameToQColumnId: (Qualifier, ColumnName) => (ColumnId, Qualifier),
+                                columnNameToNewColumnId: ColumnName => NewColumnId,
+                                columnIdToNewColumnId: ColumnId => NewColumnId): BasedSoQLAnalysis[NewColumnId, Type] = {
+    val selectionsFromJoins = joins.map(_.from).map(f => f.lastSelection.map(s => f.alias -> s)).flatten
+
+    val newColumnsFromJoins = selectionsFromJoins.flatMap { case (alias, lastSelection) =>
+      lastSelection.map { case (columnName, _) =>
+        qColumnNameToQColumnId(alias, columnName) -> columnNameToNewColumnId(columnName)
+      }
+    }
+
+    val qColumnIdNewColumnIdWithJoinsMap = qColumnIdNewColumnIdMap ++ newColumnsFromJoins
+
+    /*
+    copy(
+      selection = selection.mapValues(_.mapColumnIds(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)),
+      from = from.mapColumnIds(
+      joins = joins.map { j =>
+        val remappedFrom = j.from.mapColumnIds(qColumnIdNewColumnIdWithJoinsMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
+        typed.Join(j.typ, remappedFrom, j.on.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
+      },
+      where = where.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
+      groupBy = groupBy.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
+      having = having.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
+      orderBy = orderBy.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
+    )
+    */
+    ???
   }
 
   def decontextualized =

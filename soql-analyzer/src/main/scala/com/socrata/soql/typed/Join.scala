@@ -2,7 +2,7 @@ package com.socrata.soql.typed
 
 import com.socrata.soql.{BasedSoQLAnalysis, SimpleSoQLAnalysis, SoQLAnalysis, typed}
 import com.socrata.soql.ast._
-import com.socrata.soql.environment.TableName
+import com.socrata.soql.environment.{ColumnName, TableName}
 
 trait TableSource[ColumnId, Type] {
   def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): TableSource[NewColumnId, Type]
@@ -32,6 +32,13 @@ case class From[ColumnId, Type](source: TableSource[ColumnId, Type], refs: List[
     source.toString + refs.mkString(" |> ", " |> ", "") + alias.map(a => s" as $a")
   }
 
+  def lastSelection = {
+    refs.lastOption.map(_.selection).orElse(source match {
+      case bs: BasedSoQLAnalysis[_, _] => Some(bs.selection)
+      case _ => None
+    })
+  }
+
   val isTable = source match {
     case _: TableName[_, _] => true
     case _ => false
@@ -48,6 +55,46 @@ case class From[ColumnId, Type](source: TableSource[ColumnId, Type], refs: List[
     }
 
     typed.From(source.mapColumnIds(fromMap), refs.map(_.mapColumnIds(fromMap)), alias)
+  }
+
+  def sourceTableName = source match {
+    case TableName(name) => Some(name)
+    case _ => None
+  }
+
+  def mapColumnIds[NewColumnId](qColumnIdNewColumnIdMap: Map[(ColumnId, Qualifier), NewColumnId],
+                                qColumnNameToQColumnId: (Qualifier, ColumnName) => (ColumnId, Qualifier),
+                                columnNameToNewColumnId: ColumnName => NewColumnId,
+                                columnIdToNewColumnId: ColumnId => NewColumnId): From[NewColumnId, Type] = {
+    val initialJoinMap = qColumnIdNewColumnIdMap.foldLeft(Map.empty[(ColumnId, Qualifier), NewColumnId]) { (acc, kv) =>
+      val ((cid, qual), ncid) = kv
+      if (qual == sourceTableName) acc + ((cid, None) -> ncid)
+      else acc
+    }
+
+    val bsMapped = source match {
+      case bs: BasedSoQLAnalysis[ColumnId, Type] =>
+        Some(bs.mapColumnIds(initialJoinMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId))
+      case _ => None
+    }
+
+    val mappedRefs = refs.foldLeft(bsMapped.map(_.decontextualized).toList) { (convertedAnalyses, analysis) =>
+      val joinMap = convertedAnalyses.lastOption match {
+        case Some(prevAnalysis) =>
+          prevAnalysis.selection.foldLeft(qColumnIdNewColumnIdMap) { (acc, selCol) =>
+            val (colName, expr) = selCol
+            acc + (qColumnNameToQColumnId(None, colName) -> columnNameToNewColumnId(colName))
+          }
+        case None => initialJoinMap
+      }
+      val mapped = analysis.mapColumnIds(joinMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
+      convertedAnalyses :+ mapped
+    }
+
+    bsMapped match {
+      case None => typed.From(sourceTableName.map(typed.TableName(_)).getOrElse(new NoContext), mappedRefs, alias)
+      case Some(bs) => typed.From(bs, mappedRefs.tail, alias)
+    }
   }
 }
 
