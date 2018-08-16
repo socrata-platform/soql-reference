@@ -92,7 +92,10 @@ case class From[ColumnId, Type](source: TableSource[ColumnId, Type], refs: List[
     }
 
     bsMapped match {
-      case None => typed.From(sourceTableName.map(typed.TableName(_)).getOrElse(new NoContext), mappedRefs, alias)
+      case None =>
+        val newSource: TableSource[NewColumnId, Type] =
+          sourceTableName.map(typed.TableName[NewColumnId, Type](_)).getOrElse(new NoContext[NewColumnId, Type])
+        typed.From[NewColumnId, Type](newSource, mappedRefs, alias)
       case Some(bs) => typed.From(bs, mappedRefs.tail, alias) // mappedRefs.head is actually decontextualized bs
     }
   }
