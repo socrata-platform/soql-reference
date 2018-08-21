@@ -11,7 +11,7 @@ object SoqlToy extends (Array[String] => Unit) {
     sys.exit(1)
   }
 
-  implicit val datasetCtx = Map(TableName.PrimaryTable.qualifier -> new DatasetContext[SoQLType] {
+  implicit val datasetCtx = Map(TableName.PrimaryTable.name -> new DatasetContext[SoQLType] {
     private implicit def ctx = this
     val locale = com.ibm.icu.util.ULocale.ENGLISH
     val schema = com.socrata.soql.collection.OrderedMap(
@@ -34,7 +34,7 @@ object SoqlToy extends (Array[String] => Unit) {
 
   def menu() {
     println("Columns:")
-    Util.printList(datasetCtx(TableName.PrimaryTable.qualifier).schema)
+    Util.printList(datasetCtx(TableName.PrimaryTable.name).schema)
   }
 
   def apply(args: Array[String]) {

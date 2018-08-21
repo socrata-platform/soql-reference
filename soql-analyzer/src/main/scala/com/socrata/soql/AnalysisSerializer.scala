@@ -225,10 +225,19 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       }
     }
 
-    // TODO: this
-    private def writeFrom(from: From[C, T]) = from match {
-      case From(tn: typed.TableName[C, T], _, alias) => "from"
-      case _ => "from"
+    private def writeFrom(from: From[C, T]) = {
+      from.source match {
+        case typed.TableName(name) =>
+          out.writeRawByte(0)
+          out.writeStringNoTag(name)
+        case bs: BasedSoQLAnalysis[C, T] =>
+          out.writeRawByte(1)
+          writeBasedAnalysis(bs)
+        case _: NoContext[C, T] =>
+          out.writeRawByte(2)
+      }
+      maybeWriteList(from.refs)(writeAnalysis)
+      maybeWrite(from.alias)(out.writeStringNoTag)
     }
 
     private def maybeWrite[A](x: Option[A])(f: A => Unit): Unit = x match {
@@ -297,6 +306,33 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       writeGrouped(isGrouped)
       writeDistinct(analysis.distinct)
       writeSelection(selection)
+      writeJoins(join)
+      writeWhere(where)
+      writeGroupBy(groupBy)
+      writeHaving(having)
+      writeOrderBy(orderBy)
+      writeLimit(limit)
+      writeOffset(offset)
+      writeSearch(search)
+    }
+
+    def writeBasedAnalysis(analysis: BasedSoQLAnalysis[C, T]) {
+      val BasedSoQLAnalysis(isGrouped,
+      distinct,
+      selection,
+      from,
+      join,
+      where,
+      groupBy,
+      having,
+      orderBy,
+      limit,
+      offset,
+      search) = analysis
+      writeGrouped(isGrouped)
+      writeDistinct(analysis.distinct)
+      writeSelection(selection)
+      writeFrom(from)
       writeJoins(join)
       writeWhere(where)
       writeGroupBy(groupBy)

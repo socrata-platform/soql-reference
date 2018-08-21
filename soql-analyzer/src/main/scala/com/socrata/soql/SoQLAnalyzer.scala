@@ -553,20 +553,6 @@ object SimpleSoQLAnalysis {
   def isSimple[ColumnId, Type](a: BasedSoQLAnalysis[ColumnId, Type]): Boolean = {
     a.selection.keys.isEmpty && a.from.isTable
   }
-
-  /*
-  def isSimple[ColumnId, Type](a: Seq[SoQLAnalysis[ColumnId, Type]]): Boolean = {
-    a.nonEmpty && isSimple(a.last)
-  }
-
-  def asSoQL[ColumnId, Type](a: Seq[SoQLAnalysis[ColumnId, Type]]): Option[String] = {
-    if (isSimple(a)) {
-      a.last.from
-    } else {
-      None
-    }
-  }
-  */
 }
 
 

@@ -69,6 +69,17 @@ case class FullOuterJoin(from: From, on: Expression) extends Join {
   val typ: JoinType = FullOuterJoinType
 }
 
+object Join {
+  def apply(typ: JoinType, from: From, on: Expression) = {
+    typ match {
+      case InnerJoinType => InnerJoin(from, on)
+      case LeftOuterJoinType => LeftOuterJoin(from, on)
+      case RightOuterJoinType => RightOuterJoin(from, on)
+      case FullOuterJoinType => FullOuterJoin(from, on)
+    }
+  }
+}
+
 object OuterJoin {
   def apply(direction: Token, tableLike: From, on: Expression): Join = {
     direction match {

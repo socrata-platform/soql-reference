@@ -44,7 +44,7 @@ case class Select(
   }
 }
 
-// can be represented as [Select with From]?
+// can be represented as [Select with From]? (and/or BasedSelect[Nothing, Nothing] with From([Nothing, Nothing]))
 case class BasedSelect(
   distinct: Boolean,
   selection: Selection,

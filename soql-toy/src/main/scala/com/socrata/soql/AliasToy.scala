@@ -12,14 +12,14 @@ object AliasToy extends (Array[String] => Unit) {
     sys.exit(1)
   }
 
-  implicit val datasetCtx = Map(TableName.PrimaryTable.qualifier -> new UntypedDatasetContext {
+  implicit val datasetCtx = Map(TableName.PrimaryTable.name -> new UntypedDatasetContext {
     val locale = com.ibm.icu.util.ULocale.ENGLISH
     val columns = com.socrata.soql.collection.OrderedSet(":id", ":created_at", "a", "b", "c", "d").map(ColumnName(_))
   })
 
   def menu() {
     println("Columns:")
-    println(datasetCtx(TableName.PrimaryTable.qualifier).columns.mkString("  ", ", ", ""))
+    println(datasetCtx(TableName.PrimaryTable.name).columns.mkString("  ", ", ", ""))
   }
 
   def apply(args: Array[String]) {

@@ -12,7 +12,7 @@ import scala.util.parsing.input.{Position, NoPosition}
  * @param columnNameMap Map from current names to new names.  The map must be defined
  *                      for all column names passed in.
  */
-/* only used in test?
+// TODO: test this?
 class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
 
   def mapSelect(ss: List[Select]): List[Select] = {
@@ -23,7 +23,7 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
       ss.updated(0, Select(
         distinct = s.distinct,
         selection = mapSelection(s.selection),
-        join = s.join.map(mapJoin),
+        joins = s.joins.map(mapJoin),
         where = s.where map mapExpression,
         groupBy = s.groupBy.map(mapExpression),
         having = s.having map mapExpression,
@@ -36,23 +36,17 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
     }
   }
 
-  def mapFrom(from: From) = from match {
-    case From(select: BasedSelect, l, a) => From(mapSelect(List(select)).head.contextualize(mapFrom(select.from)), l, a)
-    case x => x
+  def mapFrom(from: From): From = from match {
+    case From(select: BasedSelect, l, a) =>
+      From(mapSelect(List(select.decontextualized)).head.contextualize(mapFrom(select.from)), mapSelect(l), a)
+    case f =>
+      f.copy(refinements = mapSelect(f.refinements))
   }
 
   def mapJoin(join: Join): Join =  {
-    val mappedExpr = mapExpression(join.on)
-    join match {
-      case j: InnerJoin =>
-        InnerJoin(mappedTableLike, mappedExpr)
-      case j: LeftOuterJoin =>
-        j.copy(tableLike = mappedTableLike, on = mappedExpr)
-      case j: RightOuterJoin =>
-        j.copy(tableLike = mappedTableLike, on = mappedExpr)
-      case j: FullOuterJoin =>
-        j.copy(tableLike = mappedTableLike, on = mappedExpr)
-    }
+    val mappedFrom = mapFrom(join.from)
+    val mappedOn = mapExpression(join.on)
+    Join(join.typ, mappedFrom, mappedOn)
   }
 
   def mapExpression(e: Expression): Expression =  e match {
@@ -90,4 +84,3 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
     s.expressions map mapSelectedExpression)
 
 }
-*/

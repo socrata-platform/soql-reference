@@ -90,8 +90,8 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
                              dictionary: DeserializationDictionary[C, T],
                              version: Int)
   {
-    def readPosition(): Position =
-      in.readRawByte() match {
+    def readPosition: Position =
+      in.readRawByte match {
         case 0 =>
           val line = in.readUInt32()
           val column = in.readUInt32()
@@ -107,8 +107,8 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
           SimplePosition(line, column, lineText)
       }
 
-    def readExpr(): Expr = {
-      val pos = readPosition()
+    def readExpr: Expr = {
+      val pos = readPosition
       in.readRawByte() match {
         case 1 =>
           val qual = maybeRead(in.readString())
@@ -131,172 +131,148 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
           val typ = dictionary.types(in.readUInt32())
           NullLiteral(typ)(pos)
         case 6 =>
-          val functionNamePosition = readPosition()
+          val functionNamePosition = readPosition
           val func = dictionary.functions(in.readUInt32())
           val params = (1 to in.readUInt32()).map { _ =>
-            readExpr()
+            readExpr
           }
           FunctionCall(func, params)(pos, functionNamePosition)
       }
     }
 
-    def readIsGrouped(): Boolean =
-      in.readBool()
+    def readIsGrouped: Boolean = in.readBool
 
-    def readDistinct(): Boolean =
-      in.readBool()
+    def readDistinct: Boolean = in.readBool
 
     def maybeRead[A](f: => A): Option[A] = {
-      if (in.readBool()) Some(f)
+      if (in.readBool) Some(f)
       else None
     }
 
-    def maybeReadList[A](f: => Seq[A]): List[A] = {
-      if (in.readBool()) f.toList
-      else Nil
-    }
-
-    def readSelection(): OrderedMap[ColumnName, Expr] = {
-      val count = in.readUInt32()
-      val elems = new VectorBuilder[(ColumnName, Expr)]
-      for(_ <- 1 to count) {
-        val name = dictionary.labels(in.readUInt32())
-        val expr = readExpr()
-        elems += name -> expr
+    def maybeReadList[A](f: => A): List[A] = {
+      if (in.readBool) {
+        val count = in.readUInt32
+        1.to(count).map { _ =>
+          f
+        }.toList
+      } else {
+        Nil
       }
-      OrderedMap(elems.result() : _*)
     }
 
-    def readJoins(): List[Join[C, T]] = {
+    def readSelection: OrderedMap[ColumnName, Expr] = {
+      val count = in.readUInt32()
+      val elems = (1 to count).map { _ =>
+        val name =  dictionary.labels(in.readUInt32())
+        val expr = readExpr
+        name -> expr
+      }
+      OrderedMap(elems : _*)
+    }
+
+    def readJoins: List[Join[C, T]] = {
       val count = in.readUInt32()
       if (count == 0) {
         Nil
       } else {
-        val elems = new ListBuffer[Join[C, T]]
-        for (_ <- 1 to count) {
+        (1 to count).map { _ =>
           val joinType = JoinType(in.readString())
-          val from = readFrom
-          val expr = readExpr()
-          elems += Join(joinType, from, expr)
-        }
-        elems.result()
+          Join(joinType, readFrom, readExpr)
+        }.toList
       }
     }
 
-    def readWhere(): Option[Expr] =
-      maybeRead {
-        readExpr()
-      }
+    def readWhere: Option[Expr] =
+      maybeRead { readExpr }
 
     def readGroupBy: List[Expr] = {
-      maybeReadList {
-        (1 to in.readUInt32()) map { _ =>
-          readExpr()
-        }
-      }
+      maybeReadList { readExpr }
     }
 
-    def readHaving() = readWhere()
+    def readHaving = readWhere
 
     def readOrderBy: List[Order] =
       maybeReadList {
-        val count = in.readUInt32()
-        (1 to count) map { _ =>
-          val expr = readExpr()
-          val ascending = in.readBool()
-          val nullsLast = in.readBool()
-          OrderBy(expr, ascending, nullsLast)
-        }
+        val expr = readExpr
+        val ascending = in.readBool()
+        val nullsLast = in.readBool()
+        OrderBy(expr, ascending, nullsLast)
       }
 
-    def readLimit(): Option[BigInt] =
+    def readLimit: Option[BigInt] =
       maybeRead {
         BigInt(dictionary.strings(in.readUInt32()))
       }
 
-    def readOffset() = readLimit()
+    def readOffset = readLimit
 
-    // TODO: this
     def readFrom: From[C, T] = {
-      null
+      val source: TableSource[C, T] = in.readRawByte match {
+        case 0 =>
+          typed.TableName(in.readString)
+        case 1 =>
+          readBasedAnalysis
+        case 2 =>
+          new NoContext
+      }
+      val refs = maybeReadList { readAnalysis }
+      val alias = maybeRead { in.readString }
+      typed.From(source, refs, alias)
     }
 
-    def readSearch(): Option[String] =
+    def readSearch: Option[String] =
       maybeRead {
         dictionary.strings(in.readUInt32())
       }
 
-    def readBasedAnalysis(): BasedSoQLAnalysis[C, T] = {
-      val isGrouped = readIsGrouped()
-      val distinct = readDistinct()
-      val selection = readSelection()
-      val from = readFrom
-      val join = readJoins()
-      val where = readWhere()
-      val groupBy = readGroupBy
-      val having = readHaving()
-      val orderBy = readOrderBy
-      val limit = readLimit()
-      val offset = readOffset()
-      val search = readSearch()
+    def readBasedAnalysis: BasedSoQLAnalysis[C, T] = {
       BasedSoQLAnalysis(
-        isGrouped,
-        distinct,
-        selection,
-        from,
-        join,
-        where,
-        groupBy,
-        having,
-        orderBy,
-        limit,
-        offset,
-        search)
+        readIsGrouped,
+        readDistinct,
+        readSelection,
+        readFrom,
+        readJoins,
+        readWhere,
+        readGroupBy,
+        readHaving,
+        readOrderBy,
+        readLimit,
+        readOffset,
+        readSearch)
     }
 
-    def readAnalysis(): SoQLAnalysis[C, T] = {
-      val isGrouped = readIsGrouped()
-      val distinct = readDistinct()
-      val selection = readSelection()
-      val join = readJoins()
-      val where = readWhere()
-      val groupBy = readGroupBy
-      val having = readHaving()
-      val orderBy = readOrderBy
-      val limit = readLimit()
-      val offset = readOffset()
-      val search = readSearch()
+    def readAnalysis: SoQLAnalysis[C, T] = {
       SoQLAnalysis(
-        isGrouped,
-        distinct,
-        selection,
-        join,
-        where,
-        groupBy,
-        having,
-        orderBy,
-        limit,
-        offset,
-        search)
+        readIsGrouped,
+        readDistinct,
+        readSelection,
+        readJoins,
+        readWhere,
+        readGroupBy,
+        readHaving,
+        readOrderBy,
+        readLimit,
+        readOffset,
+        readSearch)
     }
 
-    def read(): Seq[SoQLAnalysis[C, T]] = {
+    def read: List[SoQLAnalysis[C, T]] = {
       val count = in.readInt32()
-      for(_ <- 1 to count) yield readAnalysis()
+      1.to(count).map(_ => readAnalysis).toList
     }
   }
 
-  def apply(in: InputStream): Seq[SoQLAnalysis[C, T]] = {
+  def apply(in: InputStream): List[SoQLAnalysis[C, T]] = {
     val cis = CodedInputStream.newInstance(in)
     cis.readInt32() match {
       case 0 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, 0)
-        Seq(deserializer.readAnalysis())
+        List(deserializer.readAnalysis)
       case v if v >= 3 && v <= 4 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
-        deserializer.read()
+        deserializer.read
       case other =>
         throw new UnknownAnalysisSerializationVersion(other)
     }
