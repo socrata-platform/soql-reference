@@ -14,6 +14,16 @@ import com.socrata.soql.environment._
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.typed.{CoreExpr, NoContext, Qualifier}
 
+
+// TODO:
+// write tests for both versions of mapColumnIds
+// From: when is alias required? are refinements always valid?
+// can Select be SoQL[Nothing, Nothing] or SoQL[Nothing, Nothing, ExprType]
+// typechecker fails on join aliasing
+// test serialize/deserialize From
+// toString good on parser? on analyzer?....(do we care?)
+// check where From is used - I think refs might be ignored some places
+
 class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                          functionInfo: FunctionInfo[Type],
                          parserParameters: AbstractParser.Parameters = AbstractParser.defaultParameters)
