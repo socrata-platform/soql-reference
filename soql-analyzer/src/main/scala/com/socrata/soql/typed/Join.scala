@@ -11,7 +11,7 @@ trait TableSource[ColumnId, Type] {
 // TODO: can these just extend TableSource[Nothing, Nothing]?
 case class TableName[ColumnId, Type](name: String) extends TableSource[ColumnId, Type] {
   override def toString: String = {
-    name.replaceFirst(com.socrata.soql.environment.TableName.SodaFountainTableNamePrefix, com.socrata.soql.environment.TableName.Prefix)
+    com.socrata.soql.environment.TableName.replaceSodaPrefix(name)
   }
 
   def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): TableName[NewColumnId, Type] = {
@@ -29,7 +29,9 @@ class NoContext[ColumnId, Type] extends TableSource[ColumnId, Type] {
 // TODO: does this From need an alias? what's the point?
 case class From[ColumnId, Type](source: TableSource[ColumnId, Type], refs: List[SoQLAnalysis[ColumnId, Type]], alias: Option[String]) {
   override def toString: String = {
-    source.toString + refs.mkString(" |> ", " |> ", "") + alias.map(a => s" as $a")
+    source.toString +
+      (if (refs.nonEmpty) refs.mkString(" |> ", " |> ", "")  else "") +
+        alias.map(a => s" AS $a").getOrElse("")
   }
 
   def lastSelection = {
@@ -81,8 +83,7 @@ case class From[ColumnId, Type](source: TableSource[ColumnId, Type], refs: List[
     val mappedRefs = refs.foldLeft(bsMapped.map(_.decontextualized).toList) { (convertedAnalyses, analysis) =>
       val joinMap = convertedAnalyses.lastOption match {
         case Some(prevAnalysis) =>
-          prevAnalysis.selection.foldLeft(qColumnIdNewColumnIdMap) { (acc, selCol) =>
-            val (colName, _) = selCol
+          prevAnalysis.selection.foldLeft(qColumnIdNewColumnIdMap) { case (acc, (colName, selCol)) =>
             acc + (qColumnNameToQColumnId(None, colName) -> columnNameToNewColumnId(colName))
           }
         case None => initialJoinMap
@@ -141,10 +142,10 @@ object Join {
 
   def apply[ColumnId, Type](joinType: JoinType, from: From[ColumnId, Type], on: CoreExpr[ColumnId, Type]): Join[ColumnId, Type] = {
     joinType match {
-      case InnerJoinType => InnerJoin(from, on)
-      case LeftOuterJoinType => LeftOuterJoin(from, on)
-      case RightOuterJoinType => RightOuterJoin(from, on)
-      case FullOuterJoinType => FullOuterJoin(from, on)
+      case InnerJoinType => typed.InnerJoin(from, on)
+      case LeftOuterJoinType => typed.LeftOuterJoin(from, on)
+      case RightOuterJoinType => typed.RightOuterJoin(from, on)
+      case FullOuterJoinType => typed.FullOuterJoin(from, on)
     }
   }
 }
