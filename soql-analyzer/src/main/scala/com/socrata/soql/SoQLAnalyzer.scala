@@ -22,7 +22,7 @@ import com.socrata.soql.typed.{CoreExpr, NoContext, Qualifier}
 // typechecker fails on join aliasing
 // test serialize/deserialize From
 // toString good on parser? on analyzer?....(do we care?)
-// check where From is used - I think refs might be ignored some places
+// check where From is used - I think refs might be ignored some places. also - only last ref counts sometimes?
 
 class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                          functionInfo: FunctionInfo[Type],
