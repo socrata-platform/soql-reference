@@ -191,10 +191,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     //      selecting the group-by clauses together with "count(*)".
     //   2. Otherwise, it should be the equivalent of selecting "*".
     val typechecker = new Typechecker(typeInfo, functionInfo)(ctxWithJoins)
-    val subscriptConverter = new SubscriptConverter(typeInfo, functionInfo)
 
-    // Rewrite subscript before typecheck
-    val typecheck = subscriptConverter andThen (e => typechecker(e, Map.empty))
+    val typecheck = typechecker(_ : Expression, Map.empty)
 
     val t0 = System.nanoTime()
     val checkedWhere = where.map(typecheck)
@@ -297,17 +295,14 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     val ctxWithJoins = ctx ++ ctxFromJoins
     val typechecker = new Typechecker(typeInfo, functionInfo)(ctxWithJoins)
 
-    val subscriptConverter = new SubscriptConverter(typeInfo, functionInfo)
-
     val t0 = System.nanoTime()
     val aliasAnalysis = AliasAnalysis(query.selection)
     val t1 = System.nanoTime()
     val typedAliases = aliasAnalysis.evaluationOrder.foldLeft(Map.empty[ColumnName, Expr]) { (acc, alias) =>
-      acc + (alias -> typechecker(subscriptConverter(aliasAnalysis.expressions(alias)), acc))
+      acc + (alias -> typechecker(aliasAnalysis.expressions(alias), acc))
     }
 
-    // Rewrite subscript before typecheck
-    val typecheck = subscriptConverter andThen (e => typechecker(e, typedAliases))
+    val typecheck = typechecker(_ : Expression, typedAliases)
 
     val checkedJoin = query.join.map { js => js.map { j: Join =>
       val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx +

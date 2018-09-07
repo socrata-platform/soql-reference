@@ -19,6 +19,8 @@ object SoQLFunctions {
     new MonomorphicFunction(identity, name, params, varargs, result, isAggregate = isAggregate).function
   private def f(identity: String, name: FunctionName, constraints: Map[String, Set[SoQLType]], params: Seq[TypeLike[SoQLType]], varargs: Seq[TypeLike[SoQLType]], result: TypeLike[SoQLType], isAggregate: Boolean = false) =
     Function(identity, name, constraints, params, varargs, result, isAggregate = isAggregate)
+  private def field(source: SoQLType, field: String, result: SoQLType) =
+    mf(source.name.name + "_" + field, SpecialFunctions.Field(source.name, field), Seq(source), Seq.empty, result)
 
   val TextToFixedTimestamp = mf("text to fixed timestamp", SpecialFunctions.Cast(SoQLFixedTimestamp.name), Seq(SoQLText), Seq.empty, SoQLFixedTimestamp)
   val TextToFloatingTimestamp = mf("text to floating timestamp", SpecialFunctions.Cast(SoQLFloatingTimestamp.name), Seq(SoQLText), Seq.empty, SoQLFloatingTimestamp)
@@ -227,9 +229,9 @@ object SoQLFunctions {
 
   // Cannot use property subscript syntax (loc.prop) to access properties of different types - number, text, point. Use cast syntax (loc::prop) instead
   val LocationToPoint = mf("loc to point", SpecialFunctions.Cast(SoQLPoint.name), Seq(SoQLLocation), Seq.empty, SoQLPoint)
-  val LocationToLatitude = mf("location_latitude", FunctionName("location_latitude"), Seq(SoQLLocation), Seq.empty, SoQLNumber)
-  val LocationToLongitude = mf("location_longitude", FunctionName("location_longitude"), Seq(SoQLLocation), Seq.empty, SoQLNumber)
-  val LocationToAddress = mf("location_human_address", FunctionName("location_human_address"), Seq(SoQLLocation), Seq.empty, SoQLText)
+  val LocationToLatitude = field(SoQLLocation, "latitude", SoQLNumber)
+  val LocationToLongitude = field(SoQLLocation, "longitude", SoQLNumber)
+  val LocationToAddress = field(SoQLLocation, "human_address", SoQLText)
 
   val LocationWithinCircle = f("location_within_circle", FunctionName("within_circle"),
     Map("a" -> RealNumLike),
@@ -257,26 +259,26 @@ object SoQLFunctions {
   val HumanAddress = mf("human_address", FunctionName("human_address"),
     Seq(SoQLText, SoQLText, SoQLText, SoQLText), Seq.empty, SoQLText)
 
-  val PointToLatitude = mf("point_latitude", FunctionName("point_latitude"), Seq(SoQLPoint), Seq.empty, SoQLNumber)
-  val PointToLongitude = mf("point_longitude", FunctionName("point_longitude"), Seq(SoQLPoint), Seq.empty, SoQLNumber)
+  val PointToLatitude = field(SoQLPoint, "latitude", SoQLNumber)
+  val PointToLongitude = field(SoQLPoint, "longitude", SoQLNumber)
 
-  val PhoneToPhoneNumber = mf("phone_phone_number", FunctionName("phone_phone_number"), Seq(SoQLPhone), Seq.empty, SoQLText)
-  val PhoneToPhoneType = mf("phone_phone_type", FunctionName("phone_phone_type"), Seq(SoQLPhone), Seq.empty, SoQLText)
+  val PhoneToPhoneNumber = field(SoQLPhone, "phone_number", SoQLText)
+  val PhoneToPhoneType = field(SoQLPhone, "phone_type", SoQLText)
 
   val Phone = f("phone", FunctionName("phone"), Map.empty,
     Seq(FixedType(SoQLText), FixedType(SoQLText)), Seq.empty,
     FixedType(SoQLPhone))
 
-  val UrlToUrl = mf("url_url", FunctionName("url_url"), Seq(SoQLUrl), Seq.empty, SoQLText)
-  val UrlToDescription = mf("url_description", FunctionName("url_description"), Seq(SoQLUrl), Seq.empty, SoQLText)
+  val UrlToUrl = field(SoQLUrl, "url", SoQLText)
+  val UrlToDescription = field(SoQLUrl, "description", SoQLText)
 
   val Url = f("url", FunctionName("url"), Map.empty,
     Seq(FixedType(SoQLText), FixedType(SoQLText)), Seq.empty,
     FixedType(SoQLUrl))
 
-  val DocumentToFilename = mf("document_filename", FunctionName("document_filename"), Seq(SoQLDocument), Seq.empty, SoQLText)
-  val DocumentToFileId = mf("document_file_id", FunctionName("document_file_id"), Seq(SoQLDocument), Seq.empty, SoQLText)
-  val DocumentToContentType = mf("document_content_type", FunctionName("document_content_type"), Seq(SoQLDocument), Seq.empty, SoQLText)
+  val DocumentToFilename = field(SoQLDocument, "filename", SoQLText)
+  val DocumentToFileId = field(SoQLDocument, "file_id", SoQLText)
+  val DocumentToContentType = field(SoQLDocument, "content_type", SoQLText)
 
   val JsonToText = mf("json to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLJson), Seq.empty, SoQLText)
   val JsonToNumber = mf("json to number", SpecialFunctions.Cast(SoQLNumber.name), Seq(SoQLJson), Seq.empty, SoQLNumber)
