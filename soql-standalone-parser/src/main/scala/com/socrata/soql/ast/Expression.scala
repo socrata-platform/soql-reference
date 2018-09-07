@@ -83,12 +83,31 @@ object SpecialFunctions {
   val Subscript = Operator("[]")
 
   object Field {
-    def apply(typ: TypeName, field: String) = FunctionName("#FIELD$" + typ.name + "." + field)
-    def unapply(f: FunctionName) = f.name match {
-      case Regex(t, x) ⇒ Some((TypeName(t), x))
-      case _ => None
-    }
-    val Regex = """^#FIELD\$(.*)\.(.*)$""".r
+    // This is somewhat unfortunate; the first implementation of
+    // fields used a simple underscore-separated naming convention
+    // rather than defining a SpecialFunction make an untypable thing,
+    // and the logs say that the naming convention is in fact actually
+    // used in practice.  Therefore unlike all the other
+    // SpecialFunctions, this produces names that are actually by
+    // users.
+    //
+    // Also it has no unapply because there is no way to break apart
+    // the names back into pieces without knowing what your universe
+    // of types are.
+    def apply(typ: TypeName, field: String) = FunctionName(typ.name + "_" + field)
+
+    // If we ever do get ourselves out of that (easiest way would be
+    // to make the underscorized names (deprecated) aliases for the
+    // dot-notation) this object should look something like this,
+    // together with a line re-sugaring the function call down below
+    // in FunctionCall#asString:
+
+    // def apply(typ: TypeName, field: String) = FunctionName("#FIELD$" + typ.name + "." + field)
+    // def unapply(f: FunctionName) = f.name match {
+    //   case Regex(t, x) ⇒ Some((TypeName(t), x))
+    //   case _ => None
+    // }
+    // val Regex = """^#FIELD\$(.*)\.(.*)$""".r
   }
 
   // this exists only so that selecting "(foo)" is never semi-explicitly aliased.
@@ -138,7 +157,6 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
   protected def asString = functionName match {
     case SpecialFunctions.Parens => "(" + parameters(0) + ")"
     case SpecialFunctions.Subscript => parameters(0) + "[" + parameters(1) + "]"
-    case SpecialFunctions.Field(_, field) => parameters(0) + "." + field
     case SpecialFunctions.StarFunc(f) => f + "(*)"
     case SpecialFunctions.Operator(op) if parameters.size == 1 =>
       op match {
