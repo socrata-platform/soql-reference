@@ -82,6 +82,15 @@ object SpecialFunctions {
   }
   val Subscript = Operator("[]")
 
+  object Field {
+    def apply(typ: TypeName, field: String) = FunctionName("#FIELD$" + typ.name + "." + field)
+    def unapply(f: FunctionName) = f.name match {
+      case Regex(t, x) ⇒ Some((TypeName(t), x))
+      case _ => None
+    }
+    val Regex = """^#FIELD\$(.*)\.(.*)$""".r
+  }
+
   // this exists only so that selecting "(foo)" is never semi-explicitly aliased.
   // it's stripped out by the typechecker.
   val Parens = Operator("()")
@@ -129,6 +138,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
   protected def asString = functionName match {
     case SpecialFunctions.Parens => "(" + parameters(0) + ")"
     case SpecialFunctions.Subscript => parameters(0) + "[" + parameters(1) + "]"
+    case SpecialFunctions.Field(_, field) => parameters(0) + "." + field
     case SpecialFunctions.StarFunc(f) => f + "(*)"
     case SpecialFunctions.Operator(op) if parameters.size == 1 =>
       op match {

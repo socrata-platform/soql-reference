@@ -176,12 +176,15 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   test("subcolumn subscript converted") {
     val analysis = analyzer.analyzeUnchainedQuery(
       "select address.human_address where address.latitude > 1.1 order by address.longitude")
+
+    val typedCol = typed.ColumnRef(None, ColumnName("address"), TestLocation.t)(NoPosition)
+
     analysis.selection.toSeq must equal (Seq(
-      ColumnName("address_human_address") -> typedExpression("location_human_address(address)")
+      ColumnName("address_human_address") -> typed.FunctionCall(TestFunctions.LocationToAddress.monomorphic.get, Seq(typedCol))(NoPosition, NoPosition)
     ))
-    analysis.where must equal (Some(typedExpression("location_latitude(address) > 1.1")))
+    analysis.where must equal (Some(typed.FunctionCall(MonomorphicFunction(TestFunctions.Gt, Map("a" -> TestNumber)), Seq(typed.FunctionCall(TestFunctions.LocationToLatitude.monomorphic.get, Seq(typedCol))(NoPosition, NoPosition), typed.NumberLiteral(new java.math.BigDecimal("1.1"), TestNumber.t)(NoPosition)))(NoPosition, NoPosition)))
     analysis.where.get.position.column must equal (36)
-    analysis.orderBy must equal (Some(Seq(typed.OrderBy(typedExpression("location_longitude(address)"), true, true))))
+    analysis.orderBy must equal (Some(Seq(typed.OrderBy(typed.FunctionCall(TestFunctions.LocationToLongitude.monomorphic.get, Seq(typedCol))(NoPosition, NoPosition), true, true))))
   }
 
   test("null :: number succeeds") {

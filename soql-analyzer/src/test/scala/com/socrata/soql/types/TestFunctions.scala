@@ -73,9 +73,9 @@ object TestFunctions {
   val FloatingTimeStampExtractDow = mf("floating timestamp extract day of week", FunctionName("date_extract_dow"), Seq(TestFloatingTimestamp), Seq.empty, TestNumber)
 
   val LocationToPoint = mf("loc to point", SpecialFunctions.Cast(TestPoint.name), Seq(TestLocation), Seq.empty, TestPoint)
-  val LocationToLatitude = mf("location_latitude", FunctionName("location_latitude"), Seq(TestLocation), Seq.empty, TestNumber)
-  val LocationToLongitude = mf("location_longitude", FunctionName("location_longitude"), Seq(TestLocation), Seq.empty, TestNumber)
-  val LocationToAddress = mf("location_human_address", FunctionName("location_human_address"), Seq(TestLocation), Seq.empty, TestText)
+  val LocationToLatitude = mf("location_latitude", SpecialFunctions.Field(TestLocation.name, "latitude"), Seq(TestLocation), Seq.empty, TestNumber)
+  val LocationToLongitude = mf("location_longitude", SpecialFunctions.Field(TestLocation.name, "longitude"), Seq(TestLocation), Seq.empty, TestNumber)
+  val LocationToAddress = mf("location_human_address", SpecialFunctions.Field(TestLocation.name, "human_address"), Seq(TestLocation), Seq.empty, TestText)
 
   val LocationWithinCircle = f("location_within_circle", FunctionName("within_circle"),
     Map("a" -> RealNumLike),
