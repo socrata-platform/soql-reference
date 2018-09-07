@@ -192,7 +192,6 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     //   2. Otherwise, it should be the equivalent of selecting "*".
     val typechecker = new Typechecker(typeInfo, functionInfo)(ctxWithJoins)
 
-    // Rewrite subscript before typecheck
     val typecheck = typechecker(_ : Expression, Map.empty)
 
     val t0 = System.nanoTime()
@@ -303,7 +302,6 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       acc + (alias -> typechecker(aliasAnalysis.expressions(alias), acc))
     }
 
-    // Rewrite subscript before typecheck
     val typecheck = typechecker(_ : Expression, typedAliases)
 
     val checkedJoin = query.join.map { js => js.map { j: Join =>
