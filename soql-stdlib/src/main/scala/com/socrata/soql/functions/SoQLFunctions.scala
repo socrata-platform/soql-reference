@@ -20,7 +20,7 @@ object SoQLFunctions {
   private def f(identity: String, name: FunctionName, constraints: Map[String, Set[SoQLType]], params: Seq[TypeLike[SoQLType]], varargs: Seq[TypeLike[SoQLType]], result: TypeLike[SoQLType], isAggregate: Boolean = false) =
     Function(identity, name, constraints, params, varargs, result, isAggregate = isAggregate)
   private def field(source: SoQLType, field: String, result: SoQLType) =
-    mf(source.name.caseFolded + "_" + field, SpecialFunctions.Field(source.name, field), Seq(source), Seq.empty, result)
+    mf(source.name.name + "_" + field, SpecialFunctions.Field(source.name, field), Seq(source), Seq.empty, result)
 
   val TextToFixedTimestamp = mf("text to fixed timestamp", SpecialFunctions.Cast(SoQLFixedTimestamp.name), Seq(SoQLText), Seq.empty, SoQLFixedTimestamp)
   val TextToFloatingTimestamp = mf("text to floating timestamp", SpecialFunctions.Cast(SoQLFloatingTimestamp.name), Seq(SoQLText), Seq.empty, SoQLFloatingTimestamp)
