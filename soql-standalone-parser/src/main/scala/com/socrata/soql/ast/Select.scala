@@ -3,7 +3,25 @@ package com.socrata.soql.ast
 import scala.util.parsing.input.{NoPosition, Position}
 import com.socrata.soql.environment.{ColumnName, TableName}
 
-case class Select(distinct: Boolean, selection: Selection, from: Option[TableName], join: Option[List[Join]], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) {
+trait Source
+case class TableName(name: String) extends Source
+case object ImplicitViewSource extends Source
+
+case class From(source: Source, alias: Option[String])
+
+case class Select(
+  distinct: Boolean,
+  selection: Selection,
+  from: From,
+  join: List[Join],
+  where: Option[Expression],
+  groupBy: List[Expression],
+  having: Option[Expression],
+  orderBy: List[OrderBy],
+  limit: Option[BigInt],
+  offset: Option[BigInt],
+  search: Option[String]) extends Source {
+
   override def toString = {
     if(AST.pretty) {
       val sb = new StringBuilder("SELECT ")
