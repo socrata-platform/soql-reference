@@ -1,49 +1,54 @@
 package com.socrata.soql.ast
 
 import scala.util.parsing.input.{NoPosition, Position}
-import com.socrata.soql.environment.{ColumnName, TableName}
+import com.socrata.soql.environment._
 
-trait Source
-case class TableName(name: String) extends Source
-case object ImplicitViewSource extends Source
+// TODO: override toString
+// alias must be defined for soql-entered subSelect. not defined for chained soql.
+case class SubSelect(selects: List[Select], alias: String)
+case class JoinSelect(fromTable: TableName, subSelect: Option[SubSelect]) {
+  def alias: Option[String] =  subSelect.map(_.alias).orElse(fromTable.alias)
+  def selects: List[Select] = subSelect.map(_.selects).getOrElse(Nil)
+}
 
-case class From(source: Source, alias: Option[String])
+object Select {
+  type TopLevelSelect = List[Select]
+}
 
 case class Select(
   distinct: Boolean,
   selection: Selection,
-  from: From,
-  join: List[Join],
+  joins: List[Join],
   where: Option[Expression],
-  groupBy: List[Expression],
+  groupBys: List[Expression],
   having: Option[Expression],
-  orderBy: List[OrderBy],
+  orderBys: List[OrderBy],
   limit: Option[BigInt],
   offset: Option[BigInt],
-  search: Option[String]) extends Source {
+  search: Option[String]) {
 
-  override def toString = {
-    if(AST.pretty) {
-      val sb = new StringBuilder("SELECT ")
-      if (distinct) sb.append("DISTINCT ")
-      sb.append(selection)
-      from.foreach(sb.append(" FROM ").append(_))
-      join.toList.flatten.foreach { j =>
-        sb.append(" ")
-        sb.append(j.toString)
-      }
-      where.foreach(sb.append(" WHERE ").append(_))
-      groupBy.foreach { gb => sb.append(gb.mkString(" GROUP BY ", ", ", "")) }
-      having.foreach(sb.append(" HAVING ").append(_))
-      orderBy.foreach { ob => sb.append(ob.mkString(" ORDER BY ", ", ", "")) }
-      limit.foreach(sb.append(" LIMIT ").append(_))
-      offset.foreach(sb.append(" OFFSET ").append(_))
-      search.foreach(s => sb.append(" SEARCH ").append(Expression.escapeString(s)))
-      sb.toString
-    } else {
-      AST.unpretty(this)
-    }
-  }
+//  override def toString = {
+//    if(AST.pretty) {
+//      val sb = new StringBuilder("SELECT ")
+//      if (distinct) sb.append("DISTINCT ")
+//      sb.append(selection)
+//      from.foreach(sb.append(" FROM ").append(_))
+//      join.toList.flatten.foreach { j =>
+//        sb.append(" ")
+//        sb.append(j.toString)
+//      }
+//      where.foreach(sb.append(" WHERE ").append(_))
+//      groupBy.foreach { gb => sb.append(gb.mkString(" GROUP BY ", ", ", "")) }
+//      having.foreach(sb.append(" HAVING ").append(_))
+//      orderBy.foreach { ob => sb.append(ob.mkString(" ORDER BY ", ", ", "")) }
+//      limit.foreach(sb.append(" LIMIT ").append(_))
+//      offset.foreach(sb.append(" OFFSET ").append(_))
+//      search.foreach(s => sb.append(" SEARCH ").append(Expression.escapeString(s)))
+//      sb.toString
+//    } else {
+//      AST.unpretty(this)
+//    }
+//  }
 }
 
 case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[StarSelection], expressions: Seq[SelectedExpression]) {
@@ -66,6 +71,8 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[
       AST.unpretty(this)
     }
   }
+
+  def isSimple = allSystemExcept.isEmpty && allUserExcept.isEmpty && expressions.isEmpty
 }
 
 case class StarSelection(qualifier: Option[String], exceptions: Seq[(ColumnName, Position)]) {
@@ -98,32 +105,10 @@ case class OrderBy(expression: Expression, ascending: Boolean, nullLast: Boolean
 }
 
 object SimpleSelect {
-  def apply(resource: String): Select = {
-    Select(distinct = false,
-           selection = Selection(None, Seq.empty, Seq.empty),
-           from = Some(TableName(resource)),
-           join = None,
-           where = None,
-           groupBy = None,
-           having = None,
-           orderBy = None,
-           limit = None,
-           offset = None,
-           search = None)
-  }
-
   /**
     * Simple Select is a select created by a join where a sub-query is not used like "JOIN @aaaa-aaaa"
     */
-  def isSimple(select: Select): Boolean = {
-    val s = select.selection
-    select.from.isDefined && s.allSystemExcept.isEmpty && s.allUserExcept.isEmpty && s.expressions.isEmpty
-  }
-
-  def isSimple(selects: Seq[Select]): Boolean = {
-    selects match {
-      case Seq(s) => isSimple(s)
-      case _ => false
-    }
+  def isSimple(selects: List[Select]): Boolean = {
+    selects.forall(_.selection.isSimple)
   }
 }

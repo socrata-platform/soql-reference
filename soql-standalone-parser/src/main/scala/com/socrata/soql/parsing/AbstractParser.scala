@@ -26,10 +26,10 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def selection(soql: String): Selection = parseFull(selectList, soql)
   def joins(soql: String): List[Join] = parseFull(joinList, soql)
   def expression(soql: String): Expression = parseFull(expr, soql)
-  def orderings(soql: String): Seq[OrderBy] = parseFull(orderingList, soql)
-  def groupBys(soql: String): Seq[Expression] = parseFull(groupByList, soql)
-  def selectStatement(soql: String): Seq[Select] = parseFull(pipedSelect, soql)
-  def unchainedSelectStatement(soql: String): Select = parseFull(unchainedSelect, soql) // a select statement without pipes or subselects
+  def orderings(soql: String): List[OrderBy] = parseFull(orderingList, soql)
+  def groupBys(soql: String): List[Expression] = parseFull(groupByList, soql)
+  def selectStatement(soql: String): List[Select] = parseFull(pipedSelect, soql)
+  def unchainedSelectStatement(soql: String): Select = parseFull(select, soql) // a select statement without pipes or subselects
   def limit(soql: String): BigInt = parseFull(integer, soql)
   def offset(soql: String): BigInt = parseFull(integer, soql)
   def search(soql: String): String = parseFull(stringLiteral, soql)
@@ -95,29 +95,60 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
    *               *************************
    */
 
-  def pipedSelect: Parser[Seq[Select]] = rep1sep(unchainedSelect, QUERYPIPE())
+  val pipedSelect: Parser[List[Select]] = rep1sep(select, QUERYPIPE())
 
-  def unchainedSelect: Parser[Select] =
-    if(allowJoins) {
-      SELECT() ~> distinct ~ selectList ~ opt(FROM() ~> tableIdentifier ~ opt(AS() ~> simpleIdentifier)) ~
-        opt(joinList) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-        case d ~ s ~ f ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(d, s, f.map(x => TableName(x._1._1, x._2.map(TableName.SodaFountainTableNamePrefix + _._1))), j, w, gb, h, ord, lim, off, sr)
-      }
-    } else {
-      SELECT() ~> distinct ~ selectList ~ opt(FROM() ~> tableIdentifier ~ opt(AS() ~> simpleIdentifier)) ~ opt(whereClause) ~ opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-        case d ~ s ~ f ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) => Select(d, s, f.map(x => TableName(x._1._1, x._2.map(TableName.SodaFountainTableNamePrefix + _._1))), None, w, gb, h, ord, lim, off, sr)
-      }
+  def onlyIf[T](b: Boolean)(p: Parser[T]): Parser[T] = p.filter(_ => b)
+
+  def ifCanJoin[T](p: Parser[T]): Parser[Option[T]] = opt(onlyIf(allowJoins)(p))
+
+  def ifCanJoinList[T](p: Parser[List[T]]) = ifCanJoin(p).map(_.getOrElse(Nil))
+
+  val select: Parser[Select] = {
+    SELECT() ~> distinct ~ selectList ~ ifCanJoinList(joinList) ~ opt(whereClause) ~
+      opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+      case d ~ s ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
+        Select(d, s, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr)
     }
+  }
+
+  val selectFrom: Parser[(TableName, Select)] = {
+    SELECT() ~> distinct ~ selectList ~ (FROM() ~> tableIdentifier) ~ opt(AS() ~> simpleIdToAlias) ~ ifCanJoinList(joinList) ~ opt(whereClause) ~
+      opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
+      case d ~ s ~ ((t: String, _)) ~ a ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
+        (TableName(t, a), Select(d, s, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr))
+    }
+  }
+
+  val joinSelect: Parser[JoinSelect] = {
+    tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ {
+      case ((tid: String, _)) ~ alias =>
+        JoinSelect(TableName(tid, alias), None)
+    } |
+    LPAREN() ~> selectFrom ~ opt(QUERYPIPE() ~> pipedSelect) ~ (RPAREN() ~> AS() ~> simpleIdToAlias) ^^ {
+      case ((tn, s)) ~ chainedQueries ~ alias =>
+        JoinSelect(tn, Some(SubSelect(s :: chainedQueries.toList.flatten, alias)))
+    }
+  }
+
+  def joinClause: PackratParser[Join] =
+    opt((LEFT() | RIGHT() | FULL()) ~ OUTER()) ~ (JOIN() ~> joinSelect) ~ (ON() ~> expr) ^^ {
+      case None ~ f ~ e =>
+        InnerJoin(f, e)
+      case Some(jd) ~ f ~ e =>
+        OuterJoin(jd._1, f, e)
+    }
+
+  def joinList = rep1(joinClause)
 
   def distinct: Parser[Boolean] = opt(DISTINCT()) ^^ (_.isDefined)
 
-  def orderByAndSearch: Parser[(Option[Seq[OrderBy]], Option[String])] =
+  def orderByAndSearch: Parser[(List[OrderBy], Option[String])] =
     orderByClause ~ opt(searchClause) ^^ { //backward-compat.  We should prefer putting the search first.
-      case ob ~ sr => (Some(ob), sr)
+      case ob ~ sr => (ob, sr)
     } |
     opt(searchClause ~ opt(orderByClause)) ^^ {
-      case Some(sr ~ ob) => (ob, Some(sr))
-      case None => (None, None)
+      case Some(sr ~ ob) => (ob.getOrElse(Nil), Some(sr))
+      case None => (Nil, None)
     }
 
   def limitOffset: Parser[(Option[BigInt], Option[BigInt])] =
@@ -136,22 +167,6 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def limitClause = LIMIT() ~> integer
   def offsetClause = OFFSET() ~> integer
   def searchClause = SEARCH() ~> stringLiteral
-
-  def joinClause: PackratParser[Join] =
-    opt((LEFT() | RIGHT() | FULL()) ~ OUTER()) ~ JOIN() ~ tableLike ~ opt(AS() ~> simpleIdentifier) ~ ON() ~ expr ^^ {
-      case None ~ j ~ t ~ None ~ o ~ e => InnerJoin(t, None, e)
-      case None ~ j ~ t ~ Some((alias, pos)) ~ o ~ e => InnerJoin(t, Some(TableName.SodaFountainTableNamePrefix + alias), e)
-      case Some(jd) ~ j ~ t ~ None ~ o ~ e => OuterJoin(jd._1, t, None, e)
-      case Some(jd) ~ j ~ t ~ Some((alias, pos)) ~ o ~ e => OuterJoin(jd._1, t, Some(TableName.SodaFountainTableNamePrefix + alias), e)
-    }
-
-  def joinList = rep1(joinClause)
-
-  def tableLike: Parser[Seq[Select]] =
-    LPAREN() ~ pipedSelect ~ RPAREN() ^^ { case _ ~ x ~ _=> x} |
-    tableIdentifier ^^ {
-      case (tid: String, _) => Seq(Select(false, Selection(None, Seq.empty, Seq.empty), Some(TableName(tid, None)), None, None, None, None, None, None, None, None))
-    }
 
   /*
    *               ********************
@@ -264,17 +279,14 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       case n: NULL => NullLiteral()(n.position)
     }
 
-  def userIdentifier: Parser[(Option[String], String, Position)] =
-    if(allowJoins) {
-      opt(tableIdentifier ~ DOT()) ~ simpleUserIdentifier ^^ {
-        case None ~ uid =>
-          (None, uid._1, uid._2)
-        case Some(qual ~ _) ~ uid =>
-          (Some(qual._1), uid._1, qual._2)
-      }
-    } else {
-      simpleUserIdentifier ^^ { uid => (None, uid._1, uid._2) }
+  def userIdentifier: Parser[(Option[String], String, Position)] = {
+    ifCanJoin(tableIdentifier ~ DOT()) ~ simpleUserIdentifier ^^ {
+      case None ~ uid =>
+        (None, uid._1, uid._2)
+      case Some(qual ~ _) ~ uid =>
+        (Some(qual._1), uid._1, qual._2)
     }
+  }
 
   val tableIdentifier: Parser[(String, Position)] =
     accept[tokens.TableIdentifier] ^^ { t =>
@@ -286,17 +298,14 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       (t.value, t.position)
     } | failure(errors.missingUserIdentifier)
 
-  def systemIdentifier: Parser[(Option[String], String, Position)] =
-    if(allowJoins) {
-      opt(tableIdentifier ~ DOT()) ~ simpleSystemIdentifier ^^ {
-        case None ~ sid =>
-          (None, sid._1, sid._2)
-        case Some(qual ~ _) ~ sid =>
-          (Some(qual._1), sid._1, qual._2)
-      }
-    } else {
-      simpleSystemIdentifier ^^ { sid => (None, sid._1, sid._2) }
+  def systemIdentifier: Parser[(Option[String], String, Position)] = {
+    ifCanJoin(tableIdentifier ~ DOT()) ~ simpleSystemIdentifier ^^ {
+      case None ~ sid =>
+        (None, sid._1, sid._2)
+      case Some(qual ~ _) ~ sid =>
+        (Some(qual._1), sid._1, qual._2)
     }
+  }
 
   val simpleSystemIdentifier: Parser[(String, Position)] =
     accept[tokens.SystemIdentifier] ^^ { t =>
@@ -306,6 +315,10 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   val identifier: Parser[(Option[String], String, Position)] = systemIdentifier | userIdentifier | failure(errors.missingIdentifier)
 
   val simpleIdentifier: Parser[(String, Position)] = simpleSystemIdentifier | simpleUserIdentifier | failure(errors.missingIdentifier)
+
+  val simpleIdToAlias: Parser[String] = simpleIdentifier ^^ {
+    case (alias, _) => TableName.withSodaFountainPrefix(alias)
+  }
 
   def paramList: Parser[Either[Position, Seq[Expression]]] =
     // the clauses have to be in this order, or it can't backtrack enough to figure out it's allowed to take
