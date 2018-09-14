@@ -1,6 +1,7 @@
 package com.socrata.soql.collection
 
-import scala.collection.immutable.{MapLike, HashMap}
+import scala.collection.GenTraversableOnce
+import scala.collection.immutable.{HashMap, MapLike}
 import scala.collection.generic.{CanBuildFrom, ImmutableMapFactory}
 
 class OrderedMap[A, +B](underlying: Map[A, (Int, B)], ordering: Vector[A]) extends Map[A,B] with MapLike[A, B, OrderedMap[A, B]] with Serializable {
@@ -33,6 +34,9 @@ class OrderedMap[A, +B](underlying: Map[A, (Int, B)], ordering: Vector[A]) exten
 
   override def + [B1 >: B] (elem1: (A, B1), elem2: (A, B1), elems: (A, B1) *): OrderedMap[A, B1] =
     this + elem1 + elem2 ++ elems
+
+  // to help with type inference
+  override def ++[B1 >: B](xs: GenTraversableOnce[(A, B1)]): OrderedMap[A, B1] = super.++(xs)
 
   def - (key: A): OrderedMap[A, B] =
     underlying.get(key) match {
