@@ -22,9 +22,9 @@ class AggregateChecker[Type] {
     *                             in the GROUP BY expressions in a location where only aggregate expressions
     *                             are allowed.
     */
-  def apply(outputs: Seq[Expr], where: Option[Expr], groupBy: Option[Seq[Expr]], having: Option[Expr], orderBy: Seq[Expr]): Boolean = {
-    if(groupBy.isDefined || having.isDefined) { // ok, definitely a grouped query
-      checkGrouped(outputs, where, groupBy.getOrElse(Nil), having, orderBy)
+  def apply(outputs: List[Expr], where: Option[Expr], groupBy: List[Expr], having: Option[Expr], orderBy: List[Expr]): Boolean = {
+    if(groupBy.nonEmpty || having.isDefined) { // ok, definitely a grouped query
+      checkGrouped(outputs, where, groupBy, having, orderBy)
       true
     } else {
       // neither GROUP BY nor HAVING are set.  It could still be a grouped

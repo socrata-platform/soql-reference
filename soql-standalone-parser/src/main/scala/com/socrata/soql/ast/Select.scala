@@ -7,7 +7,7 @@ import com.socrata.soql.environment._
 // alias must be defined for soql-entered subSelect. not defined for chained soql.
 case class SubSelect(selects: List[Select], alias: String)
 case class JoinSelect(fromTable: TableName, subSelect: Option[SubSelect]) {
-  def alias: Option[String] =  subSelect.map(_.alias).orElse(fromTable.alias)
+  def aliasOpt: Option[String] =  subSelect.map(_.alias).orElse(fromTable.alias)
   def selects: List[Select] = subSelect.map(_.selects).getOrElse(Nil)
 }
 

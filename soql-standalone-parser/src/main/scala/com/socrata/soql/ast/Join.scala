@@ -43,9 +43,13 @@ sealed trait Join {
   val on: Expression
   val typ: JoinType
 
+  def isSimple = SimpleSelect.isSimple(from.selects)
+
   override def toString: String = {
     s"$typ $from ON $on"
   }
+
+
 }
 
 case class InnerJoin(from: JoinSelect, on: Expression) extends Join {

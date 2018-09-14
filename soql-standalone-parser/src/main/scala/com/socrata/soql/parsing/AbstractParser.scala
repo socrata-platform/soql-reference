@@ -95,8 +95,6 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
    *               *************************
    */
 
-  val pipedSelect: Parser[List[Select]] = rep1sep(select, QUERYPIPE())
-
   def onlyIf[T](b: Boolean)(p: Parser[T]): Parser[T] = p.filter(_ => b)
 
   def ifCanJoin[T](p: Parser[T]): Parser[Option[T]] = opt(onlyIf(allowJoins)(p))
@@ -109,6 +107,41 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       case d ~ s ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
         Select(d, s, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr)
     }
+  }
+
+  val pipedSelect: Parser[List[Select]] = rep1sep(select, QUERYPIPE())
+
+  val tableIdentifier: Parser[(String, Position)] =
+    accept[tokens.TableIdentifier] ^^ { t =>
+      (TableName.SodaFountainTableNamePrefix + t.value.substring(1) /* remove prefix @ */, t.position)
+    } | failure(errors.missingUserIdentifier)
+
+  val simpleUserIdentifier: Parser[(String, Position)] =
+    accept[tokens.Identifier] ^^ { t =>
+      (t.value, t.position)
+    } | failure(errors.missingUserIdentifier)
+
+  def systemIdentifier: Parser[(Option[String], String, Position)] = {
+    ifCanJoin(tableIdentifier ~ DOT()) ~ simpleSystemIdentifier ^^ {
+      case None ~ sid =>
+        (None, sid._1, sid._2)
+      case Some(qual ~ _) ~ sid =>
+        (Some(qual._1), sid._1, qual._2)
+    }
+  }
+
+  val simpleSystemIdentifier: Parser[(String, Position)] =
+    accept[tokens.SystemIdentifier] ^^ { t =>
+      (t.value, t.position)
+    } | failure(errors.missingSystemIdentifier)
+
+
+  val identifier: Parser[(Option[String], String, Position)] = systemIdentifier | userIdentifier | failure(errors.missingIdentifier)
+
+  val simpleIdentifier: Parser[(String, Position)] = simpleSystemIdentifier | simpleUserIdentifier | failure(errors.missingIdentifier)
+
+  val simpleIdToAlias: Parser[String] = simpleIdentifier ^^ {
+    case (alias, _) => TableName.withSodaFountainPrefix(alias)
   }
 
   val selectFrom: Parser[(TableName, Select)] = {
@@ -286,38 +319,6 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       case Some(qual ~ _) ~ uid =>
         (Some(qual._1), uid._1, qual._2)
     }
-  }
-
-  val tableIdentifier: Parser[(String, Position)] =
-    accept[tokens.TableIdentifier] ^^ { t =>
-      (TableName.SodaFountainTableNamePrefix + t.value.substring(1) /* remove prefix @ */, t.position)
-    } | failure(errors.missingUserIdentifier)
-
-  val simpleUserIdentifier: Parser[(String, Position)] =
-    accept[tokens.Identifier] ^^ { t =>
-      (t.value, t.position)
-    } | failure(errors.missingUserIdentifier)
-
-  def systemIdentifier: Parser[(Option[String], String, Position)] = {
-    ifCanJoin(tableIdentifier ~ DOT()) ~ simpleSystemIdentifier ^^ {
-      case None ~ sid =>
-        (None, sid._1, sid._2)
-      case Some(qual ~ _) ~ sid =>
-        (Some(qual._1), sid._1, qual._2)
-    }
-  }
-
-  val simpleSystemIdentifier: Parser[(String, Position)] =
-    accept[tokens.SystemIdentifier] ^^ { t =>
-      (t.value, t.position)
-    } | failure(errors.missingSystemIdentifier)
-
-  val identifier: Parser[(Option[String], String, Position)] = systemIdentifier | userIdentifier | failure(errors.missingIdentifier)
-
-  val simpleIdentifier: Parser[(String, Position)] = simpleSystemIdentifier | simpleUserIdentifier | failure(errors.missingIdentifier)
-
-  val simpleIdToAlias: Parser[String] = simpleIdentifier ^^ {
-    case (alias, _) => TableName.withSodaFountainPrefix(alias)
   }
 
   def paramList: Parser[Either[Position, Seq[Expression]]] =
