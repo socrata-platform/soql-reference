@@ -49,7 +49,6 @@ sealed trait Join {
     s"$typ $from ON $on"
   }
 
-
 }
 
 case class InnerJoin(from: JoinSelect, on: Expression) extends Join {

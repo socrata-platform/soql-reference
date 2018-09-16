@@ -2,17 +2,37 @@ package com.socrata.soql.ast
 
 import scala.util.parsing.input.{NoPosition, Position}
 import com.socrata.soql.environment._
+import Select.itrToString
 
 // TODO: override toString
 // alias must be defined for soql-entered subSelect. not defined for chained soql.
+// TODO: could be NonEmptyList
 case class SubSelect(selects: List[Select], alias: String)
 case class JoinSelect(fromTable: TableName, subSelect: Option[SubSelect]) {
   def aliasOpt: Option[String] =  subSelect.map(_.alias).orElse(fromTable.alias)
   def selects: List[Select] = subSelect.map(_.selects).getOrElse(Nil)
+
+  override def toString: String = {
+    val (subSelectStr, aliasStrOpt) = subSelect.map { case SubSelect(h :: tail, alias) =>
+      val selectWithFromStr = h.toStringWithFrom(fromTable)
+      val selectStr = (selectWithFromStr :: tail.map(_.toString)).mkString("|>")
+      (s"($selectStr)", Some(alias))
+    }.getOrElse((fromTable.toString, None))
+
+    List(subSelectStr, itrToString("AS", aliasStrOpt)).filter(_.nonEmpty).mkString(" ")
+  }
 }
 
 object Select {
   type TopLevelSelect = List[Select]
+
+  def itrToString[A](prefix: String, l: Iterable[A], sep: String = "") = {
+    if (l.nonEmpty) {
+      l.mkString(prefix, sep, "")
+    } else {
+      ""
+    }
+  }
 }
 
 case class Select(
@@ -27,28 +47,34 @@ case class Select(
   offset: Option[BigInt],
   search: Option[String]) {
 
-//  override def toString = {
-//    if(AST.pretty) {
-//      val sb = new StringBuilder("SELECT ")
-//      if (distinct) sb.append("DISTINCT ")
-//      sb.append(selection)
-//      from.foreach(sb.append(" FROM ").append(_))
-//      join.toList.flatten.foreach { j =>
-//        sb.append(" ")
-//        sb.append(j.toString)
-//      }
-//      where.foreach(sb.append(" WHERE ").append(_))
-//      groupBy.foreach { gb => sb.append(gb.mkString(" GROUP BY ", ", ", "")) }
-//      having.foreach(sb.append(" HAVING ").append(_))
-//      orderBy.foreach { ob => sb.append(ob.mkString(" ORDER BY ", ", ", "")) }
-//      limit.foreach(sb.append(" LIMIT ").append(_))
-//      offset.foreach(sb.append(" OFFSET ").append(_))
-//      search.foreach(s => sb.append(" SEARCH ").append(Expression.escapeString(s)))
-//      sb.toString
-//    } else {
-//      AST.unpretty(this)
-//    }
-//  }
+  private def preFromToString = {
+    val distinctStr = if (distinct) "DISTINCT " else ""
+    s"SELECT $distinctStr$selection"
+  }
+
+  private def postFromToString = {
+    val joinsStr = joins.mkString(" ")
+    val whereStr = itrToString("WHERE", where)
+    val groupByStr = itrToString("GROUP BY", groupBys)
+    val havingStr = itrToString("HAVING", having)
+    val obStr = itrToString("ORDER BY", orderBys, ",")
+    val limitStr = itrToString("LIMIT", limit)
+    val offsetStr = itrToString("OFFSET", offset)
+    val searchStr = itrToString("SEARCH", search.map(Expression.escapeString))
+    List(joinsStr, whereStr, groupByStr, havingStr, obStr, limitStr, offsetStr, searchStr).filter(_.nonEmpty).mkString(" ")
+  }
+
+  def toStringWithFrom(fromTable: Option[TableName] = None): String = {
+    if(AST.pretty) {
+      List(preFromToString, fromTable.map(_.toString).getOrElse(""), postFromToString).filter(_.nonEmpty).mkString(" ")
+    } else {
+      AST.unpretty(this)
+    }
+  }
+
+  def toStringWithFrom(fromTable: TableName): String = toStringWithFrom(Some(fromTable))
+
+  override def toString = toStringWithFrom(None)
 }
 
 case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[StarSelection], expressions: Seq[SelectedExpression]) {
