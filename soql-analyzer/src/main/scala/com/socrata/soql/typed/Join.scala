@@ -2,7 +2,7 @@ package com.socrata.soql.typed
 
 import com.socrata.soql._
 import com.socrata.soql.ast._
-import com.socrata.soql.environment.TableName
+import com.socrata.soql.environment.{ColumnName, TableName}
 
 
 sealed trait Join[ColumnId, Type] {
@@ -24,6 +24,7 @@ sealed trait Join[ColumnId, Type] {
 
     typed.Join(typ, JoinAnalysis(from.fromTable, mappedSub), on.mapColumnIds(f))
   }
+
 
 //  override def toString: String = {
 //    val sb = new StringBuilder

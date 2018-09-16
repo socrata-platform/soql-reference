@@ -392,6 +392,36 @@ case class SubAnalysis[ColumnId, Type](analyses: List[SoQLAnalysis[ColumnId, Typ
 case class JoinAnalysis[ColumnId, Type](fromTable: TableName, subAnalysis: Option[SubAnalysis[ColumnId, Type]]) {
   def aliasOpt: Option[String] =  subAnalysis.map(_.alias).orElse(fromTable.alias)
   def analyses: List[SoQLAnalysis[ColumnId, Type]] = subAnalysis.map(_.analyses).getOrElse(Nil)
+
+  def mapColumnIds[NewColumnId](qColumnIdNewColumnIdMap: Map[(ColumnId, Qualifier), NewColumnId],
+                                qColumnNameToQColumnId: (Qualifier, ColumnName) => (ColumnId, Qualifier),
+                                columnNameToNewColumnId: ColumnName => NewColumnId,
+                                columnIdToNewColumnId: ColumnId => NewColumnId): JoinAnalysis[NewColumnId, Type] = {
+    val mappedSubAnalysis = subAnalysis.map {
+      case SubAnalysis(analyses, alias) =>
+        val mappedAnalyses = analyses.foldLeft(List.empty[SoQLAnalysis[NewColumnId, Type]]) { (convertedAnalyses, analysis) =>
+          val joinMap =
+            convertedAnalyses.lastOption match {
+              case None =>
+                qColumnIdNewColumnIdMap.foldLeft(Map.empty[(ColumnId, Qualifier), NewColumnId]) { (acc, kv) =>
+                  val ((cid, qual), ncid) = kv
+                  if (qual.contains(fromTable.name)) acc + ((cid, None) -> ncid)
+                  else acc
+                }
+              case Some(prevAnalysis) =>
+                prevAnalysis.selection.foldLeft(qColumnIdNewColumnIdMap) { (acc, selCol) =>
+                  val (colName, expr) = selCol
+                  acc + (qColumnNameToQColumnId(None, colName) -> columnNameToNewColumnId(colName))
+                }
+            }
+
+          val a = analysis.mapColumnIds(joinMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
+          convertedAnalyses :+ a
+        }
+        SubAnalysis(mappedAnalyses, alias)
+    }
+    JoinAnalysis(fromTable, mappedSubAnalysis)
+  }
 }
 
 object SoQLAnalyzer {
@@ -427,6 +457,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                 qColumnNameToQColumnId: (Qualifier, ColumnName) => (ColumnId, Qualifier),
                                 columnNameToNewColumnId: ColumnName => NewColumnId,
                                 columnIdToNewColumnId: ColumnId => NewColumnId): SoQLAnalysis[NewColumnId, Type] = {
+
     val newColumnsFromJoin = joins.flatMap { j =>
       j.from.analyses.lastOption.flatMap(_.selection.map { case (columnName, _) =>
         qColumnNameToQColumnId(j.from.aliasOpt, columnName) -> columnNameToNewColumnId(columnName)
@@ -435,36 +466,19 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
 
     val qColumnIdNewColumnIdWithJoinsMap = qColumnIdNewColumnIdMap ++ newColumnsFromJoin
 
+    def mapJoin(j: typed.Join[ColumnId, Type]): typed.Join[NewColumnId, Type] = {
+      val mappedAnalysis = j.from.mapColumnIds(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
+      val mappedOn = j.on.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))
+      typed.Join(j.typ, mappedAnalysis, mappedOn)
+    }
+
     copy(
       selection = selection.mapValues(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
-      join = join.map { joins => joins.map { j =>
-        val analysesInColIds = j.tableLike.foldLeft(Seq.empty[SoQLAnalysis[NewColumnId, Type]]) { (convertedAnalyses, analysis) =>
-          val joinMap =
-            convertedAnalyses.lastOption match {
-              case None =>
-                qColumnIdNewColumnIdMap.foldLeft(Map.empty[(ColumnId, Qualifier), NewColumnId]) { (acc, kv) =>
-                  val ((cid, qual), ncid) = kv
-                  if (qual == j.tableLike.head.from) acc + ((cid, None) -> ncid)
-                  else acc
-                }
-              case Some(prevAnalysis) =>
-                prevAnalysis.selection.foldLeft(qColumnIdNewColumnIdMap) { (acc, selCol) =>
-                  val (colName, expr) = selCol
-                  acc + (qColumnNameToQColumnId(None, colName) -> columnNameToNewColumnId(colName))
-                }
-            }
-
-          val a = analysis.mapColumnIds(joinMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
-          convertedAnalyses :+ a
-        }
-
-        val remappedJoin = analysesInColIds
-        typed.Join(j.typ, remappedJoin, j.alias, j.expr.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
-      }},
+      joins = joins.map(mapJoin),
       where = where.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
-      groupBy = groupBy.map(_.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))),
+      groupBys = groupBys.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
       having = having.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
-      orderBy = orderBy.map(_.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))))
+      orderBys = orderBys.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
     )
   }
 }
@@ -472,42 +486,6 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
 object SoQLAnalysis {
   def merge[T](andFunction: MonomorphicFunction[T], stages: Seq[SoQLAnalysis[ColumnName, T]]): Seq[SoQLAnalysis[ColumnName, T]] =
     new Merger(andFunction).merge(stages)
-}
-
-object SimpleSoQLAnalysis {
-  def apply[ColumnId, Type](from: String): SoQLAnalysis[ColumnId, Type] = {
-    SoQLAnalysis(isGrouped = false,
-                 distinct = false,
-                 selection = OrderedMap.empty,
-                 from = Some(from),
-                 join = None,
-                 where = None,
-                 groupBy = None,
-                 having = None,
-                 orderBy = None,
-                 limit = None,
-                 offset = None,
-                 search = None)
-  }
-
-  /**
-    * Simple SoQLAnalysis is a soql analysis created by a join where a sub-query is not used like "JOIN @aaaa-aaaa"
-    */
-  def isSimple[ColumnId, Type](a: SoQLAnalysis[ColumnId, Type]): Boolean = {
-    a.selection.keys.isEmpty && a.from.nonEmpty
-  }
-
-  def isSimple[ColumnId, Type](a: Seq[SoQLAnalysis[ColumnId, Type]]): Boolean = {
-    a.nonEmpty && isSimple(a.last)
-  }
-
-  def asSoQL[ColumnId, Type](a: Seq[SoQLAnalysis[ColumnId, Type]]): Option[String] = {
-    if (isSimple(a)) {
-      a.last.from
-    } else {
-      None
-    }
-  }
 }
 
 private class Merger[T](andFunction: MonomorphicFunction[T]) {
