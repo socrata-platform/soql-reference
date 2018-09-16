@@ -27,6 +27,7 @@ private trait DeserializationDictionary[C, T] {
   def strings(i: Int): String
 }
 
+// TODO: deserializing older versions after this version has rolled out - how to do?
 class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializer: String => T, functionMap: String => Function[T]) extends (InputStream => Seq[SoQLAnalysis[C, T]]) {
   type Expr = CoreExpr[C, T]
   type Order = OrderBy[C, T]
@@ -50,7 +51,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
   private object DeserializationDictionaryImpl {
     private def readRegistry[A](in: CodedInputStream)(f: => A): TIntObjectHashMap[A] = {
       val result = new TIntObjectHashMap[A]
-      for(_ <- 1 to in.readUInt32()) {
+      (1 to in.readUInt32()).foreach { _ =>
         val a = f
         val i = in.readUInt32()
         result.put(i, a)
@@ -74,12 +75,12 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val functions = readRegistry(in) {
         val function = functionMap(strings.get(in.readUInt32()))
         val bindingsBuilder = Map.newBuilder[String, T]
-        for(_ <- 1 to in.readUInt32()) {
+        val bindings = (1 to in.readUInt32()).map { _ =>
           val typeVar = strings.get(in.readUInt32())
           val typ = types.get(in.readUInt32())
-          bindingsBuilder += typeVar -> typ
-        }
-        MonomorphicFunction(function, bindingsBuilder.result())
+          typeVar -> typ
+        }.toMap
+        MonomorphicFunction(function, bindings)
       }
 
       new DeserializationDictionaryImpl(types, strings, labels, columns, functions)
@@ -133,9 +134,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         case 6 =>
           val functionNamePosition = readPosition
           val func = dictionary.functions(in.readUInt32())
-          val params = (1 to in.readUInt32()).map { _ =>
-            readExpr
-          }
+          val params = readList { readExpr }
           FunctionCall(func, params)(pos, functionNamePosition)
       }
     }
@@ -154,17 +153,8 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       1.to(count).map { _ => f }.toList
     }
 
-    def maybeReadList[A](f: => A): List[A] = {
-      if (in.readBool) {
-        readList(f)
-      } else {
-        Nil
-      }
-    }
-
     def readSelection: OrderedMap[ColumnName, Expr] = {
-      val count = in.readUInt32()
-      val elems = (1 to count).map { _ =>
+      val elems = readList {
         val name =  dictionary.labels(in.readUInt32())
         val expr = readExpr
         name -> expr
@@ -173,25 +163,20 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     }
 
     def readJoins: List[Join[C, T]] = {
-      val count = in.readUInt32()
-      if (count == 0) {
-        Nil
-      } else {
-        (1 to count).map { _ =>
-          val joinType = JoinType(in.readString())
-          Join(joinType, readJoinAnalysis, readExpr)
-        }.toList
+      readList {
+        val joinType = JoinType(in.readString())
+        Join(joinType, readJoinAnalysis, readExpr)
       }
     }
 
     def readWhere: Option[Expr] = maybeRead { readExpr }
 
-    def readGroupBy: List[Expr] = maybeReadList { readExpr }
+    def readGroupBy: List[Expr] = readList { readExpr }
 
     def readHaving = readWhere
 
     def readOrderBy: List[Order] =
-      maybeReadList {
+      readList {
         val expr = readExpr
         val ascending = in.readBool()
         val nullsLast = in.readBool()
@@ -215,7 +200,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
     def readJoinAnalysis: JoinAnalysis[C, T] = {
       readTableName
-      ???
+      JoinAnalysis(readTableName, maybeRead(readSubAnalysis))
     }
 
     def readSearch: Option[String] =
@@ -240,8 +225,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     }
 
     def read: List[SoQLAnalysis[C, T]] = {
-      val count = in.readInt32()
-      1.to(count).map(_ => readAnalysis).toList
+      readList { readAnalysis }
     }
   }
 
