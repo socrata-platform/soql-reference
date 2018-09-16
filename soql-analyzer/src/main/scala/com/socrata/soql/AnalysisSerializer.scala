@@ -224,7 +224,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     private def writeJoinAnalysis(ja: JoinAnalysis[C, T]): Unit = {
       writeTableName(ja.fromTable)
       maybeWrite(ja.subAnalysis) { case SubAnalysis(analyses, alias) =>
-        writeList(analyses)
+        write(analyses)
         out.writeStringNoTag(alias)
       }
     }
@@ -305,8 +305,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     }
 
     def write(analyses: Seq[SoQLAnalysis[C, T]]): Unit = {
-      out.writeInt32NoTag(analyses.length)
-      analyses.foreach(writeAnalysis)
+      writeList(analyses)(writeAnalysis)
     }
   }
 

@@ -390,7 +390,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
 case class SubAnalysis[ColumnId, Type](analyses: List[SoQLAnalysis[ColumnId, Type]], alias: String)
 case class JoinAnalysis[ColumnId, Type](fromTable: TableName, subAnalysis: Option[SubAnalysis[ColumnId, Type]]) {
-  def aliasOpt: Option[String] =  subAnalysis.map(_.alias).orElse(fromTable.alias)
+  val alias: Option[String] =  subAnalysis.map(_.alias).orElse(fromTable.alias)
   def analyses: List[SoQLAnalysis[ColumnId, Type]] = subAnalysis.map(_.analyses).getOrElse(Nil)
 
   def mapColumnIds[NewColumnId](qColumnIdNewColumnIdMap: Map[(ColumnId, Qualifier), NewColumnId],
@@ -459,9 +459,9 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                 columnIdToNewColumnId: ColumnId => NewColumnId): SoQLAnalysis[NewColumnId, Type] = {
 
     val newColumnsFromJoin = joins.flatMap { j =>
-      j.from.analyses.lastOption.flatMap(_.selection.map { case (columnName, _) =>
-        qColumnNameToQColumnId(j.from.aliasOpt, columnName) -> columnNameToNewColumnId(columnName)
-      })
+      j.from.analyses.lastOption.map(_.selection.map { case (columnName, _) =>
+        qColumnNameToQColumnId(j.from.alias, columnName) -> columnNameToNewColumnId(columnName)
+      }).getOrElse(OrderedMap.empty)
     }.toMap
 
     val qColumnIdNewColumnIdWithJoinsMap = qColumnIdNewColumnIdMap ++ newColumnsFromJoin

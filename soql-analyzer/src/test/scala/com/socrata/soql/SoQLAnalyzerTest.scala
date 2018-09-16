@@ -81,9 +81,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     val analysis = analyzer.analyzeUnchainedQuery("select :id")
     analysis.selection.toSeq must equal (Seq(ColumnName(":id") -> typedExpression(":id")))
     analysis.where must be (None)
-    analysis.groupBy must be (None)
+    analysis.groupBys must be (Nil)
     analysis.having must be (None)
-    analysis.orderBy must be (None)
+    analysis.orderBys must be (Nil)
     analysis.limit must be (None)
     analysis.offset must be (None)
     analysis.isGrouped must be (false)
@@ -98,14 +98,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     analysis.where must equal (Some(typedExpression("visits > 0")))
     analysis.where.get.position.column must equal (37)
     analysis.where.get.asInstanceOf[typed.FunctionCall[_,_]].functionNamePosition.column must equal (44)
-    analysis.groupBy must equal (Some(Seq(typedExpression(":id"))))
-    analysis.groupBy.get(0).position.column must equal (8)
+    analysis.groupBys must equal (List(typedExpression(":id")))
+    analysis.groupBys.head.position.column must equal (8)
     analysis.having must equal (Some(typedExpression("sum(balance) < 5")))
     analysis.having.get.position.column must equal (66)
     analysis.having.get.asInstanceOf[typed.FunctionCall[_,_]].parameters(0).position.column must equal (18)
     analysis.having.get.asInstanceOf[typed.FunctionCall[_,_]].functionNamePosition.column must equal (78)
-    analysis.orderBy must equal (Some(Seq(typed.OrderBy(typedExpression(":id"), false, true), typed.OrderBy(typedExpression("sum(balance)"), true, false))))
-    analysis.orderBy.get.map(_.expression.position.column) must equal (Seq(8, 109))
+    analysis.orderBys must equal (List(typed.OrderBy(typedExpression(":id"), false, true), typed.OrderBy(typedExpression("sum(balance)"), true, false)))
+    analysis.orderBys.map(_.expression.position.column) must equal (Seq(8, 109))
     analysis.limit must equal (Some(BigInt(5)))
     analysis.offset must equal (Some(BigInt(10)))
   }
@@ -127,10 +127,10 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     analysis.where.get.position.column must equal (112)
     analysis.where.get.asInstanceOf[typed.FunctionCall[_,_]].functionNamePosition.column must equal (115)
     analysis.where.get.asInstanceOf[typed.FunctionCall[_,_]].parameters(0).position.column must equal (90)
-    analysis.groupBy must equal (None)
-    analysis.having must equal (None)
-    analysis.orderBy must equal (Some(Seq(typed.OrderBy(typedExpression("name_first || (' ' || name_last)"), false, false), typed.OrderBy(typedExpression("visits"), true, true))))
-    analysis.orderBy.get.map(_.expression.position.column) must equal (Seq(45, 141))
+    analysis.groupBys must equal (Nil)
+    analysis.having must equal (Nil)
+    analysis.orderBys must equal (Some(Seq(typed.OrderBy(typedExpression("name_first || (' ' || name_last)"), false, false), typed.OrderBy(typedExpression("visits"), true, true))))
+    analysis.orderBys.map(_.expression.position.column) must equal (Seq(45, 141))
     analysis.limit must equal (Some(BigInt(5)))
     analysis.offset must equal (Some(BigInt(10)))
   }
@@ -181,7 +181,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     ))
     analysis.where must equal (Some(typedExpression("location_latitude(address) > 1.1")))
     analysis.where.get.position.column must equal (36)
-    analysis.orderBy must equal (Some(Seq(typed.OrderBy(typedExpression("location_longitude(address)"), true, true))))
+    analysis.orderBys must equal (List(typed.OrderBy(typedExpression("location_longitude(address)"), true, true)))
   }
 
   test("null :: number succeeds") {
@@ -349,7 +349,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> visit,
       ColumnName("name_last") -> lastName
     ))
-    analysis.join must equal (Some(List(typed.InnerJoin(Seq(SimpleSoQLAnalysis[ColumnName, TestType]("_aaaa-aaaa")), None, typedExpression("name_last = @aaaa-aaaa.name_last")))))
+    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(TableName("_aaaa-aaaa"), None), typedExpression("name_last = @aaaa-aaaa.name_last"))))
   }
 
   test("join with table alias") {
@@ -358,7 +358,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    analysis.join must equal (Some(List(typed.InnerJoin(Seq(SimpleSoQLAnalysis[ColumnName, TestType]("_aaaa-aaaa")), Some("_a1"), typedExpression("visits > 10")))))
+    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(TableName("_aaaa-aaaa", Some("_a1")), None), typedExpression("visits > 10"))))
   }
 
   test("join toString") {
@@ -433,8 +433,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    val expected = Some(Seq(typed.InnerJoin(Seq(subAnalysis), Some("_a1"), typedExpression("name_first = @a1.name_first"))))
-    analysis.join must equal (expected)
+    val expected = List(typed.InnerJoin(JoinAnalysis(TableName("@aaaa-aaab"), Some(SubAnalysis(List(subAnalysis), "_a1"))), typedExpression("name_first = @a1.name_first")))
+    analysis.joins must equal (expected)
   }
 
   test("join with sub-chained-query") {
@@ -445,8 +445,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    val expected = Some(Seq(typed.InnerJoin(subAnalyses, Some("_a1"), typedExpression("name_first = @a1.name_first"))))
-    analysis.join must equal (expected)
+    val expected = List(typed.InnerJoin(JoinAnalysis(TableName("@aaaa-aaab"), Some(SubAnalysis(subAnalyses, "_a1"))), typedExpression("name_first = @a1.name_first")))
+    analysis.joins must equal (expected)
   }
 
   test("nested join") {
@@ -457,14 +457,14 @@ SELECT visits, @x3.x
        ) as x3 on @x3.x = name_first
       """)
 
-    val Some(innermostJoin) = analysis.join.get.head.tableLike.head.join
-    val innermostAnalysis = innermostJoin.head.tableLike.head
+    val innermostJoins = analysis.joins.head.from.analyses.head.joins
+    val innermostAnalysis = innermostJoins.head.from.analyses.head
     innermostAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x1"), ColumnName("x"), TestText)(NoPosition)
     ))
 
-    val Some(join) = analysis.join
-    val joinAnalysis = analysis.join.get.head.tableLike.head
+    val joins = analysis.joins
+    val joinAnalysis = joins.head.from.analyses.head
     joinAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x2"), ColumnName("x"), TestText)(NoPosition),
       ColumnName("name_first") -> ColumnRef(Some("_a1"), ColumnName("name_first"), TestText)(NoPosition)
@@ -484,14 +484,13 @@ SELECT visits, @x2.zx
        ) as x2 on @x2.zx = name_first
       """)
 
-    val Some(innermostLeftOuterJoin) = analysis.join.get.head.tableLike.head.join
-    val innermostAnalysis = innermostLeftOuterJoin.head.tableLike.head
+    val innermostLeftOuterJoin = analysis.joins.head.from.analyses.head.joins
+    val innermostAnalysis = innermostLeftOuterJoin.head.from.analyses.head
     innermostAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x1"), ColumnName("x"), TestText)(NoPosition)
     ))
 
-    val Some(rightOuterJoin) = analysis.join
-    val rightOuterJoinAnalysis = analysis.join.get.head.tableLike.head
+    val rightOuterJoinAnalysis = analysis.joins.head.from.analyses.head
     rightOuterJoinAnalysis.selection.toSeq must equal (Seq(
       ColumnName("zx") -> ColumnRef(Some("_x2"), ColumnName("x"), TestText)(NoPosition)
     ))
