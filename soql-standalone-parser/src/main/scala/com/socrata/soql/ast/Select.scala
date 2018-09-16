@@ -26,7 +26,7 @@ case class JoinSelect(fromTable: TableName, subSelect: Option[SubSelect]) {
 object Select {
   type TopLevelSelect = List[Select]
 
-  def itrToString[A](prefix: String, l: Iterable[A], sep: String = "") = {
+  def itrToString[A](prefix: String, l: Iterable[A], sep: String = " ") = {
     if (l.nonEmpty) {
       l.mkString(prefix, sep, "")
     } else {
