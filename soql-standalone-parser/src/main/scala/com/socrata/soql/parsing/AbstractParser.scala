@@ -30,6 +30,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def groupBys(soql: String): List[Expression] = parseFull(groupByList, soql)
   def selectStatement(soql: String): List[Select] = parseFull(pipedSelect, soql)
   def unchainedSelectStatement(soql: String): Select = parseFull(select, soql) // a select statement without pipes or subselects
+  def parseJoinSelect(soql: String): JoinSelect = parseFull(joinSelect, soql)
   def limit(soql: String): BigInt = parseFull(integer, soql)
   def offset(soql: String): BigInt = parseFull(integer, soql)
   def search(soql: String): String = parseFull(stringLiteral, soql)
