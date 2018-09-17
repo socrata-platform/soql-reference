@@ -82,6 +82,34 @@ object SpecialFunctions {
   }
   val Subscript = Operator("[]")
 
+  object Field {
+    // This is somewhat unfortunate; the first implementation of
+    // fields used a simple underscore-separated naming convention
+    // rather than defining a SpecialFunction make an untypable thing,
+    // and the logs say that the naming convention is in fact actually
+    // used in practice.  Therefore unlike all the other
+    // SpecialFunctions, this produces names that are actually by
+    // users.
+    //
+    // Also it has no unapply because there is no way to break apart
+    // the names back into pieces without knowing what your universe
+    // of types are.
+    def apply(typ: TypeName, field: String) = FunctionName(typ.name + "_" + field)
+
+    // If we ever do get ourselves out of that (easiest way would be
+    // to make the underscorized names (deprecated) aliases for the
+    // dot-notation) this object should look something like this,
+    // together with a line re-sugaring the function call down below
+    // in FunctionCall#asString:
+
+    // def apply(typ: TypeName, field: String) = FunctionName("#FIELD$" + typ.name + "." + field)
+    // def unapply(f: FunctionName) = f.name match {
+    //   case Regex(t, x) ⇒ Some((TypeName(t), x))
+    //   case _ => None
+    // }
+    // val Regex = """^#FIELD\$(.*)\.(.*)$""".r
+  }
+
   // this exists only so that selecting "(foo)" is never semi-explicitly aliased.
   // it's stripped out by the typechecker.
   val Parens = Operator("()")
