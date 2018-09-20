@@ -13,10 +13,16 @@ import com.socrata.soql.environment._
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.typed.Qualifier
 
+/**
+  * The type-checking version of [[com.socrata.soql.parsing.AbstractParser]]. Turns string soql statements into
+  * Lists of Analysis objects (soql ast), while using type information about the tables to typecheck all
+  * expressions.
+  */
 class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                          functionInfo: FunctionInfo[Type],
                          parserParameters: AbstractParser.Parameters = AbstractParser.defaultParameters)
 {
+  /** The typed version of [[com.socrata.soql.ast.Select]] */
   type Analysis = SoQLAnalysis[ColumnName, Type]
   type Expr = typed.CoreExpr[ColumnName, Type]
   type Qualifier = String
@@ -30,9 +36,19 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
   /** Turn a SoQL SELECT statement into a sequence of typed `Analysis` objects.
     *
+    * A List is returned, with one [[SoQLAnalysis]] per chained soql element. This is the typed version of
+    * AbstractParser#selectStatement.
+    *
+    * the chained soql:
+    *   "select id, a |> select a"
+    * is equivalent to:
+    *   "select a from (select id, a [from current view]) as alias"
+    * and is represented as:
+    *   List(analysis_id_a, analysis_id)
+    *
     * @param query The SELECT to parse and analyze
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
-    * @return The analysis of the query */
+    * @return The analysis of the query*/
   def analyzeFullQuery(query: String)(implicit ctx: AnalysisContext): List[Analysis] = {
     log.debug("Analyzing full query {}", query)
     val start = System.nanoTime()
@@ -383,7 +399,27 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   }
 }
 
+/**
+  * The typed version of [[com.socrata.soql.ast.SubSelect]]
+  *
+  * A SubAnalysis represents (potentially chained) soql that is required to have an alias
+  * (because subqueries need aliases)
+  */
 case class SubAnalysis[ColumnId, Type](analyses: List[SoQLAnalysis[ColumnId, Type]], alias: String)
+
+/**
+  * The typed version of [[com.socrata.soql.ast.JoinSelect]]
+  *
+  * All joins must select from another table. A join may also join on sub-analysis. A join on a sub-analysis requires an
+  * alias, but the alias is optional if the join is on a table-name only (e.g. "join 4x4").
+  *
+  *   "join 4x4" => JoinAnalysis(TableName(4x4, None), None) { aliasOpt = None }
+  *   "join 4x4 as a" => JoinAnalysis(TableName(4x4, a), None) { aliasOpt = a }
+  *   "join (select id from 4x4) as a" =>
+  *     JoinAnalysis(TableName(4x4, None), Some(SubAnalysis(List(_select_id_), a))) { aliasOpt = a }
+  *   "join (select c.id from 4x4 as c) as a" =>
+  *     JoinAnalysis(TableName(4x4, Some(c)), Some(SubAnalysis(List(_select_id_), a))) { aliasOpt = a }
+  */
 case class JoinAnalysis[ColumnId, Type](fromTable: TableName, subAnalysis: Option[SubAnalysis[ColumnId, Type]]) {
   val alias: Option[String] =  subAnalysis.map(_.alias).orElse(fromTable.alias)
   def analyses: List[SoQLAnalysis[ColumnId, Type]] = subAnalysis.map(_.analyses).getOrElse(Nil)
@@ -419,12 +455,22 @@ case class JoinAnalysis[ColumnId, Type](fromTable: TableName, subAnalysis: Optio
   }
 }
 
-object SoQLAnalyzer {
-  type TopLevelAnalysis[ColumnId, Type] = List[SoQLAnalysis[ColumnId, Type]]
-}
-
 /**
-  * @param isGrouped true iff there is a group by or aggregation function applied.  Can be derived from the selection
+  * The typed version of [[com.socrata.soql.ast.Select]]
+  *
+  * Represents a single select statement, not including the from. Top-level soql selects have an implicit "from"
+  * based on the current view. Joins do require a "from" (which is a member of the JoinAnalysis class).
+  * A List[SoQLAnalysis] represents chained soql (e.g. "select a, b |> select a"), and is what is returned from a
+  * top-level analysis of a soql string (see SoQLAnalyzer#analyzeFullQuery).
+  *
+  * the chained soql:
+  *   "select id, a |> select a"
+  * is equivalent to:
+  *   "select a from (select id, a [from current view]) as alias"
+  * and is represented as:
+  *   List(analysis_id_a, analysis_id)
+  *
+  * @param isGrouped true iff there is a group by or aggregation function applied. Can be derived from the selection
   *                  and the groupBy
   */
 case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,

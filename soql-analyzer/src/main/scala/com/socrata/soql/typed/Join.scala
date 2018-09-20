@@ -4,7 +4,6 @@ import com.socrata.soql._
 import com.socrata.soql.ast._
 import com.socrata.soql.environment.{ColumnName, TableName}
 
-
 sealed trait Join[ColumnId, Type] {
   val from: JoinAnalysis[ColumnId, Type]
   val on: CoreExpr[ColumnId, Type]

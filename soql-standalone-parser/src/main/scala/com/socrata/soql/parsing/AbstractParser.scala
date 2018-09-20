@@ -28,6 +28,14 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def expression(soql: String): Expression = parseFull(expr, soql)
   def orderings(soql: String): List[OrderBy] = parseFull(orderingList, soql)
   def groupBys(soql: String): List[Expression] = parseFull(groupByList, soql)
+
+  // produces a List[Select] with one Select per chained soql statement (chained with "|>").
+  // the chained soql:
+  //  "select id, a |> select a"
+  // is equivalent to:
+  //  "select a from (select id, a <from current view>) as alias"
+  // and is represented as:
+  //  List(select_id_a, select_id)
   def selectStatement(soql: String): List[Select] = parseFull(pipedSelect, soql)
   def unchainedSelectStatement(soql: String): Select = parseFull(select, soql) // a select statement without pipes or subselects
   def parseJoinSelect(soql: String): JoinSelect = parseFull(joinSelect, soql)
