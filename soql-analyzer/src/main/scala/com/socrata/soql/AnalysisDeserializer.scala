@@ -27,7 +27,7 @@ private trait DeserializationDictionary[C, T] {
   def strings(i: Int): String
 }
 
-// TODO: deserializing older versions after this version has rolled out - how to do?
+// TODO: deserializing older versions after this version has rolled out - is this a problem?
 class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializer: String => T, functionMap: String => Function[T]) extends (InputStream => Seq[SoQLAnalysis[C, T]]) {
   type Expr = CoreExpr[C, T]
   type Order = OrderBy[C, T]
