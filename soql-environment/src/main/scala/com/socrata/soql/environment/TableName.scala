@@ -1,10 +1,6 @@
 package com.socrata.soql.environment
 
-trait Source { val alias: Option[String] }
-trait TopLevelSource extends Source
-trait JoinSource extends Source
-case class TableName(name: String, alias: Option[String] = None) extends JoinSource {
-
+case class TableName(name: String, alias: Option[String] = None) {
   import TableName._
 
   override def toString(): String = {

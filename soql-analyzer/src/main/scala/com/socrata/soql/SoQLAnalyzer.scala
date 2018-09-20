@@ -12,6 +12,7 @@ import com.socrata.soql.typechecker._
 import com.socrata.soql.environment._
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.typed.Qualifier
+import Select.itrToString
 
 /**
   * The type-checking version of [[com.socrata.soql.parsing.AbstractParser]]. Turns string soql statements into
@@ -429,7 +430,7 @@ case class JoinAnalysis[ColumnId, Type](fromTable: TableName, subAnalysis: Optio
                                 columnNameToNewColumnId: ColumnName => NewColumnId,
                                 columnIdToNewColumnId: ColumnId => NewColumnId): JoinAnalysis[NewColumnId, Type] = {
     val mappedSubAnalysis = subAnalysis.map {
-      case SubAnalysis(analyses, alias) =>
+      case SubAnalysis(analyses, subAlias) =>
         val mappedAnalyses = analyses.foldLeft(List.empty[SoQLAnalysis[NewColumnId, Type]]) { (convertedAnalyses, analysis) =>
           val joinMap =
             convertedAnalyses.lastOption match {
@@ -449,9 +450,19 @@ case class JoinAnalysis[ColumnId, Type](fromTable: TableName, subAnalysis: Optio
           val a = analysis.mapColumnIds(joinMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
           convertedAnalyses :+ a
         }
-        SubAnalysis(mappedAnalyses, alias)
+        SubAnalysis(mappedAnalyses, subAlias)
     }
     JoinAnalysis(fromTable, mappedSubAnalysis)
+  }
+
+  override def toString: String = {
+    val (subAnasStr, aliasStrOpt) = subAnalysis.map { case SubAnalysis(h :: tail, subAlias) =>
+      val selectWithFromStr = h.toStringWithFrom(fromTable)
+      val selectStr = (selectWithFromStr :: tail.map(_.toString)).mkString("|>")
+      (s"($selectStr)", Some(subAlias))
+    }.getOrElse((fromTable.toString, None))
+
+    List(subAnasStr, Select.itrToString("AS", aliasStrOpt)).filter(_.nonEmpty).mkString(" ")
   }
 }
 
@@ -522,6 +533,27 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
       orderBys = orderBys.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
     )
   }
+
+  private def toString(from: Option[TableName]): String = {
+    val distinctStr = if (distinct) "DISTINCT " else ""
+    val selectStr = s"SELECT $distinctStr$selection"
+    val fromStr = from.map(_.toString).getOrElse("")
+    val joinsStr = joins.mkString(" ")
+    val whereStr = itrToString("WHERE", where)
+    val groupByStr = itrToString("GROUP BY", groupBys)
+    val havingStr = itrToString("HAVING", having)
+    val obStr = itrToString("ORDER BY", orderBys, ",")
+    val limitStr = itrToString("LIMIT", limit)
+    val offsetStr = itrToString("OFFSET", offset)
+    val searchStr = itrToString("SEARCH", search.map(Expression.escapeString))
+
+    val parts = List(selectStr, fromStr, joinsStr, whereStr, groupByStr, havingStr, obStr, limitStr, offsetStr, searchStr)
+    parts.filter(_.nonEmpty).mkString(" ")
+  }
+
+  def toStringWithFrom(fromTable: TableName): String = toString(Some(fromTable))
+
+  override def toString: String = toString(None)
 }
 
 object SoQLAnalysis {

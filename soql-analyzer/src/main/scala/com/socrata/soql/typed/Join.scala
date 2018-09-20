@@ -2,7 +2,6 @@ package com.socrata.soql.typed
 
 import com.socrata.soql._
 import com.socrata.soql.ast._
-import com.socrata.soql.environment.{ColumnName, TableName}
 
 sealed trait Join[ColumnId, Type] {
   val from: JoinAnalysis[ColumnId, Type]
@@ -24,29 +23,9 @@ sealed trait Join[ColumnId, Type] {
     typed.Join(typ, JoinAnalysis(from.fromTable, mappedSub), on.mapColumnIds(f))
   }
 
-
-//  override def toString: String = {
-//    val sb = new StringBuilder
-//    sb.append(typ.toString)
-//    sb.append(" ")
-//    SimpleSoQLAnalysis.asSoQL(tableLike) match {
-//      case Some(x) =>
-//        sb.append(x.replaceFirst(TableName.SodaFountainTableNamePrefix, TableName.Prefix))
-//      case None =>
-//        sb.append("(")
-//        sb.append(tableLike.map(_.toString).mkString(" |> "))
-//        sb.append(")")
-//    }
-//
-//    alias.foreach { x =>
-//      sb.append(" AS ")
-//      sb.append(x.substring(TableName.SodaFountainTableNamePrefixSubStringIndex))
-//    }
-//
-//    sb.append(" ON ")
-//    sb.append(expr.toString)
-//    sb.toString
-//  }
+  override def toString: String = {
+    s"$typ $from ON $on"
+  }
 }
 
 case class InnerJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {

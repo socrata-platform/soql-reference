@@ -206,7 +206,6 @@ class ParserTest extends WordSpec with MustMatchers {
 
     "search round trip" in {
       val x = parseFull("select * search 'weather'")
-      println(x)
       val y = parseFull(x.toString)
       y must be (x)
     }

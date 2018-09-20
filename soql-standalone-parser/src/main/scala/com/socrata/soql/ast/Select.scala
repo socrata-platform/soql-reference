@@ -28,10 +28,10 @@ case class JoinSelect(fromTable: TableName, subSelect: Option[SubSelect]) {
   def selects: List[Select] = subSelect.map(_.selects).getOrElse(Nil)
 
   override def toString: String = {
-    val (subSelectStr, aliasStrOpt) = subSelect.map { case SubSelect(h :: tail, alias) =>
+    val (subSelectStr, aliasStrOpt) = subSelect.map { case SubSelect(h :: tail, subAlias) =>
       val selectWithFromStr = h.toStringWithFrom(fromTable)
       val selectStr = (selectWithFromStr :: tail.map(_.toString)).mkString("|>")
-      (s"($selectStr)", Some(alias))
+      (s"($selectStr)", Some(subAlias))
     }.getOrElse((fromTable.toString, None))
 
     List(subSelectStr, itrToString("AS", aliasStrOpt)).filter(_.nonEmpty).mkString(" ")
