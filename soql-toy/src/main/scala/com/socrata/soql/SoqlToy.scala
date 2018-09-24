@@ -53,7 +53,7 @@ object SoqlToy extends (Array[String] => Unit) {
           val analyses = analyzer.analyzeFullQuery(selection)
 
           println("Outputs:")
-          analyses.foreach { analysis =>
+          analyses.seq.foreach { analysis =>
             Util.printList(analysis.selection)
             analysis.where.foreach { w =>
               println("where:\n  " + w)

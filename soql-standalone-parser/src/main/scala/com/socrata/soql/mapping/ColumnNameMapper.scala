@@ -1,5 +1,6 @@
 package com.socrata.soql.mapping
 
+import com.socrata.NonEmptySeq
 import com.socrata.soql.ast._
 import com.socrata.soql.environment.ColumnName
 
@@ -14,24 +15,21 @@ import scala.util.parsing.input.{NoPosition, Position}
  */
 class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
 
-  def mapSelect(selects: List[Select]): List[Select] = {
-    selects match {
-      case Nil => Nil
-      case h :: tail =>
-        val mappedHead = Select(
-          distinct = h.distinct,
-          selection = mapSelection(h.selection),
-          joins = h.joins.map(mapJoin),
-          where = h.where map mapExpression,
-          groupBys = h.groupBys.map(mapExpression),
-          having = h.having map mapExpression,
-          orderBys = h.orderBys.map(mapOrderBy),
-          limit = h.limit,
-          offset = h.offset,
-          search = h.search
-        )
-        mappedHead :: tail
-    }
+  def mapSelect(selects: NonEmptySeq[Select]): NonEmptySeq[Select] = {
+    val h = selects.head
+    val mappedHead = Select(
+      distinct = h.distinct,
+      selection = mapSelection(h.selection),
+      joins = h.joins.map(mapJoin),
+      where = h.where map mapExpression,
+      groupBys = h.groupBys.map(mapExpression),
+      having = h.having map mapExpression,
+      orderBys = h.orderBys.map(mapOrderBy),
+      limit = h.limit,
+      offset = h.offset,
+      search = h.search
+    )
+    NonEmptySeq(mappedHead, selects.tail)
   }
 
   def mapJoin(join: Join): Join =  {

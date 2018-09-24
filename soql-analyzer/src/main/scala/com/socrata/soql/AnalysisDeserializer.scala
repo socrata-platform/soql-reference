@@ -5,8 +5,8 @@ import java.io.InputStream
 import scala.collection.immutable.VectorBuilder
 import scala.collection.mutable.ListBuffer
 import scala.util.parsing.input.{NoPosition, Position}
-
 import com.google.protobuf.CodedInputStream
+import com.socrata.NonEmptySeq
 import com.socrata.soql.ast.JoinType
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ColumnName, TableName}
@@ -28,7 +28,7 @@ private trait DeserializationDictionary[C, T] {
 }
 
 // TODO: deserializing older versions after this version has rolled out - is this a problem?
-class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializer: String => T, functionMap: String => Function[T]) extends (InputStream => Seq[SoQLAnalysis[C, T]]) {
+class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializer: String => T, functionMap: String => Function[T]) extends (InputStream => NonEmptySeq[SoQLAnalysis[C, T]]) {
   type Expr = CoreExpr[C, T]
   type Order = OrderBy[C, T]
 
@@ -134,7 +134,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         case 6 =>
           val functionNamePosition = readPosition
           val func = dictionary.functions(in.readUInt32())
-          val params = readList { readExpr }
+          val params = readSeq { readExpr }
           FunctionCall(func, params)(pos, functionNamePosition)
       }
     }
@@ -148,13 +148,15 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       else None
     }
 
-    def readList[A](f: => A): List[A] = {
+    def readSeq[A](f: => A): Seq[A] = {
       val count = in.readUInt32
-      1.to(count).map { _ => f }.toList
+      1.to(count).map { _ => f }
     }
 
+    def readNonEmptySeq[A](f: => A) = NonEmptySeq.fromSeqUnsafe(readSeq(f))
+
     def readSelection: OrderedMap[ColumnName, Expr] = {
-      val elems = readList {
+      val elems = readSeq {
         val name =  dictionary.labels(in.readUInt32())
         val expr = readExpr
         name -> expr
@@ -162,8 +164,8 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       OrderedMap(elems : _*)
     }
 
-    def readJoins: List[Join[C, T]] = {
-      readList {
+    def readJoins: Seq[Join[C, T]] = {
+      readSeq {
         val joinType = JoinType(in.readString())
         Join(joinType, readJoinAnalysis, readExpr)
       }
@@ -171,12 +173,12 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
     def readWhere: Option[Expr] = maybeRead { readExpr }
 
-    def readGroupBy: List[Expr] = readList { readExpr }
+    def readGroupBy: Seq[Expr] = readSeq { readExpr }
 
     def readHaving = readWhere
 
-    def readOrderBy: List[Order] =
-      readList {
+    def readOrderBy: Seq[Order] =
+      readSeq {
         val expr = readExpr
         val ascending = in.readBool()
         val nullsLast = in.readBool()
@@ -224,18 +226,18 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         readSearch)
     }
 
-    def read: List[SoQLAnalysis[C, T]] = {
-      readList { readAnalysis }
+    def read: NonEmptySeq[SoQLAnalysis[C, T]] = {
+      readNonEmptySeq { readAnalysis }
     }
   }
 
-  def apply(in: InputStream): List[SoQLAnalysis[C, T]] = {
+  def apply(in: InputStream): NonEmptySeq[SoQLAnalysis[C, T]] = {
     val cis = CodedInputStream.newInstance(in)
     cis.readInt32() match {
       case 0 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, 0)
-        List(deserializer.readAnalysis)
+        NonEmptySeq(deserializer.readAnalysis, Seq.empty)
       case v if v >= 3 && v <= 4 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)

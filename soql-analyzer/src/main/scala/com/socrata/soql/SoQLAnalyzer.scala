@@ -12,7 +12,8 @@ import com.socrata.soql.typechecker._
 import com.socrata.soql.environment._
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.typed.Qualifier
-import Select.itrToString
+import Select._
+import com.socrata.NonEmptySeq
 
 /**
   * The type-checking version of [[com.socrata.soql.parsing.AbstractParser]]. Turns string soql statements into
@@ -50,7 +51,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     * @param query The SELECT to parse and analyze
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
     * @return The analysis of the query*/
-  def analyzeFullQuery(query: String)(implicit ctx: AnalysisContext): List[Analysis] = {
+  def analyzeFullQuery(query: String)(implicit ctx: AnalysisContext): NonEmptySeq[Analysis] = {
     log.debug("Analyzing full query {}", query)
     val start = System.nanoTime()
     val parsed = new Parser(parserParameters).selectStatement(query)
@@ -59,14 +60,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     analyze(parsed)
   }
 
-  def analyze(selects: List[Select])(implicit ctx: AnalysisContext): List[Analysis] = {
-    selects.headOption match {
-      case Some(firstSelect) =>
-        val firstAnalysis = analyzeWithSelection(firstSelect)(ctx)
-        selects.tail.scanLeft(firstAnalysis)(analyzeInOuterSelectionContext(ctx))
-      case None =>
-        Nil
-    }
+  def analyze(selects: NonEmptySeq[Select])(implicit ctx: AnalysisContext): NonEmptySeq[Analysis] = {
+    selects.scanLeft1(analyzeWithSelection(_)(ctx))(analyzeInOuterSelectionContext(ctx))
   }
 
   /** Turn a simple SoQL SELECT statement into an `Analysis` object.
@@ -178,9 +173,9 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     analyzeNoSelection(distinct, joins, where, groupBys, having, orderBys, limit, offset, search)
   }
 
-  private def joinCtx(joins: List[Join])(implicit ctx: AnalysisContext) = {
+  private def joinCtx(joins: Seq[Join])(implicit ctx: AnalysisContext) = {
     joins.map(_.from).collect {
-      case JoinSelect(tableName, Some(SubSelect(selects, alias))) if !SimpleSelect.isSimple(selects) =>
+      case JoinSelect(tableName, Some(SubSelect(selects, alias))) if !SimpleSelect.isSimple(selects.seq) =>
         val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx +
           (TableName.PrimaryTable.qualifier -> ctx(tableName.name))
         val analyses = analyze(selects)(joinCtx)
@@ -367,11 +362,11 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   def finishAnalysis(isGrouped: Boolean,
                      distinct: Boolean,
                      output: OrderedMap[ColumnName, Expr],
-                     joins: List[typed.Join[ColumnName, Type]],
+                     joins: Seq[typed.Join[ColumnName, Type]],
                      where: Option[Expr],
-                     groupBys: List[Expr],
+                     groupBys: Seq[Expr],
                      having: Option[Expr],
-                     orderBys: List[(OrderBy, Expr)],
+                     orderBys: Seq[(OrderBy, Expr)],
                      limit: Option[BigInt],
                      offset: Option[BigInt],
                      search: Option[String]): Analysis =
@@ -406,7 +401,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   * A SubAnalysis represents (potentially chained) soql that is required to have an alias
   * (because subqueries need aliases)
   */
-case class SubAnalysis[ColumnId, Type](analyses: List[SoQLAnalysis[ColumnId, Type]], alias: String)
+case class SubAnalysis[ColumnId, Type](analyses: NonEmptySeq[SoQLAnalysis[ColumnId, Type]], alias: String)
 
 /**
   * The typed version of [[com.socrata.soql.ast.JoinSelect]]
@@ -423,46 +418,46 @@ case class SubAnalysis[ColumnId, Type](analyses: List[SoQLAnalysis[ColumnId, Typ
   */
 case class JoinAnalysis[ColumnId, Type](fromTable: TableName, subAnalysis: Option[SubAnalysis[ColumnId, Type]]) {
   val alias: Option[String] =  subAnalysis.map(_.alias).orElse(fromTable.alias)
-  def analyses: List[SoQLAnalysis[ColumnId, Type]] = subAnalysis.map(_.analyses).getOrElse(Nil)
+  def analyses: Seq[SoQLAnalysis[ColumnId, Type]] = subAnalysis.map(_.analyses.seq).getOrElse(Seq.empty)
 
   def mapColumnIds[NewColumnId](qColumnIdNewColumnIdMap: Map[(ColumnId, Qualifier), NewColumnId],
                                 qColumnNameToQColumnId: (Qualifier, ColumnName) => (ColumnId, Qualifier),
                                 columnNameToNewColumnId: ColumnName => NewColumnId,
                                 columnIdToNewColumnId: ColumnId => NewColumnId): JoinAnalysis[NewColumnId, Type] = {
-    val mappedSubAnalysis = subAnalysis.map {
-      case SubAnalysis(analyses, subAlias) =>
-        val mappedAnalyses = analyses.foldLeft(List.empty[SoQLAnalysis[NewColumnId, Type]]) { (convertedAnalyses, analysis) =>
-          val joinMap =
-            convertedAnalyses.lastOption match {
-              case None =>
-                qColumnIdNewColumnIdMap.foldLeft(Map.empty[(ColumnId, Qualifier), NewColumnId]) { (acc, kv) =>
-                  val ((cid, qual), ncid) = kv
-                  if (qual.exists(_ == fromTable.name)) acc + ((cid, None) -> ncid)
-                  else acc
-                }
-              case Some(prevAnalysis) =>
-                prevAnalysis.selection.foldLeft(qColumnIdNewColumnIdMap) { (acc, selCol) =>
-                  val (colName, expr) = selCol
-                  acc + (qColumnNameToQColumnId(None, colName) -> columnNameToNewColumnId(colName))
-                }
-            }
+    val firstJoinMap =
+      qColumnIdNewColumnIdMap.foldLeft(Map.empty[(ColumnId, Qualifier), NewColumnId]) { (acc, kv) =>
+        val ((cid, qual), ncid) = kv
+        if (qual.exists(_ == fromTable.name)) acc + ((cid, None) -> ncid)
+        else acc
+      }
 
-          val a = analysis.mapColumnIds(joinMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
-          convertedAnalyses :+ a
-        }
-        SubAnalysis(mappedAnalyses, subAlias)
+    def nextJoinMap(prevAna: SoQLAnalysis[NewColumnId, Type]) =
+      prevAna.selection.foldLeft(qColumnIdNewColumnIdMap) { (acc, selCol) =>
+        val (colName, expr) = selCol
+        acc + (qColumnNameToQColumnId(None, colName) -> columnNameToNewColumnId(colName))
+      }
+
+    def headF(a: SoQLAnalysis[ColumnId, Type]) =
+      a.mapColumnIds(firstJoinMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
+    def tailF(prevAna: SoQLAnalysis[NewColumnId, Type], a: SoQLAnalysis[ColumnId, Type]) =
+      a.mapColumnIds(nextJoinMap(prevAna), qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
+
+    val mappedSubAnalysis = subAnalysis.map { case SubAnalysis(analyses, subAlias) =>
+      val mappedAnas = analyses.scanLeft1(headF)(tailF)
+      SubAnalysis(mappedAnas, subAlias)
     }
+
     JoinAnalysis(fromTable, mappedSubAnalysis)
   }
 
   override def toString: String = {
-    val (subAnasStr, aliasStrOpt) = subAnalysis.map { case SubAnalysis(h :: tail, subAlias) =>
+    val (subAnasStr, aliasStrOpt) = subAnalysis.map { case SubAnalysis(NonEmptySeq(h, tail), subAlias) =>
       val selectWithFromStr = h.toStringWithFrom(fromTable)
-      val selectStr = (selectWithFromStr :: tail.map(_.toString)).mkString("|>")
+      val selectStr = (selectWithFromStr +: tail.map(_.toString)).mkString("|>")
       (s"($selectStr)", Some(subAlias))
     }.getOrElse((fromTable.toString, None))
 
-    List(subAnasStr, Select.itrToString("AS", aliasStrOpt)).filter(_.nonEmpty).mkString(" ")
+    List(Some(subAnasStr), itrToString("AS", aliasStrOpt)).flatString
   }
 }
 
@@ -487,11 +482,11 @@ case class JoinAnalysis[ColumnId, Type](fromTable: TableName, subAnalysis: Optio
 case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                         distinct: Boolean,
                                         selection: OrderedMap[ColumnName, typed.CoreExpr[ColumnId, Type]],
-                                        joins: List[typed.Join[ColumnId, Type]],
+                                        joins: Seq[typed.Join[ColumnId, Type]],
                                         where: Option[typed.CoreExpr[ColumnId, Type]],
-                                        groupBys: List[typed.CoreExpr[ColumnId, Type]],
+                                        groupBys: Seq[typed.CoreExpr[ColumnId, Type]],
                                         having: Option[typed.CoreExpr[ColumnId, Type]],
-                                        orderBys: List[typed.OrderBy[ColumnId, Type]],
+                                        orderBys: Seq[typed.OrderBy[ColumnId, Type]],
                                         limit: Option[BigInt],
                                         offset: Option[BigInt],
                                         search: Option[String]) {
@@ -536,9 +531,9 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
 
   private def toString(from: Option[TableName]): String = {
     val distinctStr = if (distinct) "DISTINCT " else ""
-    val selectStr = s"SELECT $distinctStr$selection"
-    val fromStr = from.map(_.toString).getOrElse("")
-    val joinsStr = joins.mkString(" ")
+    val selectStr = Some(s"SELECT $distinctStr$selection")
+    val fromStr = from.map(_.toString)
+    val joinsStr = itrToString("", joins.map(_.toString))
     val whereStr = itrToString("WHERE", where)
     val groupByStr = itrToString("GROUP BY", groupBys)
     val havingStr = itrToString("HAVING", having)
@@ -548,7 +543,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
     val searchStr = itrToString("SEARCH", search.map(Expression.escapeString))
 
     val parts = List(selectStr, fromStr, joinsStr, whereStr, groupByStr, havingStr, obStr, limitStr, offsetStr, searchStr)
-    parts.filter(_.nonEmpty).mkString(" ")
+    parts.flatString
   }
 
   def toStringWithFrom(fromTable: TableName): String = toString(Some(fromTable))
@@ -557,7 +552,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
 }
 
 object SoQLAnalysis {
-  def merge[T](andFunction: MonomorphicFunction[T], stages: Seq[SoQLAnalysis[ColumnName, T]]): Seq[SoQLAnalysis[ColumnName, T]] =
+  def merge[T](andFunction: MonomorphicFunction[T], stages: NonEmptySeq[SoQLAnalysis[ColumnName, T]]): NonEmptySeq[SoQLAnalysis[ColumnName, T]] =
     new Merger(andFunction).merge(stages)
 }
 
@@ -565,13 +560,15 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   type Analysis = SoQLAnalysis[ColumnName, T]
   type Expr = typed.CoreExpr[ColumnName, T]
 
-  def merge(stages: Seq[Analysis]): Seq[Analysis] =
-    stages.drop(1).foldLeft(stages.take(1).toList) { (acc, nextStage) =>
-      tryMerge(acc.head /* acc cannot be empty */, nextStage) match {
-        case Some(merged) => merged :: acc.tail
-        case None => nextStage :: acc
+  def merge(stages: NonEmptySeq[Analysis]): NonEmptySeq[Analysis] = {
+    val newSeq = stages.tail.foldLeft(Seq(stages.head)) { (acc, nextStage) =>
+      tryMerge(acc.head /* acc cannot be empty */ , nextStage) match {
+        case Some(merged) => merged +: acc.tail
+        case None => nextStage +: acc
       }
     }.reverse
+    NonEmptySeq.fromSeqUnsafe(newSeq)
+  }
 
   // Currently a search on the second query prevents merging, as its meaning ought to
   // be "search the output of the first query" rather than "search the underlying
@@ -649,10 +646,10 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
     b.mapValues(replaceRefs(a, _))
 
   private def mergeOrderBy(aliases: OrderedMap[ColumnName, Expr],
-                           obA: List[typed.OrderBy[ColumnName, T]],
-                           obB: List[typed.OrderBy[ColumnName, T]]): List[typed.OrderBy[ColumnName, T]] =
+                           obA: Seq[typed.OrderBy[ColumnName, T]],
+                           obB: Seq[typed.OrderBy[ColumnName, T]]): Seq[typed.OrderBy[ColumnName, T]] =
     (obA, obB) match {
-      case (Nil, Nil) => Nil
+      case (Nil, Nil) => Seq.empty
       case (a, Nil) => a
       case (Nil, b) => b.map { ob => ob.copy(expression = replaceRefs(aliases, ob.expression)) }
       case (a, b) => b.map { ob => ob.copy(expression = replaceRefs(aliases, ob.expression)) } ++ a
@@ -668,7 +665,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
       case (Some(a), Some(b)) => Some(typed.FunctionCall(andFunction, List(a, replaceRefs(aliases, b)))(NoPosition, NoPosition))
     }
 
-  private def mergeGroupBy(aliases: OrderedMap[ColumnName, Expr], gb: List[Expr]): List[Expr] = {
+  private def mergeGroupBy(aliases: OrderedMap[ColumnName, Expr], gb: Seq[Expr]): Seq[Expr] = {
     gb.map(replaceRefs(aliases, _))
   }
 

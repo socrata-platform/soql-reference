@@ -1,5 +1,6 @@
 package com.socrata.soql.typed
 
+import com.socrata.NonEmptySeq
 import com.socrata.soql._
 import com.socrata.soql.ast._
 
@@ -13,11 +14,10 @@ sealed trait Join[ColumnId, Type] {
   def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): Join[NewColumnId, Type] = {
     def fWithTable(id: ColumnId, qual: Qualifier) = f(id, qual.orElse(Some(from.fromTable.name)))
 
-    val mappedSub = from.subAnalysis.collect {
-      case SubAnalysis(h :: tail, alias) =>
-        val firstAna = h.mapColumnIds(fWithTable)
-        val restAnas = tail.map(_.mapColumnIds(f))
-        SubAnalysis(firstAna :: restAnas, alias)
+    val mappedSub = from.subAnalysis.map {
+      case SubAnalysis(NonEmptySeq(head, tail), alias) =>
+        val newAnas = NonEmptySeq(head.mapColumnIds(fWithTable), tail.map(_.mapColumnIds(f)))
+        SubAnalysis(newAnas, alias)
     }
 
     typed.Join(typ, JoinAnalysis(from.fromTable, mappedSub), on.mapColumnIds(f))

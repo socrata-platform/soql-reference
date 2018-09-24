@@ -1,5 +1,6 @@
 package com.socrata.soql
 
+import com.socrata.NonEmptySeq
 import com.socrata.soql.exceptions._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.PropertyChecks
@@ -205,7 +206,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("a subselect makes the output of the inner select available to the outer") {
-    val Seq(inner, outer) = analyzer.analyzeFullQuery("select 5 :: money as x |> select max(x)")
+    val NonEmptySeq(inner, Seq(outer)) = analyzer.analyzeFullQuery("select 5 :: money as x |> select max(x)")
     outer.selection(ColumnName("max_x")) must equal (typed.FunctionCall(MonomorphicFunction(TestFunctions.Max, Map("a" -> TestMoney)), Seq(typed.ColumnRef(None, ColumnName("x"), TestMoney : TestType)(NoPosition)))(NoPosition, NoPosition))
     inner.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
       Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber.t)(NoPosition)))(NoPosition, NoPosition)))(NoPosition, NoPosition))
@@ -222,10 +223,6 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
 
   test("cannot group by a non-groupable type") {
     a [NonGroupableGroupBy] must be thrownBy analyzer.analyzeFullQuery("select array group by array")
-  }
-
-  test("Merging no stages returns no stages") {
-    SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, Nil) must equal (Nil)
   }
 
   test("Merging two simple filter queries is the same as querying one") {
@@ -427,9 +424,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     parsedAgain.toString must equal(expected)
   }
 
-  def parseJoin(joinSoql: String)(implicit ctx: analyzer.AnalysisContext): List[SoQLAnalysis[ColumnName, TestType]] = {
+  def parseJoin(joinSoql: String)(implicit ctx: analyzer.AnalysisContext): NonEmptySeq[SoQLAnalysis[ColumnName, TestType]] = {
     val parsed = new StandaloneParser().parseJoinSelect(joinSoql)
-    analyzer.analyze(parsed.selects)(ctx)
+    analyzer.analyze(NonEmptySeq.fromSeqUnsafe(parsed.selects))(ctx)
   }
 
   test("join with sub-query") {

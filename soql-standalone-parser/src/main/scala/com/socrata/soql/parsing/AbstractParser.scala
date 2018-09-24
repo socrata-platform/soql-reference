@@ -1,5 +1,7 @@
 package com.socrata.soql.parsing
 
+import com.socrata.NonEmptySeq
+
 import scala.reflect.ClassTag
 import scala.util.parsing.combinator.{PackratParsers, Parsers}
 import util.parsing.input.Position
@@ -24,7 +26,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
    *               *************
    */
   def selection(soql: String): Selection = parseFull(selectList, soql)
-  def joins(soql: String): List[Join] = parseFull(joinList, soql)
+  def joins(soql: String): Seq[Join] = parseFull(joinList, soql)
   def expression(soql: String): Expression = parseFull(expr, soql)
   def orderings(soql: String): List[OrderBy] = parseFull(orderingList, soql)
   def groupBys(soql: String): List[Expression] = parseFull(groupByList, soql)
@@ -36,7 +38,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   //  "select a from (select id, a <from current view>) as alias"
   // and is represented as:
   //  List(select_id_a, select_id)
-  def selectStatement(soql: String): List[Select] = parseFull(pipedSelect, soql)
+  def selectStatement(soql: String): NonEmptySeq[Select] = parseFull(pipedSelect, soql)
   def unchainedSelectStatement(soql: String): Select = parseFull(select, soql) // a select statement without pipes or subselects
   def parseJoinSelect(soql: String): JoinSelect = parseFull(joinSelect, soql)
   def limit(soql: String): BigInt = parseFull(integer, soql)
@@ -118,7 +120,11 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     }
   }
 
-  val pipedSelect: Parser[List[Select]] = rep1sep(select, QUERYPIPE())
+  val pipedSelect: Parser[NonEmptySeq[Select]] = {
+    rep1sep(select, QUERYPIPE()) ^^ {
+      case h :: tail => NonEmptySeq(h, tail) // case guaranteed by behavior of rep1sep
+    }
+  }
 
   val tableIdentifier: Parser[(String, Position)] =
     accept[tokens.TableIdentifier] ^^ { t =>
@@ -168,7 +174,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     } |
     LPAREN() ~> selectFrom ~ opt(QUERYPIPE() ~> pipedSelect) ~ (RPAREN() ~> AS() ~> simpleIdToAlias) ^^ {
       case ((tn, s)) ~ chainedQueries ~ alias =>
-        JoinSelect(tn, Some(SubSelect(s :: chainedQueries.toList.flatten, alias)))
+        JoinSelect(tn, Some(SubSelect(NonEmptySeq(s, chainedQueries.map(_.seq).getOrElse(Seq.empty)), alias)))
     }
   }
 

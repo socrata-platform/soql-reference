@@ -2,13 +2,14 @@ package com.socrata.soql.ast
 
 import scala.util.parsing.input.{NoPosition, Position}
 import com.socrata.soql.environment._
-import Select.itrToString
+import Select._
+import com.socrata.NonEmptySeq
 
 /**
   * A SubSelect represents (potentially chained) soql that is required to have an alias
   * (because subqueries need aliases)
   */
-case class SubSelect(selects: List[Select], alias: String)
+case class SubSelect(selects: NonEmptySeq[Select], alias: String)
 
 /**
   * All joins must select from another table. A join may also join on sub-select. A join on a sub-select requires an
@@ -25,26 +26,31 @@ case class JoinSelect(fromTable: TableName, subSelect: Option[SubSelect]) {
   // The overall alias for the join select, which is the alias for the subSelect, if defined.
   // Otherwise, it is the alias for the TableName, if defined.
   val alias: Option[String] =  subSelect.map(_.alias).orElse(fromTable.alias)
-  def selects: List[Select] = subSelect.map(_.selects).getOrElse(Nil)
+  def selects: Seq[Select] = subSelect.map(_.selects.seq).getOrElse(Seq.empty)
 
   override def toString: String = {
-    val (subSelectStr, aliasStrOpt) = subSelect.map { case SubSelect(h :: tail, subAlias) =>
-      val selectWithFromStr = h.toStringWithFrom(fromTable)
-      val selectStr = (selectWithFromStr :: tail.map(_.toString)).mkString("|>")
-      (s"($selectStr)", Some(subAlias))
+    val (subSelectStr, aliasStrOpt) = subSelect.map {
+      case SubSelect(NonEmptySeq(h, tail), subAlias) =>
+        val selectWithFromStr = h.toStringWithFrom(fromTable)
+        val selectStr = (selectWithFromStr +: tail.map(_.toString)).mkString("|>")
+        (s"($selectStr)", Some(subAlias))
     }.getOrElse((fromTable.toString, None))
 
-    List(subSelectStr, itrToString("AS", aliasStrOpt)).filter(_.nonEmpty).mkString(" ")
+    List(Some(subSelectStr), itrToString("AS", aliasStrOpt)).flatString
   }
 }
 
 object Select {
-  def itrToString[A](prefix: String, l: Iterable[A], sep: String = " ") = {
+  def itrToString[A](prefix: String, l: Iterable[A], sep: String = " "): Option[String] = {
     if (l.nonEmpty) {
-      l.mkString(prefix, sep, "")
+      Some(l.mkString(prefix, sep, ""))
     } else {
-      ""
+      None
     }
+  }
+
+  implicit class StringOptionList(l: List[Option[String]]) {
+    def flatString = l.flatten.mkString(" ")
   }
 }
 
@@ -64,11 +70,11 @@ object Select {
 case class Select(
   distinct: Boolean,
   selection: Selection,
-  joins: List[Join],
+  joins: Seq[Join],
   where: Option[Expression],
-  groupBys: List[Expression],
+  groupBys: Seq[Expression],
   having: Option[Expression],
-  orderBys: List[OrderBy],
+  orderBys: Seq[OrderBy],
   limit: Option[BigInt],
   offset: Option[BigInt],
   search: Option[String]) {
@@ -76,9 +82,9 @@ case class Select(
   private def toString(from: Option[TableName]): String = {
     if(AST.pretty) {
       val distinctStr = if (distinct) "DISTINCT " else ""
-      val selectStr = s"SELECT $distinctStr$selection"
-      val fromStr = from.map(_.toString).getOrElse("")
-      val joinsStr = joins.mkString(" ")
+      val selectStr = Some(s"SELECT $distinctStr$selection")
+      val fromStr = from.map(_.toString)
+      val joinsStr = itrToString("", joins.map(_.toString))
       val whereStr = itrToString("WHERE", where)
       val groupByStr = itrToString("GROUP BY", groupBys)
       val havingStr = itrToString("HAVING", having)
@@ -88,7 +94,7 @@ case class Select(
       val searchStr = itrToString("SEARCH", search.map(Expression.escapeString))
 
       val parts = List(selectStr, fromStr, joinsStr, whereStr, groupByStr, havingStr, obStr, limitStr, offsetStr, searchStr)
-      parts.filter(_.nonEmpty).mkString(" ")
+      parts.flatString
     } else {
       AST.unpretty(this)
     }
@@ -162,7 +168,7 @@ object SimpleSelect {
   /**
     * Simple Select is a select created by a join where a sub-query is not used like "JOIN @aaaa-aaaa"
     */
-  def isSimple(selects: List[Select]): Boolean = {
+  def isSimple(selects: Seq[Select]): Boolean = {
     selects.forall(_.selection.isSimple)
   }
 }
