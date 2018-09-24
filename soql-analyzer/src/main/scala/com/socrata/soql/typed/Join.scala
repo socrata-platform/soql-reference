@@ -13,7 +13,7 @@ sealed trait Join[ColumnId, Type] {
   def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): Join[NewColumnId, Type] = {
     def fWithTable(id: ColumnId, qual: Qualifier) = f(id, qual.orElse(Some(from.fromTable.name)))
 
-    val mappedSub = from.subAnalysis.map {
+    val mappedSub = from.subAnalysis.collect {
       case SubAnalysis(h :: tail, alias) =>
         val firstAna = h.mapColumnIds(fWithTable)
         val restAnas = tail.map(_.mapColumnIds(f))
