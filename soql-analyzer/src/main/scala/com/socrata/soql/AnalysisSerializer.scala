@@ -4,6 +4,7 @@ import scala.util.parsing.input.{NoPosition, Position}
 import java.io.{ByteArrayOutputStream, OutputStream}
 
 import com.google.protobuf.CodedOutputStream
+import com.socrata.NonEmptySeq
 import gnu.trove.impl.Constants
 import gnu.trove.map.hash.TObjectIntHashMap
 import com.socrata.soql.parsing.SoQLPosition
@@ -24,7 +25,7 @@ trait UnchainedAnalysisSerializerProvider[C, T] {
   def unchainedSerializer: (OutputStream, SoQLAnalysis[C, T]) => Unit
 }
 
-class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => String) extends ((OutputStream, Seq[SoQLAnalysis[C, T]]) => Unit) with UnchainedAnalysisSerializerProvider[C, T] {
+class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => String) extends ((OutputStream, NonEmptySeq[SoQLAnalysis[C, T]]) => Unit) with UnchainedAnalysisSerializerProvider[C, T] {
   type Expr = CoreExpr[C, T]
   type Order = OrderBy[C, T]
 
@@ -196,8 +197,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
           out.writeRawByte(6)
           writePosition(f.functionNamePosition)
           out.writeUInt32NoTag(registerFunction(func))
-          out.writeUInt32NoTag(params.length)
-          for(param <- params) writeExpr(param)
+          writeSeq(params)(writeExpr)
       }
     }
 
@@ -208,22 +208,36 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       out.writeBoolNoTag(distinct)
 
     private def writeSelection(selection: OrderedMap[ColumnName, Expr]) {
-      out.writeUInt32NoTag(selection.size)
-      for((col, expr) <- selection) {
+      writeSeq(selection) { case (col, expr) =>
         out.writeUInt32NoTag(dictionary.registerLabel(col))
         writeExpr(expr)
       }
     }
 
-    private def writeJoins(joins: Option[List[Join[C, T]]]) {
-      val size = joins.map(_.size).getOrElse(0)
-      out.writeUInt32NoTag(size)
-      joins.toList.flatten.foreach { join =>
+    private def writeJoins(joins: Seq[Join[C, T]]) {
+      writeSeq(joins) { join =>
         out.writeStringNoTag(join.typ.toString)
-        write(join.tableLike)
-        maybeWrite(join.alias)(x => out.writeStringNoTag(x))
-        writeExpr(join.expr)
+        writeJoinAnalysis(join.from)
+        writeExpr(join.on)
       }
+    }
+
+    private def writeJoinAnalysis(ja: JoinAnalysis[C, T]): Unit = {
+      writeTableName(ja.fromTable)
+      maybeWrite(ja.subAnalysis) { case SubAnalysis(analyses, alias) =>
+        write(analyses)
+        out.writeStringNoTag(alias)
+      }
+    }
+
+    private def writeTableName(tn: TableName) = {
+      out.writeStringNoTag(tn.name)
+      maybeWrite(tn.alias)(out.writeStringNoTag)
+    }
+
+    def writeSeq[A](list: Iterable[A])(f: A => Unit): Unit = {
+      out.writeUInt32NoTag(list.size)
+      list.foreach(f)
     }
 
     private def maybeWrite[A](x: Option[A])(f: A => Unit): Unit = x match {
@@ -235,15 +249,10 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     }
 
     private def writeWhere(where: Option[Expr]) =
-      maybeWrite(where) { expr =>
-        writeExpr(expr)
-      }
+      maybeWrite(where) { writeExpr }
 
-    private def writeGroupBy(groupBy: Option[Seq[Expr]]) =
-      maybeWrite(groupBy) { exprs =>
-        out.writeUInt32NoTag(exprs.size)
-        exprs.foreach(writeExpr)
-      }
+    private def writeGroupBy(groupBy: Seq[Expr]) =
+      writeSeq(groupBy)(writeExpr)
 
     private def writeHaving(expr: Option[Expr]) =
       writeWhere(expr)
@@ -255,11 +264,8 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       out.writeBoolNoTag(nullsLast)
     }
 
-    private def writeOrderBy(orderBy: Option[Seq[Order]]) =
-      maybeWrite(orderBy) { orderBys =>
-        out.writeUInt32NoTag(orderBys.size)
-        orderBys.foreach(writeSingleOrderBy)
-      }
+    private def writeOrderBy(orderBy: Seq[Order]) =
+      writeSeq(orderBy)(writeSingleOrderBy)
 
     private def writeLimit(limit: Option[BigInt]) =
       maybeWrite(limit) { n =>
@@ -278,7 +284,6 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       val SoQLAnalysis(isGrouped,
                        distinct,
                        selection,
-                       from,
                        join,
                        where,
                        groupBy,
@@ -290,7 +295,6 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       writeGrouped(isGrouped)
       writeDistinct(analysis.distinct)
       writeSelection(selection)
-      maybeWrite(from) { x => out.writeStringNoTag(x) }
       writeJoins(join)
       writeWhere(where)
       writeGroupBy(groupBy)
@@ -301,13 +305,12 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       writeSearch(search)
     }
 
-    def write(analyses: Seq[SoQLAnalysis[C, T]]): Unit = {
-      out.writeInt32NoTag(analyses.length)
-      analyses.foreach(writeAnalysis)
+    def write(analyses: NonEmptySeq[SoQLAnalysis[C, T]]): Unit = {
+      writeSeq(analyses.seq)(writeAnalysis)
     }
   }
 
-  def apply(outputStream: OutputStream, analyses: Seq[SoQLAnalysis[C, T]]) {
+  def apply(outputStream: OutputStream, analyses: NonEmptySeq[SoQLAnalysis[C, T]]) {
     val dictionary = new SerializationDictionaryImpl
     val postDictionaryData = new ByteArrayOutputStream
     val out = CodedOutputStream.newInstance(postDictionaryData)
@@ -316,7 +319,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     out.flush()
 
     val codedOutputStream = CodedOutputStream.newInstance(outputStream)
-    codedOutputStream.writeInt32NoTag(4) // version number
+    codedOutputStream.writeInt32NoTag(4) // version number TODO: new version number?
     dictionary.save(codedOutputStream)
     codedOutputStream.flush()
     postDictionaryData.writeTo(outputStream)

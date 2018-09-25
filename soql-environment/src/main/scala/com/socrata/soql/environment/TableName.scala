@@ -1,12 +1,10 @@
 package com.socrata.soql.environment
 
 case class TableName(name: String, alias: Option[String] = None) {
-
   import TableName._
 
   override def toString(): String = {
-    val unPrefixedName = name.substring(SodaFountainTableNamePrefixSubStringIndex)
-    "@" + unPrefixedName + alias.map(" AS " + _.substring(SodaFountainTableNamePrefixSubStringIndex)).getOrElse("")
+    alias.map(removeSodaPrefix).foldLeft(replaceSodaPrefix(name))((n, a) => s"$n AS $a")
   }
 
   def qualifier: String = alias.getOrElse(name)
@@ -25,4 +23,8 @@ object TableName {
   // To remove this "feature", re-define this with an empty string "" or completely remove this variable.
   val SodaFountainTableNamePrefix = "_"
   val SodaFountainTableNamePrefixSubStringIndex = 1
+
+  def withSodaFountainPrefix(s: String) = s"$SodaFountainTableNamePrefix$s"
+  def replaceSodaPrefix(s: String) = s.replaceFirst(TableName.SodaFountainTableNamePrefix, TableName.Prefix)
+  def removeSodaPrefix(s: String) = s.replaceFirst(TableName.SodaFountainTableNamePrefix, "")
 }

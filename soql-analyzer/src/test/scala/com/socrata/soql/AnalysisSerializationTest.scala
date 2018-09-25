@@ -5,6 +5,7 @@ import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, Type
 import com.socrata.soql.types._
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
+import com.socrata.NonEmptySeq
 import org.scalatest.MustMatchers
 
 class AnalysisSerializationTest extends FunSuite with MustMatchers {
@@ -34,7 +35,7 @@ class AnalysisSerializationTest extends FunSuite with MustMatchers {
   def serializeTestType(t: TestType) = t.name.name
   def deserializeTestType(s: String): TestType = TestType.typesByName(TypeName(s))
 
-  val serializer = new AnalysisSerializer(serializeColumnName, serializeTestType)
+  val serializer = new AnalysisSerializer[ColumnName, TestType](serializeColumnName, serializeTestType)
   val deserializer = new AnalysisDeserializer(deserializeColumnName, deserializeTestType, TestFunctions.functionsByIdentity)
 
   test("deserialize-of-serialize is the identity (all query options)") {
@@ -74,13 +75,13 @@ class AnalysisSerializationTest extends FunSuite with MustMatchers {
         |   offset 10""".stripMargin)
     val baos = new ByteArrayOutputStream
     serializer.unchainedSerializer(baos, analysis)
-    deserializer(new ByteArrayInputStream(baos.toByteArray)) must equal (Seq(analysis))
+    deserializer(new ByteArrayInputStream(baos.toByteArray)) must equal (NonEmptySeq(analysis))
   }
 
   test("deserialize-of-unchained-serialize is Seq(_) (minimal query options)") {
     val analysis = analyzer.analyzeUnchainedQuery("select :id")
     val baos = new ByteArrayOutputStream
     serializer.unchainedSerializer(baos, analysis)
-    deserializer(new ByteArrayInputStream(baos.toByteArray)) must equal (Seq(analysis))
+    deserializer(new ByteArrayInputStream(baos.toByteArray)) must equal (NonEmptySeq(analysis))
   }
 }

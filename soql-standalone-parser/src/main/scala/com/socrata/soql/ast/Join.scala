@@ -1,7 +1,6 @@
 package com.socrata.soql.ast
 
 
-import com.socrata.soql.environment.TableName
 import com.socrata.soql.tokens.{FULL, LEFT, RIGHT, Token}
 
 sealed trait JoinType
@@ -40,61 +39,40 @@ object JoinType {
 }
 
 sealed trait Join {
-  val tableLike: Seq[Select]
-  val alias: Option[String]
-  val expr: Expression
+  val from: JoinSelect
+  val on: Expression
   val typ: JoinType
 
+  def isSimple = SimpleSelect.isSimple(from.selects)
+
   override def toString: String = {
-    val sb = new StringBuilder
-    sb.append(typ)
-    sb.append(" ")
-
-    tableLike match {
-      case Seq(x) if x.from.nonEmpty &&
-        x.selection.allUserExcept.isEmpty &&
-        x.selection.allSystemExcept.isEmpty &&
-        x.selection.expressions.isEmpty =>
-        x.from.foreach(x => sb.append(x.toString()))
-      case _ =>
-        sb.append("(")
-        sb.append(tableLike.map(_.toString).mkString(" |> "))
-        sb.append(")")
-    }
-
-    alias.foreach { x =>
-      sb.append(" AS ")
-      sb.append(x.substring(TableName.SodaFountainTableNamePrefixSubStringIndex))
-    }
-
-    sb.append(" ON ")
-    sb.append(expr)
-    sb.toString
+    s"$typ $from ON $on"
   }
+
 }
 
-case class InnerJoin(tableLike: Seq[Select], alias: Option[String], expr: Expression) extends Join {
+case class InnerJoin(from: JoinSelect, on: Expression) extends Join {
   val typ: JoinType = InnerJoinType
 }
 
-case class LeftOuterJoin(tableLike: Seq[Select], alias: Option[String], expr: Expression) extends Join {
+case class LeftOuterJoin(from: JoinSelect, on: Expression) extends Join {
   val typ: JoinType = LeftOuterJoinType
 }
 
-case class RightOuterJoin(tableLike: Seq[Select], alias: Option[String], expr: Expression) extends Join {
+case class RightOuterJoin(from: JoinSelect, on: Expression) extends Join {
   val typ: JoinType = RightOuterJoinType
 }
 
-case class FullOuterJoin(tableLike: Seq[Select], alias: Option[String], expr: Expression) extends Join {
+case class FullOuterJoin(from: JoinSelect, on: Expression) extends Join {
   val typ: JoinType = FullOuterJoinType
 }
 
 object OuterJoin {
-  def apply(direction: Token, tableLike: Seq[Select], alias: Option[String], expr: Expression): Join = {
+  def apply(direction: Token, from: JoinSelect, on: Expression): Join = {
     direction match {
-      case _: LEFT => LeftOuterJoin(tableLike, alias, expr)
-      case _: RIGHT => RightOuterJoin(tableLike, alias, expr)
-      case _: FULL => FullOuterJoin(tableLike, alias, expr)
+      case _: LEFT => LeftOuterJoin(from, on)
+      case _: RIGHT => RightOuterJoin(from, on)
+      case _: FULL => FullOuterJoin(from, on)
       case t: Token => throw new IllegalArgumentException(s"invalid outer join token ${t.printable}")
     }
   }
