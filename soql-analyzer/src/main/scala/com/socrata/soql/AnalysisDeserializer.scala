@@ -2,8 +2,6 @@ package com.socrata.soql
 
 import java.io.InputStream
 
-import scala.collection.immutable.VectorBuilder
-import scala.collection.mutable.ListBuffer
 import scala.util.parsing.input.{NoPosition, Position}
 import com.google.protobuf.CodedInputStream
 import com.socrata.NonEmptySeq
@@ -91,8 +89,8 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
                              dictionary: DeserializationDictionary[C, T],
                              version: Int)
   {
-    def readPosition: Position =
-      in.readRawByte match {
+    def readPosition(): Position =
+      in.readRawByte() match {
         case 0 =>
           val line = in.readUInt32()
           val column = in.readUInt32()
@@ -108,8 +106,8 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
           SimplePosition(line, column, lineText)
       }
 
-    def readExpr: Expr = {
-      val pos = readPosition
+    def readExpr(): Expr = {
+      val pos = readPosition()
       in.readRawByte() match {
         case 1 =>
           val qual = maybeRead(in.readString())
@@ -132,102 +130,101 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
           val typ = dictionary.types(in.readUInt32())
           NullLiteral(typ)(pos)
         case 6 =>
-          val functionNamePosition = readPosition
+          val functionNamePosition = readPosition()
           val func = dictionary.functions(in.readUInt32())
-          val params = readSeq { readExpr }
+          val params = readSeq { readExpr() }
           FunctionCall(func, params)(pos, functionNamePosition)
       }
     }
 
-    def readIsGrouped: Boolean = in.readBool
+    def readIsGrouped(): Boolean = in.readBool()
 
-    def readDistinct: Boolean = in.readBool
+    def readDistinct(): Boolean = in.readBool()
 
     def maybeRead[A](f: => A): Option[A] = {
-      if (in.readBool) Some(f)
+      if (in.readBool()) Some(f)
       else None
     }
 
     def readSeq[A](f: => A): Seq[A] = {
-      val count = in.readUInt32
+      val count = in.readUInt32()
       1.to(count).map { _ => f }
     }
 
-    def readNonEmptySeq[A](f: => A) = NonEmptySeq.fromSeqUnsafe(readSeq(f))
+    def readNonEmptySeq[A](f: => A): NonEmptySeq[A] = NonEmptySeq.fromSeqUnsafe(readSeq(f))
 
-    def readSelection: OrderedMap[ColumnName, Expr] = {
+    def readSelection(): OrderedMap[ColumnName, Expr] = {
       val elems = readSeq {
         val name =  dictionary.labels(in.readUInt32())
-        val expr = readExpr
+        val expr = readExpr()
         name -> expr
       }
       OrderedMap(elems : _*)
     }
 
-    def readJoins: Seq[Join[C, T]] = {
+    def readJoins(): Seq[Join[C, T]] = {
       readSeq {
         val joinType = JoinType(in.readString())
-        Join(joinType, readJoinAnalysis, readExpr)
+        Join(joinType, readJoinAnalysis(), readExpr())
       }
     }
 
-    def readWhere: Option[Expr] = maybeRead { readExpr }
+    def readWhere(): Option[Expr] = maybeRead { readExpr() }
 
-    def readGroupBy: Seq[Expr] = readSeq { readExpr }
+    def readHaving(): Option[Expr] = readWhere()
 
-    def readHaving = readWhere
+    def readGroupBy(): Seq[Expr] = readSeq { readExpr() }
 
-    def readOrderBy: Seq[Order] =
+    def readOrderBy(): Seq[Order] =
       readSeq {
-        val expr = readExpr
+        val expr = readExpr()
         val ascending = in.readBool()
         val nullsLast = in.readBool()
         OrderBy(expr, ascending, nullsLast)
       }
 
-    def readLimit: Option[BigInt] =
+    def readLimit(): Option[BigInt] =
       maybeRead {
         BigInt(dictionary.strings(in.readUInt32()))
       }
 
-    def readOffset = readLimit
+    def readOffset(): Option[BigInt] = readLimit()
 
-    def readTableName: TableName = {
-      TableName(in.readString, maybeRead { in.readString })
+    def readTableName(): TableName = {
+      TableName(in.readString(), maybeRead { in.readString() })
     }
 
-    def readSubAnalysis: SubAnalysis[C, T] = {
-      SubAnalysis(read, in.readString)
+    def readSubAnalysis(): SubAnalysis[C, T] = {
+      SubAnalysis(read(), in.readString())
     }
 
-    def readJoinAnalysis: JoinAnalysis[C, T] = {
-      readTableName
-      JoinAnalysis(readTableName, maybeRead(readSubAnalysis))
+    def readJoinAnalysis(): JoinAnalysis[C, T] = {
+      JoinAnalysis(readTableName(), maybeRead(readSubAnalysis()))
     }
 
-    def readSearch: Option[String] =
+    def readSearch(): Option[String] =
       maybeRead {
         dictionary.strings(in.readUInt32())
       }
 
 
-    def readAnalysis: SoQLAnalysis[C, T] = {
+    def readAnalysis(): SoQLAnalysis[C, T] = {
       SoQLAnalysis(
-        readIsGrouped,
-        readDistinct,
-        readSelection,
-        readJoins,
-        readWhere,
-        readGroupBy,
-        readHaving,
-        readOrderBy,
-        readLimit,
-        readOffset,
-        readSearch)
+        readIsGrouped(),
+        readDistinct(),
+        readSelection(),
+        readJoins(),
+        readWhere(),
+        readGroupBy(),
+        readHaving(),
+        readOrderBy(),
+        readLimit(),
+        readOffset(),
+        readSearch())
     }
 
-    def read: NonEmptySeq[SoQLAnalysis[C, T]] = {
-      readNonEmptySeq { readAnalysis }
+    def read(): NonEmptySeq[SoQLAnalysis[C, T]] = {
+      readNonEmptySeq { readAnalysis() }
     }
   }
 
@@ -237,11 +234,11 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       case 0 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, 0)
-        NonEmptySeq(deserializer.readAnalysis, Seq.empty)
+        NonEmptySeq(deserializer.readAnalysis(), Seq.empty)
       case v if v >= 3 && v <= 4 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
-        deserializer.read
+        deserializer.read()
       case other =>
         throw new UnknownAnalysisSerializationVersion(other)
     }
