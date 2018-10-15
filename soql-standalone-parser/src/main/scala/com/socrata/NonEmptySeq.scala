@@ -3,15 +3,26 @@ package com.socrata
 // A collection that guarantees the existence of at least one element.
 // Fills the same role as scalaz's NonEmptyList, but now we don't have to include scalaz as a dependency,
 // and we can use Seq as the internal type (rather than List)
-case class NonEmptySeq[T](head: T, tail: Seq[T] = Nil) {
+case class NonEmptySeq[+T](head: T, tail: Seq[T] = Seq.empty) {
   def length: Int = 1 + tail.length
   def size: Int = length
   def seq: Seq[T] = head +: tail
   def iterator: Iterator[T] = Iterator.single(head) ++ tail.iterator
   def last: T = tail.lastOption.getOrElse(head)
-  def reverse: NonEmptySeq[T] = mapSeq(_.reverse)
+  def reverse: NonEmptySeq[T] = NonEmptySeq.fromSeqUnsafe(seq.reverse)
+
+  def +[TT >: T](t: TT): NonEmptySeq[TT] = NonEmptySeq(head, tail :+ t)
+  def ++[TT >: T](other: Iterable[TT]): NonEmptySeq[TT] = NonEmptySeq(head, tail ++ other)
+  def ++[TT >: T](other: NonEmptySeq[TT]): NonEmptySeq[TT] = this ++ other.seq
+  def prepend[TT >: T](t: TT): NonEmptySeq[TT] = NonEmptySeq(t, seq)
+  def prepend[TT >: T](other: Iterable[TT]): NonEmptySeq[TT] = other.toList match {
+    case h :: t => NonEmptySeq(h, t ++ seq)
+    case Nil => this
+  }
+  def prepend[TT >: T](other: NonEmptySeq[TT]): NonEmptySeq[TT] = prepend(other.seq)
+
   def map[U](f: T => U): NonEmptySeq[U] = NonEmptySeq(f(head), tail.map(f))
-  def filter(f: T => Boolean): Seq[T] = iterator.filter(f).toSeq
+  def filter(f: T => Boolean): Seq[T] = seq.filter(f)
   def flatMap[U](f: T => NonEmptySeq[U]): NonEmptySeq[U] = {
     val first = f(head)
     NonEmptySeq(first.head, first.tail ++ tail.flatMap(f(_).iterator))
@@ -20,11 +31,9 @@ case class NonEmptySeq[T](head: T, tail: Seq[T] = Nil) {
     val newHead = headF(head)
     NonEmptySeq(newHead, tail.scanLeft(newHead)(tailF).tail)
   }
-  def mapHeadTail(f: (T, Seq[T]) => Seq[T]): NonEmptySeq[T] = {
-    NonEmptySeq.fromSeqUnsafe(f(head, tail))
-  }
-  def mapSeq(f: Seq[T] => Seq[T]): NonEmptySeq[T] = {
-    NonEmptySeq.fromSeqUnsafe(f(seq))
+  def foldLeft1[U](headF: T => U)(tailF: (U, T) => U): U = {
+    val newHead = headF(head)
+    tail.foldLeft(newHead)(tailF)
   }
 }
 

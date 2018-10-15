@@ -561,14 +561,12 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   type Expr = typed.CoreExpr[ColumnName, T]
 
   def merge(stages: NonEmptySeq[Analysis]): NonEmptySeq[Analysis] = {
-    stages.mapHeadTail { case (head, tail) =>
-      tail.foldLeft(Seq(head)) { (acc, nextStage) =>
-        tryMerge(acc.head /* acc cannot be empty */ , nextStage) match {
-          case Some(merged) => merged +: acc.tail
-          case None => nextStage +: acc
-        }
-      }.reverse
-    }
+    stages.foldLeft1(NonEmptySeq(_)) { case (acc, nextStage) =>
+      tryMerge(acc.head /* acc cannot be empty */ , nextStage) match {
+        case Some(merged) => acc.copy(head = merged)
+        case None => acc.prepend(nextStage)
+      }
+    }.reverse
   }
 
   // Currently a search on the second query prevents merging, as its meaning ought to
