@@ -48,7 +48,17 @@ sealed trait Join {
   override def toString: String = {
     s"$typ $from ON $on"
   }
+}
 
+object Join {
+  def expandJoins(selects: Seq[Select]): Seq[Join] = {
+    def expandJoin(join: Join): Seq[Join] = {
+      if (join.isSimple) Seq(join)
+      else expandJoins(join.from.selects) :+ join
+    }
+
+    selects.flatMap(_.joins.flatMap(expandJoin))
+  }
 }
 
 case class InnerJoin(from: JoinSelect, on: Expression) extends Join {

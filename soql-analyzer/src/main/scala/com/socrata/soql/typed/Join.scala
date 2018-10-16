@@ -26,6 +26,13 @@ sealed trait Join[ColumnId, Type] {
   override def toString: String = {
     s"$typ $from ON $on"
   }
+
+  // joins are simple if there is no subAnalysis ("join @aaaa-aaaa[ as a]") or if all analyses in subAnalysis
+  // are select * "join (select * from @aaaa-aaaa) as a"
+  def isSimple: Boolean = {
+    from.subAnalysis.forall(_.analyses.seq.forall(_.selection.keys.isEmpty))
+  }
+
 }
 
 case class InnerJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
@@ -53,5 +60,14 @@ object Join {
       case RightOuterJoinType => typed.RightOuterJoin(from, on)
       case FullOuterJoinType => typed.FullOuterJoin(from, on)
     }
+  }
+
+  def expandJoins[ColumnId, Type](analyses: Seq[SoQLAnalysis[ColumnId, Type]]): Seq[typed.Join[ColumnId, Type]] = {
+    def expandJoin(join: typed.Join[ColumnId, Type]): Seq[typed.Join[ColumnId, Type]] = {
+      if (join.isSimple) Seq(join)
+      else expandJoins(join.from.analyses) :+ join
+    }
+
+    analyses.flatMap(_.joins.flatMap(expandJoin))
   }
 }

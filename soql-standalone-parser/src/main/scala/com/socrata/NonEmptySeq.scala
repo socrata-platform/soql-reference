@@ -21,6 +21,10 @@ case class NonEmptySeq[+T](head: T, tail: Seq[T] = Seq.empty) {
   }
   def prepend[TT >: T](other: NonEmptySeq[TT]): NonEmptySeq[TT] = prepend(other.seq)
 
+  def updated[TT >: T](index: Int, t: TT): NonEmptySeq[TT] = NonEmptySeq.fromSeqUnsafe(seq.updated(index, t))
+  def replaceLast[TT >: T](t: TT): NonEmptySeq[TT] = updated(length - 1, t)
+  def replaceFirst[TT >: T](t: TT): NonEmptySeq[TT] = NonEmptySeq(t, tail)
+
   def map[U](f: T => U): NonEmptySeq[U] = NonEmptySeq(f(head), tail.map(f))
   def filter(f: T => Boolean): Seq[T] = seq.filter(f)
   def flatMap[U](f: T => NonEmptySeq[U]): NonEmptySeq[U] = {
