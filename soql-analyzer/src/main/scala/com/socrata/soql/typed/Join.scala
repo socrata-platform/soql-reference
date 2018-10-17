@@ -27,11 +27,8 @@ sealed trait Join[ColumnId, Type] {
     s"$typ $from ON $on"
   }
 
-  // joins are simple if there is no subAnalysis ("join @aaaa-aaaa[ as a]") or if all analyses in subAnalysis
-  // are select * "join (select * from @aaaa-aaaa) as a"
-  def isSimple: Boolean = {
-    from.subAnalysis.forall(_.analyses.seq.forall(_.selection.keys.isEmpty))
-  }
+  // joins are simple if there is no subAnalysis, e.g. "join @aaaa-aaaa[ as a]"
+  def isSimple: Boolean = from.subAnalysis.isEmpty
 
 }
 

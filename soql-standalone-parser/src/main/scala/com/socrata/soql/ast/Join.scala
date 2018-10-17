@@ -43,7 +43,8 @@ sealed trait Join {
   val on: Expression
   val typ: JoinType
 
-  def isSimple = SimpleSelect.isSimple(from.selects)
+  // joins are simple if there is no subAnalysis, e.g. "join @aaaa-aaaa[ as a]"
+  def isSimple = from.subSelect.isEmpty
 
   override def toString: String = {
     s"$typ $from ON $on"
