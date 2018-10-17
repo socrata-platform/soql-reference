@@ -11,6 +11,11 @@ case class NonEmptySeq[+T](head: T, tail: Seq[T] = Seq.empty) {
   def last: T = tail.lastOption.getOrElse(head)
   def reverse: NonEmptySeq[T] = NonEmptySeq.fromSeqUnsafe(seq.reverse)
 
+  def apply(index: Int): T = {
+    if (index == 0) head
+    else tail(index - 1)
+  }
+
   def +[TT >: T](t: TT): NonEmptySeq[TT] = NonEmptySeq(head, tail :+ t)
   def ++[TT >: T](other: Iterable[TT]): NonEmptySeq[TT] = NonEmptySeq(head, tail ++ other)
   def ++[TT >: T](other: NonEmptySeq[TT]): NonEmptySeq[TT] = this ++ other.seq
@@ -31,6 +36,8 @@ case class NonEmptySeq[+T](head: T, tail: Seq[T] = Seq.empty) {
     val first = f(head)
     NonEmptySeq(first.head, first.tail ++ tail.flatMap(f(_).iterator))
   }
+  def scanLeft[U](initial: U)(f: (U, T) => U): NonEmptySeq[U] =
+    NonEmptySeq.fromSeqUnsafe(seq.scanLeft(initial)(f))
   def scanLeft1[U](headF: T => U)(tailF: (U, T) => U): NonEmptySeq[U] = {
     val newHead = headF(head)
     NonEmptySeq(newHead, tail.scanLeft(newHead)(tailF).tail)
