@@ -59,6 +59,15 @@ object Join {
 
     selects.flatMap(_.joins.flatMap(expandJoin))
   }
+
+  def apply(joinType: JoinType, from: JoinSelect, on: Expression): Join = {
+    joinType match {
+      case InnerJoinType => InnerJoin(from, on)
+      case LeftOuterJoinType => LeftOuterJoin(from, on)
+      case RightOuterJoinType => RightOuterJoin(from, on)
+      case FullOuterJoinType => FullOuterJoin(from, on)
+    }
+  }
 }
 
 case class InnerJoin(from: JoinSelect, on: Expression) extends Join {
@@ -78,12 +87,17 @@ case class FullOuterJoin(from: JoinSelect, on: Expression) extends Join {
 }
 
 object OuterJoin {
+  val dirToJoinType: Map[Token, JoinType] = Map(
+    LEFT() -> LeftOuterJoinType,
+    RIGHT() -> RightOuterJoinType,
+    FULL() -> FullOuterJoinType
+  )
+
   def apply(direction: Token, from: JoinSelect, on: Expression): Join = {
-    direction match {
-      case _: LEFT => LeftOuterJoin(from, on)
-      case _: RIGHT => RightOuterJoin(from, on)
-      case _: FULL => FullOuterJoin(from, on)
-      case t: Token => throw new IllegalArgumentException(s"invalid outer join token ${t.printable}")
+    dirToJoinType.get(direction).map { joinType =>
+      Join(joinType, from, on)
+    }.getOrElse {
+      throw new IllegalArgumentException(s"invalid outer join token ${direction.printable}")
     }
   }
 }
