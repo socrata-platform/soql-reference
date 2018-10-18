@@ -128,7 +128,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
 
   val tableIdentifier: Parser[(String, Position)] =
     accept[tokens.TableIdentifier] ^^ { t =>
-      (TableName.SodaFountainTableNamePrefix + t.value.substring(1) /* remove prefix @ */, t.position)
+      (TableName.SodaFountainPrefix + t.value.substring(1) /* remove prefix @ */, t.position)
     } | failure(errors.missingUserIdentifier)
 
   val simpleUserIdentifier: Parser[(String, Position)] =

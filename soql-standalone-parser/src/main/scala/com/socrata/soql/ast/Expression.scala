@@ -129,7 +129,7 @@ case class ColumnOrAliasRef(qualifier: Option[String], column: ColumnName)(val p
   protected def asString = {
     qualifier.map { q =>
       TableName.Prefix +
-        q.substring(TableName.SodaFountainTableNamePrefixSubStringIndex) +
+        q.substring(TableName.PrefixIndex) +
         TableName.Field
     }.getOrElse("") + "`" + column.name + "`"
   }

@@ -85,13 +85,13 @@ case class Select(
       val selectStr = Some(s"SELECT $distinctStr$selection")
       val fromStr = from.map(_.toString)
       val joinsStr = itrToString("", joins.map(_.toString))
-      val whereStr = itrToString("WHERE", where)
-      val groupByStr = itrToString("GROUP BY", groupBys)
-      val havingStr = itrToString("HAVING", having)
-      val obStr = itrToString("ORDER BY", orderBys, ",")
-      val limitStr = itrToString("LIMIT", limit)
-      val offsetStr = itrToString("OFFSET", offset)
-      val searchStr = itrToString("SEARCH", search.map(Expression.escapeString))
+      val whereStr = itrToString("WHERE ", where)
+      val groupByStr = itrToString("GROUP BY ", groupBys)
+      val havingStr = itrToString("HAVING ", having)
+      val obStr = itrToString("ORDER BY ", orderBys, ",")
+      val limitStr = itrToString("LIMIT ", limit)
+      val offsetStr = itrToString("OFFSET ", offset)
+      val searchStr = itrToString("SEARCH ", search.map(Expression.escapeString))
 
       val parts = List(selectStr, fromStr, joinsStr, whereStr, groupByStr, havingStr, obStr, limitStr, offsetStr, searchStr)
       parts.flatString
@@ -117,7 +117,7 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[
       def star(s: StarSelection, token: String) = {
         val sb = new StringBuilder()
         s.qualifier.foreach { x =>
-          sb.append(x.replaceFirst(TableName.SodaFountainTableNamePrefix, TableName.Prefix))
+          sb.append(x.replaceFirst(TableName.SodaFountainPrefix, TableName.Prefix))
           sb.append(TableName.Field)
         }
         sb.append(token)

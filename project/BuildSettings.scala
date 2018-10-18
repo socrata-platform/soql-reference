@@ -6,7 +6,8 @@ import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
 
 object BuildSettings {
   val buildSettings: Seq[Setting[_]] = Defaults.defaultSettings ++ SocrataCloudbeesSbt.socrataBuildSettings ++ Seq(
-    scalaVersion := "2.10.4"
+    scalaVersion := "2.11.12",
+    crossScalaVersions := Seq("2.10.4", scalaVersion.value)
   )
 
   def projectSettings(assembly: Boolean = false): Seq[Setting[_]] = buildSettings ++ SocrataCloudbeesSbt.socrataProjectSettings(assembly) ++ Seq(
