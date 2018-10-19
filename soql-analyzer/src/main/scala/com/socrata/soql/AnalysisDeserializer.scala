@@ -165,13 +165,43 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     def readJoins(): Seq[Join[C, T]] = {
       readSeq {
         val joinType = JoinType(in.readString())
-        Join(joinType, readJoinAnalysis(), readExpr())
+        val joinAnalysis =
+          if (version == 4) { // TODO: remove after release of 2.10.6 or higher (for 2.10.5- backwards-compatibility)
+            val tableLikeAndFroms = readWithFrom().seq
+            val from = tableLikeAndFroms.head._2.get // must exist by conventions of v4
+            val tableLike = tableLikeAndFroms.map(_._1)
+            val alias = maybeRead(in.readString)
+            v4JoinToV5Join(from, tableLike, alias)
+          } else {
+            readJoinAnalysis()
+          }
+        Join(joinType, joinAnalysis, readExpr())
       }
+    }
+
+    def v4JoinToV5Join(from: String, tableLike: Seq[SoQLAnalysis[C, T]], alias: Option[String]): JoinAnalysis[C, T] = {
+      val subAnaOpt = if (tableLike.size == 1 && tableLike.head.selection.keys.nonEmpty) {
+        None
+      } else {
+        val nes = NonEmptySeq.fromSeq(tableLike)
+        nes.map(n => SubAnalysis(n, alias.get)) // alias must be present in order for
+      }
+      JoinAnalysis(TableName(from, None), subAnaOpt)
     }
 
     def readWhere(): Option[Expr] = maybeRead { readExpr() }
 
     def readHaving(): Option[Expr] = readWhere()
+
+    // TODO: remove after release of 2.10.6 or higher (for 2.10.5- backwards-compatibility)
+    // backwards compatible sequence reading (used to be Option[Seq[T]] everywhere)
+    def bcSeq[T](f: => Seq[T]): Seq[T] = {
+      if (version == 4) {
+        maybeRead(f).toSeq.flatten
+      } else {
+        f
+      }
+    }
 
     def readGroupBy(): Seq[Expr] = readSeq { readExpr() }
 
@@ -207,24 +237,39 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         dictionary.strings(in.readUInt32())
       }
 
-
     def readAnalysis(): SoQLAnalysis[C, T] = {
-      SoQLAnalysis(
+      readAnaAndFrom()._1
+    }
+
+    def readAnaAndFrom(): (SoQLAnalysis[C, T], Option[String]) = {
+      lazy val fromOptTrigger = if (version == 4) maybeRead(in.readString) else None
+
+      val ana = SoQLAnalysis(
         readIsGrouped(),
         readDistinct(),
         readSelection(),
-        readJoins(),
+        { // TODO: remove after release of 2.10.6 or higher (for 2.10.5- backwards-compatibility)
+          fromOptTrigger; // trigger eval, read "from" string if v4
+          bcSeq { readJoins() }
+        },
         readWhere(),
-        readGroupBy(),
+        bcSeq { readGroupBy() },
         readHaving(),
-        readOrderBy(),
+        bcSeq { readOrderBy() },
         readLimit(),
         readOffset(),
-        readSearch())
+        readSearch()
+      )
+
+      (ana, fromOptTrigger)
     }
 
     def read(): NonEmptySeq[SoQLAnalysis[C, T]] = {
       readNonEmptySeq { readAnalysis() }
+    }
+
+    def readWithFrom(): NonEmptySeq[(SoQLAnalysis[C, T], Option[String])] = {
+      readNonEmptySeq { readAnaAndFrom() }
     }
   }
 

@@ -78,7 +78,7 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
   type Analysis = SoQLAnalysis[ColumnName, TestType]
 
   sealed trait SerializationMethod[T] {
-    type typ = T
+    type Type = T
     val analyze: String => T
     val serialize: (OutputStream, T) => Unit
     val toFullAnalysis: T => NonEmptySeq[Analysis]
@@ -98,13 +98,13 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
   case object Full extends SerializationMethod[NonEmptySeq[Analysis]] {
     val analyze = analyzer.analyzeFullQuery _
     val serialize = serializer.apply(_, _)
-    val toFullAnalysis: typ => NonEmptySeq[Analysis] = identity
+    val toFullAnalysis: Type => NonEmptySeq[Analysis] = identity
   }
 
   case object Unchained extends SerializationMethod[SoQLAnalysis[ColumnName, TestType]] {
     val analyze = analyzer.analyzeUnchainedQuery _
     val serialize = serializer.unchainedSerializer(_, _)
-    val toFullAnalysis: typ => NonEmptySeq[Analysis] = NonEmptySeq(_)
+    val toFullAnalysis: Type => NonEmptySeq[Analysis] = NonEmptySeq(_)
   }
 
   case class Test[T](testName: String, queryString: String, method: SerializationMethod[T], serializedV4B64: String)
