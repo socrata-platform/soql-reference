@@ -239,6 +239,10 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
         deserializer.read()
+      case v@5 =>
+        val dictionary = DeserializationDictionaryImpl.fromInput(cis)
+        val deserializer = new Deserializer(cis, dictionary, v)
+        deserializer.read()
       case other =>
         throw new UnknownAnalysisSerializationVersion(other)
     }
