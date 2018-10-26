@@ -1,13 +1,11 @@
 package com.socrata.soql.parsing
 
 import scala.util.parsing.input.NoPosition
-
 import org.scalatest._
 import org.scalatest.MustMatchers
-
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions.BadParse
-import com.socrata.soql.environment.{FunctionName, ColumnName}
+import com.socrata.soql.environment.{ColumnName, FunctionName}
 
 class ParserTest extends WordSpec with MustMatchers {
   def parseExpression(soql: String) = new Parser().expression(soql)

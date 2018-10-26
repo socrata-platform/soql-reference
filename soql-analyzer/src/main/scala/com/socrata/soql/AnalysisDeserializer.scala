@@ -2,7 +2,6 @@ package com.socrata.soql
 
 import java.io.InputStream
 
-import scala.util.parsing.input.{NoPosition, Position}
 import com.google.protobuf.CodedInputStream
 import com.socrata.NonEmptySeq
 import com.socrata.soql.ast.JoinType
@@ -12,6 +11,8 @@ import com.socrata.soql.functions.{Function, MonomorphicFunction}
 import com.socrata.soql.parsing.SoQLPosition
 import com.socrata.soql.typed._
 import gnu.trove.map.hash.TIntObjectHashMap
+
+import scala.util.parsing.input.{NoPosition, Position}
 
 private case class SimplePosition(line: Int, column: Int, lineContents: String) extends Position
 
@@ -30,7 +31,9 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
   type Expr = CoreExpr[C, T]
   type Order = OrderBy[C, T]
 
-  private val TestVersion = 0 // This is odd and for smooth deploy transition.  0 is used by test.
+  // This is odd and for smooth deploy transition.  0 is used by test.
+  private val TestVersionV4 = 0
+  private val TestVersionV5 = -1
 
   private class DeserializationDictionaryImpl(typesRegistry: TIntObjectHashMap[T],
                                       stringsRegistry: TIntObjectHashMap[String],
@@ -89,6 +92,9 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
                              dictionary: DeserializationDictionary[C, T],
                              version: Int)
   {
+    // TODO: remove after release of 2.10.6 or higher (exists for 2.10.5- backwards-compatibility during release process)
+    val isV4 = version == 4 || version == TestVersionV4
+
     def readPosition(): Position =
       in.readRawByte() match {
         case 0 =>
@@ -159,14 +165,14 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         val expr = readExpr()
         name -> expr
       }
-      OrderedMap(elems : _*)
+      OrderedMap(elems: _*)
     }
 
     def readJoins(): Seq[Join[C, T]] = {
       readSeq {
         val joinType = JoinType(in.readString())
         val joinAnalysis =
-          if (version == 4) { // TODO: remove after release of 2.10.6 or higher (for 2.10.5- backwards-compatibility)
+          if (isV4) {
             val tableLikeAndFroms = readWithFrom().seq
             val from = tableLikeAndFroms.head._2.get // must exist by conventions of v4
             val tableLike = tableLikeAndFroms.map(_._1)
@@ -179,24 +185,27 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       }
     }
 
+    // TODO: remove after release of 2.10.6 or higher (for 2.10.5- backwards-compatibility)
     def v4JoinToV5Join(from: String, tableLike: Seq[SoQLAnalysis[C, T]], alias: Option[String]): JoinAnalysis[C, T] = {
-      val subAnaOpt = if (tableLike.size == 1 && tableLike.head.selection.keys.nonEmpty) {
+      val subAnaOpt = if (tableLike.size == 1 && tableLike.head.selection.keys.isEmpty) {
         None
       } else {
         val nes = NonEmptySeq.fromSeq(tableLike)
         nes.map(n => SubAnalysis(n, alias.get)) // alias must be present in order for
       }
-      JoinAnalysis(TableName(from, None), subAnaOpt)
+
+      val tableNameAlias = if (subAnaOpt.isEmpty) alias else None
+
+      JoinAnalysis(TableName(from, tableNameAlias), subAnaOpt)
     }
 
     def readWhere(): Option[Expr] = maybeRead { readExpr() }
 
     def readHaving(): Option[Expr] = readWhere()
 
-    // TODO: remove after release of 2.10.6 or higher (for 2.10.5- backwards-compatibility)
     // backwards compatible sequence reading (used to be Option[Seq[T]] everywhere)
     def bcSeq[T](f: => Seq[T]): Seq[T] = {
-      if (version == 4) {
+      if (isV4) {
         maybeRead(f).toSeq.flatten
       } else {
         f
@@ -237,31 +246,31 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         dictionary.strings(in.readUInt32())
       }
 
-    def readAnalysis(): SoQLAnalysis[C, T] = {
-      readAnaAndFrom()._1
-    }
-
     def readAnaAndFrom(): (SoQLAnalysis[C, T], Option[String]) = {
-      lazy val fromOptTrigger = if (version == 4) maybeRead(in.readString) else None
+      lazy val fromOptTrigger = if (isV4) maybeRead(in.readString) else None
 
-      val ana = SoQLAnalysis(
-        readIsGrouped(),
-        readDistinct(),
-        readSelection(),
-        { // TODO: remove after release of 2.10.6 or higher (for 2.10.5- backwards-compatibility)
-          fromOptTrigger; // trigger eval, read "from" string if v4
-          bcSeq { readJoins() }
-        },
-        readWhere(),
-        bcSeq { readGroupBy() },
-        readHaving(),
-        bcSeq { readOrderBy() },
-        readLimit(),
-        readOffset(),
-        readSearch()
-      )
+      val ig = readIsGrouped()
+      val d = readDistinct()
+      val s = readSelection()
+      val j = {
+        fromOptTrigger; // trigger eval, read "from" string if v4
+        readJoins()
+      }
+      val w = readWhere()
+      val gb = bcSeq { readGroupBy() }
+      val h = readHaving()
+      val ob = bcSeq { readOrderBy() }
+      val l = readLimit()
+      val o = readOffset()
+      val search = readSearch()
+
+      val ana = SoQLAnalysis(ig, d, s, j, w, gb, h, ob, l, o, search)
 
       (ana, fromOptTrigger)
+    }
+
+    def readAnalysis(): SoQLAnalysis[C, T] = {
+      readAnaAndFrom()._1
     }
 
     def read(): NonEmptySeq[SoQLAnalysis[C, T]] = {
@@ -276,10 +285,10 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
   def apply(in: InputStream): NonEmptySeq[SoQLAnalysis[C, T]] = {
     val cis = CodedInputStream.newInstance(in)
     cis.readInt32() match {
-      case 0 =>
+      case v if v == 0 || v == -1 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
-        val deserializer = new Deserializer(cis, dictionary, 0)
-        NonEmptySeq(deserializer.readAnalysis(), Seq.empty)
+          val deserializer = new Deserializer(cis, dictionary, v)
+          NonEmptySeq(deserializer.readAnalysis(), Seq.empty)
       case v if v >= 3 && v <= 4 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)

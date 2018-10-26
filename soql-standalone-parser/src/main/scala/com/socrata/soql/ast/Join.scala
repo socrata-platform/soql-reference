@@ -33,7 +33,7 @@ object JoinType {
       case LeftOuterJoinName => LeftOuterJoinType
       case RightOuterJoinName => RightOuterJoinType
       case FullOuterJoinName => FullOuterJoinType
-      case x => throw new IllegalArgumentException(s"invalid join type $x")
+      case x => throw new IllegalArgumentException(s"invalid join type: $x")
     }
   }
 }

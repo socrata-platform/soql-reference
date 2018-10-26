@@ -22,7 +22,7 @@ object TableName {
   val PrefixIndex = 1
 
   def removePrefix(s: String): String = s.substring(PrefixIndex)
-  def addAtPrefix(s: String): String = s"$Prefix$s"
+  def withAtPrefix(s: String): String = s"$Prefix$s"
   def withSodaFountainPrefix(s: String): String = s"$SodaFountainPrefix$s"
-  def replacePrefixWithAt(s: String): String = addAtPrefix(removePrefix(s))
+  def replacePrefixWithAt(s: String): String = withAtPrefix(removePrefix(s))
 }
