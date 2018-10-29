@@ -42,6 +42,9 @@ case class NonEmptySeq[+T](head: T, tail: Seq[T] = Seq.empty) {
     val newHead = headF(head)
     NonEmptySeq(newHead, tail.scanLeft(newHead)(tailF).tail)
   }
+  /** A foldLeft where, instead of specifying the initial value directly, the initial value is a transform
+    * (given by `headF`) of `head` in this NES. If you want to do a regular foldLeft, use .seq.foldLeft
+    */
   def foldLeft1[U](headF: T => U)(tailF: (U, T) => U): U = {
     val newHead = headF(head)
     tail.foldLeft(newHead)(tailF)
