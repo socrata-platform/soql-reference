@@ -18,7 +18,6 @@ sealed abstract class ValueToken[T] extends Token {
 }
 
 // Keywords
-// TODO: why are all of these case classes w/ 0 params instead of case objects?....
 case class SELECT() extends Token
 case class DISTINCT() extends Token
 case class EXCEPT() extends Token
