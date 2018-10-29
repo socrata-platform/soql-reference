@@ -34,7 +34,6 @@ object AnalysisDeserializer {
   val TestVersionV5 = -1
 }
 
-// TODO: deserializing older versions after this version has rolled out - is this a problem?
 class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializer: String => T, functionMap: String => Function[T]) extends (InputStream => NonEmptySeq[SoQLAnalysis[C, T]]) {
   import AnalysisDeserializer._
 
