@@ -26,14 +26,20 @@ private trait DeserializationDictionary[C, T] {
   def strings(i: Int): String
 }
 
+object AnalysisDeserializer {
+  val CurrentVersion = 5
+
+  // This is odd and for smooth deploy transition.
+  val TestVersionV4 = 0
+  val TestVersionV5 = -1
+}
+
 // TODO: deserializing older versions after this version has rolled out - is this a problem?
 class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializer: String => T, functionMap: String => Function[T]) extends (InputStream => NonEmptySeq[SoQLAnalysis[C, T]]) {
+  import AnalysisDeserializer._
+
   type Expr = CoreExpr[C, T]
   type Order = OrderBy[C, T]
-
-  // This is odd and for smooth deploy transition.  0 is used by test.
-  private val TestVersionV4 = 0
-  private val TestVersionV5 = -1
 
   private class DeserializationDictionaryImpl(typesRegistry: TIntObjectHashMap[T],
                                       stringsRegistry: TIntObjectHashMap[String],
@@ -186,15 +192,18 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     }
 
     // TODO: remove after release of 2.10.6 or higher (for 2.10.5- backwards-compatibility)
-    def v4JoinToV5Join(from: String, tableLike: Seq[SoQLAnalysis[C, T]], alias: Option[String]): JoinAnalysis[C, T] = {
+    def v4JoinToV5Join(from: String, tableLike: Seq[SoQLAnalysis[C, T]], aliasOpt: Option[String]): JoinAnalysis[C, T] = {
       val subAnaOpt = if (tableLike.size == 1 && tableLike.head.selection.keys.isEmpty) {
         None
       } else {
-        val nes = NonEmptySeq.fromSeq(tableLike)
-        nes.map(n => SubAnalysis(n, alias.get)) // alias must be present in order for
+        val subAnalyses = NonEmptySeq.fromSeq(tableLike)
+        val alias = aliasOpt.getOrElse {
+          throw new RuntimeException(s"alias must be present in a sub-select (join, from: $from)")
+        }
+        subAnalyses.map(SubAnalysis(_, alias))
       }
 
-      val tableNameAlias = if (subAnaOpt.isEmpty) alias else None
+      val tableNameAlias = if (subAnaOpt.isEmpty) aliasOpt else None
 
       JoinAnalysis(TableName(from, tableNameAlias), subAnaOpt)
     }
@@ -203,7 +212,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
     def readHaving(): Option[Expr] = readWhere()
 
-    // backwards compatible sequence reading (used to be Option[Seq[T]] everywhere)
+    // backwards compatible (v4) sequence reading (used to be Option[Seq[T]] (v4) instead of Seq[T] (v5))
     def bcSeq[T](f: => Seq[T]): Seq[T] = {
       if (isV4) {
         maybeRead(f).toSeq.flatten
@@ -285,15 +294,15 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
   def apply(in: InputStream): NonEmptySeq[SoQLAnalysis[C, T]] = {
     val cis = CodedInputStream.newInstance(in)
     cis.readInt32() match {
-      case v if v == 0 || v == -1 =>
+      case v if v == TestVersionV4 || v == TestVersionV5 => // single select
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
-          val deserializer = new Deserializer(cis, dictionary, v)
-          NonEmptySeq(deserializer.readAnalysis(), Seq.empty)
+        val deserializer = new Deserializer(cis, dictionary, v)
+        NonEmptySeq(deserializer.readAnalysis(), Seq.empty)
       case v if v >= 3 && v <= 4 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
         deserializer.read()
-      case v@5 =>
+      case v@CurrentVersion =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
         deserializer.read()
