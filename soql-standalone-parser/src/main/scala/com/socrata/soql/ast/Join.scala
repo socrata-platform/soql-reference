@@ -33,7 +33,7 @@ object JoinType {
       case LeftOuterJoinName => LeftOuterJoinType
       case RightOuterJoinName => RightOuterJoinType
       case FullOuterJoinName => FullOuterJoinType
-      case x => throw new IllegalArgumentException(s"invalid join type $x")
+      case x => throw new IllegalArgumentException(s"invalid join type: $x")
     }
   }
 }
@@ -43,12 +43,32 @@ sealed trait Join {
   val on: Expression
   val typ: JoinType
 
-  def isSimple = SimpleSelect.isSimple(from.selects)
+  // joins are simple if there is no subAnalysis, e.g. "join @aaaa-aaaa[ as a]"
+  def isSimple = from.subSelect.isEmpty
 
   override def toString: String = {
     s"$typ $from ON $on"
   }
+}
 
+object Join {
+  def expandJoins(selects: Seq[Select]): Seq[Join] = {
+    def expandJoin(join: Join): Seq[Join] = {
+      if (join.isSimple) Seq(join)
+      else expandJoins(join.from.selects) :+ join
+    }
+
+    selects.flatMap(_.joins.flatMap(expandJoin))
+  }
+
+  def apply(joinType: JoinType, from: JoinSelect, on: Expression): Join = {
+    joinType match {
+      case InnerJoinType => InnerJoin(from, on)
+      case LeftOuterJoinType => LeftOuterJoin(from, on)
+      case RightOuterJoinType => RightOuterJoin(from, on)
+      case FullOuterJoinType => FullOuterJoin(from, on)
+    }
+  }
 }
 
 case class InnerJoin(from: JoinSelect, on: Expression) extends Join {
@@ -68,12 +88,17 @@ case class FullOuterJoin(from: JoinSelect, on: Expression) extends Join {
 }
 
 object OuterJoin {
+  val dirToJoinType: Map[Token, JoinType] = Map(
+    LEFT() -> LeftOuterJoinType,
+    RIGHT() -> RightOuterJoinType,
+    FULL() -> FullOuterJoinType
+  )
+
   def apply(direction: Token, from: JoinSelect, on: Expression): Join = {
-    direction match {
-      case _: LEFT => LeftOuterJoin(from, on)
-      case _: RIGHT => RightOuterJoin(from, on)
-      case _: FULL => FullOuterJoin(from, on)
-      case t: Token => throw new IllegalArgumentException(s"invalid outer join token ${t.printable}")
+    dirToJoinType.get(direction).map { joinType =>
+      Join(joinType, from, on)
+    }.getOrElse {
+      throw new IllegalArgumentException(s"invalid outer join token ${direction.printable}")
     }
   }
 }

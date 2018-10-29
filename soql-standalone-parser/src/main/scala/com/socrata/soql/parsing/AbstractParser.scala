@@ -31,13 +31,13 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def orderings(soql: String): List[OrderBy] = parseFull(orderingList, soql)
   def groupBys(soql: String): List[Expression] = parseFull(groupByList, soql)
 
-  // produces a List[Select] with one Select per chained soql statement (chained with "|>").
+  // produces a NonEmptySeq[Select] with one Select per chained soql statement (chained with "|>").
   // the chained soql:
   //  "select id, a |> select a"
   // is equivalent to:
   //  "select a from (select id, a <from current view>) as alias"
   // and is represented as:
-  //  List(select_id_a, select_id)
+  //  NonEmptySeq(select_id_a, Seq(select_id))
   def selectStatement(soql: String): NonEmptySeq[Select] = parseFull(pipedSelect, soql)
   def unchainedSelectStatement(soql: String): Select = parseFull(select, soql) // a select statement without pipes or subselects
   def parseJoinSelect(soql: String): JoinSelect = parseFull(joinSelect, soql)
@@ -128,7 +128,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
 
   val tableIdentifier: Parser[(String, Position)] =
     accept[tokens.TableIdentifier] ^^ { t =>
-      (TableName.SodaFountainTableNamePrefix + t.value.substring(1) /* remove prefix @ */, t.position)
+      (TableName.SodaFountainPrefix + t.value.substring(1) /* remove prefix @ */, t.position)
     } | failure(errors.missingUserIdentifier)
 
   val simpleUserIdentifier: Parser[(String, Position)] =

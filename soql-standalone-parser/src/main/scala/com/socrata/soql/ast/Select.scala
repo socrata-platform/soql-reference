@@ -32,18 +32,22 @@ case class JoinSelect(fromTable: TableName, subSelect: Option[SubSelect]) {
     val (subSelectStr, aliasStrOpt) = subSelect.map {
       case SubSelect(NonEmptySeq(h, tail), subAlias) =>
         val selectWithFromStr = h.toStringWithFrom(fromTable)
-        val selectStr = (selectWithFromStr +: tail.map(_.toString)).mkString("|>")
+        val selectStr = (selectWithFromStr +: tail.map(_.toString)).mkString(" |> ")
         (s"($selectStr)", Some(subAlias))
     }.getOrElse((fromTable.toString, None))
 
-    List(Some(subSelectStr), itrToString("AS", aliasStrOpt)).flatString
+    List(Some(subSelectStr), itrToString("AS", aliasStrOpt.map(TableName.removePrefix))).flatString
   }
 }
 
 object Select {
-  def itrToString[A](prefix: String, l: Iterable[A], sep: String = " "): Option[String] = {
+  def itrToString(prefix: String, l: Iterable[_], sep: String = " "): Option[String] = {
+    itrToString(Some(prefix), l, sep)
+  }
+
+  def itrToString(prefix: Option[String], l: Iterable[_], sep: String): Option[String] = {
     if (l.nonEmpty) {
-      Some(l.mkString(prefix, sep, ""))
+      Some(l.mkString(prefix.map(p => s"$p ").getOrElse(""), sep, ""))
     } else {
       None
     }
@@ -83,12 +87,12 @@ case class Select(
     if(AST.pretty) {
       val distinctStr = if (distinct) "DISTINCT " else ""
       val selectStr = Some(s"SELECT $distinctStr$selection")
-      val fromStr = from.map(_.toString)
-      val joinsStr = itrToString("", joins.map(_.toString))
+      val fromStr = from.map(t => s"FROM $t")
+      val joinsStr = itrToString(None, joins.map(_.toString), " ")
       val whereStr = itrToString("WHERE", where)
-      val groupByStr = itrToString("GROUP BY", groupBys)
+      val groupByStr = itrToString("GROUP BY", groupBys, ", ")
       val havingStr = itrToString("HAVING", having)
-      val obStr = itrToString("ORDER BY", orderBys, ",")
+      val obStr = itrToString("ORDER BY", orderBys, ", ")
       val limitStr = itrToString("LIMIT", limit)
       val offsetStr = itrToString("OFFSET", offset)
       val searchStr = itrToString("SEARCH", search.map(Expression.escapeString))
@@ -117,7 +121,7 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[
       def star(s: StarSelection, token: String) = {
         val sb = new StringBuilder()
         s.qualifier.foreach { x =>
-          sb.append(x.replaceFirst(TableName.SodaFountainTableNamePrefix, TableName.Prefix))
+          sb.append(x.replaceFirst(TableName.SodaFountainPrefix, TableName.Prefix))
           sb.append(TableName.Field)
         }
         sb.append(token)

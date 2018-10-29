@@ -453,11 +453,11 @@ case class JoinAnalysis[ColumnId, Type](fromTable: TableName, subAnalysis: Optio
   override def toString: String = {
     val (subAnasStr, aliasStrOpt) = subAnalysis.map { case SubAnalysis(NonEmptySeq(h, tail), subAlias) =>
       val selectWithFromStr = h.toStringWithFrom(fromTable)
-      val selectStr = (selectWithFromStr +: tail.map(_.toString)).mkString("|>")
+      val selectStr = (selectWithFromStr +: tail.map(_.toString)).mkString(" |> ")
       (s"($selectStr)", Some(subAlias))
     }.getOrElse((fromTable.toString, None))
 
-    List(Some(subAnasStr), itrToString("AS", aliasStrOpt)).flatString
+    List(Some(subAnasStr), itrToString("AS", aliasStrOpt.map(TableName.removePrefix))).flatString
   }
 }
 
@@ -532,12 +532,12 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
   private def toString(from: Option[TableName]): String = {
     val distinctStr = if (distinct) "DISTINCT " else ""
     val selectStr = Some(s"SELECT $distinctStr$selection")
-    val fromStr = from.map(_.toString)
-    val joinsStr = itrToString("", joins.map(_.toString))
+    val fromStr = from.map(t => s"FROM $t")
+    val joinsStr = itrToString(None, joins.map(_.toString), " ")
     val whereStr = itrToString("WHERE", where)
-    val groupByStr = itrToString("GROUP BY", groupBys)
+    val groupByStr = itrToString("GROUP BY", groupBys, ", ")
     val havingStr = itrToString("HAVING", having)
-    val obStr = itrToString("ORDER BY", orderBys, ",")
+    val obStr = itrToString("ORDER BY", orderBys, ", ")
     val limitStr = itrToString("LIMIT", limit)
     val offsetStr = itrToString("OFFSET", offset)
     val searchStr = itrToString("SEARCH", search.map(Expression.escapeString))
@@ -561,13 +561,11 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   type Expr = typed.CoreExpr[ColumnName, T]
 
   def merge(stages: NonEmptySeq[Analysis]): NonEmptySeq[Analysis] = {
-    stages.mapHeadTail { case (head, tail) =>
-      tail.foldLeft(Seq(head)) { (acc, nextStage) =>
-        tryMerge(acc.head /* acc cannot be empty */ , nextStage) match {
-          case Some(merged) => merged +: acc.tail
-          case None => nextStage +: acc
-        }
-      }.reverse
+    stages.foldLeft1(NonEmptySeq(_)) { case (acc, nextStage) =>
+      tryMerge(acc.head , nextStage) match {
+        case Some(merged) => acc.copy(head = merged)
+        case None => acc + nextStage
+      }
     }
   }
 
