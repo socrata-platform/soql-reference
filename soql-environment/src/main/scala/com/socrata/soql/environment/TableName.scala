@@ -2,7 +2,7 @@ package com.socrata.soql.environment
 
 case class TableName(name: String, alias: Option[String] = None) {
   override def toString(): String = {
-    aliasWithoutPrefix.foldLeft(nameWithoutPrefix)((n, a) => s"$n AS $a")
+    aliasWithoutPrefix.foldLeft(TableName.withSoqlPrefix(name))((n, a) => s"$n AS $a")
   }
 
   def qualifier: String = alias.getOrElse(name)
