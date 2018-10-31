@@ -1,5 +1,6 @@
 package com.socrata.soql
 
+import com.socrata.soql.ast.Select
 import com.socrata.soql.exceptions.SoQLException
 import com.socrata.soql.types._
 import environment.{ColumnName, DatasetContext, TableName}
@@ -52,23 +53,17 @@ object SoqlToy extends (Array[String] => Unit) {
           val analyses = analyzer.analyzeFullQuery(selection)
 
           println("Outputs:")
-          analyses.foreach { analysis =>
+          analyses.seq.foreach { analysis =>
             Util.printList(analysis.selection)
             analysis.where.foreach { w =>
               println("where:\n  " + w)
             }
-            analysis.groupBy.foreach { gbs =>
-              println("group bys:")
-              for (gb <- gbs) {
-                println("  " + gb)
-              }
-            }
-            analysis.having.foreach { h =>
-              println("having:\n  " + h)
-            }
-            analysis.orderBy.map { obs =>
+            println(Select.itrToString("group bys:\n", analysis.groupBys))
+            println(Select.itrToString("having:\n", analysis.having))
+            val obs = analysis.orderBys
+            if (obs.nonEmpty) {
               println("order bys:")
-              for (ob <- obs) {
+              obs.map { ob =>
                 println("  " + ob.expression + " (" + (if (ob.ascending) "ascending" else "descending") + ", nulls " + (if (ob.nullLast) "last" else "first") + ")")
               }
             }

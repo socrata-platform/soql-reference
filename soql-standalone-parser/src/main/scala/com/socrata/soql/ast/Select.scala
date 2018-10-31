@@ -1,31 +1,112 @@
 package com.socrata.soql.ast
 
 import scala.util.parsing.input.{NoPosition, Position}
-import com.socrata.soql.environment.{ColumnName, HoleName, TableName}
+import com.socrata.soql.environment._
+import Select._
+import com.socrata.NonEmptySeq
 
-case class Select(distinct: Boolean, selection: Selection, from: Option[TableName], join: Option[List[Join]], where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[HoleInt], offset: Option[HoleInt], search: Option[String]) {
-  override def toString = {
+/**
+  * A SubSelect represents (potentially chained) soql that is required to have an alias
+  * (because subqueries need aliases)
+  */
+case class SubSelect(selects: NonEmptySeq[Select], alias: String)
+
+/**
+  * All joins must select from another table. A join may also join on sub-select. A join on a sub-select requires an
+  * alias, but the alias is optional if the join is on a table-name only (e.g. "join 4x4").
+  *
+  *   "join 4x4" => JoinSelect(TableName(4x4, None), None) { aliasOpt = None }
+  *   "join 4x4 as a" => JoinSelect(TableName(4x4, a), None) { aliasOpt = a }
+  *   "join (select id from 4x4) as a" =>
+  *     JoinSelect(TableName(4x4, None), Some(SubSelect(List(_select_id_), a))) { aliasOpt = a }
+  *   "join (select c.id from 4x4 as c) as a" =>
+  *     JoinSelect(TableName(4x4, Some(c)), Some(SubSelect(List(_select_id_), a))) { aliasOpt = a }
+  */
+case class JoinSelect(fromTable: TableName, subSelect: Option[SubSelect]) {
+  // The overall alias for the join select, which is the alias for the subSelect, if defined.
+  // Otherwise, it is the alias for the TableName, if defined.
+  val alias: Option[String] =  subSelect.map(_.alias).orElse(fromTable.alias)
+  def selects: Seq[Select] = subSelect.map(_.selects.seq).getOrElse(Seq.empty)
+
+  override def toString: String = {
+    val (subSelectStr, aliasStrOpt) = subSelect.map {
+      case SubSelect(NonEmptySeq(h, tail), subAlias) =>
+        val selectWithFromStr = h.toStringWithFrom(fromTable)
+        val selectStr = (selectWithFromStr +: tail.map(_.toString)).mkString(" |> ")
+        (s"($selectStr)", Some(subAlias))
+    }.getOrElse((fromTable.toString, None))
+
+    List(Some(subSelectStr), itrToString("AS", aliasStrOpt.map(TableName.removePrefix))).flatString
+  }
+}
+
+object Select {
+  def itrToString(prefix: String, l: Iterable[_], sep: String = " "): Option[String] = {
+    itrToString(Some(prefix), l, sep)
+  }
+
+  def itrToString(prefix: Option[String], l: Iterable[_], sep: String): Option[String] = {
+    if (l.nonEmpty) {
+      Some(l.mkString(prefix.map(p => s"$p ").getOrElse(""), sep, ""))
+    } else {
+      None
+    }
+  }
+
+  implicit class StringOptionList(l: List[Option[String]]) {
+    def flatString = l.flatten.mkString(" ")
+  }
+}
+
+/**
+  * Represents a single select statement, not including the from. Top-level selects have an implicit "from"
+  * based on the current view. Joins do require a "from" (which is a member of the JoinSelect class). A List[Select]
+  * represents chained soql (e.g. "select a, b |> select a"), and is what is returned from a top-level parse of a
+  * soql string (see Parser#selectStatement).
+  *
+  * the chained soql:
+  *   "select id, a |> select a"
+  * is equivalent to:
+  *   "select a from (select id, a [from current view]) as alias"
+  * and is represented as:
+  *   List(select_id_a, select_id)
+  */
+case class Select(
+  distinct: Boolean,
+  selection: Selection,
+  joins: Seq[Join],
+  where: Option[Expression],
+  groupBys: Seq[Expression],
+  having: Option[Expression],
+  orderBys: Seq[OrderBy],
+  limit: Option[HoleInt],
+  offset: Option[HoleInt],
+  search: Option[String]) {
+
+  private def toString(from: Option[TableName]): String = {
     if(AST.pretty) {
-      val sb = new StringBuilder("SELECT ")
-      if (distinct) sb.append("DISTINCT ")
-      sb.append(selection)
-      from.foreach(sb.append(" FROM ").append(_))
-      join.toList.flatten.foreach { j =>
-        sb.append(" ")
-        sb.append(j.toString)
-      }
-      where.foreach(sb.append(" WHERE ").append(_))
-      groupBy.foreach { gb => sb.append(gb.mkString(" GROUP BY ", ", ", "")) }
-      having.foreach(sb.append(" HAVING ").append(_))
-      orderBy.foreach { ob => sb.append(ob.mkString(" ORDER BY ", ", ", "")) }
-      limit.foreach(sb.append(" LIMIT ").append(_))
-      offset.foreach(sb.append(" OFFSET ").append(_))
-      search.foreach(s => sb.append(" SEARCH ").append(Expression.escapeString(s)))
-      sb.toString
+      val distinctStr = if (distinct) "DISTINCT " else ""
+      val selectStr = Some(s"SELECT $distinctStr$selection")
+      val fromStr = from.map(t => s"FROM $t")
+      val joinsStr = itrToString(None, joins.map(_.toString), " ")
+      val whereStr = itrToString("WHERE", where)
+      val groupByStr = itrToString("GROUP BY", groupBys, ", ")
+      val havingStr = itrToString("HAVING", having)
+      val obStr = itrToString("ORDER BY", orderBys, ", ")
+      val limitStr = itrToString("LIMIT", limit)
+      val offsetStr = itrToString("OFFSET", offset)
+      val searchStr = itrToString("SEARCH", search.map(Expression.escapeString))
+
+      val parts = List(selectStr, fromStr, joinsStr, whereStr, groupByStr, havingStr, obStr, limitStr, offsetStr, searchStr)
+      parts.flatString
     } else {
       AST.unpretty(this)
     }
   }
+
+  def toStringWithFrom(fromTable: TableName): String = toString(Some(fromTable))
+
+  override def toString: String = toString(None)
 }
 
 sealed abstract class HoleInt
@@ -48,13 +129,19 @@ case class HoleIntInt(int: BigInt) extends HoleInt {
   }
 }
 
+// represents the columns being selected. examples:
+// "first_name, last_name as last"
+// "*"
+// "*(except id)"
+// ":*"      <-- all columns including system columns (date_created, etc.)
+// "sum(count) as s"
 case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[StarSelection], expressions: Seq[SelectedExpression]) {
   override def toString = {
     if(AST.pretty) {
       def star(s: StarSelection, token: String) = {
         val sb = new StringBuilder()
         s.qualifier.foreach { x =>
-          sb.append(x.replaceFirst(TableName.SodaFountainTableNamePrefix, TableName.Prefix))
+          sb.append(x.replaceFirst(TableName.SodaFountainPrefix, TableName.Prefix))
           sb.append(TableName.Field)
         }
         sb.append(token)
@@ -68,6 +155,8 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[
       AST.unpretty(this)
     }
   }
+
+  def isSimple = allSystemExcept.isEmpty && allUserExcept.isEmpty && expressions.isEmpty
 }
 
 case class StarSelection(qualifier: Option[String], exceptions: Seq[(ColumnName, Position)]) {
@@ -100,32 +189,10 @@ case class OrderBy(expression: Expression, ascending: Boolean, nullLast: Boolean
 }
 
 object SimpleSelect {
-  def apply(resource: String): Select = {
-    Select(distinct = false,
-           selection = Selection(None, Seq.empty, Seq.empty),
-           from = Some(TableName(resource)),
-           join = None,
-           where = None,
-           groupBy = None,
-           having = None,
-           orderBy = None,
-           limit = None,
-           offset = None,
-           search = None)
-  }
-
   /**
     * Simple Select is a select created by a join where a sub-query is not used like "JOIN @aaaa-aaaa"
     */
-  def isSimple(select: Select): Boolean = {
-    val s = select.selection
-    select.from.isDefined && s.allSystemExcept.isEmpty && s.allUserExcept.isEmpty && s.expressions.isEmpty
-  }
-
   def isSimple(selects: Seq[Select]): Boolean = {
-    selects match {
-      case Seq(s) => isSimple(s)
-      case _ => false
-    }
+    selects.forall(_.selection.isSimple)
   }
 }

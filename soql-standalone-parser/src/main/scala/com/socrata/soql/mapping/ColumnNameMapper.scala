@@ -1,9 +1,10 @@
 package com.socrata.soql.mapping
 
+import com.socrata.NonEmptySeq
 import com.socrata.soql.ast._
 import com.socrata.soql.environment.ColumnName
 
-import scala.util.parsing.input.{Position, NoPosition}
+import scala.util.parsing.input.{NoPosition, Position}
 
 /**
  * Maps column names in the given AST.  Position information is not updated
@@ -14,40 +15,38 @@ import scala.util.parsing.input.{Position, NoPosition}
  */
 class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
 
-  def mapSelect(ss: Seq[Select]): Seq[Select] = {
-    if(ss.nonEmpty) {
-      // this only needs to apply to the first query in the chain; subsequent elements
-      // take their names from the output of the first query.
-      val s = ss.head
-      ss.updated(0, Select(
-        distinct = s.distinct,
-        selection = mapSelection(s.selection),
-        from = s.from,
-        join = s.join.map(_ map mapJoin),
-        where = s.where map mapExpression,
-        groupBy = s.groupBy.map(_ map mapExpression),
-        having = s.having map mapExpression,
-        orderBy = s.orderBy.map(_ map mapOrderBy),
-        limit = s.limit,
-        offset = s.offset,
-        search = s.search))
-    } else {
-      ss
-    }
+  def mapSelect(selects: NonEmptySeq[Select]): NonEmptySeq[Select] = {
+    val h = selects.head
+    val mappedHead = Select(
+      distinct = h.distinct,
+      selection = mapSelection(h.selection),
+      joins = h.joins.map(mapJoin),
+      where = h.where map mapExpression,
+      groupBys = h.groupBys.map(mapExpression),
+      having = h.having map mapExpression,
+      orderBys = h.orderBys.map(mapOrderBy),
+      limit = h.limit,
+      offset = h.offset,
+      search = h.search
+    )
+    NonEmptySeq(mappedHead, selects.tail)
   }
 
   def mapJoin(join: Join): Join =  {
-    val mappedTableLike = mapSelect(join.tableLike)
-    val mappedExpr = mapExpression(join.expr)
+    val mappedSubSelect = join.from.subSelect.map { ss =>
+      ss.copy(selects = mapSelect(ss.selects))
+    }
+    val mappedFrom = join.from.copy(subSelect = mappedSubSelect)
+    val mappedOn = mapExpression(join.on)
     join match {
       case j: InnerJoin =>
-        InnerJoin(mappedTableLike, j.alias, mappedExpr)
+        InnerJoin(mappedFrom, mappedOn)
       case j: LeftOuterJoin =>
-        j.copy(tableLike = mappedTableLike, expr = mappedExpr)
+        j.copy(from = mappedFrom, on = mappedOn)
       case j: RightOuterJoin =>
-        j.copy(tableLike = mappedTableLike, expr = mappedExpr)
+        j.copy(from = mappedFrom, on = mappedOn)
       case j: FullOuterJoin =>
-        j.copy(tableLike = mappedTableLike, expr = mappedExpr)
+        j.copy(from = mappedFrom, on = mappedOn)
     }
   }
 

@@ -1,64 +1,70 @@
 package com.socrata.soql.typed
 
-import com.socrata.soql.{SimpleSoQLAnalysis, SoQLAnalysis}
+import com.socrata.NonEmptySeq
+import com.socrata.soql._
 import com.socrata.soql.ast._
-import com.socrata.soql.environment.TableName
-
 
 sealed trait Join[ColumnId, Type] {
-  val tableLike: Seq[SoQLAnalysis[ColumnId, Type]]
-  val alias: Option[String]
-  val expr: CoreExpr[ColumnId, Type]
+  val from: JoinAnalysis[ColumnId, Type]
+  val on: CoreExpr[ColumnId, Type]
   val typ: JoinType
 
-  override def toString: String = {
-    val sb = new StringBuilder
-    sb.append(typ.toString)
-    sb.append(" ")
-    SimpleSoQLAnalysis.asSoQL(tableLike) match {
-      case Some(x) =>
-        sb.append(x.replaceFirst(TableName.SodaFountainTableNamePrefix, TableName.Prefix))
-      case None =>
-        sb.append("(")
-        sb.append(tableLike.map(_.toString).mkString(" |> "))
-        sb.append(")")
+  def useTableQualifier[ColumnId](id: ColumnId, qual: Qualifier) = (id, qual.orElse(Some(from.fromTable.name)))
+
+  def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): Join[NewColumnId, Type] = {
+    def fWithTable(id: ColumnId, qual: Qualifier) = f(id, qual.orElse(Some(from.fromTable.name)))
+
+    val mappedSub = from.subAnalysis.map {
+      case SubAnalysis(NonEmptySeq(head, tail), alias) =>
+        val newAnas = NonEmptySeq(head.mapColumnIds(fWithTable), tail.map(_.mapColumnIds(f)))
+        SubAnalysis(newAnas, alias)
     }
 
-    alias.foreach { x =>
-      sb.append(" AS ")
-      sb.append(x.substring(TableName.SodaFountainTableNamePrefixSubStringIndex))
-    }
-
-    sb.append(" ON ")
-    sb.append(expr.toString)
-    sb.toString
+    typed.Join(typ, JoinAnalysis(from.fromTable, mappedSub), on.mapColumnIds(f))
   }
+
+  override def toString: String = {
+    s"$typ $from ON $on"
+  }
+
+  // joins are simple if there is no subAnalysis, e.g. "join @aaaa-aaaa[ as a]"
+  def isSimple: Boolean = from.subAnalysis.isEmpty
+
 }
 
-case class InnerJoin[ColumnId, Type](tableLike: Seq[SoQLAnalysis[ColumnId, Type]], alias: Option[String], expr: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
+case class InnerJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
   val typ: JoinType = InnerJoinType
 }
 
-case class LeftOuterJoin[ColumnId, Type](tableLike: Seq[SoQLAnalysis[ColumnId, Type]], alias: Option[String], expr: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
+case class LeftOuterJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
   val typ: JoinType = LeftOuterJoinType
 }
 
-case class RightOuterJoin[ColumnId, Type](tableLike: Seq[SoQLAnalysis[ColumnId, Type]], alias: Option[String], expr: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
+case class RightOuterJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
   val typ: JoinType = RightOuterJoinType
 }
 
-case class FullOuterJoin[ColumnId, Type](tableLike: Seq[SoQLAnalysis[ColumnId, Type]], alias: Option[String], expr: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
+case class FullOuterJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
   val typ: JoinType = FullOuterJoinType
 }
 
 object Join {
 
-  def apply[ColumnId, Type](joinType: JoinType, tableLike: Seq[SoQLAnalysis[ColumnId, Type]], alias: Option[String], expr: CoreExpr[ColumnId, Type]): Join[ColumnId, Type] = {
+  def apply[ColumnId, Type](joinType: JoinType, from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]): Join[ColumnId, Type] = {
     joinType match {
-      case InnerJoinType => InnerJoin(tableLike, alias, expr)
-      case LeftOuterJoinType => LeftOuterJoin(tableLike, alias, expr)
-      case RightOuterJoinType => RightOuterJoin(tableLike, alias, expr)
-      case FullOuterJoinType => FullOuterJoin(tableLike, alias, expr)
+      case InnerJoinType => typed.InnerJoin(from, on)
+      case LeftOuterJoinType => typed.LeftOuterJoin(from, on)
+      case RightOuterJoinType => typed.RightOuterJoin(from, on)
+      case FullOuterJoinType => typed.FullOuterJoin(from, on)
     }
+  }
+
+  def expandJoins[ColumnId, Type](analyses: Seq[SoQLAnalysis[ColumnId, Type]]): Seq[typed.Join[ColumnId, Type]] = {
+    def expandJoin(join: typed.Join[ColumnId, Type]): Seq[typed.Join[ColumnId, Type]] = {
+      if (join.isSimple) Seq(join)
+      else expandJoins(join.from.analyses) :+ join
+    }
+
+    analyses.flatMap(_.joins.flatMap(expandJoin))
   }
 }

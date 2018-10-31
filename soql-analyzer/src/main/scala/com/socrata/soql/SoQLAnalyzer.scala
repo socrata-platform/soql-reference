@@ -12,11 +12,19 @@ import com.socrata.soql.typechecker._
 import com.socrata.soql.environment._
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.typed.Qualifier
+import Select._
+import com.socrata.NonEmptySeq
 
+/**
+  * The type-checking version of [[com.socrata.soql.parsing.AbstractParser]]. Turns string soql statements into
+  * Lists of Analysis objects (soql ast), while using type information about the tables to typecheck all
+  * expressions.
+  */
 class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                          functionInfo: FunctionInfo[Type],
                          parserParameters: AbstractParser.Parameters = AbstractParser.defaultParameters)
 {
+  /** The typed version of [[com.socrata.soql.ast.Select]] */
   type Analysis = SoQLAnalysis[ColumnName, Type]
   type Expr = typed.CoreExpr[ColumnName, Type]
   type Qualifier = String
@@ -30,10 +38,20 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
   /** Turn a SoQL SELECT statement into a sequence of typed `Analysis` objects.
     *
+    * A List is returned, with one [[SoQLAnalysis]] per chained soql element. This is the typed version of
+    * AbstractParser#selectStatement.
+    *
+    * the chained soql:
+    *   "select id, a |> select a"
+    * is equivalent to:
+    *   "select a from (select id, a [from current view]) as alias"
+    * and is represented as:
+    *   List(analysis_id_a, analysis_id)
+    *
     * @param query The SELECT to parse and analyze
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
     * @return The analysis of the query */
-  def analyzeFullQuery(query: String, holeValues: Map[HoleName, String] = Map.empty)(implicit ctx: AnalysisContext): Seq[Analysis] = {
+  def analyzeFullQuery(query: String, holeValues: Map[HoleName, String] = Map.empty)(implicit ctx: AnalysisContext): NonEmptySeq[Analysis] = {
     log.debug("Analyzing full query {}", query)
     val start = System.nanoTime()
     val parsed = new Parser(parserParameters).selectStatement(query)
@@ -42,14 +60,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     analyze(parsed, holeValues)
   }
 
-  def analyze(selects: Seq[Select], holeValues: Map[HoleName, String] = Map.empty)(implicit ctx: AnalysisContext): Seq[Analysis] = {
-    selects.headOption match {
-      case Some(firstSelect) =>
-        val firstAnalysis = analyzeWithSelection(firstSelect, holeValues)(ctx)
-        selects.tail.scanLeft(firstAnalysis)(analyzeInOuterSelectionContext(ctx, holeValues))
-      case None =>
-        Seq.empty
-    }
+  def analyze(selects: NonEmptySeq[Select], holeValues: Map[HoleName, String])(implicit ctx: AnalysisContext): NonEmptySeq[Analysis] = {
+    selects.scanLeft1(analyzeWithSelection(_, holeValues)(ctx))(analyzeInOuterSelectionContext(ctx, holeValues))
   }
 
   /** Turn a simple SoQL SELECT statement into an `Analysis` object.
@@ -78,12 +90,11 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     SoQLAnalysis(isGrouped = false,
                  distinct = false,
                  selection = mergedSelection,
-                 from = None,
-                 join = None,
+                 joins = Nil,
                  where = None,
-                 groupBy = None,
+                 groupBys = Nil,
                  having = None,
-                 orderBy = None,
+                 orderBys = Nil,
                  limit = None,
                  offset = None,
                  search = None)
@@ -97,11 +108,11 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     *
     * @param distinct   Reduce identical tuples into one.
     * @param selection  A selection list.
-    * @param join       A join list.
+    * @param joins       A join list.
     * @param where      An expression to be used as the query's WHERE clause.
-    * @param groupBy    A comma-separated list of expressions to be used as the query's GROUP BY cluase.
+    * @param groupBys    A comma-separated list of expressions to be used as the query's GROUP BY cluase.
     * @param having     An expression to be used as the query's HAVING clause.
-    * @param orderBy    A comma-separated list of expressions and sort-order specifiers to be uesd as the query's ORDER BY clause.
+    * @param orderBys    A comma-separated list of expressions and sort-order specifiers to be uesd as the query's ORDER BY clause.
     * @param limit      A non-negative integer to be used as the query's LIMIT parameter
     * @param offset     A non-negative integer to be used as the query's OFFSET parameter
     * @param sourceFrom The analysis-chain of the query this query is based upon, if applicable.
@@ -109,11 +120,11 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     * @return The analysis of the query.  Note this should be appended to `sourceFrom` to form a full query-chain. */
   def analyzeSplitQuery(distinct: Boolean,
                         selection: Option[String],
-                        join: Option[String],
+                        joins: Option[String],
                         where: Option[String],
-                        groupBy: Option[String],
+                        groupBys: Option[String],
                         having: Option[String],
-                        orderBy: Option[String],
+                        orderBys: Option[String],
                         limit: Option[String],
                         offset: Option[String],
                         search: Option[String],
@@ -127,21 +138,21 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       else sourceFrom.last
 
     def dispatch(distinct: Boolean, selection: Option[Selection],
-                 joins: Option[List[Join]],
-                 where: Option[Expression], groupBy: Option[Seq[Expression]], having: Option[Expression], orderBy: Option[Seq[OrderBy]], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) =
+                 joins: List[Join],
+                 where: Option[Expression], groupBys: List[Expression], having: Option[Expression], orderBys: List[OrderBy], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) =
       selection match {
-        case None => analyzeNoSelectionInOuterSelectionContext(lastQuery, distinct, joins, where, groupBy, having, orderBy, limit, offset, search)
-        case Some(s) => analyzeInOuterSelectionContext(ctx)(lastQuery, Select(distinct, s, None, joins, where, groupBy, having, orderBy, limit.map(HoleIntInt), offset.map(HoleIntInt), search))
+        case None => analyzeNoSelectionInOuterSelectionContext(lastQuery, distinct, joins, where, groupBys, having, orderBys, limit, offset, search)
+        case Some(s) => analyzeInOuterSelectionContext(ctx)(lastQuery, Select(distinct, s, joins, where, groupBys, having, orderBys, limit.map(HoleIntInt), offset.map(HoleIntInt), search))
       }
 
     dispatch(
       distinct,
       selection.map(p.selection),
-      join.map(p.joins),
+      joins.map(p.joins).toList.flatten,
       where.map(p.expression),
-      groupBy.map(p.groupBys),
+      groupBys.map(p.groupBys).toList.flatten,
       having.map(p.expression),
-      orderBy.map(p.orderings),
+      orderBys.map(p.orderings).toList.flatten,
       limit.map(p.limit),
       offset.map(p.offset),
       search.map(p.search)
@@ -150,62 +161,60 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
   def analyzeNoSelectionInOuterSelectionContext(lastQuery: Analysis,
                                                 distinct: Boolean,
-                                                joins: Option[List[Join]],
+                                                joins: List[Join],
                                                 where: Option[Expression],
-                                                groupBy: Option[Seq[Expression]],
+                                                groupBys: List[Expression],
                                                 having: Option[Expression],
-                                                orderBy: Option[Seq[OrderBy]],
+                                                orderBys: List[OrderBy],
                                                 limit: Option[BigInt],
                                                 offset: Option[BigInt],
                                                 search: Option[String]): Analysis = {
     implicit val fakeCtx = contextFromAnalysis(lastQuery)
-    analyzeNoSelection(distinct, joins, where, groupBy, having, orderBy, limit, offset, search)
+    analyzeNoSelection(distinct, joins, where, groupBys, having, orderBys, limit, offset, search)
   }
 
-  private def joinCtx(join: Option[List[Join]])(implicit ctx: AnalysisContext) = {
-    join.toSeq.flatten.filterNot(j => SimpleSelect.isSimple(j.tableLike)).map { j: Join =>
-      val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx +
-        (TableName.PrimaryTable.qualifier -> ctx(j.tableLike.head.from.get.name))
-      val analyses = analyze(j.tableLike)(joinCtx)
-      contextFromAnalysis(j.alias.getOrElse(
-        throw new BadParse("Sub-query join must use alias.  Hint: JOIN (SELECT ...) AS T1", j.expr.position)),
-        analyses.last)
+  private def joinCtx(joins: Seq[Join], holeValues: Map[HoleName, String])(implicit ctx: AnalysisContext) = {
+    joins.map(_.from).collect {
+      case JoinSelect(tableName, Some(SubSelect(selects, alias))) if !SimpleSelect.isSimple(selects.seq) =>
+        val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx +
+          (TableName.PrimaryTable.qualifier -> ctx(tableName.name))
+        val analyses = analyze(selects, holeValues)(joinCtx)
+        contextFromAnalysis(alias, analyses.last)
     }
   }
 
+  // TODO: do we need this? wat
   def analyzeNoSelection(distinct: Boolean,
-                         join: Option[List[Join]],
+                         joins: List[Join],
                          where: Option[Expression],
-                         groupBy: Option[Seq[Expression]],
+                         groupBys: List[Expression],
                          having: Option[Expression],
-                         orderBy: Option[Seq[OrderBy]],
+                         orderBys: List[OrderBy],
                          limit: Option[BigInt],
                          offset: Option[BigInt],
                          search: Option[String])(implicit ctx: AnalysisContext): Analysis = {
     log.debug("No selection; doing typechecking of the other parts then deciding what to make the selection")
 
-    val ctxFromJoins = joinCtx(join)
+    val ctxFromJoins = joinCtx(joins, Map.empty)
     val ctxWithJoins = ctx ++ ctxFromJoins
     // ok, so the only tricky thing here is the selection itself.  Since it isn't provided, there are two cases:
     //   1. If there are groupBys, having, or aggregates in orderBy, then selection should be the equivalent of
     //      selecting the group-by clauses together with "count(*)".
     //   2. Otherwise, it should be the equivalent of selecting "*".
     val typechecker = new Typechecker(typeInfo, functionInfo)(ctxWithJoins)
-    val subscriptConverter = new SubscriptConverter(typeInfo, functionInfo)
 
-    // Rewrite subscript before typecheck
-    val typecheck = subscriptConverter andThen (e => typechecker(e, Map.empty, Map.empty))
+    val typecheck = typechecker(_ : Expression, Map.empty, Map.empty)
 
     val t0 = System.nanoTime()
     val checkedWhere = where.map(typecheck)
     val t1 = System.nanoTime()
-    val checkedGroupBy = groupBy.map(_.map(typecheck))
+    val checkedGroupBy = groupBys.map(typecheck)
     val t2 = System.nanoTime()
     val checkedHaving = having.map(typecheck)
     val t3 = System.nanoTime()
-    val checkedOrderBy = orderBy.map { obs => obs.zip(obs.map { ob => typecheck(ob.expression) })}
+    val checkedOrderBy = orderBys.map { ob => ob -> typecheck(ob.expression) }
     val t4 = System.nanoTime()
-    val isGrouped = aggregateChecker(Nil, checkedWhere, checkedGroupBy, checkedHaving, checkedOrderBy.getOrElse(Nil).map(_._2))
+    val isGrouped = aggregateChecker(Nil, checkedWhere, checkedGroupBy, checkedHaving, checkedOrderBy.map(_._2))
     val t5 = System.nanoTime()
 
     if(log.isTraceEnabled) {
@@ -221,13 +230,13 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
       val beforeAliasAnalysis = System.nanoTime()
       val count_* = FunctionCall(SpecialFunctions.StarFunc("count"), Nil)(NoPosition, NoPosition)
-      val untypedSelectedExpressions = groupBy.getOrElse(Nil) :+ count_*
+      val untypedSelectedExpressions = groupBys :+ count_*
       val names = AliasAnalysis(Selection(None, Seq.empty, untypedSelectedExpressions.map(SelectedExpression(_, None)))).expressions.keys.toSeq
       val afterAliasAnalysis = System.nanoTime()
 
       log.trace("alias analysis took {}ms", ns2ms(afterAliasAnalysis - beforeAliasAnalysis))
 
-      val typedSelectedExpressions = checkedGroupBy.getOrElse(Nil) :+ typechecker(count_*, Map.empty, Map.empty)
+      val typedSelectedExpressions = checkedGroupBy :+ typechecker(count_*, Map.empty, Map.empty)
 
       (names, typedSelectedExpressions)
     } else { // ok, no group by...
@@ -246,20 +255,15 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       (names, typedSelectedExpressions)
     }
 
-    val checkedJoin = join.map {
-      _.map { j: Join =>
-        val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx +
-          (TableName.PrimaryTable.qualifier -> ctx(j.tableLike.head.from.get.name))
-        val analyses = analyze(j.tableLike)(joinCtx)
-        typed.Join(j.typ, analyses, j.alias, typecheck(j.expr))
-      }
+    val checkedJoin = joins.map { j: Join =>
+      val subAnalysisOpt = subAnalysis(j, Map.empty)(ctx)
+      typed.Join(j.typ, JoinAnalysis(j.from.fromTable, subAnalysisOpt), typecheck(j.on))
     }
 
     finishAnalysis(
       isGrouped,
       distinct,
       OrderedMap(names.zip(typedSelectedExpressions): _*),
-      None,
       checkedJoin,
       checkedWhere,
       checkedGroupBy,
@@ -290,48 +294,53 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     (qualifier -> ctx)
   }
 
-  def analyzeWithSelection(query: Select, holeValues: Map[HoleName, String] = Map.empty)(implicit ctx: AnalysisContext): Analysis = {
+  def subAnalysis(join: Join, holeValues: Map[HoleName, String])(ctx: AnalysisContext) = {
+    join.from.subSelect.map {
+      case SubSelect(selects, alias) =>
+        val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx +
+          (TableName.PrimaryTable.qualifier -> ctx(join.from.fromTable.name))
+        val analyses = analyze(selects, holeValues)(joinCtx)
+        SubAnalysis(analyses, alias)
+    }
+  }
+
+  def analyzeWithSelection(query: Select, holeValues: Map[HoleName, String])(implicit ctx: AnalysisContext): Analysis = {
     log.debug("There is a selection; typechecking all parts")
 
-    val ctxFromJoins = joinCtx(query.join)
+    val ctxFromJoins = joinCtx(query.joins, holeValues)
     val ctxWithJoins = ctx ++ ctxFromJoins
     val typechecker = new Typechecker(typeInfo, functionInfo)(ctxWithJoins)
-
-    val subscriptConverter = new SubscriptConverter(typeInfo, functionInfo)
 
     val t0 = System.nanoTime()
     val aliasAnalysis = AliasAnalysis(query.selection)
     val t1 = System.nanoTime()
     val typedAliases = aliasAnalysis.evaluationOrder.foldLeft(Map.empty[ColumnName, Expr]) { (acc, alias) =>
-      acc + (alias -> typechecker(subscriptConverter(aliasAnalysis.expressions(alias)), acc, holeValues))
+      acc + (alias -> typechecker(aliasAnalysis.expressions(alias), acc, holeValues))
     }
 
-    // Rewrite subscript before typecheck
-    val typecheck = subscriptConverter andThen (e => typechecker(e, typedAliases, holeValues))
+    val typecheck = typechecker(_ : Expression, typedAliases, holeValues)
 
-    val checkedJoin = query.join.map { js => js.map { j: Join =>
-      val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx +
-        (TableName.PrimaryTable.qualifier -> ctx(j.tableLike.head.from.get.name))
-      val analyses = analyze(j.tableLike)(joinCtx)
-      typed.Join(j.typ, analyses, j.alias, typecheck(j.expr))
-    }}
+    val checkedJoin = query.joins.map { j: Join =>
+      val subAnalysisOpt = subAnalysis(j, holeValues)(ctx)
+      typed.Join(j.typ, JoinAnalysis(j.from.fromTable, subAnalysisOpt), typecheck(j.on))
+    }
 
-    val outputs = OrderedMap(aliasAnalysis.expressions.keys.map { k => k -> typedAliases(k) }.toSeq : _*)
+    val outputs = OrderedMap(aliasAnalysis.expressions.keys.map { k => k -> typedAliases(k) }.toList : _*)
     val t2 = System.nanoTime()
     val checkedWhere = query.where.map(typecheck)
     val t3 = System.nanoTime()
-    val checkedGroupBy = query.groupBy.map(_.map(typecheck))
+    val checkedGroupBy = query.groupBys.map(typecheck)
     val t4 = System.nanoTime()
     val checkedHaving = query.having.map(typecheck)
     val t5 = System.nanoTime()
-    val checkedOrderBy = query.orderBy.map { obs => obs.zip(obs.map { ob => typecheck(ob.expression) })}
+    val checkedOrderBy = query.orderBys.map { ob => ob -> typecheck(ob.expression) }
     val t6 = System.nanoTime()
     val isGrouped = aggregateChecker(
-      outputs.values.toSeq,
+      outputs.values.toList,
       checkedWhere,
       checkedGroupBy,
       checkedHaving,
-      checkedOrderBy.getOrElse(Nil).map(_._2))
+      checkedOrderBy.map(_._2))
     val t7 = System.nanoTime()
 
     if(log.isTraceEnabled) {
@@ -345,7 +354,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     }
 
     finishAnalysis(isGrouped, query.distinct,
-                   outputs, query.from.map(_.name),
+                   outputs,
                    checkedJoin, checkedWhere, checkedGroupBy, checkedHaving, checkedOrderBy,
                    query.limit.flatMap(fillIntHole(_, holeValues)), query.offset.flatMap(fillIntHole(_, holeValues)), query.search)
   }
@@ -364,12 +373,11 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   def finishAnalysis(isGrouped: Boolean,
                      distinct: Boolean,
                      output: OrderedMap[ColumnName, Expr],
-                     from: Option[String],
-                     join: Option[List[typed.Join[ColumnName, Type]]],
+                     joins: Seq[typed.Join[ColumnName, Type]],
                      where: Option[Expr],
-                     groupBy: Option[Seq[Expr]],
+                     groupBys: Seq[Expr],
                      having: Option[Expr],
-                     orderBy: Option[Seq[(OrderBy, Expr)]],
+                     orderBys: Seq[(OrderBy, Expr)],
                      limit: Option[BigInt],
                      offset: Option[BigInt],
                      search: Option[String]): Analysis =
@@ -379,20 +387,19 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     }
 
     check(where, typeInfo.isBoolean, NonBooleanWhere)
-    check(groupBy.getOrElse(Nil), typeInfo.isGroupable, NonGroupableGroupBy)
+    check(groupBys, typeInfo.isGroupable, NonGroupableGroupBy)
     check(having, typeInfo.isBoolean, NonBooleanHaving)
-    check(orderBy.getOrElse(Nil).map(_._2), typeInfo.isOrdered, UnorderableOrderBy)
+    check(orderBys.map(_._2), typeInfo.isOrdered, UnorderableOrderBy)
 
     SoQLAnalysis(
       isGrouped,
       distinct,
       output,
-      from,
-      join,
+      joins,
       where,
-      groupBy,
+      groupBys,
       having,
-      orderBy.map { obs => obs.map { case (ob, e) => typed.OrderBy(e, ob.ascending, ob.nullLast) } },
+      orderBys.map { case (ob, e) => typed.OrderBy(e, ob.ascending, ob.nullLast) },
       limit,
       offset,
       search)
@@ -400,208 +407,242 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 }
 
 /**
-  * @param isGrouped true iff there is a group by or aggregation function applied.  Can be derived from the selection
+  * The typed version of [[com.socrata.soql.ast.SubSelect]]
+  *
+  * A SubAnalysis represents (potentially chained) soql that is required to have an alias
+  * (because subqueries need aliases)
+  */
+case class SubAnalysis[ColumnId, Type](analyses: NonEmptySeq[SoQLAnalysis[ColumnId, Type]], alias: String)
+
+/**
+  * The typed version of [[com.socrata.soql.ast.JoinSelect]]
+  *
+  * All joins must select from another table. A join may also join on sub-analysis. A join on a sub-analysis requires an
+  * alias, but the alias is optional if the join is on a table-name only (e.g. "join 4x4").
+  *
+  *   "join 4x4" => JoinAnalysis(TableName(4x4, None), None) { aliasOpt = None }
+  *   "join 4x4 as a" => JoinAnalysis(TableName(4x4, a), None) { aliasOpt = a }
+  *   "join (select id from 4x4) as a" =>
+  *     JoinAnalysis(TableName(4x4, None), Some(SubAnalysis(List(_select_id_), a))) { aliasOpt = a }
+  *   "join (select c.id from 4x4 as c) as a" =>
+  *     JoinAnalysis(TableName(4x4, Some(c)), Some(SubAnalysis(List(_select_id_), a))) { aliasOpt = a }
+  */
+case class JoinAnalysis[ColumnId, Type](fromTable: TableName, subAnalysis: Option[SubAnalysis[ColumnId, Type]]) {
+  val alias: Option[String] =  subAnalysis.map(_.alias).orElse(fromTable.alias)
+  def analyses: Seq[SoQLAnalysis[ColumnId, Type]] = subAnalysis.map(_.analyses.seq).getOrElse(Seq.empty)
+
+  def mapColumnIds[NewColumnId](qColumnIdNewColumnIdMap: Map[(ColumnId, Qualifier), NewColumnId],
+                                qColumnNameToQColumnId: (Qualifier, ColumnName) => (ColumnId, Qualifier),
+                                columnNameToNewColumnId: ColumnName => NewColumnId,
+                                columnIdToNewColumnId: ColumnId => NewColumnId): JoinAnalysis[NewColumnId, Type] = {
+    val firstJoinMap =
+      qColumnIdNewColumnIdMap.foldLeft(Map.empty[(ColumnId, Qualifier), NewColumnId]) { (acc, kv) =>
+        val ((cid, qual), ncid) = kv
+        if (qual.exists(_ == fromTable.name)) acc + ((cid, None) -> ncid)
+        else acc
+      }
+
+    def nextJoinMap(prevAna: SoQLAnalysis[NewColumnId, Type]) =
+      prevAna.selection.foldLeft(qColumnIdNewColumnIdMap) { (acc, selCol) =>
+        val (colName, expr) = selCol
+        acc + (qColumnNameToQColumnId(None, colName) -> columnNameToNewColumnId(colName))
+      }
+
+    def headF(a: SoQLAnalysis[ColumnId, Type]) =
+      a.mapColumnIds(firstJoinMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
+    def tailF(prevAna: SoQLAnalysis[NewColumnId, Type], a: SoQLAnalysis[ColumnId, Type]) =
+      a.mapColumnIds(nextJoinMap(prevAna), qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
+
+    val mappedSubAnalysis = subAnalysis.map { case SubAnalysis(analyses, subAlias) =>
+      val mappedAnas = analyses.scanLeft1(headF)(tailF)
+      SubAnalysis(mappedAnas, subAlias)
+    }
+
+    JoinAnalysis(fromTable, mappedSubAnalysis)
+  }
+
+  override def toString: String = {
+    val (subAnasStr, aliasStrOpt) = subAnalysis.map { case SubAnalysis(NonEmptySeq(h, tail), subAlias) =>
+      val selectWithFromStr = h.toStringWithFrom(fromTable)
+      val selectStr = (selectWithFromStr +: tail.map(_.toString)).mkString(" |> ")
+      (s"($selectStr)", Some(subAlias))
+    }.getOrElse((fromTable.toString, None))
+
+    List(Some(subAnasStr), itrToString("AS", aliasStrOpt.map(TableName.removePrefix))).flatString
+  }
+}
+
+/**
+  * The typed version of [[com.socrata.soql.ast.Select]]
+  *
+  * Represents a single select statement, not including the from. Top-level soql selects have an implicit "from"
+  * based on the current view. Joins do require a "from" (which is a member of the JoinAnalysis class).
+  * A List[SoQLAnalysis] represents chained soql (e.g. "select a, b |> select a"), and is what is returned from a
+  * top-level analysis of a soql string (see SoQLAnalyzer#analyzeFullQuery).
+  *
+  * the chained soql:
+  *   "select id, a |> select a"
+  * is equivalent to:
+  *   "select a from (select id, a [from current view]) as alias"
+  * and is represented as:
+  *   List(analysis_id_a, analysis_id)
+  *
+  * @param isGrouped true iff there is a group by or aggregation function applied. Can be derived from the selection
   *                  and the groupBy
   */
 case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                         distinct: Boolean,
                                         selection: OrderedMap[ColumnName, typed.CoreExpr[ColumnId, Type]],
-                                        from: Option[String],
-                                        join: Option[List[typed.Join[ColumnId, Type]]],
+                                        joins: Seq[typed.Join[ColumnId, Type]],
                                         where: Option[typed.CoreExpr[ColumnId, Type]],
-                                        groupBy: Option[Seq[typed.CoreExpr[ColumnId, Type]]],
+                                        groupBys: Seq[typed.CoreExpr[ColumnId, Type]],
                                         having: Option[typed.CoreExpr[ColumnId, Type]],
-                                        orderBy: Option[Seq[typed.OrderBy[ColumnId, Type]]],
+                                        orderBys: Seq[typed.OrderBy[ColumnId, Type]],
                                         limit: Option[BigInt],
                                         offset: Option[BigInt],
                                         search: Option[String]) {
   def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): SoQLAnalysis[NewColumnId, Type] =
     copy(
       selection = selection.mapValues(_.mapColumnIds(f)),
-      join = join.map { joins => joins.map { join =>
-
-        def joinMap(c: ColumnId, q: Qualifier): NewColumnId = {
-          val qualifierForJoin = q.orElse(join.tableLike.head.from)
-          f(c, qualifierForJoin)
-        }
-
-        val remappedJoin = join.tableLike.map(_.mapColumnIds(joinMap))
-        typed.Join(join.typ, remappedJoin, join.alias, join.expr.mapColumnIds(f))
-      }},
+      joins = joins.map(_.mapColumnIds(f)),
       where = where.map(_.mapColumnIds(f)),
-      groupBy = groupBy.map(_.map(_.mapColumnIds(f))),
+      groupBys = groupBys.map(_.mapColumnIds(f)),
       having = having.map(_.mapColumnIds(f)),
-      orderBy = orderBy.map(_.map(_.mapColumnIds(f)))
+      orderBys = orderBys.map(_.mapColumnIds(f))
     )
 
   def mapColumnIds[NewColumnId](qColumnIdNewColumnIdMap: Map[(ColumnId, Qualifier), NewColumnId],
                                 qColumnNameToQColumnId: (Qualifier, ColumnName) => (ColumnId, Qualifier),
                                 columnNameToNewColumnId: ColumnName => NewColumnId,
                                 columnIdToNewColumnId: ColumnId => NewColumnId): SoQLAnalysis[NewColumnId, Type] = {
-    val newColumnsFromJoin = join.toSeq.flatten.filter(x => !SimpleSoQLAnalysis.isSimple(x.tableLike)).flatMap { j =>
-      j.tableLike.last.selection.map { case (columnName, _) =>
-        qColumnNameToQColumnId(j.alias, columnName) -> columnNameToNewColumnId(columnName)
-      }}.toMap
+
+    val newColumnsFromJoin = joins.flatMap { j =>
+      j.from.analyses.lastOption.map(_.selection.map { case (columnName, _) =>
+        qColumnNameToQColumnId(j.from.alias, columnName) -> columnNameToNewColumnId(columnName)
+      }).getOrElse(OrderedMap.empty)
+    }.toMap
 
     val qColumnIdNewColumnIdWithJoinsMap = qColumnIdNewColumnIdMap ++ newColumnsFromJoin
 
+    def mapJoin(j: typed.Join[ColumnId, Type]): typed.Join[NewColumnId, Type] = {
+      val mappedAnalysis = j.from.mapColumnIds(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
+      val mappedOn = j.on.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))
+      typed.Join(j.typ, mappedAnalysis, mappedOn)
+    }
+
     copy(
       selection = selection.mapValues(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
-      join = join.map { joins => joins.map { j =>
-        val analysesInColIds = j.tableLike.foldLeft(Seq.empty[SoQLAnalysis[NewColumnId, Type]]) { (convertedAnalyses, analysis) =>
-          val joinMap =
-            convertedAnalyses.lastOption match {
-              case None =>
-                qColumnIdNewColumnIdMap.foldLeft(Map.empty[(ColumnId, Qualifier), NewColumnId]) { (acc, kv) =>
-                  val ((cid, qual), ncid) = kv
-                  if (qual == j.tableLike.head.from) acc + ((cid, None) -> ncid)
-                  else acc
-                }
-              case Some(prevAnalysis) =>
-                prevAnalysis.selection.foldLeft(qColumnIdNewColumnIdMap) { (acc, selCol) =>
-                  val (colName, expr) = selCol
-                  acc + (qColumnNameToQColumnId(None, colName) -> columnNameToNewColumnId(colName))
-                }
-            }
-
-          val a = analysis.mapColumnIds(joinMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
-          convertedAnalyses :+ a
-        }
-
-        val remappedJoin = analysesInColIds
-        typed.Join(j.typ, remappedJoin, j.alias, j.expr.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
-      }},
+      joins = joins.map(mapJoin),
       where = where.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
-      groupBy = groupBy.map(_.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))),
+      groupBys = groupBys.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
       having = having.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
-      orderBy = orderBy.map(_.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))))
+      orderBys = orderBys.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
     )
   }
+
+  private def toString(from: Option[TableName]): String = {
+    val distinctStr = if (distinct) "DISTINCT " else ""
+    val selectStr = Some(s"SELECT $distinctStr$selection")
+    val fromStr = from.map(t => s"FROM $t")
+    val joinsStr = itrToString(None, joins.map(_.toString), " ")
+    val whereStr = itrToString("WHERE", where)
+    val groupByStr = itrToString("GROUP BY", groupBys, ", ")
+    val havingStr = itrToString("HAVING", having)
+    val obStr = itrToString("ORDER BY", orderBys, ", ")
+    val limitStr = itrToString("LIMIT", limit)
+    val offsetStr = itrToString("OFFSET", offset)
+    val searchStr = itrToString("SEARCH", search.map(Expression.escapeString))
+
+    val parts = List(selectStr, fromStr, joinsStr, whereStr, groupByStr, havingStr, obStr, limitStr, offsetStr, searchStr)
+    parts.flatString
+  }
+
+  def toStringWithFrom(fromTable: TableName): String = toString(Some(fromTable))
+
+  override def toString: String = toString(None)
 }
 
 object SoQLAnalysis {
-  def merge[T](andFunction: MonomorphicFunction[T], stages: Seq[SoQLAnalysis[ColumnName, T]]): Seq[SoQLAnalysis[ColumnName, T]] =
+  def merge[T](andFunction: MonomorphicFunction[T], stages: NonEmptySeq[SoQLAnalysis[ColumnName, T]]): NonEmptySeq[SoQLAnalysis[ColumnName, T]] =
     new Merger(andFunction).merge(stages)
-}
-
-object SimpleSoQLAnalysis {
-  def apply[ColumnId, Type](from: String): SoQLAnalysis[ColumnId, Type] = {
-    SoQLAnalysis(isGrouped = false,
-                 distinct = false,
-                 selection = OrderedMap.empty,
-                 from = Some(from),
-                 join = None,
-                 where = None,
-                 groupBy = None,
-                 having = None,
-                 orderBy = None,
-                 limit = None,
-                 offset = None,
-                 search = None)
-  }
-
-  /**
-    * Simple SoQLAnalysis is a soql analysis created by a join where a sub-query is not used like "JOIN @aaaa-aaaa"
-    */
-  def isSimple[ColumnId, Type](a: SoQLAnalysis[ColumnId, Type]): Boolean = {
-    a.selection.keys.isEmpty && a.from.nonEmpty
-  }
-
-  def isSimple[ColumnId, Type](a: Seq[SoQLAnalysis[ColumnId, Type]]): Boolean = {
-    a.nonEmpty && isSimple(a.last)
-  }
-
-  def asSoQL[ColumnId, Type](a: Seq[SoQLAnalysis[ColumnId, Type]]): Option[String] = {
-    if (isSimple(a)) {
-      a.last.from
-    } else {
-      None
-    }
-  }
 }
 
 private class Merger[T](andFunction: MonomorphicFunction[T]) {
   type Analysis = SoQLAnalysis[ColumnName, T]
   type Expr = typed.CoreExpr[ColumnName, T]
 
-  def merge(stages: Seq[Analysis]): Seq[Analysis] =
-    stages.drop(1).foldLeft(stages.take(1).toList) { (acc, nextStage) =>
-      tryMerge(acc.head /* acc cannot be empty */, nextStage) match {
-        case Some(merged) => merged :: acc.tail
-        case None => nextStage :: acc
+  def merge(stages: NonEmptySeq[Analysis]): NonEmptySeq[Analysis] = {
+    stages.foldLeft1(NonEmptySeq(_)) { case (acc, nextStage) =>
+      tryMerge(acc.head , nextStage) match {
+        case Some(merged) => acc.copy(head = merged)
+        case None => acc + nextStage
       }
-    }.reverse
+    }
+  }
 
   // Currently a search on the second query prevents merging, as its meaning ought to
   // be "search the output of the first query" rather than "search the underlying
   // dataset".  Unfortunately this means "select :*,*" isn't a left-identity of merge
   // for a query that contains a search.
   private def tryMerge(a: Analysis, b: Analysis): Option[Analysis] = (a, b) match {
-    case (SoQLAnalysis(aIsGroup, false, aSelect, aFrom, None, aWhere, aGroup, aHaving, aOrder, aLim, aOff, aSearch),
-          SoQLAnalysis(false,    false, bSelect, bFrom, bJoin, None,   None,   None,    None,   bLim, bOff, None)) if
+    case (SoQLAnalysis(aIsGroup, false, aSelect, Nil, aWhere, aGroup, aHaving, aOrder, aLim, aOff, aSearch),
+          SoQLAnalysis(false,    false, bSelect, bJoins, None,   Nil,   None,    Nil,   bLim, bOff, None)) if
           // Do not merge when the previous soql is grouped and the next soql has joins
           // select g, count(x) as cx group by g |> select g, cx, @b.a join @b on @b.g=g
           // Newly introduced columns from joins cannot be merged and brought in w/o grouping and aggregate functions.
-          !(aIsGroup && bJoin.nonEmpty) && aFrom == bFrom =>
+          !(aIsGroup && bJoins.nonEmpty) => // TODO: relaxed requirement on aFrom = bFrom? is this ok?
       // we can merge a change of only selection and limit + offset onto anything
       val (newLim, newOff) = Merger.combineLimits(aLim, aOff, bLim, bOff)
       Some(SoQLAnalysis(isGrouped = aIsGroup,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        from = aFrom,
-                        join = bJoin,
+                        joins = bJoins,
                         where = aWhere,
-                        groupBy = aGroup,
+                        groupBys = aGroup,
                         having = aHaving,
-                        orderBy = aOrder,
+                        orderBys = aOrder,
                         limit = newLim,
                         offset = newOff,
                         search = aSearch))
-    case (SoQLAnalysis(false, false, aSelect, aFrom, None, aWhere, None, None, aOrder, None, None, aSearch),
-          SoQLAnalysis(false, false, bSelect, bFrom, bJoin, bWhere, None, None, bOrder, bLim, bOff, None)) if
-          aFrom == bFrom =>
+    case (SoQLAnalysis(false, false, aSelect, Nil, aWhere, Nil, None, aOrder, None, None, aSearch),
+          SoQLAnalysis(false, false, bSelect, bJoins, bWhere, Nil, None, bOrder, bLim, bOff, None)) =>
       // Can merge a change of filter or order only if no window was specified on the left
       Some(SoQLAnalysis(isGrouped = false,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        from = aFrom,
-                        join = bJoin,
+                        joins = bJoins,
                         where = mergeWhereLike(aSelect, aWhere, bWhere),
-                        groupBy = None,
+                        groupBys = Nil,
                         having = None,
-                        orderBy = mergeOrderBy(aSelect, aOrder, bOrder),
+                        orderBys = mergeOrderBy(aSelect, aOrder, bOrder),
                         limit = bLim,
                         offset = bOff,
                         search = aSearch))
-    case (SoQLAnalysis(false, false, aSelect, aFrom, None, aWhere, None,     None,    _,      None, None, aSearch),
-          SoQLAnalysis(true, false, bSelect, bFrom, bJoin, bWhere, bGroupBy, bHaving, bOrder, bLim, bOff, None)) if
-          aFrom == bFrom =>
+    case (SoQLAnalysis(false, false, aSelect, Nil, aWhere, Nil,     None,    _,      None, None, aSearch),
+          SoQLAnalysis(true, false, bSelect, bJoins, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None)) =>
       // an aggregate on a non-aggregate
       Some(SoQLAnalysis(isGrouped = true,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        from = aFrom,
-                        join = bJoin,
+                        joins = bJoins,
                         where = mergeWhereLike(aSelect, aWhere, bWhere),
-                        groupBy = mergeGroupBy(aSelect, bGroupBy),
+                        groupBys = mergeGroupBy(aSelect, bGroup),
                         having = mergeWhereLike(aSelect, None, bHaving),
-                        orderBy = mergeOrderBy(aSelect, None, bOrder),
+                        orderBys = mergeOrderBy(aSelect, Nil, bOrder),
                         limit = bLim,
                         offset = bOff,
                         search = aSearch))
-    case (SoQLAnalysis(true,  false, aSelect, aFrom, None, aWhere, aGroupBy, aHaving, aOrder, None, None, aSearch),
-          SoQLAnalysis(false, false, bSelect, bFrom, None, bWhere, None,     None,    bOrder, bLim, bOff, None)) if
-          aFrom == bFrom =>
+    case (SoQLAnalysis(true,  false, aSelect, Nil, aWhere, aGroup, aHaving, aOrder, None, None, aSearch),
+          SoQLAnalysis(false, false, bSelect, Nil, bWhere, Nil,      None,    bOrder, bLim, bOff, None)) =>
       // a non-aggregate on an aggregate -- merge the WHERE of the second with the HAVING of the first
       Some(SoQLAnalysis(isGrouped = true,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        from = aFrom,
-                        join = None,
+                        joins = Nil,
                         where = aWhere,
-                        groupBy = aGroupBy,
+                        groupBys = aGroup,
                         having = mergeWhereLike(aSelect, aHaving, bWhere),
-                        orderBy = mergeOrderBy(aSelect, aOrder, bOrder),
+                        orderBys = mergeOrderBy(aSelect, aOrder, bOrder),
                         limit = bLim,
                         offset = bOff,
                         search = aSearch))
@@ -615,13 +656,13 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
     b.mapValues(replaceRefs(a, _))
 
   private def mergeOrderBy(aliases: OrderedMap[ColumnName, Expr],
-                           obA: Option[Seq[typed.OrderBy[ColumnName, T]]],
-                           obB: Option[Seq[typed.OrderBy[ColumnName, T]]]): Option[Seq[typed.OrderBy[ColumnName, T]]] =
+                           obA: Seq[typed.OrderBy[ColumnName, T]],
+                           obB: Seq[typed.OrderBy[ColumnName, T]]): Seq[typed.OrderBy[ColumnName, T]] =
     (obA, obB) match {
-      case (None, None) => None
-      case (Some(a), None) => Some(a)
-      case (None, Some(b)) => Some(b.map { ob => ob.copy(expression = replaceRefs(aliases, ob.expression)) })
-      case (Some(a), Some(b)) => Some(b.map { ob => ob.copy(expression = replaceRefs(aliases, ob.expression)) } ++ a)
+      case (Nil, Nil) => Seq.empty
+      case (a, Nil) => a
+      case (Nil, b) => b.map { ob => ob.copy(expression = replaceRefs(aliases, ob.expression)) }
+      case (a, b) => b.map { ob => ob.copy(expression = replaceRefs(aliases, ob.expression)) } ++ a
     }
 
   private def mergeWhereLike(aliases: OrderedMap[ColumnName, Expr],
@@ -634,9 +675,9 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
       case (Some(a), Some(b)) => Some(typed.FunctionCall(andFunction, List(a, replaceRefs(aliases, b)))(NoPosition, NoPosition))
     }
 
-  private def mergeGroupBy(aliases: OrderedMap[ColumnName, Expr],
-                           gb: Option[Seq[Expr]]): Option[Seq[Expr]] =
-    gb.map(_.map(replaceRefs(aliases, _)))
+  private def mergeGroupBy(aliases: OrderedMap[ColumnName, Expr], gb: Seq[Expr]): Seq[Expr] = {
+    gb.map(replaceRefs(aliases, _))
+  }
 
   private def replaceRefs(a: OrderedMap[ColumnName, Expr],
                              b: Expr): Expr =

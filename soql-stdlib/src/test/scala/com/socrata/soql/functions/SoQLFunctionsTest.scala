@@ -5,6 +5,10 @@ import org.scalatest.FunSuite
 
 class SoQLFunctionsTest extends FunSuite with MustMatchers {
   test("all functions have distinct identities") {
+    if(SoQLFunctions.functionsByIdentity.size != SoQLFunctions.allFunctions.size) {
+      SoQLFunctions.allFunctions.groupBy(_.identity).filter(_._2.size != 1).keySet must equal (Set.empty)
+    }
+
     SoQLFunctions.functionsByIdentity.size must equal (SoQLFunctions.allFunctions.size)
   }
 
