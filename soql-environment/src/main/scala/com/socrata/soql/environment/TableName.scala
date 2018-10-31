@@ -10,6 +10,12 @@ case class TableName(name: String, alias: Option[String] = None) {
   /** removes any leading Soql or SF prefix ("@" or "_") from `name` */
   def nameWithoutPrefix: String = TableName.removeValidPrefix(name)
 
+  /** removes any leading "_" (SF prefix); adds leading "@" (Soql prefix) if that isn't already the first character */
+  def nameWithSoqlPrefix: String = TableName.withSoqlPrefix(name)
+
+  /** removes any leading "@" (Soql prefix); adds leading "_" (SF prefix) if that isn't already the first character */
+  def nameWithSodaFountainPrefix: String = TableName.withSodaFountainPrefix(name)
+
   /** removes any leading Soql or SF prefix ("@" or "_") from `alias` */
   def aliasWithoutPrefix: Option[String] = alias.map(TableName.removeValidPrefix)
 }
