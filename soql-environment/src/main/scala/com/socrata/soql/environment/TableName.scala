@@ -1,13 +1,17 @@
 package com.socrata.soql.environment
 
 case class TableName(name: String, alias: Option[String] = None) {
-  import TableName._
-
   override def toString(): String = {
-    alias.map(removePrefix).foldLeft(replacePrefixWithAt(name))((n, a) => s"$n AS $a")
+    aliasWithoutPrefix.foldLeft(TableName.withSoqlPrefix(name))((n, a) => s"$n AS $a")
   }
 
   def qualifier: String = alias.getOrElse(name)
+
+  /** removes any leading Soql or SF prefix ("@" or "_") from `name` */
+  def nameWithoutPrefix: String = TableName.removeValidPrefix(name)
+
+  /** removes any leading Soql or SF prefix ("@" or "_") from `alias` */
+  def aliasWithoutPrefix: Option[String] = alias.map(TableName.removeValidPrefix)
 }
 
 object TableName {
@@ -16,13 +20,19 @@ object TableName {
   // To handle this mis-match, we automatically prepend the prefix when the parse tree is built.
   // To remove this "feature", re-define this with an empty string "" or completely remove this variable.
   val SodaFountainPrefix = "_"
+  val SoqlPrefix = "@"
   val PrimaryTable = TableName(SodaFountainPrefix)
-  val Prefix = "@"
   val Field = "."
   val PrefixIndex = 1
 
-  def removePrefix(s: String): String = s.substring(PrefixIndex)
-  def withAtPrefix(s: String): String = s"$Prefix$s"
-  def withSodaFountainPrefix(s: String): String = s"$SodaFountainPrefix$s"
-  def replacePrefixWithAt(s: String): String = withAtPrefix(removePrefix(s))
+  val prefixRegex = s"^[$SodaFountainPrefix$SoqlPrefix]".r
+
+  /** removes any single leading Soql or SF prefix ("@" or "_") from `s` */
+  def removeValidPrefix(s: String) = prefixRegex.replaceFirstIn(s, "")
+
+  /** removes any leading "_" (SF prefix); adds leading "@" (Soql prefix) if that isn't already the first character */
+  def withSoqlPrefix(s: String): String = s"$SoqlPrefix${removeValidPrefix(s)}"
+
+  /** removes any leading "@" (Soql prefix); adds leading "_" (SF prefix) if that isn't already the first character */
+  def withSodaFountainPrefix(s: String): String = s"$SodaFountainPrefix${removeValidPrefix(s)}"
 }
