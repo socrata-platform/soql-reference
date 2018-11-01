@@ -92,6 +92,12 @@ class ToStringTest extends FunSpec with MustMatchers {
       }
     }
 
+    it("withSoqlPrefix replaces _ for prefixed _4x4s") {
+      validExamples.foreach { valid =>
+        withSoqlPrefix(s"$SodaFountainPrefix$valid") must equal(s"$SoqlPrefix$valid")
+      }
+    }
+
     it("withSoqlPrefix does not add @ for non-4x4s") {
       invalidExamples.foreach { invalid =>
         withSoqlPrefix(invalid) must equal(invalid)
@@ -107,6 +113,12 @@ class ToStringTest extends FunSpec with MustMatchers {
     it("withSodaFountainPrefix maintains _ for prefixed valid 4x4s") {
       validExamples.foreach { valid =>
         withSodaFountainPrefix(s"$SodaFountainPrefix$valid") must equal(s"$SodaFountainPrefix$valid")
+      }
+    }
+
+    it("withSodaFountainPrefix replaces @ for prefixed valid @4x4s") {
+      validExamples.foreach { valid =>
+        withSodaFountainPrefix(s"$SoqlPrefix$valid") must equal(s"$SodaFountainPrefix$valid")
       }
     }
 
