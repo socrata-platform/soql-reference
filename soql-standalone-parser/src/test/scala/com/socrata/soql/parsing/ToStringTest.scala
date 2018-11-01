@@ -62,55 +62,55 @@ class ToStringTest extends FunSpec with MustMatchers {
 
     val prefixedValidExamples = (commonPrefixes ++ uncommonPrefixes).flatMap(p => validExamples.map(e => s"$p$e"))
 
-    it("removing prefix for unprefixed valid s causes no change") {
+    it("removing prefix for unprefixed valid 4x4s causes no change") {
       validExamples.foreach { valid =>
         removePrefix(valid) must equal(valid)
       }
     }
 
-    it("removing prefix for non-s causes no change") {
+    it("removing prefix for non-4x4s causes no change") {
       invalidExamples.foreach { valid =>
         removePrefix(valid) must equal(valid)
       }
     }
 
-    it("removing prefix from prefixed valid  removes any single character prefix") {
+    it("removing prefix from prefixed valid 4x4 removes any single character prefix") {
       prefixedValidExamples.foreach { prefixed =>
         removePrefix(prefixed) must equal(prefixed.substring(1))
       }
     }
 
-    it("withSoqlPrefix adds @ for unprefixed valid s") {
+    it("withSoqlPrefix adds @ for unprefixed valid 4x4s") {
       validExamples.foreach { valid =>
         withSoqlPrefix(valid) must equal(s"$SoqlPrefix$valid")
       }
     }
 
-    it("withSoqlPrefix maintains @ for prefixed @s") {
+    it("withSoqlPrefix maintains @ for prefixed @4x4s") {
       validExamples.foreach { valid =>
         withSoqlPrefix(s"$SoqlPrefix$valid") must equal(s"$SoqlPrefix$valid")
       }
     }
 
-    it("withSoqlPrefix does not add @ for non-s") {
+    it("withSoqlPrefix does not add @ for non-4x4s") {
       invalidExamples.foreach { invalid =>
         withSoqlPrefix(invalid) must equal(invalid)
       }
     }
 
-    it("withSodaFountainPrefix adds _ for unprefixed valid s") {
+    it("withSodaFountainPrefix adds _ for unprefixed valid 4x4s") {
       validExamples.foreach { valid =>
         withSodaFountainPrefix(valid) must equal(s"$SodaFountainPrefix$valid")
       }
     }
 
-    it("withSodaFountainPrefix maintains _ for prefixed valid s") {
+    it("withSodaFountainPrefix maintains _ for prefixed valid 4x4s") {
       validExamples.foreach { valid =>
         withSodaFountainPrefix(s"$SodaFountainPrefix$valid") must equal(s"$SodaFountainPrefix$valid")
       }
     }
 
-    it("withSodaFountainPrefix does not add _ for non-s") {
+    it("withSodaFountainPrefix does not add _ for non-4x4s") {
       invalidExamples.foreach { invalid =>
         withSodaFountainPrefix(invalid) must equal(invalid)
       }
