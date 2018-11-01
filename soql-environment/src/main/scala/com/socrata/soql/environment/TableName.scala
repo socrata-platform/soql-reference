@@ -1,23 +1,26 @@
 package com.socrata.soql.environment
+import TableName.Prefixers._
+
+import scala.util.matching.Regex
 
 case class TableName(name: String, alias: Option[String] = None) {
   override def toString(): String = {
-    aliasWithoutPrefix.foldLeft(TableName.withSoqlPrefix(name))((n, a) => s"$n AS $a")
+    aliasWithoutPrefix.foldLeft(FourBy4.withSoqlPrefix(name))((n, a) => s"$n AS $a")
   }
 
   def qualifier: String = alias.getOrElse(name)
 
-  /** removes any leading Soql or SF prefix ("@" or "_") from `name` */
-  def nameWithoutPrefix: String = TableName.removeValidPrefix(name)
+  /** removes any leading single character prefix from `name`, if it is an otherwise-valid 4x4. else returns `name` */
+  def nameWithoutPrefix: String = FourBy4.removePrefix(name)
 
-  /** removes any leading "_" (SF prefix); adds leading "@" (Soql prefix) if that isn't already the first character */
-  def nameWithSoqlPrefix: String = TableName.withSoqlPrefix(name)
+  /** if `name` is a (prefixed) valid 4x4, prepend (or replace existing prefix with) "@". else return `name` */
+  def nameWithSoqlPrefix: String = FourBy4.withSoqlPrefix(name)
 
-  /** removes any leading "@" (Soql prefix); adds leading "_" (SF prefix) if that isn't already the first character */
-  def nameWithSodaFountainPrefix: String = TableName.withSodaFountainPrefix(name)
+  /** if `name` is a (prefixed) valid 4x4, prepend (or replace existing prefix with) "_". else return `name` */
+  def nameWithSodaFountainPrefix: String = FourBy4.withSodaFountainPrefix(name)
 
-  /** removes any leading Soql or SF prefix ("@" or "_") from `alias` */
-  def aliasWithoutPrefix: Option[String] = alias.map(TableName.removeValidPrefix)
+  /** removes prefix from `alias` if that prefix is "@" or "_" (Soql or SodaFountain prefix) */
+  def aliasWithoutPrefix: Option[String] = alias.map(Alias.removePrefix)
 }
 
 object TableName {
@@ -31,14 +34,45 @@ object TableName {
   val Field = "."
   val PrefixIndex = 1
 
-  val prefixRegex = s"^[$SodaFountainPrefix$SoqlPrefix]".r
+  /** Helpers to add/remove/modify prefixes to 4x4s and aliases found in TableNames */
+  object Prefixers {
+    private val valid4x4Chars = "[2-9a-kmnp-z]"
+    private val fourBy4Regex = s"[$valid4x4Chars]{4}\\-[$valid4x4Chars]{4}".r
+    private val sodaOrSoqlPrefixRegex = s"[$SodaFountainPrefix$SoqlPrefix]".r
 
-  /** removes any single leading Soql or SF prefix ("@" or "_") from `s` */
-  def removeValidPrefix(s: String) = prefixRegex.replaceFirstIn(s, "")
+    /**
+      * Add/remove/replace any single character prefix to any valid 4x4. 4x4s have a very specific format, so we can
+      * assume any single character that prefixes an otherwise-valid 4x4 is meant to be a prefix.
+      */
+    val FourBy4 = new PrefixReplacer(".".r, fourBy4Regex)
 
-  /** removes any leading "_" (SF prefix); adds leading "@" (Soql prefix) if that isn't already the first character */
-  def withSoqlPrefix(s: String): String = s"$SoqlPrefix${removeValidPrefix(s)}"
+    /**
+      * Add/remove/replace soda or soql prefix to any string at all. Aliases can be essentially any string, so we can
+      * only modify known prefixes.
+      */
+    val Alias = new PrefixReplacer(sodaOrSoqlPrefixRegex, ".*".r)
 
-  /** removes any leading "@" (Soql prefix); adds leading "_" (SF prefix) if that isn't already the first character */
-  def withSodaFountainPrefix(s: String): String = s"$SodaFountainPrefix${removeValidPrefix(s)}"
+    /**
+      * Removes/adds/replaces prefixes from/to/in strings. Methods will only modify a given string `s` that matches
+      * `bodyRegex` (possibly prefixed by a prefix matching `prefixRegex`). If a provided string does not match
+      * `bodyRegex` (with possible prefix), then the original string will be returned unmodified by all methods.
+      *
+      * @param prefixRegex matches prefixes to strings given to methods. Will only remove/modify prefixes to
+      *                    String function parameters that match this regex.
+      * @param bodyRegex matches the body of String function parameters `s`. Only strings given that match this
+      *                  regex will be modified.
+      */
+    protected class PrefixReplacer(prefixRegex: Regex, bodyRegex: Regex) {
+      val possiblyPrefixed = s"^${prefixRegex.pattern.pattern}?(${bodyRegex.pattern.pattern})$$".r
+
+      /** removes any matching prefixes to an `s` that matches `bodyRegex`. else returns `s` */
+      def removePrefix(s: String) = possiblyPrefixed.replaceFirstIn(s, "$1")
+
+      /** if `s` matches `bodyRegex`, prepend (or replace existing matching prefix with) "@". else returns `s` */
+      def withSoqlPrefix(s: String): String = possiblyPrefixed.replaceFirstIn(s, s"$SoqlPrefix$$1")
+
+      /** if `s` matches `bodyRegex`, prepend (or replace existing matching prefix with) "_". else returns `s` */
+      def withSodaFountainPrefix(s: String): String = possiblyPrefixed.replaceFirstIn(s, s"$SodaFountainPrefix$$1")
+    }
+  }
 }

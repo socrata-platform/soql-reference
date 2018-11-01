@@ -8,6 +8,7 @@ import util.parsing.input.Position
 import com.socrata.soql.{ast, tokens}
 import com.socrata.soql.tokens._
 import com.socrata.soql.ast._
+import com.socrata.soql.environment.TableName.Prefixers
 import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
 
 object AbstractParser {
@@ -156,7 +157,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   val simpleIdentifier: Parser[(String, Position)] = simpleSystemIdentifier | simpleUserIdentifier | failure(errors.missingIdentifier)
 
   val simpleIdToAlias: Parser[String] = simpleIdentifier ^^ {
-    case (alias, _) => TableName.withSodaFountainPrefix(alias)
+    case (alias, _) => Prefixers.Alias.withSodaFountainPrefix(alias)
   }
 
   val selectFrom: Parser[(TableName, Select)] = {

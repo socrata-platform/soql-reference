@@ -14,6 +14,7 @@ import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.typed.Qualifier
 import Select._
 import com.socrata.NonEmptySeq
+import com.socrata.soql.environment.TableName.Prefixers
 
 /**
   * The type-checking version of [[com.socrata.soql.parsing.AbstractParser]]. Turns string soql statements into
@@ -457,7 +458,7 @@ case class JoinAnalysis[ColumnId, Type](fromTable: TableName, subAnalysis: Optio
       (s"($selectStr)", Some(subAlias))
     }.getOrElse((fromTable.toString, None))
 
-    List(Some(subAnasStr), itrToString("AS", aliasStrOpt.map(TableName.removeValidPrefix))).flatString
+    List(Some(subAnasStr), itrToString("AS", aliasStrOpt.map(Prefixers.Alias.removePrefix))).flatString
   }
 }
 

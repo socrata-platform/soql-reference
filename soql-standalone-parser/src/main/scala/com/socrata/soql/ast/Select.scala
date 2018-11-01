@@ -4,6 +4,7 @@ import scala.util.parsing.input.{NoPosition, Position}
 import com.socrata.soql.environment._
 import Select._
 import com.socrata.NonEmptySeq
+import TableName.Prefixers.Alias
 
 /**
   * A SubSelect represents (potentially chained) soql that is required to have an alias
@@ -36,7 +37,7 @@ case class JoinSelect(fromTable: TableName, subSelect: Option[SubSelect]) {
         (s"($selectStr)", Some(subAlias))
     }.getOrElse((fromTable.toString, None))
 
-    List(Some(subSelectStr), itrToString("AS", aliasStrOpt.map(TableName.removeValidPrefix))).flatString
+    List(Some(subSelectStr), itrToString("AS", aliasStrOpt.map(Alias.removePrefix))).flatString
   }
 }
 
@@ -121,7 +122,7 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[
       def star(s: StarSelection, token: String) = {
         val sb = new StringBuilder()
         s.qualifier.foreach { x =>
-          sb.append(TableName.withSoqlPrefix(x))
+          sb.append(Alias.withSoqlPrefix(x))
           sb.append(TableName.Field)
         }
         sb.append(token)
