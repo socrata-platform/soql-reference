@@ -38,7 +38,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
   private val textToPhoneFunc = getMonomorphically(SoQLFunctions.TextToPhone)
   private val textToUrlFunc = getMonomorphically(SoQLFunctions.TextToUrl)
   private val textToLocationFunc = getMonomorphically(SoQLFunctions.TextToLocation)
-  private val textToBooleanFunc = getMonomorphically(SoQLFunctions.TextToBoolean)
+  private val textToBooleanFunc = getMonomorphically(SoQLFunctions.TextToBool)
 
   private def isNumberLiteral(s: String) = try {
     val lexer = new Lexer(s)
