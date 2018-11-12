@@ -468,7 +468,7 @@ case class JoinAnalysis[ColumnId, Type](fromTable: TableName, subAnalysis: Optio
       (s"($selectStr)", Some(subAlias))
     }.getOrElse((fromTable.toString, None))
 
-    List(Some(subAnasStr), itrToString("AS", aliasStrOpt.map(TableName.removePrefix))).flatString
+    List(Some(subAnasStr), itrToString("AS", aliasStrOpt.map(TableName.removeValidPrefix))).flatString
   }
 }
 

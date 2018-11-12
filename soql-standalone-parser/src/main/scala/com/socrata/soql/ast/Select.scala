@@ -36,7 +36,7 @@ case class JoinSelect(fromTable: TableName, subSelect: Option[SubSelect]) {
         (s"($selectStr)", Some(subAlias))
     }.getOrElse((fromTable.toString, None))
 
-    List(Some(subSelectStr), itrToString("AS", aliasStrOpt.map(TableName.removePrefix))).flatString
+    List(Some(subSelectStr), itrToString("AS", aliasStrOpt.map(TableName.removeValidPrefix))).flatString
   }
 }
 
@@ -141,7 +141,7 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[
       def star(s: StarSelection, token: String) = {
         val sb = new StringBuilder()
         s.qualifier.foreach { x =>
-          sb.append(x.replaceFirst(TableName.SodaFountainPrefix, TableName.Prefix))
+          sb.append(TableName.withSoqlPrefix(x))
           sb.append(TableName.Field)
         }
         sb.append(token)
