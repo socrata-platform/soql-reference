@@ -20,8 +20,8 @@ abstract class AbstractName[Self <: AbstractName[Self]](val name: String) extend
 }
 
 object AbstractName {
-  private val nfdMode = Normalizer.NFD
-  private def nfd(s: String) = Normalizer.normalize(s, nfdMode)
+  private val nfdNormalizer = Normalizer2.getNFDInstance
+  private def nfd(s: String) = nfdNormalizer.normalize(s)
 
   private val nfkcCasefolder = Normalizer2.getNFKCCasefoldInstance
   private def nfkcCasefold(s: String) = nfkcCasefolder.normalize(s)
