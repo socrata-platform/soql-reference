@@ -22,7 +22,7 @@ object Expression {
 
   private def findIdentsAndLiterals(e: Expression): Seq[String] = e match {
     case v: Literal => Vector(v.asString)
-    case ColumnOrAliasRef(_, name) => Vector(name.name)
+    case ColumnOrAliasRef(aliasOpt, name) => aliasOpt ++: Vector(name.name)
     case fc: FunctionCall =>
       fc match {
         case FunctionCall(SpecialFunctions.StarFunc(base), Seq()) => Vector(base)

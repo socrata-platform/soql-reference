@@ -560,4 +560,10 @@ SELECT visits, @x2.zx
         (NoPosition, NoPosition)
     ))
   }
+
+  test("joined table name alias is part of default function-column name") {
+    val analysis = analyzer.analyzeUnchainedQuery("select sum(@a1.:id) join @aaaa-aaab as a1 on :id = @a1.:id")
+    analysis.selection.head._1.name must equal("sum_a1_id")
+  }
+
 }
