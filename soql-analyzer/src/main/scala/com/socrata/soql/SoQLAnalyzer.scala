@@ -564,9 +564,9 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
     stages.foldLeft1(NonEmptySeq(_)) { case (acc, nextStage) =>
       tryMerge(acc.head , nextStage) match {
         case Some(merged) => acc.copy(head = merged)
-        case None => acc + nextStage
+        case None => acc.prepend(nextStage)
       }
-    }
+    }.reverse
   }
 
   // Currently a search on the second query prevents merging, as its meaning ought to
