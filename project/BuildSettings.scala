@@ -1,16 +1,16 @@
 import sbt._
 import Keys._
 
-import com.socrata.cloudbeessbt.SocrataCloudbeesSbt
 import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
 
 object BuildSettings {
-  val buildSettings: Seq[Setting[_]] = Defaults.defaultSettings ++ SocrataCloudbeesSbt.socrataBuildSettings ++ Seq(
+  val buildSettings: Seq[Setting[_]] = Defaults.defaultSettings ++ Seq(
     scalaVersion := "2.11.12",
-    crossScalaVersions := Seq("2.10.4", scalaVersion.value)
+    crossScalaVersions := Seq("2.10.4", scalaVersion.value),
+    resolvers += "socrata artifactory" at "https://repo.socrata.com/artifactory/libs-release"
   )
 
-  def projectSettings(assembly: Boolean = false): Seq[Setting[_]] = buildSettings ++ SocrataCloudbeesSbt.socrataProjectSettings(assembly) ++ Seq(
+  def projectSettings(assembly: Boolean = false): Seq[Setting[_]] = buildSettings ++ Seq(
     // Haven't made a stable release of this yet
     previousArtifact <<= (scalaBinaryVersion,name) { (sv,name) => None /*Some("com.socrata" % (name + "_" + sv) % "0.1.0")*/ },
     testOptions in Test ++= Seq(

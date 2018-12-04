@@ -1,10 +1,12 @@
 resolvers ++= Seq(
-  "socrata releases" at "https://repository-socrata-oss.forge.cloudbees.com/release"
+  "socrata releases" at "https://repo.socrata.com/artifactory/libs-release/"
 )
 
-addSbtPlugin("com.socrata" % "socrata-cloudbees-sbt" % "1.4.1")
+organization := "com.socrata"
 
-addSbtPlugin("org.scoverage" %% "sbt-scoverage" % "0.99.5.1")
+addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.14.6")
+addSbtPlugin("org.scoverage" %% "sbt-scoverage" %  "1.1.0")
+addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.1.11")
 
 libraryDependencies ++= Seq(
   "de.jflex" % "jflex" % "1.4.3",
