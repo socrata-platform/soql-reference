@@ -5,6 +5,7 @@ import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
 
 object BuildSettings {
   val buildSettings: Seq[Setting[_]] = Defaults.defaultSettings ++ Seq(
+    organization := "com.socrata",
     scalaVersion := "2.11.12",
     crossScalaVersions := Seq("2.10.4", scalaVersion.value),
     resolvers += "socrata artifactory" at "https://repo.socrata.com/artifactory/libs-release"
