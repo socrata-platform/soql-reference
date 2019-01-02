@@ -16,7 +16,7 @@ object SoqlParser {
       Seq(new File(outputDir.get(task).asInstanceOf[File], className.get(task).asInstanceOf[String] + ".java"))
     },
     libraryDependencies ++= Seq(
-      "com.socrata" %% "soql-brita" % "[1.3.0,2.0.0)",
+      "com.socrata" %% "soql-brita" % "1.4.1",
       "org.slf4j" % "slf4j-simple" % BuildSettings.slf4jVersion % "test"
     )
   )
