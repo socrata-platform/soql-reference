@@ -58,6 +58,12 @@ object Select {
   }
 }
 
+
+
+trait BaseSelect
+case class Selects(op: String, a: BaseSelect, b: BaseSelect) extends BaseSelect
+case class ParenSelect(a: BaseSelect) extends BaseSelect
+
 /**
   * Represents a single select statement, not including the from. Top-level selects have an implicit "from"
   * based on the current view. Joins do require a "from" (which is a member of the JoinSelect class). A List[Select]
@@ -81,7 +87,7 @@ case class Select(
   orderBys: Seq[OrderBy],
   limit: Option[BigInt],
   offset: Option[BigInt],
-  search: Option[String]) {
+  search: Option[String]) extends BaseSelect {
 
   private def toString(from: Option[TableName]): String = {
     if(AST.pretty) {

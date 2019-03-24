@@ -45,6 +45,8 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def offset(soql: String): BigInt = parseFull(integer, soql)
   def search(soql: String): String = parseFull(stringLiteral, soql)
 
+  def baseSelect(soql: String): BaseSelect = parseFull(atomSelect, soql)
+
   protected def badParse(msg: String, nextPos: Position): Nothing
   protected def lexer(s: String): AbstractLexer
 
@@ -125,6 +127,26 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       case h :: tail => NonEmptySeq(h, tail) // case guaranteed by behavior of rep1sep
     }
   }
+
+  val query_op = QUERYPIPE() |
+    QUERYUNION() | QUERYINTERSECT() | QUERYMINUS() |
+    QUERYUNIONALL() | QUERYINTERSECTALL() | QUERYMINUSALL()
+
+  def parenSelect: Parser[BaseSelect] =
+    LPAREN() ~> atomSelect <~ RPAREN() ^^ { s => s }
+
+  lazy val compoundSelect: PackratParser[BaseSelect] =
+    opt(compoundSelect ~ query_op) ~ compoundSelect ^^ {
+      case None ~ b => b
+      case Some(a ~ op) ~ b =>
+        Selects(op.printable, a, b)
+    } | atomSelect
+
+  def atomSelect =
+    parenSelect |
+    compoundSelect |
+    select | failure(errors.missingExpr)
+
 
   val tableIdentifier: Parser[(String, Position)] =
     accept[tokens.TableIdentifier] ^^ { t =>

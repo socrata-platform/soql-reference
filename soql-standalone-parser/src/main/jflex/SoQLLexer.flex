@@ -82,6 +82,14 @@ TableIdentifier = "@" ("-" | [:jletterdigit:])+
   // Query chaining
   "|>"  { return token(new QUERYPIPE()); }
 
+  "UNION" { return token(new QUERYUNION()); }
+  "INTERSECT"  { return token(new QUERYINTERSECT()); }
+  "MINUS"  { return token(new QUERYMINUS()); }
+
+  "UNION" {WhiteSpace}+ "ALL" { return token(new QUERYUNIONALL()); }
+  "INTERSECT" {WhiteSpace}+ "ALL" { return token(new QUERYINTERSECTALL()); }
+  "MINUS" {WhiteSpace}+ "ALL" { return token(new QUERYMINUSALL()); }
+
   // Subscripting
   // "." share with qualifying
   "["   { return token(new LBRACKET()); }

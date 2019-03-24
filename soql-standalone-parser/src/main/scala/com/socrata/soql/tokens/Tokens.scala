@@ -52,6 +52,13 @@ case class LAST() extends Token with NullPlacement
 // Query chaining
 case class QUERYPIPE() extends Token
 
+case class QUERYUNION() extends FormattedToken("UNION")
+case class QUERYINTERSECT() extends FormattedToken("INTERSECT")
+case class QUERYMINUS() extends FormattedToken("MINUS")
+case class QUERYUNIONALL() extends FormattedToken("UNION ALL")
+case class QUERYINTERSECTALL() extends FormattedToken("INTERSECT ALL")
+case class QUERYMINUSALL() extends FormattedToken("MINUS ALL")
+
 // Subscripting
 // DOT() share with qualifying
 case class LBRACKET() extends FormattedToken("[")
