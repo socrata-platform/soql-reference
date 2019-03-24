@@ -24,7 +24,7 @@ object CoreExpr {
 }
 
 case class ColumnRef[ColumnId, Type](qualifier: Qualifier, column: ColumnId, typ: Type)(val position: Position) extends CoreExpr[ColumnId, Type] {
-  protected def asString = column.toString
+  protected def asString = qualifier.map(_ + ".").getOrElse("") + column.toString
   def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId) = copy(column = f(column, qualifier))
   val size = 0
 

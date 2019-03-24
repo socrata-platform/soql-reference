@@ -1,26 +1,27 @@
 package com.socrata.soql.typed
 
-import com.socrata.NonEmptySeq
 import com.socrata.soql._
 import com.socrata.soql.ast._
+import com.socrata.soql.environment.TableName
 
 sealed trait Join[ColumnId, Type] {
   val from: JoinAnalysis[ColumnId, Type]
   val on: CoreExpr[ColumnId, Type]
   val typ: JoinType
 
-  def useTableQualifier[ColumnId](id: ColumnId, qual: Qualifier) = (id, qual.orElse(Some(from.fromTable.name)))
+  def useTableQualifier[ColumnId](id: ColumnId, qual: Qualifier) = (id, qual.orElse(from.subAnalysis.left.toOption.map(_.name)))
 
   def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): Join[NewColumnId, Type] = {
-    def fWithTable(id: ColumnId, qual: Qualifier) = f(id, qual.orElse(Some(from.fromTable.name)))
+    val mappedSub: Either[TableName, SubAnalysis[NewColumnId, Type]] = from.subAnalysis match {
+      case Right(SubAnalysis(analyses, alias)) =>
+        val newAnas = analyses.flatMap(_.mapColumnIds(f))
+        Right(SubAnalysis(newAnas, alias))
+      case Left(tableName) =>
+        Left(tableName)
 
-    val mappedSub = from.subAnalysis.map {
-      case SubAnalysis(NonEmptySeq(head, tail), alias) =>
-        val newAnas = NonEmptySeq(head.mapColumnIds(fWithTable), tail.map(_.mapColumnIds(f)))
-        SubAnalysis(newAnas, alias)
     }
 
-    typed.Join(typ, JoinAnalysis(from.fromTable, mappedSub), on.mapColumnIds(f))
+    typed.Join(typ, JoinAnalysis(mappedSub), on.mapColumnIds(f))
   }
 
   def copy(from: JoinAnalysis[ColumnId, Type] = from, on: CoreExpr[ColumnId, Type] = on): typed.Join[ColumnId, Type] = {
@@ -32,7 +33,7 @@ sealed trait Join[ColumnId, Type] {
   }
 
   // joins are simple if there is no subAnalysis, e.g. "join @aaaa-aaaa[ as a]"
-  def isSimple: Boolean = from.subAnalysis.isEmpty
+  def isSimple: Boolean = from.subAnalysis.isLeft
 
 }
 
@@ -65,8 +66,10 @@ object Join {
 
   def expandJoins[ColumnId, Type](analyses: Seq[SoQLAnalysis[ColumnId, Type]]): Seq[typed.Join[ColumnId, Type]] = {
     def expandJoin(join: typed.Join[ColumnId, Type]): Seq[typed.Join[ColumnId, Type]] = {
-      if (join.isSimple) Seq(join)
-      else expandJoins(join.from.analyses) :+ join
+      join.from.subAnalysis match {
+        case Left(_) => Seq(join)
+        case Right(SubAnalysis(analyses, _)) => expandJoins(analyses.seq) :+ join
+      }
     }
 
     analyses.flatMap(_.joins.flatMap(expandJoin))

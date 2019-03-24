@@ -3,38 +3,50 @@ package com.socrata.soql.ast
 import scala.util.parsing.input.{NoPosition, Position}
 import com.socrata.soql.environment._
 import Select._
-import com.socrata.NonEmptySeq
+import com.socrata.soql.{BinaryTree, Compound, PipeQuery}
 
 /**
   * A SubSelect represents (potentially chained) soql that is required to have an alias
   * (because subqueries need aliases)
   */
-case class SubSelect(selects: NonEmptySeq[Select], alias: String)
+case class SubSelect(selects: BinaryTree[Select], alias: String)
 
 /**
   * All joins must select from another table. A join may also join on sub-select. A join on a sub-select requires an
   * alias, but the alias is optional if the join is on a table-name only (e.g. "join 4x4").
   *
-  *   "join 4x4" => JoinSelect(TableName(4x4, None), None) { aliasOpt = None }
-  *   "join 4x4 as a" => JoinSelect(TableName(4x4, a), None) { aliasOpt = a }
+  *   "join 4x4" => JoinSelect(Left(TableName(4x4, None))) { aliasOpt = None }
+  *   "join 4x4 as a" => JoinSelect(Left(TableName(4x4, a))) { aliasOpt = a }
   *   "join (select id from 4x4) as a" =>
-  *     JoinSelect(TableName(4x4, None), Some(SubSelect(List(_select_id_), a))) { aliasOpt = a }
+  *     JoinSelect(Right(SubSelect(List(_select_id_), a))) { aliasOpt = a }
   *   "join (select c.id from 4x4 as c) as a" =>
-  *     JoinSelect(TableName(4x4, Some(c)), Some(SubSelect(List(_select_id_), a))) { aliasOpt = a }
+  *     JoinSelect(Right(SubSelect(List(_select_id_), a))) { aliasOpt = a }
   */
-case class JoinSelect(fromTable: TableName, subSelect: Option[SubSelect]) {
+case class JoinSelect(subSelect: Either[TableName, SubSelect]) {
   // The overall alias for the join select, which is the alias for the subSelect, if defined.
   // Otherwise, it is the alias for the TableName, if defined.
-  val alias: Option[String] =  subSelect.map(_.alias).orElse(fromTable.alias)
-  def selects: Seq[Select] = subSelect.map(_.selects.seq).getOrElse(Seq.empty)
+  val alias: Option[String] = {
+    subSelect match {
+      case Left(TableName(_, alias)) => alias
+      case Right(SubSelect(_, alias)) => Option(alias)
+    }
+  }
+
+  def selects: Option[BinaryTree[Select]] = {
+    subSelect match {
+      case Left(_) => None
+      case Right(SubSelect(s, _)) => Some(s)
+    }
+  }
 
   override def toString: String = {
-    val (subSelectStr, aliasStrOpt) = subSelect.map {
-      case SubSelect(NonEmptySeq(h, tail), subAlias) =>
-        val selectWithFromStr = h.toStringWithFrom(fromTable)
-        val selectStr = (selectWithFromStr +: tail.map(_.toString)).mkString(" |> ")
+    val (subSelectStr, aliasStrOpt) = subSelect match {
+      case Right(SubSelect(select, subAlias)) =>
+        val selectStr = Select.toString(select)
         (s"($selectStr)", Some(subAlias))
-    }.getOrElse((fromTable.toString, None))
+      case Left(tn@TableName(name, alias)) =>
+        (tn.toString, None)
+    }
 
     List(Some(subSelectStr), itrToString("AS", aliasStrOpt.map(TableName.removeValidPrefix))).flatString
   }
@@ -50,6 +62,21 @@ object Select {
       Some(l.mkString(prefix.map(p => s"$p ").getOrElse(""), sep, ""))
     } else {
       None
+    }
+  }
+
+  def toString(selects: BinaryTree[Select]): String = {
+    selects match {
+      case PipeQuery(l, r) =>
+        val ls = Select.toString(l)
+        val rs = Select.toString(r)
+        s"$ls |> $rs"
+      case Compound(op, l, r) =>
+        val ls = Select.toString(l)
+        val rs = Select.toString(r)
+        s"$ls $op $rs"
+      case select: Select =>
+        select.toString
     }
   }
 
@@ -74,6 +101,7 @@ object Select {
 case class Select(
   distinct: Boolean,
   selection: Selection,
+  from: Option[TableName],
   joins: Seq[Join],
   where: Option[Expression],
   groupBys: Seq[Expression],
@@ -81,13 +109,13 @@ case class Select(
   orderBys: Seq[OrderBy],
   limit: Option[BigInt],
   offset: Option[BigInt],
-  search: Option[String]) {
+  search: Option[String]) extends BinaryTree[Select] {
 
   private def toString(from: Option[TableName]): String = {
     if(AST.pretty) {
       val distinctStr = if (distinct) "DISTINCT " else ""
       val selectStr = Some(s"SELECT $distinctStr$selection")
-      val fromStr = from.map(t => s"FROM $t")
+      val fromStr = this.from.orElse(from).map(t => s"FROM $t")
       val joinsStr = itrToString(None, joins.map(j => s"${j.toString}"), " ")
       val whereStr = itrToString("WHERE", where)
       val groupByStr = itrToString("GROUP BY", groupBys, ", ")

@@ -206,78 +206,79 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("a subselect makes the output of the inner select available to the outer") {
-    val NonEmptySeq(inner, Seq(outer)) = analyzer.analyzeFullQuery("select 5 :: money as x |> select max(x)")
-    outer.selection(ColumnName("max_x")) must equal (typed.FunctionCall(MonomorphicFunction(TestFunctions.Max, Map("a" -> TestMoney)), Seq(typed.ColumnRef(None, ColumnName("x"), TestMoney : TestType)(NoPosition)), None)(NoPosition, NoPosition))
-    inner.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
+    val PipeQuery(inner, outer) = analyzer.analyzeFullQueryBinary("select 5 :: money as x |> select max(x)")
+    outer.asLeaf.selection(ColumnName("max_x")) must equal (typed.FunctionCall(MonomorphicFunction(TestFunctions.Max, Map("a" -> TestMoney)), Seq(typed.ColumnRef(None, ColumnName("x"), TestMoney : TestType)(NoPosition)), None)(NoPosition, NoPosition))
+    inner.asLeaf.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
       Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber.t)(NoPosition)), None)(NoPosition, NoPosition)), None)(NoPosition, NoPosition))
   }
 
   test("cannot ORDER BY an unorderable type") {
-    an [UnorderableOrderBy] must be thrownBy analyzer.analyzeFullQuery("select * order by array")
+    an [UnorderableOrderBy] must be thrownBy analyzer.analyzeFullQueryBinary("select * order by array")
   }
 
   test("cannot filter by a non-boolean type") {
-    a [NonBooleanWhere] must be thrownBy analyzer.analyzeFullQuery("select * where array")
-    a [NonBooleanHaving] must be thrownBy analyzer.analyzeFullQuery("select count(*) having count(*)")
+    a [NonBooleanWhere] must be thrownBy analyzer.analyzeFullQueryBinary("select * where array")
+    a [NonBooleanHaving] must be thrownBy analyzer.analyzeFullQueryBinary("select count(*) having count(*)")
   }
 
   test("cannot group by a non-groupable type") {
-    a [NonGroupableGroupBy] must be thrownBy analyzer.analyzeFullQuery("select array group by array")
+    a [NonGroupableGroupBy] must be thrownBy analyzer.analyzeFullQueryBinary("select array group by array")
   }
 
   test("Merging two simple filter queries is the same as querying one") {
-    val analysis1 = analyzer.analyzeFullQuery("select 2*visits as twice_visits where twice_visits > 10 |> select * where twice_visits > 20")
-    val analysis2 = analyzer.analyzeFullQuery("select 2*visits as twice_visits where twice_visits > 10 and twice_visits > 20")
+    val analysis1 = analyzer.analyzeFullQueryBinary("select 2*visits as twice_visits where twice_visits > 10 |> select * where twice_visits > 20")
+    val analysis2 = analyzer.analyzeFullQueryBinary("select 2*visits as twice_visits where twice_visits > 10 and twice_visits > 20")
     SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
   }
 
   test("Merging a filter-on-a-group-on-a-filter is the same as a where-group-having one") {
-    val analysis1 = analyzer.analyzeFullQuery("select visits where visits > 10 |> select visits, count(*) as c group by visits |> select * where c > 5")
-    val analysis2 = analyzer.analyzeFullQuery("select visits, count(*) as c where visits > 10 group by visits having c > 5")
+    val analysis1 = analyzer.analyzeFullQueryBinary("select visits where visits > 10 |> select visits, count(*) as c group by visits |> select * where c > 5")
+    val analysis2 = analyzer.analyzeFullQueryBinary("select visits, count(*) as c where visits > 10 group by visits having c > 5")
     SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
   }
 
   test("Merging limits truncates the second limit to the window defined by the first") {
-    val analysis1 = analyzer.analyzeFullQuery("select visits offset 10 limit 5 |> select * offset 3 limit 10")
-    val analysis2 = analyzer.analyzeFullQuery("select visits offset 13 limit 2")
+    val analysis1 = analyzer.analyzeFullQueryBinary("select visits offset 10 limit 5 |> select * offset 3 limit 10")
+    val analysis2 = analyzer.analyzeFullQueryBinary("select visits offset 13 limit 2")
     SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
   }
 
+
   test("Merging an offset to the end of a limit reduces the limit to 0") {
-    val analysis1 = analyzer.analyzeFullQuery("select visits offset 10 limit 5 |> select * offset 5")
-    val analysis2 = analyzer.analyzeFullQuery("select visits offset 15 limit 0")
+    val analysis1 = analyzer.analyzeFullQueryBinary("select visits offset 10 limit 5 |> select * offset 5")
+    val analysis2 = analyzer.analyzeFullQueryBinary("select visits offset 15 limit 0")
     SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
   }
 
   test("Merging an offset past the end of a limit reduces the limit to 0 and does not move the offset past the end of the first query") {
-    val analysis1 = analyzer.analyzeFullQuery("select visits offset 10 limit 5 |> select * offset 50")
-    val analysis2 = analyzer.analyzeFullQuery("select visits offset 15 limit 0")
+    val analysis1 = analyzer.analyzeFullQueryBinary("select visits offset 10 limit 5 |> select * offset 50")
+    val analysis2 = analyzer.analyzeFullQueryBinary("select visits offset 15 limit 0")
     SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
   }
 
   test("Merging join") {
-    val analysis1 = analyzer.analyzeFullQuery("select name_last, visits where visits > 1 |> select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = name_last where @aaaa-aaaa.name_last='Almond'")
-    val analysis2 = analyzer.analyzeFullQuery("select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = name_last where visits > 1 and @aaaa-aaaa.name_last='Almond'")
+    val analysis1 = analyzer.analyzeFullQueryBinary("select name_last, visits where visits > 1 |> select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = name_last where @aaaa-aaaa.name_last='Almond'")
+    val analysis2 = analyzer.analyzeFullQueryBinary("select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = name_last where visits > 1 and @aaaa-aaaa.name_last='Almond'")
     val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1)
     merged must equal (analysis2)
   }
 
   test("Merging join with column alias of the main line") {
-    val analysis1 = analyzer.analyzeFullQuery("select coalesce(name_last, name_first) as nl, visits where visits > 1 |> select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = nl where @aaaa-aaaa.name_last='Almond'")
-    val analysis2 = analyzer.analyzeFullQuery("select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = coalesce(name_last, name_first) where visits > 1 and @aaaa-aaaa.name_last='Almond'")
+    val analysis1 = analyzer.analyzeFullQueryBinary("select coalesce(name_last, name_first) as nl, visits where visits > 1 |> select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = nl where @aaaa-aaaa.name_last='Almond'")
+    val analysis2 = analyzer.analyzeFullQueryBinary("select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = coalesce(name_last, name_first) where visits > 1 and @aaaa-aaaa.name_last='Almond'")
     val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1)
     merged must equal (analysis2)
   }
 
   test("Merging join with table alias") {
-    val analysis1 = analyzer.analyzeFullQuery("select name_last, name_first, visits where visits > 1 |> select visits as vis, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first where @a1.name_first='John'")
-    val analysis2 = analyzer.analyzeFullQuery("select visits as vis, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first where visits > 1 and @a1.name_first='John'")
+    val analysis1 = analyzer.analyzeFullQueryBinary("select name_last, name_first, visits where visits > 1 |> select visits as vis, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first where @a1.name_first='John'")
+    val analysis2 = analyzer.analyzeFullQueryBinary("select visits as vis, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first where visits > 1 and @a1.name_first='John'")
     val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1)
     merged must equal (analysis2)
   }
 
   test("Back to back joins do not merge") {
-    val analysis = analyzer.analyzeFullQuery("select name_first, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = name_last |> select name_last, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first")
+    val analysis = analyzer.analyzeFullQueryBinary("select name_first, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = name_last |> select name_last, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first")
     val notMerged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
     notMerged must equal (analysis)
   }
@@ -355,16 +356,16 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> visit,
       ColumnName("name_last") -> lastName
     ))
-    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(TableName("_aaaa-aaaa"), None), typedExpression("name_last = @aaaa-aaaa.name_last"))))
+    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(Left(TableName("_aaaa-aaaa"))), typedExpression("name_last = @aaaa-aaaa.name_last"))))
   }
 
   test("join with table alias") {
-    val analysis = analyzer.analyzeUnchainedQuery("select visits, @a1.name_first join @aaaa-aaaa as a1 on visits > 10")
+    val analysis = analyzer.analyzeUnchainedQuery("select visits, @a1.name_first join @aaaa-aaab as a1 on visits > 10")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(TableName("_aaaa-aaaa", Some("_a1")), None), typedExpression("visits > 10"))))
+    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(Left(TableName("_aaaa-aaab", Some("_a1")))), typedExpression("visits > 10"))))
   }
 
   test("join toString") {
@@ -431,34 +432,34 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     parsedAgain.toString must equal(expected)
   }
 
-  def parseJoin(joinSoql: String)(implicit ctx: analyzer.AnalysisContext): NonEmptySeq[SoQLAnalysis[ColumnName, TestType]] = {
+  def parseJoin(joinSoql: String)(implicit ctx: analyzer.AnalysisContext): BinaryTree[SoQLAnalysis[ColumnName, TestType]] = {
     val parsed = new StandaloneParser().parseJoinSelect(joinSoql)
-    analyzer.analyze(NonEmptySeq.fromSeqUnsafe(parsed.selects))(ctx)
+    analyzer.analyzeBinary(parsed.selects.get)(ctx)
   }
 
   test("join with sub-query") {
     val joinSubSoqlInner = "select * from @aaaa-aaab where name_first = 'xxx'"
     val joinSubSoql = s"($joinSubSoqlInner) as a1"
-    val subAnalyses = parseJoin(joinSubSoql)(Map(TableName.PrimaryTable.qualifier -> joinAliasCtx))
+    val subAnalyses = parseJoin(joinSubSoql)(datasetCtxMap + (TableName.PrimaryTable.qualifier -> joinAliasCtx))
     val analysis = analyzer.analyzeUnchainedQuery(s"select visits, @a1.name_first join $joinSubSoql on name_first = @a1.name_first")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    val expected = List(typed.InnerJoin(JoinAnalysis(TableName("_aaaa-aaab"), Some(SubAnalysis(subAnalyses, "_a1"))), typedExpression("name_first = @a1.name_first")))
+    val expected = List(typed.InnerJoin(JoinAnalysis(Right(SubAnalysis(subAnalyses, "_a1"))), typedExpression("name_first = @a1.name_first")))
     analysis.joins must equal (expected)
   }
 
   test("join with sub-chained-query") {
     val joinSubSoqlInner = "select * from @aaaa-aaab where name_first = 'aaa' |> select * where name_first = 'bbb'"
     val joinSubSoql = s"($joinSubSoqlInner) as a1"
-    val subAnalyses = parseJoin(joinSubSoql)(Map(TableName.PrimaryTable.qualifier -> joinAliasCtx))
+    val subAnalyses = parseJoin(joinSubSoql)(datasetCtxMap + (TableName.PrimaryTable.qualifier -> joinAliasCtx))
     val analysis = analyzer.analyzeUnchainedQuery(s"select visits, @a1.name_first join $joinSubSoql on name_first = @a1.name_first")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    val expected = List(typed.InnerJoin(JoinAnalysis(TableName("_aaaa-aaab"), Some(SubAnalysis(subAnalyses, "_a1"))), typedExpression("name_first = @a1.name_first")))
+    val expected = List(typed.InnerJoin(JoinAnalysis(Right(SubAnalysis(subAnalyses, "_a1"))), typedExpression("name_first = @a1.name_first")))
     analysis.joins must equal (expected)
   }
 
@@ -470,14 +471,14 @@ SELECT visits, @x3.x
        ) as x3 on @x3.x = name_first
       """)
 
-    val innermostJoins = analysis.joins.head.from.analyses.head.joins
-    val innermostAnalysis = innermostJoins.head.from.analyses.head
+    val innermostJoins = analysis.joins.head.from.subAnalysis.right.get.analyses.asLeaf.joins
+    val innermostAnalysis = innermostJoins.head.from.subAnalysis.right.get.analyses.asLeaf
     innermostAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x1"), ColumnName("x"), TestText)(NoPosition)
     ))
 
     val joins = analysis.joins
-    val joinAnalysis = joins.head.from.analyses.head
+    val joinAnalysis = joins.head.from.subAnalysis.right.get.analyses.asLeaf
     joinAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x2"), ColumnName("x"), TestText)(NoPosition),
       ColumnName("name_first") -> ColumnRef(Some("_a1"), ColumnName("name_first"), TestText)(NoPosition)
@@ -497,13 +498,13 @@ SELECT visits, @x2.zx
        ) as x2 on @x2.zx = name_first
       """)
 
-    val innermostLeftOuterJoin = analysis.joins.head.from.analyses.head.joins
-    val innermostAnalysis = innermostLeftOuterJoin.head.from.analyses.head
+    val innermostLeftOuterJoin = analysis.joins.head.from.analyses.get.asLeaf.joins
+    val innermostAnalysis = innermostLeftOuterJoin.head.from.analyses.get.asLeaf
     innermostAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x1"), ColumnName("x"), TestText)(NoPosition)
     ))
 
-    val rightOuterJoinAnalysis = analysis.joins.head.from.analyses.head
+    val rightOuterJoinAnalysis = analysis.joins.head.from.analyses.get.asLeaf
     rightOuterJoinAnalysis.selection.toSeq must equal (Seq(
       ColumnName("zx") -> ColumnRef(Some("_x2"), ColumnName("x"), TestText)(NoPosition)
     ))
@@ -574,10 +575,9 @@ SELECT visits, @x2.zx
     analysis.selection.head._1.name must equal("sum_a1_id")
   }
 
-
   test("Merge window function with group by aggregate") {
-    val analysis1 = analyzer.analyzeFullQuery("SELECT name_first, name_last, sum(visits) as n2 GROUP BY name_first, name_last |> SELECT name_first, row_number() over(order by n2) as rn")
-    val analysis2 = analyzer.analyzeFullQuery("SELECT name_first, row_number() over(order by sum(visits)) as rn GROUP BY name_first, name_last")
+    val analysis1 = analyzer.analyzeFullQueryBinary("SELECT name_first, name_last, sum(visits) as n2 GROUP BY name_first, name_last |> SELECT name_first, row_number() over(order by n2) as rn")
+    val analysis2 = analyzer.analyzeFullQueryBinary("SELECT name_first, row_number() over(order by sum(visits)) as rn GROUP BY name_first, name_last")
     SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
   }
 }

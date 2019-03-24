@@ -78,6 +78,12 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
     deserializer(new ByteArrayInputStream(baos.toByteArray)) must equal(analysis)
   }
 
+  def testFull(analysis: BinaryTree[Analysis]) = {
+    val baos = new ByteArrayOutputStream
+    serializer.applyBinaryTree(baos, analysis)
+    deserializer.applyBinaryTree(new ByteArrayInputStream(baos.toByteArray)) must equal(analysis)
+  }
+
   def testCompatibilityFull(query: String, v4Serializedb64: String) = {
     val analysis = analyzeFull(query)
     val baos = b64Decoder.decode(v4Serializedb64)

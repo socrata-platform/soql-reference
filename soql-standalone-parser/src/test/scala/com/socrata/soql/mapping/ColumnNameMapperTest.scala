@@ -13,7 +13,13 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
     ColumnName("crime_date") -> ColumnName("MAP_crime_date"),
     ColumnName("ward") -> ColumnName("MAP_ward"),
     ColumnName("arrest") -> ColumnName("MAP_arrest"),
-    ColumnName("crime_type") -> ColumnName("MAP_crime_type")
+    ColumnName("crime_type") -> ColumnName("MAP_crime_type"),
+
+    ColumnName("name") -> ColumnName("MAP_name"),
+    ColumnName("cat") -> ColumnName("MAP_cat"),
+    ColumnName("dog") -> ColumnName("MAP_dog"),
+    ColumnName("bird") -> ColumnName("MAP_bird"),
+    ColumnName("fish") -> ColumnName("MAP_fish")
   )
 
   lazy val mapper = new ColumnNameMapper(columnIdMap)
@@ -50,7 +56,7 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
   }
 
   test("Select mapped") {
-    def s = parser.selectStatement(
+    def s = parser.binaryTreeSelect(
       """
         |SELECT
         |  date_trunc_ym(crime_date) AS crime_date,
@@ -68,7 +74,7 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
         |OFFSET 11
       """.stripMargin)
 
-    def expS = parser.selectStatement(
+    def expS = parser.binaryTreeSelect(
       """
         |SELECT
         |  date_trunc_ym(MAP_crime_date) AS crime_date,
@@ -88,5 +94,27 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
     )
 
     assert(mapper.mapSelect(s).toString === expS.toString)
+  }
+
+  test("Compound query mapped") {
+    val soql =  """
+       SELECT name, @dog.name as dogname, @j2.name as j2catname, @j4.name as j4name,
+              @dog.dog, @j2.cat as j2cat, @j3.cat as j3cat, @j4.bird as j4bird
+         JOIN @dog ON TRUE
+         JOIN @cat as j2 ON TRUE
+         JOIN @cat as j3 ON TRUE
+         JOIN (SELECT @b1.name, @b1.bird FROM @bird as b1
+                UNION
+              (SELECT name, fish, @c2.cat as cat2 FROM @fish JOIN @cat as c2 ON TRUE |> SELECT name, cat2)
+                UNION ALL
+               SELECT @cat.name, @cat.cat FROM @cat) as j4 ON TRUE
+      """
+
+    val expected = "SELECT `MAP_name`, @dog.`MAP_name` AS dogname, @j2.`MAP_name` AS j2catname, @j4.`MAP_name` AS j4name, @dog.`MAP_dog`, @j2.`MAP_cat` AS j2cat, @j3.`MAP_cat` AS j3cat, @j4.`MAP_bird` AS j4bird JOIN @dog ON TRUE JOIN @cat AS j2 ON TRUE JOIN @cat AS j3 ON TRUE JOIN (SELECT @b1.`MAP_name`, @b1.`MAP_bird` FROM @bird AS b1 UNION SELECT `MAP_name`, `MAP_fish`, @c2.`MAP_cat` AS cat2 FROM @fish JOIN @cat AS c2 ON TRUE |> SELECT `name`, `cat2` UNION ALL SELECT @cat.`MAP_name`, @cat.`MAP_cat` FROM @cat) AS j4 ON TRUE"
+    val s = parser.binaryTreeSelect(soql)
+    val actual = mapper.mapSelect(s)
+    // Note that the (second) chained query in join union is not mapped and retains "SELECT name, cat2" because this is not supported.
+    // But mapSelect should not raise exception because of that.
+    assert(actual.toString === expected)
   }
 }

@@ -26,7 +26,7 @@ class ToStringTest extends FunSpec with MustMatchers {
 
     it("wide expressions") {
       val expected =
-         """foo(
+        """foo(
           |  bar(
           |    baz(
           |      `hello`,
@@ -60,7 +60,7 @@ class ToStringTest extends FunSpec with MustMatchers {
 
     it("nested expressions ((with extra parens))") {
       val expected =
-         """case(
+        """case(
           |  (`species` = 'cat'),
           |  case(
           |    ((`breed` = 'tabby')),
@@ -98,7 +98,6 @@ class ToStringTest extends FunSpec with MustMatchers {
       val rendered = parser.expression(expected).toString
       rendered must equal(expected)
     }
-
   }
 
   describe("non-join") {
@@ -143,6 +142,22 @@ class ToStringTest extends FunSpec with MustMatchers {
       val expected2 = "SELECT `:id`"
       val parsed = parser.selectStatement(query).map(_.toString)
       parsed must equal(NonEmptySeq(expected1, List(expected2)))
+    }
+  }
+
+  describe("query operators") {
+    it("chains, unions, joins round trip") {
+      val soqls = Seq(
+        "SELECT 1 |> SELECT 2 |> SELECT 3",
+        "SELECT 1 |> SELECT 2 |> (SELECT 3 |> SELECT 4 |> SELECT 5 |> SELECT 6)",
+        "SELECT 1 UNION (SELECT 2 UNION ALL (SELECT 3 UNION SELECT 4) UNION SELECT 5) UNION SELECT 6",
+        "SELECT `x`, @a.`a1`, @jb.`b1`, @jcd.`c1` JOIN @a ON TRUE JOIN (SELECT @b.`b1` FROM @b) AS jb ON TRUE JOIN (SELECT @cc.`c1` FROM @c AS cc UNION SELECT `d1` FROM @d) AS jcd ON TRUE |> SELECT `x`, `c1`, 1 + 2 ORDER BY `x` ASC NULL LAST, `c1` ASC NULL LAST"
+      )
+
+      soqls.foreach { soql =>
+        val roundTrip = parser.binaryTreeSelect(soql)
+        roundTrip.toString must equal(soql)
+      }
     }
   }
 }

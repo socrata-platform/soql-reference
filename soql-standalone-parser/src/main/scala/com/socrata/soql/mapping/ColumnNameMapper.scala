@@ -1,41 +1,57 @@
 package com.socrata.soql.mapping
 
-import com.socrata.NonEmptySeq
 import com.socrata.soql.ast._
 import com.socrata.soql.environment.ColumnName
+import com.socrata.soql.{BinaryTree, Compound, PipeQuery}
 
 import scala.util.parsing.input.{NoPosition, Position}
 
 /**
  * Maps column names in the given AST.  Position information is not updated
  * or retained.
+ * This is used for rewriting rollups in soda fountain and does not work for chained queries (only operate on the first element).
  *
  * @param columnNameMap Map from current names to new names.  The map must be defined
  *                      for all column names passed in.
  */
 class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
 
-  def mapSelect(selects: NonEmptySeq[Select]): NonEmptySeq[Select] = {
-    val h = selects.head
-    val mappedHead = Select(
-      distinct = h.distinct,
-      selection = mapSelection(h.selection),
-      joins = h.joins.map(mapJoin),
-      where = h.where map mapExpression,
-      groupBys = h.groupBys.map(mapExpression),
-      having = h.having map mapExpression,
-      orderBys = h.orderBys.map(mapOrderBy),
-      limit = h.limit,
-      offset = h.offset,
-      search = h.search
-    )
-    NonEmptySeq(mappedHead, selects.tail)
+  def mapSelect(selects: BinaryTree[Select]): BinaryTree[Select] = {
+    selects match {
+      case PipeQuery(l, r) =>
+        // previously when pipe query is in seq form,
+        // mapSelect only operates on the first element
+        val nl = mapSelect(l)
+        PipeQuery(nl, r)
+      case Compound(op, l, r) =>
+        val nl = mapSelect(l)
+        val nr = mapSelect(r)
+        Compound(op, nl, nr)
+      case h: Select =>
+        Select(
+          distinct = h.distinct,
+          selection = mapSelection(h.selection),
+          from = h.from,
+          joins = h.joins.map(mapJoin),
+          where = h.where map mapExpression,
+          groupBys = h.groupBys.map(mapExpression),
+          having = h.having map mapExpression,
+          orderBys = h.orderBys.map(mapOrderBy),
+          limit = h.limit,
+          offset = h.offset,
+          search = h.search
+        )
+    }
   }
 
   def mapJoin(join: Join): Join =  {
-    val mappedSubSelect = join.from.subSelect.map { ss =>
-      ss.copy(selects = mapSelect(ss.selects))
+    val mappedSubSelect = join.from.subSelect match {
+      case Right(ss) =>
+        Right(ss.copy(selects = mapSelect(ss.selects)))
+      case l@Left(_) =>
+        l
     }
+
     val mappedFrom = join.from.copy(subSelect = mappedSubSelect)
     val mappedOn = mapExpression(join.on)
     join match {

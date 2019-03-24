@@ -12,7 +12,7 @@ trait AliasAnalysis {
   type AnalysisContext = Map[Qualifier, UntypedDatasetContext]
 
   case class Analysis(expressions: OrderedMap[ColumnName, Expression], evaluationOrder: Seq[ColumnName])
-  def apply(selection: Selection)(implicit ctx: AnalysisContext): Analysis
+  def apply(selection: Selection, from: Option[TableName])(implicit ctx: AnalysisContext): Analysis
 }
 
 object AliasAnalysis extends AliasAnalysis {
@@ -28,9 +28,9 @@ object AliasAnalysis extends AliasAnalysis {
     * @throws com.socrata.soql.exceptions.DuplicateAlias if duplicate aliases are detected
     * @throws com.socrata.soql.exceptions.CircularAliasDefinition if an alias is defined in terms of itself
     */
-  def apply(selection: Selection)(implicit ctx: AnalysisContext): Analysis = {
+  def apply(selection: Selection, from: Option[TableName] = None)(implicit ctx: AnalysisContext): Analysis = {
     log.debug("Input: {}", selection)
-    val starsExpanded = expandSelection(selection)
+    val starsExpanded = expandSelection(selection, from)
     log.debug("After expanding stars: {}", starsExpanded)
     val (semiExplicit, explicitAndSemiExplicitAssigned) = assignExplicitAndSemiExplicit(starsExpanded)
     log.debug("After assigning explicit and semi-explicit: {}", explicitAndSemiExplicitAssigned)
@@ -49,13 +49,14 @@ object AliasAnalysis extends AliasAnalysis {
    * @throws com.socrata.soql.exceptions.RepeatedException if the same column is excepted more than once
    * @throws com.socrata.soql.exceptions.NoSuchColumn if a column not on the dataset is excepted
    */
-  def expandSelection(selection: Selection)(implicit ctx: AnalysisContext): Seq[SelectedExpression] = {
+  def expandSelection(selection: Selection, from: Option[TableName] = None)(implicit ctx: AnalysisContext): Seq[SelectedExpression] = {
+    val defaultQualifier = from.map(_.qualifier).getOrElse(TableName.PrimaryTable.qualifier)
     val Selection(systemStar, userStars, expressions) = selection
-    val ctxKeyForSystem = systemStar.flatMap(_.qualifier).getOrElse(TableName.PrimaryTable.qualifier)
+    val ctxKeyForSystem = systemStar.flatMap(_.qualifier).getOrElse(defaultQualifier)
     val systemColumns = ctx(ctxKeyForSystem).columns.filter(_.name.startsWith(":"))
     systemStar.toSeq.flatMap(processStar(_, systemColumns)) ++
       userStars.flatMap { userStar =>
-        val ctxKeyForUser = userStar.qualifier.getOrElse(TableName.PrimaryTable.qualifier)
+        val ctxKeyForUser = userStar.qualifier.getOrElse(defaultQualifier)
         val userColumns = ctx(ctxKeyForUser).columns.filterNot(_.name.startsWith(":"))
         processStar(userStar, userColumns)
       } ++
