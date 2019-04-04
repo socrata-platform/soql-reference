@@ -6,6 +6,90 @@ import org.scalatest.{FunSpec, MustMatchers}
 class ToStringTest extends FunSpec with MustMatchers {
   val parser = new StandaloneParser()
 
+  describe("expressions") {
+    it("simple expressions") {
+      val expected = "foo(`hi`)"
+      val rendered = parser.expression(expected).toString
+      rendered must equal(expected)
+    }
+
+    it("wide expressions") {
+      val expected =
+         """foo(
+          |  bar(
+          |    baz(
+          |      `hello`,
+          |      `there`,
+          |      'yikes',
+          |      'wow this is a complicated function',
+          |      'the arglist is very long in terms of rendered width',
+          |      'as well as arg count',
+          |      'this is a long arglist so it will get broken up',
+          |      biz(1, 2, 3, 'this', 'wont'),
+          |      this(
+          |        'should',
+          |        'get broken up',
+          |        'becuase it is very long',
+          |        'and this much stuff on one line',
+          |        'will make things',
+          |        'very hard to read',
+          |        'i could maybe write a whole poem',
+          |        'in these tests',
+          |        'but it is 5 oclock',
+          |        'and i am not creative',
+          |        'sorry about that',
+          |        'happy monday'
+          |      )
+          |    )
+          |  )
+          |)""".stripMargin
+      val rendered = parser.expression(expected).toString
+      rendered must equal(expected)
+    }
+
+    it("nested expressions ((with extra parens))") {
+      val expected =
+         """case(
+          |  (`species` = 'cat'),
+          |  case(
+          |    ((`breed` = 'tabby')),
+          |    'tabby cat',
+          |    `breed` = 'sphinx',
+          |    'sphinx cat',
+          |    `breed` = 'fuzzy',
+          |    'fuzzy cat'
+          |  ),
+          |  `species` = 'dog',
+          |  case(
+          |    `breed` = 'corgi',
+          |    'corgis!',
+          |    `breed` = 'greyhound',
+          |    'greyhounds!',
+          |    `breed` = 'husky',
+          |    'huskys!',
+          |    (`breed` == 'shepherd'),
+          |    case(
+          |      `subbreed` = 'aussie',
+          |      'australian shepherd',
+          |      `subbreed` = 'german',
+          |      'german shepherd',
+          |      `subbreed` = 'border',
+          |      'border collie',
+          |      `subbreed` = 'belgian',
+          |      'belgian shepherd',
+          |      (`subbreed` = 'pyrenees'),
+          |      'great pyrenees'
+          |    )
+          |  ),
+          |  TRUE,
+          |  'other'
+          |)""".stripMargin
+      val rendered = parser.expression(expected).toString
+      rendered must equal(expected)
+    }
+
+  }
+
   describe("non-join") {
     it("complex") {
       val query =
