@@ -13,6 +13,17 @@ class ToStringTest extends FunSpec with MustMatchers {
       rendered must equal(expected)
     }
 
+    it("nested operators") {
+      val betweenExpect = "foo(`something` BETWEEN 1 AND 5)"
+      val betweenActual = parser.expression(betweenExpect).toString
+      betweenActual must equal(betweenExpect)
+
+      val notNullExpect = "foo(`something` IS NOT NULL)"
+      val notNullActual = parser.expression(notNullExpect).toString
+      notNullActual must equal(notNullExpect)
+
+    }
+
     it("wide expressions") {
       val expected =
          """foo(
