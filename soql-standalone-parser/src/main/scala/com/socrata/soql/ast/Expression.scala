@@ -13,6 +13,11 @@ sealed abstract class Expression extends Product {
 
   def toSyntheticIdentifierBase: String =
     com.socrata.soql.brita.IdentifierFilter(Expression.findIdentsAndLiterals(this))
+
+  def format(depth: Int): String
+  def indent(token: String, depth: Int): String = {
+    ("  " * depth) + token
+  }
 }
 
 object Expression {
@@ -133,12 +138,13 @@ case class ColumnOrAliasRef(qualifier: Option[String], column: ColumnName)(val p
         TableName.Field
     }.getOrElse("") + "`" + column.name + "`"
   }
-
+  def format(depth: Int) = asString
   def allColumnRefs = Set(this)
 }
 
 sealed abstract class Literal extends Expression {
   def allColumnRefs = Set.empty
+  def format(depth: Int) = asString
 }
 case class NumberLiteral(value: BigDecimal)(val position: Position) extends Literal {
   protected def asString = value.toString
@@ -154,31 +160,65 @@ case class NullLiteral()(val position: Position) extends Literal {
 }
 
 case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])(val position: Position, val functionNamePosition: Position) extends Expression {
-  protected def asString = functionName match {
-    case SpecialFunctions.Parens => "(" + parameters(0) + ")"
-    case SpecialFunctions.Subscript => parameters(0) + "[" + parameters(1) + "]"
-    case SpecialFunctions.StarFunc(f) => f + "(*)"
-    case SpecialFunctions.Operator(op) if parameters.size == 1 =>
-      op match {
-        case "NOT" => "%s %s".format(op, parameters(0))
-        case _ => op + parameters(0)
+  protected def asString() = format(0)
+
+  def format(d: Int): String = {
+    functionName match {
+      case SpecialFunctions.Parens =>
+        "(" + parameters(0).format(d) + ")"
+      case SpecialFunctions.Subscript =>
+        parameters(0).format(d) + "[" + parameters(1).format(d) + "]"
+      case SpecialFunctions.StarFunc(f) =>
+        f.format(d) + "(*)"
+      case SpecialFunctions.Operator(op) if parameters.size == 1 =>
+        op match {
+          case "NOT" => "%s %s".format(op, parameters(0).format(d))
+          case _ => op + parameters(0).format(d)
+        }
+      case SpecialFunctions.Operator(op) if parameters.size == 2 =>
+        parameters(0).format(d) + " " + op + " " + parameters(1).format(d)
+      case SpecialFunctions.Operator(op) =>
+        sys.error("Found a non-unary, non-binary operator: " + op + " at " + position)
+      case SpecialFunctions.Cast(typ) if parameters.size == 1 =>
+        parameters(0).format(d) + " :: " + typ
+      case SpecialFunctions.Cast(_) =>
+        sys.error("Found a non-unary cast at " + position)
+      case SpecialFunctions.Between =>
+        parameters(0).format(d) + " BETWEEN " + parameters(1).format(d) + " AND " + parameters(2).format(d)
+      case SpecialFunctions.NotBetween =>
+        parameters(0).format(d) + " NOT BETWEEN " + parameters(1).format(d) + " AND " + parameters(2).format(d)
+      case SpecialFunctions.IsNull =>
+        parameters(0).format(d) + " IS NULL"
+      case SpecialFunctions.IsNotNull =>
+        parameters(0).format(d) + " IS NOT NULL"
+      case SpecialFunctions.In =>
+        parameters.drop(1).map(_.format(d)).mkString(parameters(0).format(d) + " IN (", ",", ")")
+      case SpecialFunctions.NotIn =>
+        parameters.drop(1).map(_.format(d)).mkString(parameters(0).format(d) + " NOT IN (", ",", ")")
+      case SpecialFunctions.Like =>
+        parameters.map(_.format(d)).mkString(" LIKE ")
+      case SpecialFunctions.NotLike =>
+        parameters.map(_.format(d)).mkString(" NOT LIKE ")
+      case SpecialFunctions.WindowFunctionOver =>
+        val partitionBy = if (parameters.size > 1) "PARTITION BY " else ""
+        parameters.drop(1).map(_.format(d)).mkString(parameters(0).format(d) + " OVER (" + partitionBy, ",", ")")
+      case other => {
+        val (break, delim, indentation) = parameters.map(_.toString).mkString.length match {
+          case l if l > 30 => ("\n", ",\n", d + 1)
+          case _ => ("", ", ", 0)
+        }
+
+        parameters
+          .map((e: Expression) => {
+            e match {
+              case _: Literal => indent(e.format(indentation), indentation)
+              case _: ColumnOrAliasRef => indent(e.format(indentation), indentation)
+              case _ => indent(e.format(d + 1), indentation)
+            }
+          })
+          .mkString(other.toString + s"(${break}", delim, break + indent(")", indentation - 1))
       }
-    case SpecialFunctions.Operator(op) if parameters.size == 2 => parameters(0) + " " + op + " " + parameters(1)
-    case SpecialFunctions.Operator(op) => sys.error("Found a non-unary, non-binary operator: " + op + " at " + position)
-    case SpecialFunctions.Cast(typ) if parameters.size == 1 => parameters(0) + " :: " + typ
-    case SpecialFunctions.Cast(_) => sys.error("Found a non-unary cast at " + position)
-    case SpecialFunctions.Between => parameters(0) + " BETWEEN " + parameters(1) + " AND " + parameters(2)
-    case SpecialFunctions.NotBetween => parameters(0) + " NOT BETWEEN " + parameters(1) + " AND " + parameters(2)
-    case SpecialFunctions.IsNull => parameters(0) + " IS NULL"
-    case SpecialFunctions.IsNotNull => parameters(0) + " IS NOT NULL"
-    case SpecialFunctions.In => parameters.drop(1).mkString(parameters(0) + " IN (", ",", ")")
-    case SpecialFunctions.NotIn => parameters.drop(1).mkString(parameters(0) + " NOT IN (", ",", ")")
-    case SpecialFunctions.Like => parameters.mkString(" LIKE ")
-    case SpecialFunctions.NotLike => parameters.mkString(" NOT LIKE ")
-    case SpecialFunctions.WindowFunctionOver =>
-      val partitionBy = if (parameters.size > 1) "PARTITION BY " else ""
-      parameters.drop(1).mkString(parameters(0) + " OVER (" + partitionBy, ",", ")")
-    case other => parameters.mkString(other + "(", ",", ")")
+    }
   }
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
 }
