@@ -46,8 +46,7 @@ object Expression {
         case FunctionCall(SpecialFunctions.WindowFunctionOver, args) =>
           Seq(args.head).flatMap(findIdentsAndLiterals) ++
             Vector("over") ++
-            (if (args.tail.isEmpty) Vector.empty else Vector("partition", "by")) ++
-            args.tail.flatMap(findIdentsAndLiterals)
+            (if (args.tail.isEmpty) Vector.empty else args.tail.flatMap(findIdentsAndLiterals))
         case FunctionCall(other, args) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals)
       }
   }
@@ -200,8 +199,14 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
       case SpecialFunctions.NotLike =>
         parameters.map(_.format(d)).mkString(" NOT LIKE ")
       case SpecialFunctions.WindowFunctionOver =>
-        val partitionBy = if (parameters.size > 1) "PARTITION BY " else ""
-        parameters.drop(1).map(_.format(d)).mkString(parameters(0).format(d) + " OVER (" + partitionBy, ",", ")")
+        val param0 = parameters(0).format(d)
+        val partitions = windowOverPartition(parameters.tail)
+        val orders = windowOverOrder(parameters.tail)
+        val result = param0 + " OVER (" +
+          (if (partitions.nonEmpty) partitions.map(_.format(d)).mkString(" PARTITION BY ", ",", "") else "") +
+          (if (orders.nonEmpty) orders.map(_.format(d)).mkString(" ORDER BY ", ",", "") else "") +
+          ")"
+        result
       case other => {
         val (break, delim, indentation) = parameters.map(_.toString).mkString.length match {
           case l if l > 30 => ("\n", ",\n", d + 1)
@@ -220,5 +225,28 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
       }
     }
   }
+
+  private def windowOverPartition(es: Seq[Expression]): Seq[Expression] = {
+    val ps = es.dropWhile {
+      case StringLiteral("partition_by") => false
+      case _ => true
+    }
+    val ps1 = ps.takeWhile {
+      case StringLiteral("order_by") => false
+      case _ => true
+    }
+    if (ps1.nonEmpty) ps1.tail
+    else ps1
+  }
+
+  private def windowOverOrder(es: Seq[Expression]): Seq[Expression] = {
+    val ps = es.dropWhile {
+      case StringLiteral("order_by") => false
+      case _ => true
+    }
+    if (ps.nonEmpty) ps.tail
+    else ps
+  }
+
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
 }
