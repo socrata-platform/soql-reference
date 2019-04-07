@@ -46,6 +46,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def search(soql: String): String = parseFull(stringLiteral, soql)
 
   def baseSelect(soql: String): BaseSelect = parseFull(atomSelect, soql)
+  def test(soql: String) = parseFull(select2, soql)
 
   protected def badParse(msg: String, nextPos: Position): Nothing
   protected def lexer(s: String): AbstractLexer
@@ -146,6 +147,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     parenSelect |
     compoundSelect |
     select | failure(errors.missingExpr)
+
 
 
   val tableIdentifier: Parser[(String, Position)] =
@@ -526,4 +528,44 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     }
 
   def expr = disjunction | failure(errors.missingExpr)
+
+
+  def select2 = compoundSelect2 | failure(errors.missingExpr)
+
+
+  def parenSelect2: Parser[NonEmptySeq[BaseSelect]] = {
+    println("parenSelect2")
+    LPAREN() ~> select2 <~ RPAREN() ^^ { s =>
+      s
+    }
+  }
+
+  def atomSelect2: PackratParser[NonEmptySeq[BaseSelect]] = {
+    select ^^ { case a =>
+      println("atomSelect2")
+      NonEmptySeq(a)
+    } |
+      parenSelect2 |
+      failure(errors.missingExpr)
+  }
+
+  lazy val compoundSelect2: PackratParser[NonEmptySeq[BaseSelect]] = {
+    opt(compoundSelect2 ~ query_op) ~ atomSelect2 ^^ {
+      case None ~ b =>
+        println("AA: " + b)
+        //Seq.empty[BaseSelect]
+        b
+      case Some(a ~ op) ~ b =>
+        println("BB: ")
+        //Selects(op.printable, a, b)
+        val aop = a.op.getOrElse(op.printable)
+        val bop = b.op.getOrElse(op.printable)
+        val result = if (aop == bop)
+          NonEmptySeq(a.head, (a.tail ++ b.seq), op = Some(op.printable))
+        else
+          NonEmptySeq(a, b.seq, op = Some(op.printable))
+        result
+      //Seq.empty[BaseSelect]
+    }
+  }
 }

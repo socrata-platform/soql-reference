@@ -102,8 +102,10 @@ class ToStringTest extends FunSpec with MustMatchers {
 
   describe("query operators") {
     it("chain and union") {
-      val query = "select 1 |> (select 2 union  all  select 2.1 |> select 2.2) |> (select 3.1 union select 3.2)"
-      val parsed = parser.baseSelect(query)
+      var query = "select 1 |> (select 2 union  all  select 2.1 |> select 2.2) |> (select 3.1 union select 3.2)"
+
+      query="select 1 |> select 2 |> select 3 |> select 4 UNION select 5 |> select 6"
+      val parsed = parser.test(query)
       println( parsed.toString())
     }
   }

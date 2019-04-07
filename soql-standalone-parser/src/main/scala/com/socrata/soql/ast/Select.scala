@@ -30,7 +30,7 @@ case class JoinSelect(fromTable: TableName, subSelect: Option[SubSelect]) {
 
   override def toString: String = {
     val (subSelectStr, aliasStrOpt) = subSelect.map {
-      case SubSelect(NonEmptySeq(h, tail), subAlias) =>
+      case SubSelect(NonEmptySeq(h, tail, op), subAlias) =>
         val selectWithFromStr = h.toStringWithFrom(fromTable)
         val selectStr = (selectWithFromStr +: tail.map(_.toString)).mkString(" |> ")
         (s"($selectStr)", Some(subAlias))
@@ -63,6 +63,7 @@ object Select {
 trait BaseSelect
 case class Selects(op: String, a: BaseSelect, b: BaseSelect) extends BaseSelect
 case class ParenSelect(a: BaseSelect) extends BaseSelect
+
 
 /**
   * Represents a single select statement, not including the from. Top-level selects have an implicit "from"

@@ -451,7 +451,7 @@ case class JoinAnalysis[ColumnId, Type](fromTable: TableName, subAnalysis: Optio
   }
 
   override def toString: String = {
-    val (subAnasStr, aliasStrOpt) = subAnalysis.map { case SubAnalysis(NonEmptySeq(h, tail), subAlias) =>
+    val (subAnasStr, aliasStrOpt) = subAnalysis.map { case SubAnalysis(NonEmptySeq(h, tail, _), subAlias) =>
       val selectWithFromStr = h.toStringWithFrom(fromTable)
       val selectStr = (selectWithFromStr +: tail.map(_.toString)).mkString(" |> ")
       (s"($selectStr)", Some(subAlias))

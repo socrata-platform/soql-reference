@@ -1,9 +1,11 @@
 package com.socrata
 
+import com.socrata.soql.ast.BaseSelect
+
 // A collection that guarantees the existence of at least one element.
 // Fills the same role as scalaz's NonEmptyList, but now we don't have to include scalaz as a dependency,
 // and we can use Seq as the internal type (rather than List)
-case class NonEmptySeq[+T](head: T, tail: Seq[T] = Seq.empty) {
+case class NonEmptySeq[+T](head: T, tail: Seq[T] = Seq.empty, op: Option[String] = None) extends BaseSelect {
   def length: Int = 1 + tail.length
   def size: Int = length
   def seq: Seq[T] = head +: tail

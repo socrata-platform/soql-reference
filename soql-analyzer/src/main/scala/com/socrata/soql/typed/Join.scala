@@ -15,7 +15,7 @@ sealed trait Join[ColumnId, Type] {
     def fWithTable(id: ColumnId, qual: Qualifier) = f(id, qual.orElse(Some(from.fromTable.name)))
 
     val mappedSub = from.subAnalysis.map {
-      case SubAnalysis(NonEmptySeq(head, tail), alias) =>
+      case SubAnalysis(NonEmptySeq(head, tail, _), alias) =>
         val newAnas = NonEmptySeq(head.mapColumnIds(fWithTable), tail.map(_.mapColumnIds(f)))
         SubAnalysis(newAnas, alias)
     }
