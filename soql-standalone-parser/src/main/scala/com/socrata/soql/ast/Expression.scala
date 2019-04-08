@@ -44,9 +44,7 @@ object Expression {
         case FunctionCall(SpecialFunctions.NotBetween, Seq(a,b,c)) =>
           findIdentsAndLiterals(a) ++ Vector("not", "between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
         case FunctionCall(SpecialFunctions.WindowFunctionOver, args) =>
-          Seq(args.head).flatMap(findIdentsAndLiterals) ++
-            Vector("over") ++
-            (if (args.tail.isEmpty) Vector.empty else args.tail.flatMap(findIdentsAndLiterals))
+          (findIdentsAndLiterals(args.head) :+ "over") ++ args.tail.flatMap(findIdentsAndLiterals)
         case FunctionCall(other, args) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals)
       }
   }
@@ -199,9 +197,10 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
       case SpecialFunctions.NotLike =>
         parameters.map(_.format(d)).mkString(" NOT LIKE ")
       case SpecialFunctions.WindowFunctionOver =>
-        val param0 = parameters(0).format(d)
-        val partitions = windowOverPartition(parameters.tail)
-        val orders = windowOverOrder(parameters.tail)
+        val head :: tail = parameters
+        val param0 = head.format(d)
+        val partitions = windowOverPartition(tail)
+        val orders = windowOverOrder(tail)
         val result = param0 + " OVER (" +
           (if (partitions.nonEmpty) partitions.map(_.format(d)).mkString(" PARTITION BY ", ",", "") else "") +
           (if (orders.nonEmpty) orders.map(_.format(d)).mkString(" ORDER BY ", ",", "") else "") +
