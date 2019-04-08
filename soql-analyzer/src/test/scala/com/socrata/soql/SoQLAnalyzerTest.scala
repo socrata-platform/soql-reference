@@ -541,7 +541,7 @@ SELECT visits, @x2.zx
     val partitionExpected = intercept[BadParse] {
       analyzer.analyzeUnchainedQuery("SELECT name_last, avg(visits) OVER (name_last, 2, 3)")
     }
-    partitionExpected.message must startWith("`PARTITION' expected")
+    partitionExpected.message must startWith("`)' expected")
   }
 
   test("aliases work") {

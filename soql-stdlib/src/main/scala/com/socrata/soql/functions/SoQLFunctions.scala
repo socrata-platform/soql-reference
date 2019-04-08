@@ -183,6 +183,10 @@ object SoQLFunctions {
   val Lower = mf("lower", FunctionName("lower"), Seq(SoQLText), Seq.empty, SoQLText)
   val Upper = mf("upper", FunctionName("upper"), Seq(SoQLText), Seq.empty, SoQLText)
 
+  val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, SoQLNumber)
+  val Rank = mf("rank", FunctionName("rank"), Seq(), Seq.empty, SoQLNumber)
+  val DenseRank = mf("dense_rank", FunctionName("dense_rank"), Seq(), Seq.empty, SoQLNumber)
+
   val FloatingTimeStampTruncYmd = mf("floating timestamp trunc day", FunctionName("date_trunc_ymd"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)
   val FloatingTimeStampTruncYm = mf("floating timestamp trunc month", FunctionName("date_trunc_ym"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)
   val FloatingTimeStampTruncY = mf("floating timestamp trunc year", FunctionName("date_trunc_y"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)

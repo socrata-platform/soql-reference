@@ -349,11 +349,28 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def windowFunctionParamList: Parser[Either[Position, Seq[Expression]]] =
     rep1sep(expr, COMMA()) ^^ (Right(_))
 
-  def windowFunctionParams: Parser[Either[Position, Seq[Expression]]] =
-    LPAREN() ~> RPAREN() ^^ { _ => Right(Seq.empty) } |
-      LPAREN() ~> PARTITION() ~> BY() ~> windowFunctionParamList <~ RPAREN() |
-      failure(errors.missingArg)
+  def windowFunctionParams: Parser[Either[Position, Seq[Expression]]] = {
+    def partitionKey(position: Position) = com.socrata.soql.ast.StringLiteral("partition_by")(position)
+    def orderKey(position: Position) =  com.socrata.soql.ast.StringLiteral("order_by")(position)
 
+    LPAREN() ~ opt(PARTITION() ~ BY() ~ windowFunctionParamList) ~ opt(ORDER() ~ BY() ~ windowFunctionParamList) ~ RPAREN() ^^ {
+      case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ Some(_ ~ _ ~ Right(order)) ~ _) =>
+        mergePartitionOrder(Right(partitionKey(lp.position) +: partition), Right(orderKey(lp.position) +: order))
+      case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ None ~ _) =>
+        Right(partitionKey(lp.position) +: partition)
+      case (lp ~ None ~ Some(_ ~ _ ~ Right(order)) ~ _) =>
+        Right(orderKey(lp.position) +: order)
+      case _ => // ( )
+        Right(Seq.empty)
+    } | failure(errors.missingArg)
+  }
+
+  def mergePartitionOrder(a: Either[Position, Seq[Expression]], b: Either[Position, Seq[Expression]]): Either[Position, Seq[Expression]] = {
+    (a, b) match {
+      case (Right(x), Right(y)) => Right(x ++ y)
+      case (l, _) => l
+    }
+  }
 
   def identifier_or_funcall: Parser[Expression] =
     identifier ~ opt(params) ~ opt(OVER() ~ windowFunctionParams) ^^ {
