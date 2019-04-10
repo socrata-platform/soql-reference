@@ -574,6 +574,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   // dataset".  Unfortunately this means "select :*,*" isn't a left-identity of merge
   // for a query that contains a search.
   private def tryMerge(a: Analysis, b: Analysis): Option[Analysis] = (a, b) match {
+    case (a, _) if (hasWindowFunction(a)) => None
     case (SoQLAnalysis(aIsGroup, false, aSelect, Nil, aWhere, aGroup, aHaving, aOrder, aLim, aOff, aSearch),
           SoQLAnalysis(false,    false, bSelect, bJoins, None,   Nil,   None,    Nil,   bLim, bOff, None)) if
           // Do not merge when the previous soql is grouped and the next soql has joins
@@ -637,6 +638,15 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         search = aSearch))
     case (_, _) =>
       None
+  }
+
+  private def hasWindowFunction(a: Analysis): Boolean = {
+    a.selection.exists {
+      case (_, fc: com.socrata.soql.typed.FunctionCall[_, _]) =>
+        fc.function.name == SpecialFunctions.WindowFunctionOver
+      case _ =>
+        false
+    }
   }
 
   private def mergeSelection(a: OrderedMap[ColumnName, Expr],
