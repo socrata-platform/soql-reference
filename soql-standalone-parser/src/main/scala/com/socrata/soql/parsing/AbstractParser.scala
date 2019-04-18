@@ -122,7 +122,8 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
 
   val pipedSelect: Parser[NonEmptySeq[Select]] = {
     rep1sep(select, QUERYPIPE()) ^^ {
-      case h :: tail => NonEmptySeq(h, tail) // case guaranteed by behavior of rep1sep
+      case h :: tail => NonEmptySeq(h, tail)
+      case Nil => throw new Exception("Impossible: rep1sep returned nothing")
     }
   }
 
@@ -349,40 +350,37 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def windowFunctionParamList: Parser[Either[Position, Seq[Expression]]] =
     rep1sep(expr, COMMA()) ^^ (Right(_))
 
-  def windowFunctionParams: Parser[Either[Position, Seq[Expression]]] = {
+  def windowFunctionParams: Parser[Seq[Expression]] = {
     def partitionKey(position: Position) = com.socrata.soql.ast.StringLiteral("partition_by")(position)
     def orderKey(position: Position) =  com.socrata.soql.ast.StringLiteral("order_by")(position)
 
     LPAREN() ~ opt(PARTITION() ~ BY() ~ windowFunctionParamList) ~ opt(ORDER() ~ BY() ~ windowFunctionParamList) ~ RPAREN() ^^ {
       case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ Some(_ ~ _ ~ Right(order)) ~ _) =>
-        mergePartitionOrder(Right(partitionKey(lp.position) +: partition), Right(orderKey(lp.position) +: order))
+        mergePartitionOrder(partitionKey(lp.position) +: partition, orderKey(lp.position) +: order)
       case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ None ~ _) =>
-        Right(partitionKey(lp.position) +: partition)
+        partitionKey(lp.position) +: partition
       case (lp ~ None ~ Some(_ ~ _ ~ Right(order)) ~ _) =>
-        Right(orderKey(lp.position) +: order)
+        orderKey(lp.position) +: order
       case _ => // ( )
-        Right(Seq.empty)
+        Seq.empty
     } | failure(errors.missingArg)
   }
 
-  def mergePartitionOrder(a: Either[Position, Seq[Expression]], b: Either[Position, Seq[Expression]]): Either[Position, Seq[Expression]] = {
-    (a, b) match {
-      case (Right(x), Right(y)) => Right(x ++ y)
-      case (l, _) => l
-    }
+  def mergePartitionOrder(a: Seq[Expression], b: Seq[Expression]): Seq[Expression] = {
+    a ++ b
   }
 
   def identifier_or_funcall: Parser[Expression] =
-    identifier ~ opt(params) ~ opt(OVER() ~ windowFunctionParams) ^^ {
-      case ((qual, ident, identPos)) ~ None ~ None =>
+    identifier ~ opt(params ~ opt(OVER() ~ windowFunctionParams)) ^^ {
+      case ((qual, ident, identPos)) ~ None =>
         ColumnOrAliasRef(qual, ColumnName(ident))(identPos)
-      case ((_, ident, identPos)) ~ Some(Right(params)) ~ None =>
+      case ((_, ident, identPos)) ~ Some(Right(params) ~ None) =>
         FunctionCall(FunctionName(ident), params)(identPos, identPos)
-      case ((_, ident, identPos)) ~ Some(Left(position)) ~ None =>
+      case ((_, ident, identPos)) ~ Some(Left(position) ~ None) =>
         FunctionCall(SpecialFunctions.StarFunc(ident), Seq.empty)(identPos, identPos)
-      case ((_, ident, identPos)) ~ Some(Right(params)) ~ Some(wfParams) =>
+      case ((_, ident, identPos)) ~ Some(Right(params) ~ Some(_ ~ wfParams)) =>
         val innerFc = FunctionCall(FunctionName(ident), params)(identPos, identPos)
-        FunctionCall(SpecialFunctions.WindowFunctionOver, innerFc +: wfParams._2.right.get)(identPos, identPos)
+        FunctionCall(SpecialFunctions.WindowFunctionOver, innerFc +: wfParams)(identPos, identPos)
     }
 
   def paren: Parser[Expression] =
