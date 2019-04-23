@@ -14,6 +14,23 @@ sealed abstract class Expression extends Product {
   def toSyntheticIdentifierBase: String =
     com.socrata.soql.brita.IdentifierFilter(Expression.findIdentsAndLiterals(this))
 
+  // This is used to pretty-print expressions.  It's annoyingly
+  // complicated, but fast.  What happens is this: when we're
+  // pretty-printing an expression, we want to wrap the arguments if
+  // the expression is an overly-long function call, where "overly
+  // long" basically means "more than 30 characters from the start of
+  // the open parenthesis of the call's argument list".  BUT we don't
+  // want to just try rendering it and then checking if it's too long!
+  // For a deeply nested expression, that will lead to superlinear
+  // (quadratic, I think) runtime.  So what we'll do instead is build
+  // our function call into a StringBuilder, and if, _while we're
+  // generating that_, we run into our limit, we'll abandon it
+  // immediately and return None.
+  //
+  // Note that if `limit` is `None`, the result will be a `Some`.
+  // This is possible to express in Scala, but too clunky to be worth
+  // it unfortunately.  The only place that depends on it is
+  // FunctionCall's asString implementation.
   def format(depth: Int, sb: StringBuilder, limit: Option[Int]): Option[StringBuilder]
 }
 
