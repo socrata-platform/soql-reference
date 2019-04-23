@@ -14,10 +14,7 @@ sealed abstract class Expression extends Product {
   def toSyntheticIdentifierBase: String =
     com.socrata.soql.brita.IdentifierFilter(Expression.findIdentsAndLiterals(this))
 
-  def format(depth: Int): String
-  def indent(token: String, depth: Int): String = {
-    ("  " * depth) + token
-  }
+  def format(depth: Int, sb: StringBuilder, limit: Option[Int]): Option[StringBuilder]
 }
 
 object Expression {
@@ -135,13 +132,13 @@ case class ColumnOrAliasRef(qualifier: Option[String], column: ColumnName)(val p
         TableName.Field
     }.getOrElse("") + "`" + column.name + "`"
   }
-  def format(depth: Int) = asString
+  def format(depth: Int, sb: StringBuilder, limit: Option[Int]) = Some(sb.append(asString))
   def allColumnRefs = Set(this)
 }
 
 sealed abstract class Literal extends Expression {
   def allColumnRefs = Set.empty
-  def format(depth: Int) = asString
+  def format(depth: Int, sb: StringBuilder, limit: Option[Int]) = Some(sb.append(asString))
 }
 case class NumberLiteral(value: BigDecimal)(val position: Position) extends Literal {
   protected def asString = value.toString
@@ -157,70 +154,149 @@ case class NullLiteral()(val position: Position) extends Literal {
 }
 
 case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])(val position: Position, val functionNamePosition: Position) extends Expression {
-  protected def asString() = format(0)
+  protected def asString() = format(0, new StringBuilder, None).get.toString
 
-  def format(d: Int): String = {
+  private implicit class Interspersable[T](xs: Seq[T]) {
+    def intersperse(t: T): Seq[T] = {
+      val builder = Seq.newBuilder[T]
+      var didOne = false
+      for(x <- xs) {
+        if(didOne) builder += t
+        else didOne = true
+        builder += x
+      }
+      builder.result()
+    }
+  }
+
+  private def appendParams(sb: StringBuilder, params: Iterator[Expression], sep: String, d: Int, limit: Option[Int]): Option[StringBuilder] = {
+    if(params.hasNext) {
+      params.next().format(d, sb, limit) match {
+        case None => return None
+        case Some(_) =>
+          limit.foreach { l => if(sb.length > l) return None }
+          while(params.hasNext) {
+            sb.append(sep)
+            params.next().format(d, sb, limit) match {
+              case None => return None
+              case Some(_) => // ok
+            }
+            limit.foreach { l => if(sb.length > l) return None }
+          }
+      }
+    }
+    Some(sb)
+  } // soql-standalone-parser/testOnly com.socrata.soql.parsing.ToStringTest -- -z "wide expressions"
+
+  private def indent(n: Int) = "  " * n
+
+  def format(d: Int, sb: StringBuilder, limit: Option[Int]): Option[StringBuilder] = {
     functionName match {
       case SpecialFunctions.Parens =>
-        "(" + parameters(0).format(d) + ")"
+        sb.append("(")
+        parameters(0).format(d, sb, limit).map(_.append(")"))
       case SpecialFunctions.Subscript =>
-        parameters(0).format(d) + "[" + parameters(1).format(d) + "]"
+        for {
+          sb <- parameters(0).format(d, sb, limit)
+          _ = sb.append("[")
+          sb <- parameters(1).format(d, sb, limit)
+        } yield sb.append("]")
       case SpecialFunctions.StarFunc(f) =>
-        f.format(d) + "(*)"
+        Some(sb.append(f).append("(*)"))
       case SpecialFunctions.Operator(op) if parameters.size == 1 =>
         op match {
-          case "NOT" => "%s %s".format(op, parameters(0).format(d))
-          case _ => op + parameters(0).format(d)
+          case "NOT" =>
+            sb.append("NOT ")
+            parameters(0).format(d, sb, limit)
+          case _ =>
+            sb.append(op)
+            parameters(0).format(d, sb, limit)
         }
       case SpecialFunctions.Operator(op) if parameters.size == 2 =>
-        parameters(0).format(d) + " " + op + " " + parameters(1).format(d)
+        for {
+          sb <- parameters(0).format(d, sb, limit)
+          _ = sb.append(" ").append(op).append(" ")
+          sb <- parameters(1).format(d, sb, limit)
+        } yield sb
       case SpecialFunctions.Operator(op) =>
         sys.error("Found a non-unary, non-binary operator: " + op + " at " + position)
       case SpecialFunctions.Cast(typ) if parameters.size == 1 =>
-        parameters(0).format(d) + " :: " + typ
+        parameters(0).format(d, sb, limit).map(_.append(" :: ").append(typ))
       case SpecialFunctions.Cast(_) =>
         sys.error("Found a non-unary cast at " + position)
       case SpecialFunctions.Between =>
-        parameters(0).format(d) + " BETWEEN " + parameters(1).format(d) + " AND " + parameters(2).format(d)
+        for {
+          sb <- parameters(0).format(d, sb, limit)
+          _ = sb.append(" BETWEEN ")
+          sb <- parameters(1).format(d, sb, limit)
+          _ = sb.append(" AND ")
+          sb <- parameters(2).format(d, sb, limit)
+        } yield sb
       case SpecialFunctions.NotBetween =>
-        parameters(0).format(d) + " NOT BETWEEN " + parameters(1).format(d) + " AND " + parameters(2).format(d)
+        for {
+          sb <- parameters(0).format(d, sb, limit)
+          _ = sb.append(" NOT BETWEEN ")
+          sb <- parameters(1).format(d, sb, limit)
+          _ = sb.append(" AND ")
+          sb <- parameters(2).format(d, sb, limit)
+        } yield sb
       case SpecialFunctions.IsNull =>
-        parameters(0).format(d) + " IS NULL"
+        parameters(0).format(d, sb, limit).map(_.append(" IS NULL"))
       case SpecialFunctions.IsNotNull =>
-        parameters(0).format(d) + " IS NOT NULL"
+        parameters(0).format(d, sb, limit).map(_.append(" IS NOT NULL"))
       case SpecialFunctions.In =>
-        parameters.drop(1).map(_.format(d)).mkString(parameters(0).format(d) + " IN (", ",", ")")
+        parameters(0).format(d, sb, limit).map(_.append(" IN (")).flatMap { sb =>
+          appendParams(sb, parameters.iterator.drop(1), ",", d, limit)
+        }.map(_.append(")"))
       case SpecialFunctions.NotIn =>
-        parameters.drop(1).map(_.format(d)).mkString(parameters(0).format(d) + " NOT IN (", ",", ")")
+        parameters(0).format(d, sb, limit).map(_.append(" NOT IN (")).flatMap { sb =>
+          appendParams(sb, parameters.iterator.drop(1), ",", d, limit)
+        }.map(_.append(")"))
       case SpecialFunctions.Like =>
-        parameters.map(_.format(d)).mkString(" LIKE ")
+        appendParams(sb, parameters.iterator, " LIKE ", d, limit)
       case SpecialFunctions.NotLike =>
-        parameters.map(_.format(d)).mkString(" NOT LIKE ")
+        appendParams(sb, parameters.iterator, " NOT LIKE ", d, limit)
       case SpecialFunctions.WindowFunctionOver =>
-        val head :: tail = parameters
-        val param0 = head.format(d)
-        val partitions = windowOverPartition(tail)
-        val orders = windowOverOrder(tail)
-        val result = param0 + " OVER (" +
-          (if (partitions.nonEmpty) partitions.map(_.format(d)).mkString(" PARTITION BY ", ",", "") else "") +
-          (if (orders.nonEmpty) orders.map(_.format(d)).mkString(" ORDER BY ", ",", "") else "") +
-          ")"
-        result
+        val head = parameters.head
+        val tail = parameters.tail
+        head.format(d, sb, limit).map(_.append(" OVER (")).flatMap { sb =>
+          windowOverPartition(tail) match {
+            case Seq() =>
+              Some(sb)
+            case partitions =>
+              sb.append(" PARTITION BY ")
+              appendParams(sb, partitions.iterator, ",", d, limit)
+          }
+        }.flatMap { sb =>
+          windowOverOrder(tail) match {
+            case Seq() =>
+              Some(sb)
+            case orders =>
+              sb.append(" ORDER BY ")
+              appendParams(sb, orders.iterator, ",", d, limit)
+          }
+        }.map(_.append(")"))
       case other => {
-        val (break, delim, indentation) = parameters.map(_.toString).mkString.length match {
-          case l if l > 30 => ("\n", ",\n", d + 1)
-          case _ => ("", ", ", 0)
-        }
-
-        parameters
-          .map((e: Expression) => {
-            e match {
-              case _: Literal => indent(e.format(indentation), indentation)
-              case _: ColumnOrAliasRef => indent(e.format(indentation), indentation)
-              case _ => indent(e.format(d + 1), indentation)
+        sb.append(other).append("(")
+        val startLength = sb.length
+        appendParams(sb, parameters.iterator, ", ", d, limit.orElse(Some(startLength + 30))) match {
+          case Some(sb) =>
+            // it all fit on one line
+            sb.append(")")
+            Some(sb)
+          case None =>
+            limit match {
+              case Some(l) =>
+                None
+              case None =>
+                // it didn't, we'll need to line-break
+                sb.setLength(startLength) // undo anything that got written
+                sb.append("\n").append(indent(d+1))
+                appendParams(sb, parameters.iterator, ",\n" + indent(d+1), d+1, None)
+                sb.append("\n").append(indent(d))
+                Some(sb.append(")"))
             }
-          })
-          .mkString(other.toString + s"(${break}", delim, break + indent(")", indentation - 1))
+        }
       }
     }
   }
