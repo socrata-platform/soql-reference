@@ -8,7 +8,7 @@ object BuildSettings {
     organization := "com.socrata",
     scalaVersion := "2.11.12",
     crossScalaVersions := Seq("2.10.4", scalaVersion.value),
-    resolvers += "socrata artifactory" at "https://repo.socrata.com/artifactory/libs-release"
+    externalResolvers := Seq("socrata artifactory" at "https://repo.socrata.com/artifactory/libs-release")
   )
 
   def projectSettings(assembly: Boolean = false): Seq[Setting[_]] = buildSettings ++ Seq(
