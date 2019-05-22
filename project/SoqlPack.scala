@@ -9,6 +9,6 @@ object SoqlPack {
         "org.velvia"         %% "msgpack4s"                % "0.4.3",
         "com.rojoma" %% "simple-arm" % "1.2.0"
       ),
-    resolvers += "velvia maven" at "http://dl.bintray.com/velvia/maven"
+    externalResolvers += "Socrata Jcenter Mirror" at "https://repo.socrata.com/artifactory/jcenter"
   )
 }

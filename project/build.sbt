@@ -1,4 +1,4 @@
-resolvers ++= Seq(
+externalResolvers ++= Seq(
   "socrata releases" at "https://repo.socrata.com/artifactory/libs-release/"
 )
 
