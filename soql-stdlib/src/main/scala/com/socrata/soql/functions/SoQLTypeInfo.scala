@@ -2,8 +2,6 @@ package com.socrata.soql.functions
 
 import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
-import com.socrata.soql.parsing.Lexer
-import com.socrata.soql.tokens.{EOF, NumberLiteral}
 import com.socrata.soql.typed
 import com.socrata.soql.types._
 import com.socrata.soql.typechecker.TypeInfo
@@ -39,11 +37,13 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
   private val textToUrlFunc = getMonomorphically(SoQLFunctions.TextToUrl)
   private val textToLocationFunc = getMonomorphically(SoQLFunctions.TextToLocation)
 
+  private val numberRx = "([+-]?[0-9]+)(\\.[0-9]*)?(e[+-]?[0-9]+)?".r
   private def isNumberLiteral(s: String) = try {
-    val lexer = new Lexer(s)
-    lexer.yylex() match {
-      case NumberLiteral(_) => lexer.yylex() == EOF()
-      case _ => false
+    s match {
+      case numberRx(_, _, _) =>
+        true
+      case _ =>
+        false
     }
   } catch {
     case e: Exception =>
