@@ -23,6 +23,7 @@ object SoQLTypeClasses {
   val Equatable = Ordered ++ GeospatialLike ++ Set[SoQLType](
     SoQLBlob,
     SoQLPhone,
+    SoQLPhoto,
     SoQLLocation,
     SoQLUrl
   )

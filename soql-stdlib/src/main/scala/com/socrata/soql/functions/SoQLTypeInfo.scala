@@ -33,6 +33,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
   private val textToPolygonFunc = getMonomorphically(SoQLFunctions.TextToPolygon)
   private val textToMultiPolygonFunc = getMonomorphically(SoQLFunctions.TextToMultiPolygon)
   private val textToBlobFunc = getMonomorphically(SoQLFunctions.TextToBlob)
+  private val textToPhotoFunc = getMonomorphically(SoQLFunctions.TextToPhoto)
   private val textToPhoneFunc = getMonomorphically(SoQLFunctions.TextToPhone)
   private val textToUrlFunc = getMonomorphically(SoQLFunctions.TextToUrl)
   private val textToLocationFunc = getMonomorphically(SoQLFunctions.TextToLocation)
@@ -79,6 +80,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
       func <- funcs
     } yield typed.FunctionCall(func, Seq(baseString))(pos, pos))
     results += typed.FunctionCall(textToBlobFunc, Seq(baseString))(pos, pos)
+    results += typed.FunctionCall(textToPhotoFunc, Seq(baseString))(pos, pos)
     results.result()
   }
 

@@ -32,6 +32,7 @@ object SoQLPackEncoder {
     SoQLArray        -> { case SoQLArray(jAray) => jAray.toString },
     SoQLJson         -> { case SoQLJson(jValue) => jValue.toString },
     SoQLBlob         -> { case SoQLBlob(str) => str },
+    SoQLPhoto        -> { case SoQLPhoto(str) => str },
     SoQLLocation     -> { case x@SoQLLocation(_, _, _) => JsonUtil.renderJson(x) }
   )
 
