@@ -33,6 +33,7 @@ object SoQLFunctions {
   val TextToPolygon = mf("text to polygon", SpecialFunctions.Cast(SoQLPolygon.name), Seq(SoQLText), Seq.empty, SoQLPolygon)
   val TextToMultiPolygon = mf("text to multi polygon", SpecialFunctions.Cast(SoQLMultiPolygon.name), Seq(SoQLText), Seq.empty, SoQLMultiPolygon)
   val TextToBlob = mf("text to blob", SpecialFunctions.Cast(SoQLBlob.name), Seq(SoQLText), Seq.empty, SoQLBlob)
+  val TextToPhoto = mf("text to photo", SpecialFunctions.Cast(SoQLPhoto.name), Seq(SoQLText), Seq.empty, SoQLPhoto)
   val TextToLocation = mf("text to location", SpecialFunctions.Cast(SoQLLocation.name), Seq(SoQLText), Seq.empty, SoQLLocation)
   val TextToPhone = mf("text to phone", SpecialFunctions.Cast(SoQLPhone.name), Seq(SoQLText), Seq.empty, SoQLPhone)
   val TextToUrl = mf("text to url", SpecialFunctions.Cast(SoQLUrl.name), Seq(SoQLText), Seq.empty, SoQLUrl)

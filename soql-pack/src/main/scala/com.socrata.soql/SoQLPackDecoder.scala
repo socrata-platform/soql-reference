@@ -41,6 +41,7 @@ object SoQLPackDecoder {
     SoQLArray        -> (x => decodeJson[JArray](x).map(SoQLArray(_))),
     SoQLJson         -> (x => decodeJson[JValue](x).map(SoQLJson(_))),
     SoQLBlob         -> decodeBlobId _,
+    SoQLPhoto        -> decodePhoto _,
     SoQLLocation     -> (x => decodeJson[JValue](x).flatMap(JsonDecode[SoQLLocation].decode(_).right.toOption))
   )
 
@@ -62,6 +63,12 @@ object SoQLPackDecoder {
 
   def decodeBlobId(item: Any): Option[SoQLValue] = try {
     Some(SoQLBlob(getString(item)))
+  } catch {
+    case _: Exception => None
+  }
+
+  def decodePhoto(item: Any): Option[SoQLValue] = try {
+    Some(SoQLPhoto(getString(item)))
   } catch {
     case _: Exception => None
   }
