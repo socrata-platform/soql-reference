@@ -33,7 +33,8 @@ object SoQLPackEncoder {
     SoQLJson         -> { case SoQLJson(jValue) => jValue.toString },
     SoQLBlob         -> { case SoQLBlob(str) => str },
     SoQLPhoto        -> { case SoQLPhoto(str) => str },
-    SoQLLocation     -> { case x@SoQLLocation(_, _, _) => JsonUtil.renderJson(x) }
+    SoQLLocation     -> { case x@SoQLLocation(_, _, _) => JsonUtil.renderJson(x) },
+    SoQLUrl          -> { case x@SoQLUrl(_, _) => JsonUtil.renderJson(x) }
   )
 
   lazy val geomEncoder: Encoder = {

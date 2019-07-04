@@ -42,7 +42,8 @@ object SoQLPackDecoder {
     SoQLJson         -> (x => decodeJson[JValue](x).map(SoQLJson(_))),
     SoQLBlob         -> decodeBlobId _,
     SoQLPhoto        -> decodePhoto _,
-    SoQLLocation     -> (x => decodeJson[JValue](x).flatMap(JsonDecode[SoQLLocation].decode(_).right.toOption))
+    SoQLLocation     -> (x => decodeJson[JValue](x).flatMap(JsonDecode[SoQLLocation].decode(_).right.toOption)),
+    SoQLUrl          -> (x => decodeJson[JValue](x).flatMap(JsonDecode[SoQLUrl].decode(_).right.toOption))
   )
 
   def decodeLong(item: Any): Option[Long] = try {
