@@ -5,6 +5,7 @@ import com.socrata.soql.types._
 import com.vividsolutions.jts.geom.Geometry
 import org.joda.time.DateTime
 import org.joda.time.DateTimeZone.UTC
+import java.nio.charset.StandardCharsets
 
 object SoQLPackEncoder {
   type Encoder = PartialFunction[SoQLValue, Any]
@@ -34,7 +35,7 @@ object SoQLPackEncoder {
     SoQLBlob         -> { case SoQLBlob(str) => str },
     SoQLPhoto        -> { case SoQLPhoto(str) => str },
     SoQLLocation     -> { case x@SoQLLocation(_, _, _) => JsonUtil.renderJson(x) },
-    SoQLUrl          -> { case x@SoQLUrl(_, _) => JsonUtil.renderJson(x) }
+    SoQLUrl          -> { case x@SoQLUrl(_, _) => encodeUrl(x) }
   )
 
   lazy val geomEncoder: Encoder = {
@@ -48,6 +49,18 @@ object SoQLPackEncoder {
 
   def encodeBigDecimal(bd: java.math.BigDecimal): Any =
     Array(bd.scale, bd.unscaledValue.toByteArray)
+
+  def encodeUrl(soqlUrl: SoQLUrl): Any = soqlUrl match {
+    case SoQLUrl(Some(url), Some(label)) =>
+      Array(url.getBytes(StandardCharsets.UTF_8), label.getBytes(StandardCharsets.UTF_8))
+    case SoQLUrl(Some(url), None) =>
+      Array(url.getBytes(StandardCharsets.UTF_8), null)
+    case SoQLUrl(None, Some(label)) =>
+      Array(null, label.getBytes(StandardCharsets.UTF_8))
+    case SoQLUrl(None, None) =>
+      Array(null, null)
+  }
+
 
   import org.joda.time.chrono._
 
