@@ -50,17 +50,11 @@ object SoQLPackEncoder {
   def encodeBigDecimal(bd: java.math.BigDecimal): Any =
     Array(bd.scale, bd.unscaledValue.toByteArray)
 
-  def encodeUrl(soqlUrl: SoQLUrl): Any = soqlUrl match {
-    case SoQLUrl(Some(url), Some(label)) =>
-      Array(url.getBytes(StandardCharsets.UTF_8), label.getBytes(StandardCharsets.UTF_8))
-    case SoQLUrl(Some(url), None) =>
-      Array(url.getBytes(StandardCharsets.UTF_8), null)
-    case SoQLUrl(None, Some(label)) =>
-      Array(null, label.getBytes(StandardCharsets.UTF_8))
-    case SoQLUrl(None, None) =>
-      Array(null, null)
+  def encodeUrl(soqlUrl: SoQLUrl) = {
+    val SoQLUrl(url, label) = soqlUrl
+    Array(url.map(_.getBytes(StandardCharsets.UTF_8)).orNull,
+      label.map(_.getBytes(StandardCharsets.UTF_8)).orNull)
   }
-
 
   import org.joda.time.chrono._
 

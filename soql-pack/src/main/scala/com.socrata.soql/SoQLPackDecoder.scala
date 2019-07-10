@@ -92,7 +92,6 @@ object SoQLPackDecoder {
       Some(SoQLUrl(None, None))
   }
 
-
   def decodeBigDecimal(item: Any): Option[BigDecimal] = item match {
     case Seq(scale: Byte, bytes: Array[Byte]) =>
       Some(new BigDecimal(new java.math.BigInteger(bytes), scale.toInt))
