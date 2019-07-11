@@ -8,7 +8,6 @@ import com.vividsolutions.jts.geom.Geometry
 import java.math.BigDecimal
 import org.joda.time.{DateTime, DateTimeZone, LocalDateTime, LocalDate, LocalTime}
 import org.velvia.MsgPackUtils._
-import java.nio.charset.StandardCharsets
 
 /**
   * The decoders decode from elements of the Seq[Any] decoded by msgpack4s from
@@ -81,20 +80,17 @@ object SoQLPackDecoder {
   def decodeBoolean(item: Any): Option[SoQLValue] =
     Some(SoQLBoolean(item.asInstanceOf[Boolean]))
 
-  def decodeUrl(item: Any): Option[SoQLValue] = try {
-    item match {
+  def decodeUrl(item: Any): Option[SoQLValue] = item match {
       case Seq(url: Array[Byte], label: Array[Byte]) =>
-        Some(SoQLUrl(Some(new String(url, StandardCharsets.UTF_8)), Some(new String(label, StandardCharsets.UTF_8))))
+        Some(SoQLUrl(Some(getString(url)), Some(getString(label))))
       case Seq(url: Array[Byte], null) =>
-        Some(SoQLUrl(Some(new String(url, StandardCharsets.UTF_8)), None))
+        Some(SoQLUrl(Some(getString(url)), None))
       case Seq(null, label: Array[Byte]) =>
-        Some(SoQLUrl(None, Some(new String(label, StandardCharsets.UTF_8))))
-      case Seq(null, null) =>
-        Some(SoQLUrl(None, None))
+        Some(SoQLUrl(None, Some(getString(label))))
+      case _ =>
+        None
     }
-  } catch {
-    case _: Exception => None
-  }
+
 
   def decodeBigDecimal(item: Any): Option[BigDecimal] = item match {
     case Seq(scale: Byte, bytes: Array[Byte]) =>
