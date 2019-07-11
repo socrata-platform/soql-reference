@@ -81,15 +81,19 @@ object SoQLPackDecoder {
   def decodeBoolean(item: Any): Option[SoQLValue] =
     Some(SoQLBoolean(item.asInstanceOf[Boolean]))
 
-  def decodeUrl(item: Any): Option[SoQLValue] = item match {
-    case Seq(url: Array[Byte], label: Array[Byte]) =>
-      Some(SoQLUrl(Some(new String(url, StandardCharsets.UTF_8)), Some(new String(label, StandardCharsets.UTF_8))))
-    case Seq(url: Array[Byte], null) =>
-      Some(SoQLUrl(Some(new String(url, StandardCharsets.UTF_8)), None))
-    case Seq(null, label: Array[Byte]) =>
-      Some(SoQLUrl(None, Some(new String(label, StandardCharsets.UTF_8))))
-    case Seq(null, null) =>
-      Some(SoQLUrl(None, None))
+  def decodeUrl(item: Any): Option[SoQLValue] = try {
+    item match {
+      case Seq(url: Array[Byte], label: Array[Byte]) =>
+        Some(SoQLUrl(Some(new String(url, StandardCharsets.UTF_8)), Some(new String(label, StandardCharsets.UTF_8))))
+      case Seq(url: Array[Byte], null) =>
+        Some(SoQLUrl(Some(new String(url, StandardCharsets.UTF_8)), None))
+      case Seq(null, label: Array[Byte]) =>
+        Some(SoQLUrl(None, Some(new String(label, StandardCharsets.UTF_8))))
+      case Seq(null, null) =>
+        Some(SoQLUrl(None, None))
+    }
+  } catch {
+    case _: Exception => None
   }
 
   def decodeBigDecimal(item: Any): Option[BigDecimal] = item match {
