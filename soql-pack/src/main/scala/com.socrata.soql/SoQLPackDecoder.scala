@@ -42,7 +42,8 @@ object SoQLPackDecoder {
     SoQLJson         -> (x => decodeJson[JValue](x).map(SoQLJson(_))),
     SoQLBlob         -> decodeBlobId _,
     SoQLPhoto        -> decodePhoto _,
-    SoQLLocation     -> (x => decodeJson[JValue](x).flatMap(JsonDecode[SoQLLocation].decode(_).right.toOption))
+    SoQLLocation     -> (x => decodeJson[JValue](x).flatMap(JsonDecode[SoQLLocation].decode(_).right.toOption)),
+    SoQLUrl          -> (x => decodeUrl(x))
   )
 
   def decodeLong(item: Any): Option[Long] = try {
@@ -78,6 +79,18 @@ object SoQLPackDecoder {
 
   def decodeBoolean(item: Any): Option[SoQLValue] =
     Some(SoQLBoolean(item.asInstanceOf[Boolean]))
+
+  def decodeUrl(item: Any): Option[SoQLValue] = item match {
+      case Seq(url: Array[Byte], label: Array[Byte]) =>
+        Some(SoQLUrl(Some(getString(url)), Some(getString(label))))
+      case Seq(url: Array[Byte], null) =>
+        Some(SoQLUrl(Some(getString(url)), None))
+      case Seq(null, label: Array[Byte]) =>
+        Some(SoQLUrl(None, Some(getString(label))))
+      case _ =>
+        None
+    }
+
 
   def decodeBigDecimal(item: Any): Option[BigDecimal] = item match {
     case Seq(scale: Byte, bytes: Array[Byte]) =>
