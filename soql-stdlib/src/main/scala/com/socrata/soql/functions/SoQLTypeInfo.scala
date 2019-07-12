@@ -55,7 +55,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
   private val booleanRx = "(?i)(true|false)".r
   private def isBooleanLiteral(s: String) = try {
     s match {
-      case booleanRx(x) =>
+      case booleanRx(_) =>
         true
       case _ =>
         false
