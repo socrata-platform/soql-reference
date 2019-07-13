@@ -37,11 +37,25 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
   private val textToPhoneFunc = getMonomorphically(SoQLFunctions.TextToPhone)
   private val textToUrlFunc = getMonomorphically(SoQLFunctions.TextToUrl)
   private val textToLocationFunc = getMonomorphically(SoQLFunctions.TextToLocation)
+  private val textToBooleanFunc = getMonomorphically(SoQLFunctions.TextToBool)
 
   private val numberRx = "([+-]?[0-9]+)(\\.[0-9]*)?(e[+-]?[0-9]+)?".r
   private def isNumberLiteral(s: String) = try {
     s match {
       case numberRx(_, _, _) =>
+        true
+      case _ =>
+        false
+    }
+  } catch {
+    case e: Exception =>
+      false
+  }
+
+  private val booleanRx = "(?i)(true|false)".r
+  private def isBooleanLiteral(s: String) = try {
+    s match {
+      case booleanRx(_) =>
         true
       case _ =>
         false
@@ -67,7 +81,8 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
     (SoQLMultiPolygon.WktRep.unapply(_).isDefined, Seq(textToMultiPolygonFunc)),
     (SoQLPhone.isPossible, Seq(textToPhoneFunc)),
     (SoQLUrl.isPossible, Seq(textToUrlFunc)),
-    (SoQLLocation.isPossibleLocation, Seq(textToLocationFunc))
+    (SoQLLocation.isPossibleLocation, Seq(textToLocationFunc)),
+    (isBooleanLiteral, Seq(textToBooleanFunc))
   )
 
   def stringLiteralExpr(s: String, pos: Position) = {
