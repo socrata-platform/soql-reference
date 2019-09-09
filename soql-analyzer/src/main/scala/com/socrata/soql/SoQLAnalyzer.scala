@@ -595,7 +595,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         offset = newOff,
                         search = aSearch))
     case (SoQLAnalysis(false, false, aSelect, Nil, aWhere, Nil, None, aOrder, None, None, aSearch),
-          SoQLAnalysis(false, false, bSelect, bJoins, bWhere, Nil, None, bOrder, bLim, bOff, None)) =>
+          SoQLAnalysis(false, false, bSelect, bJoins, bWhere, Nil, None, bOrder, bLim, bOff, None)) if bJoins.isEmpty =>
       // Can merge a change of filter or order only if no window was specified on the left
       Some(SoQLAnalysis(isGrouped = false,
                         distinct = false,
@@ -609,7 +609,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         offset = bOff,
                         search = aSearch))
     case (SoQLAnalysis(false, false, aSelect, Nil, aWhere, Nil,     None,    _,      None, None, aSearch),
-          SoQLAnalysis(true, false, bSelect, bJoins, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None)) =>
+          SoQLAnalysis(true, false, bSelect, bJoins, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None)) if bJoins.isEmpty =>
       // an aggregate on a non-aggregate
       Some(SoQLAnalysis(isGrouped = true,
                         distinct = false,
