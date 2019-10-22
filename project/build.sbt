@@ -1,5 +1,9 @@
 externalResolvers ++= Seq(
-  "socrata releases" at "https://repo.socrata.com/artifactory/libs-release/"
+  "socrata releases" at "https://repo.socrata.com/artifactory/libs-release/",
+  Resolver.url(
+    "typesafe sbt-plugins",
+    url("https://dl.bintray.com/typesafe/sbt-plugins")
+  )(Resolver.ivyStylePatterns)
 )
 
 organization := "com.socrata"
