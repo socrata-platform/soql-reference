@@ -16,6 +16,7 @@ sealed trait AliasAnalysisException extends SoQLException
 case class RepeatedException(name: ColumnName, position: Position) extends SoQLException("Column `" + name + "' has already been excluded", position) with AliasAnalysisException
 case class DuplicateAlias(name: ColumnName, position: Position) extends SoQLException("There is already a column named `" + name + "' selected", position) with AliasAnalysisException
 case class NoSuchColumn(name: ColumnName, position: Position) extends SoQLException("No such column `" + name + "'", position) with AliasAnalysisException with TypecheckException
+case class NoSuchTable(qualifier: String, position: Position) extends SoQLException("No such table `" + qualifier + "'", position) with AliasAnalysisException with TypecheckException
 case class CircularAliasDefinition(name: ColumnName, position: Position) extends SoQLException("Circular reference while defining alias `" + name + "'", position) with AliasAnalysisException
 
 sealed trait LexerException extends SoQLException

@@ -5,7 +5,7 @@ import com.socrata.soql.exceptions._
 import com.socrata.soql.typed
 import com.socrata.soql.environment.{ColumnName, DatasetContext, FunctionName, TableName}
 
-class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: String => DatasetContext[Type]) extends ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]]) => typed.CoreExpr[ColumnName, Type]) { self =>
+class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: Map[String, DatasetContext[Type]]) extends ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]]) => typed.CoreExpr[ColumnName, Type]) { self =>
   import typeInfo._
 
   type Expr = typed.CoreExpr[ColumnName, Type]
@@ -31,7 +31,8 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
         case Some(tree) =>
           Right(Seq(tree))
         case None =>
-          val columns = ctx(qual.getOrElse(TableName.PrimaryTable.qualifier)).schema
+          val theQual = qual.getOrElse(TableName.PrimaryTable.qualifier)
+          val columns = ctx.getOrElse(theQual, throw NoSuchTable(theQual, r.position)).schema
           columns.get(col) match {
             case Some(typ) =>
               Right(Seq(typed.ColumnRef(qual, col, typ)(r.position)))
