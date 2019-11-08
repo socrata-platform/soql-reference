@@ -195,7 +195,7 @@ case class SoQLDouble(value: Double) extends SoQLValue {
 }
 case object SoQLDouble extends SoQLType("double")
 
-case class SoQLFixedTimestamp(value: DateTime) extends SoQLValue {
+case class SoQLFixedTimestamp(value: BoundedDateTime) extends SoQLValue {
   def typ = SoQLFixedTimestamp
 }
 case object SoQLFixedTimestamp extends SoQLType("fixed_timestamp") {
@@ -203,55 +203,55 @@ case object SoQLFixedTimestamp extends SoQLType("fixed_timestamp") {
     private val fixedParser = ISODateTimeFormat.dateTimeParser.withZoneUTC
     private val fixedRenderer = ISODateTimeFormat.dateTime.withZoneUTC
 
-    def unapply(text: String): Option[DateTime] =
-      try { Some(fixedParser.parseDateTime(text)) }
+    def unapply(text: String): Option[BoundedDateTime] =
+      try { BoundedDateTime(fixedParser.parseDateTime(text)) }
       catch { case _: IllegalArgumentException => None }
 
-    def unapply(text: CaseInsensitiveString): Option[DateTime] = unapply(text.getString)
+    def unapply(text: CaseInsensitiveString): Option[BoundedDateTime] = unapply(text.getString)
 
-    def apply(dateTime: DateTime) =
-      fixedRenderer.print(dateTime)
+    def apply(dateTime: BoundedDateTime) =
+      fixedRenderer.print(dateTime.dateTime)
 
-    def printTo(appendable: Appendable, dateTime: DateTime) =
-      fixedRenderer.printTo(appendable, dateTime)
+    def printTo(appendable: Appendable, dateTime: BoundedDateTime) =
+      fixedRenderer.printTo(appendable, dateTime.dateTime)
   }
 }
 
-case class SoQLFloatingTimestamp(value: LocalDateTime) extends SoQLValue {
+case class SoQLFloatingTimestamp(value: BoundedLocalDateTime) extends SoQLValue {
   def typ = SoQLFloatingTimestamp
 }
 case object SoQLFloatingTimestamp extends SoQLType("floating_timestamp") {
   object StringRep {
-    def unapply(text: String): Option[LocalDateTime] =
-      try { Some(ISODateTimeFormat.localDateOptionalTimeParser.parseLocalDateTime(text)) }
+    def unapply(text: String): Option[BoundedLocalDateTime] =
+      try { BoundedLocalDateTime(ISODateTimeFormat.localDateOptionalTimeParser.parseLocalDateTime(text)) }
       catch { case _: IllegalArgumentException => None }
 
-    def unapply(text: CaseInsensitiveString): Option[LocalDateTime] = unapply(text.getString)
+    def unapply(text: CaseInsensitiveString): Option[BoundedLocalDateTime] = unapply(text.getString)
 
-    def apply(dateTime: LocalDateTime) =
-      ISODateTimeFormat.dateTime.print(dateTime)
+    def apply(dateTime: BoundedLocalDateTime) =
+      ISODateTimeFormat.dateTime.print(dateTime.localDateTime)
 
-    def printTo(appendable: Appendable, dateTime: LocalDateTime) =
-      ISODateTimeFormat.dateTime.printTo(appendable, dateTime)
+    def printTo(appendable: Appendable, dateTime: BoundedLocalDateTime) =
+      ISODateTimeFormat.dateTime.printTo(appendable, dateTime.localDateTime)
   }
 }
 
-case class SoQLDate(value: LocalDate) extends SoQLValue {
+case class SoQLDate(value: BoundedLocalDate) extends SoQLValue {
   def typ = SoQLDate
 }
 case object SoQLDate extends SoQLType("date") {
   object StringRep {
-    def unapply(text: String): Option[LocalDate] =
-      try { Some(ISODateTimeFormat.localDateParser.parseLocalDate(text)) }
+    def unapply(text: String): Option[BoundedLocalDate] =
+      try { BoundedLocalDate(ISODateTimeFormat.localDateParser.parseLocalDate(text)) }
       catch { case _: IllegalArgumentException => None }
 
-    def unapply(text: CaseInsensitiveString): Option[LocalDate] = unapply(text.getString)
+    def unapply(text: CaseInsensitiveString): Option[BoundedLocalDate] = unapply(text.getString)
 
-    def apply(date: LocalDate) =
-      ISODateTimeFormat.date.print(date)
+    def apply(date: BoundedLocalDate) =
+      ISODateTimeFormat.date.print(date.localDate)
 
-    def printTo(appendable: Appendable, date: LocalDate) =
-      ISODateTimeFormat.dateTime.printTo(appendable, date)
+    def printTo(appendable: Appendable, date: BoundedLocalDate) =
+      ISODateTimeFormat.dateTime.printTo(appendable, date.localDate)
   }
 }
 

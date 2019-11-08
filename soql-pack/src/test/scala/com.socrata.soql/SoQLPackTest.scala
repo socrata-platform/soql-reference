@@ -75,11 +75,11 @@ class SoQLPackTest extends FunSuite with MustMatchers {
     }
   }
 
-  val dt1 = DateTime.parse("2015-03-22T12Z")
-  val dt2 = DateTime.parse("2015-03-22T12:00:00-08:00")
-  val ldt = LocalDateTime.parse("2015-03-22T01:23")
-  val date = ldt.toLocalDate
-  val time = ldt.toLocalTime
+  val dt1 = BoundedDateTime(DateTime.parse("2015-03-22T12Z")).get
+  val dt2 = BoundedDateTime(DateTime.parse("2015-03-22T12:00:00-08:00")).get
+  val ldt = BoundedLocalDateTime(LocalDateTime.parse("2015-03-22T01:23")).get
+  val date = BoundedLocalDate(ldt.localDateTime.toLocalDate).get
+  val time = ldt.localDateTime.toLocalTime
 
   val schemaDT = Seq("dt" -> SoQLFixedTimestamp,
                      "ldt" -> SoQLFloatingTimestamp,
@@ -88,7 +88,7 @@ class SoQLPackTest extends FunSuite with MustMatchers {
 
   val dataDT: Seq[Array[SoQLValue]] = Seq(
     Array(SoQLFixedTimestamp(dt1), SoQLFloatingTimestamp(ldt),              SoQLDate(date), null),
-    Array(SoQLFixedTimestamp(dt2), SoQLFloatingTimestamp(ldt.plusHours(1)), SoQLNull, SoQLTime(time))
+    Array(SoQLFixedTimestamp(dt2), SoQLFloatingTimestamp(BoundedLocalDateTime(ldt.localDateTime.plusHours(1)).get), SoQLNull, SoQLTime(time))
   )
 
   test("Can serialize SoQL rows with date time types to and from SoQLPack") {

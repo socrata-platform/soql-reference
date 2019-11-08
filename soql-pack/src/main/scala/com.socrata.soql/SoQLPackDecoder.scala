@@ -34,8 +34,8 @@ object SoQLPackDecoder {
                            case _: Any => None
                          }),
     SoQLFixedTimestamp -> (x => decodeDateTime(x).map(SoQLFixedTimestamp(_))),
-    SoQLFloatingTimestamp -> (x => decodeDateTime(x).map(t => SoQLFloatingTimestamp(new LocalDateTime(t)))),
-    SoQLDate         -> (x => decodeDateTime(x).map(t => SoQLDate(new LocalDate(t)))),
+    SoQLFloatingTimestamp -> (x => decodeDateTime(x).map(new LocalDateTime(_)).flatMap(BoundedLocalDateTime(_)).map(SoQLFloatingTimestamp(_))),
+    SoQLDate         -> (x => decodeDateTime(x).map(new LocalDate(_)).flatMap(BoundedLocalDate(_)).map(SoQLDate(_))),
     SoQLTime         -> (x => decodeLong(x).map(t => SoQLTime(LocalTime.fromMillisOfDay(t.toInt)))),
     SoQLObject       -> (x => decodeJson[JObject](x).map(SoQLObject(_))),
     SoQLArray        -> (x => decodeJson[JArray](x).map(SoQLArray(_))),
@@ -103,15 +103,15 @@ object SoQLPackDecoder {
     case other: Any => None
   }
 
-  def decodeDateTime(item: Any): Option[DateTime] = item match {
+  def decodeDateTime(item: Any): Option[BoundedDateTime] = item match {
     case Seq(millis: Any) =>
-      Some(new DateTime(getLong(millis), DateTimeZone.UTC))
+      BoundedDateTime(new DateTime(getLong(millis), DateTimeZone.UTC))
     case Seq(millis: Any, tz: Byte) =>
-      Some(new DateTime(getLong(millis), DateTimeZone.forOffsetMillis(tz * SoQLPackEncoder.FifteenMinMillis)))
+      BoundedDateTime(new DateTime(getLong(millis), DateTimeZone.forOffsetMillis(tz * SoQLPackEncoder.FifteenMinMillis)))
     case Seq(millis: Any, tz: Byte, chrono: Byte) =>
       val zone = DateTimeZone.forOffsetMillis(tz * SoQLPackEncoder.FifteenMinMillis)
       val chronos = SoQLPackEncoder.Chronologies(chrono).withZone(zone)
-      Some(new DateTime(getLong(millis), chronos))
+      BoundedDateTime(new DateTime(getLong(millis), chronos))
     case other: Any => None
   }
 
