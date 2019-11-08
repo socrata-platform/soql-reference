@@ -204,7 +204,7 @@ case object SoQLFixedTimestamp extends SoQLType("fixed_timestamp") {
     private val fixedRenderer = ISODateTimeFormat.dateTime.withZoneUTC
 
     def unapply(text: String): Option[DateTime] =
-      try { Some(fixedParser.parseDateTime(text)) }
+      try { Some(validateYear(fixedParser.parseDateTime(text))) }
       catch { case _: IllegalArgumentException => None }
 
     def unapply(text: CaseInsensitiveString): Option[DateTime] = unapply(text.getString)
@@ -223,7 +223,7 @@ case class SoQLFloatingTimestamp(value: LocalDateTime) extends SoQLValue {
 case object SoQLFloatingTimestamp extends SoQLType("floating_timestamp") {
   object StringRep {
     def unapply(text: String): Option[LocalDateTime] =
-      try { Some(ISODateTimeFormat.localDateOptionalTimeParser.parseLocalDateTime(text)) }
+      try { Some(validateYear(ISODateTimeFormat.localDateOptionalTimeParser.parseLocalDateTime(text))) }
       catch { case _: IllegalArgumentException => None }
 
     def unapply(text: CaseInsensitiveString): Option[LocalDateTime] = unapply(text.getString)
@@ -239,10 +239,11 @@ case object SoQLFloatingTimestamp extends SoQLType("floating_timestamp") {
 case class SoQLDate(value: LocalDate) extends SoQLValue {
   def typ = SoQLDate
 }
+
 case object SoQLDate extends SoQLType("date") {
   object StringRep {
     def unapply(text: String): Option[LocalDate] =
-      try { Some(ISODateTimeFormat.localDateParser.parseLocalDate(text)) }
+      try { Some(validateYear(ISODateTimeFormat.localDateParser.parseLocalDate(text))) }
       catch { case _: IllegalArgumentException => None }
 
     def unapply(text: CaseInsensitiveString): Option[LocalDate] = unapply(text.getString)
