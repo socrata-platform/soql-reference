@@ -22,6 +22,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
   private val textToTimeFunc = getMonomorphically(SoQLFunctions.TextToTime)
   private val numberToMoneyFunc = getMonomorphically(SoQLFunctions.NumberToMoney)
   private val numberToDoubleFunc = getMonomorphically(SoQLFunctions.NumberToDouble)
+  private val numberToTextFunc = getMonomorphically(SoQLFunctions.NumberToText)
   private val textToRowIdFunc = getMonomorphically(SoQLFunctions.TextToRowIdentifier)
   private val textToRowVersionFunc = getMonomorphically(SoQLFunctions.TextToRowVersion)
   private val textToNumberFunc = getMonomorphically(SoQLFunctions.TextToNumber)
@@ -104,7 +105,8 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
     Seq(
       baseNumber,
       typed.FunctionCall(numberToMoneyFunc, Seq(baseNumber))(pos, pos),
-      typed.FunctionCall(numberToDoubleFunc, Seq(baseNumber))(pos, pos)
+      typed.FunctionCall(numberToDoubleFunc, Seq(baseNumber))(pos, pos),
+      typed.FunctionCall(numberToTextFunc, Seq(baseNumber))(pos, pos)
     )
   }
 
