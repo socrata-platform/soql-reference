@@ -62,8 +62,9 @@ class SoQLPackWriter(schema: Seq[(String, SoQLType)],
   /**
     * Serializes the rows into SoQLPack binary format, writing it out to the ostream.
     * The caller must be responsible for closing the output stream.
+    * return: number of rows written
     */
-  def write(ostream: OutputStream, rows: Iterator[Array[SoQLValue]]) {
+  def write(ostream: OutputStream, rows: Iterator[Array[SoQLValue]]): Int = {
     for {
       dos <- managed(new DataOutputStream(ostream))
     } yield {
@@ -78,14 +79,16 @@ class SoQLPackWriter(schema: Seq[(String, SoQLType)],
       // end of header
 
       val wkbWriter = new WKBWriter
-
+      var ttl = 0
       for (row <- rows) {
+        ttl += 1
         val values: Seq[Any] = (0 until row.length).map { i =>
           encoders(i)(row(i))
         }
         MsgPack.pack(values, dos)
       }
       dos.flush()
+      ttl
     }
   }
 }
