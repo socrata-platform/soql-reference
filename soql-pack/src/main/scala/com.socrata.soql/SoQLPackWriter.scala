@@ -64,7 +64,7 @@ class SoQLPackWriter(schema: Seq[(String, SoQLType)],
     * The caller must be responsible for closing the output stream.
     * return: number of rows written
     */
-  def write(ostream: OutputStream, rows: Iterator[Array[SoQLValue]]): Int = {
+  def write(ostream: OutputStream, rows: Iterator[Array[SoQLValue]]): Long = {
     for {
       dos <- managed(new DataOutputStream(ostream))
     } yield {
@@ -79,7 +79,7 @@ class SoQLPackWriter(schema: Seq[(String, SoQLType)],
       // end of header
 
       val wkbWriter = new WKBWriter
-      var ttl = 0
+      var ttl = 0L
       for (row <- rows) {
         ttl += 1
         val values: Seq[Any] = (0 until row.length).map { i =>
