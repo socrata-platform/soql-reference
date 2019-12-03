@@ -92,13 +92,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def accept[T <: Elem](implicit mfst: ClassTag[T]): Parser[T] =
     elem(mfst.runtimeClass.getName, mfst.runtimeClass.isInstance _) ^^(_.asInstanceOf[T])
 
-  val eof = new Parser[Unit] {
-    def apply(in: Input) =
-      if(in.first == EOF())
-        Success((), in.rest)
-      else
-        Failure(errors.missingEOF(in.first), in)
-  }
+  val eof = acceptIf(_ == EOF()) { t => errors.missingEOF(t) }
 
   /*
    *               *************************
