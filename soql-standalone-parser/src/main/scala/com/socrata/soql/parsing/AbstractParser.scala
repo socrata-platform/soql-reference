@@ -370,16 +370,22 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     a ++ b
   }
 
+  def functionWithParams(ident: String, params: Either[Position, Seq[Expression]], pos: Position) =
+    params match {
+      case Left(_) =>
+        FunctionCall(SpecialFunctions.StarFunc(ident), Seq.empty)(pos, pos)
+      case Right(params) =>
+        FunctionCall(FunctionName(ident), params)(pos, pos)
+    }
+
   def identifier_or_funcall: Parser[Expression] =
     identifier ~ opt(params ~ opt(OVER() ~ windowFunctionParams)) ^^ {
       case ((qual, ident, identPos)) ~ None =>
         ColumnOrAliasRef(qual, ColumnName(ident))(identPos)
-      case ((_, ident, identPos)) ~ Some(Right(params) ~ None) =>
-        FunctionCall(FunctionName(ident), params)(identPos, identPos)
-      case ((_, ident, identPos)) ~ Some(Left(position) ~ None) =>
-        FunctionCall(SpecialFunctions.StarFunc(ident), Seq.empty)(identPos, identPos)
-      case ((_, ident, identPos)) ~ Some(Right(params) ~ Some(_ ~ wfParams)) =>
-        val innerFc = FunctionCall(FunctionName(ident), params)(identPos, identPos)
+      case ((_, ident, identPos)) ~ Some(params ~ None) =>
+        functionWithParams(ident, params, identPos)
+      case ((_, ident, identPos)) ~ Some(params ~ Some(_ ~ wfParams)) =>
+        val innerFc = functionWithParams(ident, params, identPos)
         FunctionCall(SpecialFunctions.WindowFunctionOver, innerFc +: wfParams)(identPos, identPos)
     }
 
