@@ -3,6 +3,7 @@ import Keys._
 
 object SoqlAnalyzer {
   lazy val settings: Seq[Setting[_]] = BuildSettings.projectSettings() ++ Seq(
+    name := "soql-analyzer",
     libraryDependencies ++= Seq(
       // These two are only used by analysis-serialization
       "com.google.protobuf" % "protobuf-java" % "2.4.1" % "optional",

@@ -3,6 +3,7 @@ import Keys._
 
 object SoqlTypes {
   lazy val settings: Seq[Setting[_]] = BuildSettings.projectSettings() ++ Seq(
+    name := "soql-types",
     libraryDependencies ++=
       Seq(
         // Only used by serialization

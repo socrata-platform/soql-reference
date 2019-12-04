@@ -3,6 +3,7 @@ import Keys._
 
 object SoqlParser {
   lazy val settings: Seq[Setting[_]] = BuildSettings.projectSettings() ++ Seq(
+    name := "soql-standalone-parser",
     sourceGenerators in Compile += Def.task {
       // (sourceManaged in Compile, sourceDirectory in Compile) map { (sourceManaged, sourceDir) =>
       val task = new JFlex.anttask.JFlexTask

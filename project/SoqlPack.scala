@@ -3,6 +3,7 @@ import Keys._
 
 object SoqlPack {
   lazy val settings: Seq[Setting[_]] = BuildSettings.projectSettings() ++ Seq(
+    name := "soql-pack",
     libraryDependencies ++=
       Seq(
         // Only used by serialization
