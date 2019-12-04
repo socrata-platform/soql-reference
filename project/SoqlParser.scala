@@ -3,10 +3,11 @@ import Keys._
 
 object SoqlParser {
   lazy val settings: Seq[Setting[_]] = BuildSettings.projectSettings() ++ Seq(
-    sourceGenerators in Compile <+= (sourceManaged in Compile, sourceDirectory in Compile) map { (sourceManaged, sourceDir) =>
+    sourceGenerators in Compile += Def.task {
+      // (sourceManaged in Compile, sourceDirectory in Compile) map { (sourceManaged, sourceDir) =>
       val task = new JFlex.anttask.JFlexTask
-      task.setDestdir(sourceManaged)
-      task.setFile(sourceDir / "jflex" / "SoQLLexer.flex")
+      task.setDestdir((sourceManaged in Compile).value)
+      task.setFile((sourceDirectory in Compile).value / "jflex" / "SoQLLexer.flex")
       task.execute()
       // and now for some ugliness!
       val outputDir = task.getClass.getDeclaredField("outputDir")
