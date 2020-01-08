@@ -58,7 +58,7 @@ import com.socrata.soql.tokens.*;
   protected abstract RuntimeException unexpectedCharacter(char c, Position pos);
 %}
 
-WhiteSpace = [ \t\n]
+WhiteSpace = [ \t\r\n]
 
 Identifier = [:jletter:] [:jletterdigit:]*
 SystemIdentifier = ":" "@"? [:jletterdigit:]+
