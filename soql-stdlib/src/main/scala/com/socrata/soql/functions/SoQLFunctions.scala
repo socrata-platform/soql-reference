@@ -145,6 +145,7 @@ object SoQLFunctions {
 
   val BinaryPlus = f("+", SpecialFunctions.Operator("+"), Map("a" -> NumLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"))
   val BinaryMinus = f("-", SpecialFunctions.Operator("-"), Map("a" -> NumLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"))
+  val FloatingTimestampMinus = mf("floating timestamp -", SpecialFunctions.Operator("-"), Seq(SoQLFloatingTimestamp, SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
 
   val TimesNumNum = mf("*NN", SpecialFunctions.Operator("*"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber)
   val TimesDoubleDouble = mf("*DD", SpecialFunctions.Operator("*"), Seq(SoQLDouble, SoQLDouble), Seq.empty, SoQLDouble)
@@ -164,6 +165,7 @@ object SoQLFunctions {
   val ModMoneyNum = mf("%MN", SpecialFunctions.Operator("%"), Seq(SoQLMoney, SoQLNumber), Seq.empty, SoQLMoney)
   val ModMoneyMoney = mf("%MM", SpecialFunctions.Operator("%"), Seq(SoQLMoney, SoQLMoney), Seq.empty, SoQLNumber)
 
+  val Absolute = f("abs", FunctionName("abs"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
   val Ceiling = f("ceil", FunctionName("ceil"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
   val Floor = f("floor", FunctionName("floor"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
 
