@@ -11,7 +11,7 @@ sealed abstract class SoQLFunctions
 object SoQLFunctions {
   private val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLFunctions])
 
-  import SoQLTypeClasses.{Ordered, Equatable, NumLike, RealNumLike, GeospatialLike}
+  import SoQLTypeClasses.{Ordered, Equatable, NumLike, RealNumLike, GeospatialLike, TimestampLike}
   private val AllTypes = SoQLType.typesByName.values.toSet
 
   // helpers to guide type inference (specifically forces SoQLType to be inferred)
@@ -145,7 +145,6 @@ object SoQLFunctions {
 
   val BinaryPlus = f("+", SpecialFunctions.Operator("+"), Map("a" -> NumLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"))
   val BinaryMinus = f("-", SpecialFunctions.Operator("-"), Map("a" -> NumLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"))
-  val FloatingTimestampMinus = mf("floating timestamp -", SpecialFunctions.Operator("-"), Seq(SoQLFloatingTimestamp, SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
 
   val TimesNumNum = mf("*NN", SpecialFunctions.Operator("*"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber)
   val TimesDoubleDouble = mf("*DD", SpecialFunctions.Operator("*"), Seq(SoQLDouble, SoQLDouble), Seq.empty, SoQLDouble)
@@ -215,6 +214,8 @@ object SoQLFunctions {
   val FixedTimeStampTruncYmdAtTimeZone = mf("fixed timestamp trunc day at time zone", FunctionName("date_trunc_ymd"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)
   val FixedTimeStampTruncYmAtTimeZone = mf("fixed timestamp trunc month at time zone", FunctionName("date_trunc_ym"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)
   val FixedTimeStampTruncYAtTimeZone = mf("fixed timestamp trunc year at time zone", FunctionName("date_trunc_y"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)
+
+  val DaysBetween = f("days_between", FunctionName("days_between"), Map("a" -> TimestampLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLNumber))
 
   // Translate a fixed timestamp to a given time zone and convert it to a floating timestamp.
   val ToFloatingTimestamp = mf("to floating timestamp", FunctionName("to_floating_timestamp"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)
