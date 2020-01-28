@@ -203,7 +203,6 @@ object SoQLFunctions {
   val FloatingTimeStampExtractDow = mf("floating timestamp extract day of week", FunctionName("date_extract_dow"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
   val FloatingTimeStampExtractWoy = mf("floating timestamp extract week of year", FunctionName("date_extract_woy"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)
 
-
   // This set of date_trunc functions for fixed_timestamp are for obe compatibility purpose.
   // The truncated boundary does not aligned with the client time zone unless it happens to have the same time zone as the server.
   // The FixedTimeStampTrunc*AtTimeZone set give the client more control to align at particular time zone.
@@ -215,7 +214,7 @@ object SoQLFunctions {
   val FixedTimeStampTruncYmAtTimeZone = mf("fixed timestamp trunc month at time zone", FunctionName("date_trunc_ym"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)
   val FixedTimeStampTruncYAtTimeZone = mf("fixed timestamp trunc year at time zone", FunctionName("date_trunc_y"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)
 
-  val DaysBetween = f("days_between", FunctionName("days_between"), Map("a" -> TimestampLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLNumber))
+  val TimeStampDiffD = f("timestamp diff in days", FunctionName("date_diff_d"), Map("a" -> TimestampLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLNumber))
 
   // Translate a fixed timestamp to a given time zone and convert it to a floating timestamp.
   val ToFloatingTimestamp = mf("to floating timestamp", FunctionName("to_floating_timestamp"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)
