@@ -30,4 +30,5 @@ object SoQLTypeClasses {
 
   val NumLike = Set[SoQLType](SoQLNumber, SoQLDouble, SoQLMoney)
   val RealNumLike = Set[SoQLType](SoQLNumber, SoQLDouble)
+  val TimestampLike = Set[SoQLType](SoQLFixedTimestamp, SoQLFloatingTimestamp)
 }
