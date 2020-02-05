@@ -340,6 +340,9 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def params: Parser[Either[Position, Seq[Expression]]] =
     LPAREN() ~> paramList <~ (RPAREN() | failure(errors.missingArg))
 
+  def countDistinctParam: Parser[Expression] =
+    LPAREN() ~> DISTINCT() ~> expr <~ (RPAREN() | failure(errors.missingArg))
+
 
   def windowFunctionParamList: Parser[Either[Position, Seq[Expression]]] =
     rep1sep(expr, COMMA()) ^^ (Right(_))
@@ -372,7 +375,11 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
         FunctionCall(FunctionName(ident), params)(pos, pos)
     }
 
-  def identifier_or_funcall: Parser[Expression] =
+  def identifier_or_funcall: Parser[Expression] = {
+    identifier ~ countDistinctParam ^^ {
+      case ((_, ident, identPos)) ~ param =>
+        functionWithParams(s"${ident}_distinct", Right(Seq(param)), identPos)
+    } |
     identifier ~ opt(params ~ opt(OVER() ~ windowFunctionParams)) ^^ {
       case ((qual, ident, identPos)) ~ None =>
         ColumnOrAliasRef(qual, ColumnName(ident))(identPos)
@@ -382,6 +389,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
         val innerFc = functionWithParams(ident, params, identPos)
         FunctionCall(SpecialFunctions.WindowFunctionOver, innerFc +: wfParams)(identPos, identPos)
     }
+  }
 
   def paren: Parser[Expression] =
     LPAREN() ~> expr <~ RPAREN() ^^ { e => FunctionCall(SpecialFunctions.Parens, Seq(e))(e.position, e.position) }

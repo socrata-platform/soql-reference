@@ -123,6 +123,7 @@ object SoQLFunctions {
   val Max = f("max", FunctionName("max"), Map("a" -> Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
   val CountStar = mf("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, SoQLNumber, isAggregate = true)
   val Count = f("count", FunctionName("count"), Map.empty, Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), isAggregate = true)
+  val CountDistinct = f("count_distinct", FunctionName("count_distinct"), Map.empty, Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), isAggregate = true)
   val Sum = f("sum", FunctionName("sum"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
   val Avg = f("avg", FunctionName("avg"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
   val Median = f("median", FunctionName("median"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
@@ -189,6 +190,8 @@ object SoQLFunctions {
   val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, SoQLNumber)
   val Rank = mf("rank", FunctionName("rank"), Seq(), Seq.empty, SoQLNumber)
   val DenseRank = mf("dense_rank", FunctionName("dense_rank"), Seq(), Seq.empty, SoQLNumber)
+  val FirstValue = f("first value", FunctionName("first_value"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"))
+  val LastValue = f("last value", FunctionName("last_value"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"))
 
   val FloatingTimeStampTruncYmd = mf("floating timestamp trunc day", FunctionName("date_trunc_ymd"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)
   val FloatingTimeStampTruncYm = mf("floating timestamp trunc month", FunctionName("date_trunc_ym"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)

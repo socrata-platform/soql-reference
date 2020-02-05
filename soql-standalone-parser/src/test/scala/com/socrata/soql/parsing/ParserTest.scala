@@ -210,6 +210,24 @@ class ParserTest extends WordSpec with MustMatchers {
       y must be (x)
     }
 
+    "count(disinct column)" in {
+      println("test 1")
+      val x = parseFull("select count(distinct column)")
+      x.selection.expressions.head.expression.asInstanceOf[FunctionCall].functionName.name must be ("count_distinct")
+    }
+
+    "count(column)" in {
+      println("select count(column)")
+      val x = parseFull("select count(column)")
+      x.selection.expressions.head.expression.asInstanceOf[FunctionCall].functionName.name must be ("count")
+    }
+
+    "count(*)" in {
+      println("select count(*)")
+      val x = parseFull("select count(*)")
+      x.selection.expressions.head.expression.asInstanceOf[FunctionCall].functionName.name must be ("count/*")
+    }
+
     "window function over partition order round trip" in {
       val x = parseFull("select row_number() over(partition by x, y order by m, n)")
       x.selection.expressions.head.expression.toString must be ("row_number() OVER ( PARTITION BY `x`,`y` ORDER BY `m`,`n`)")
