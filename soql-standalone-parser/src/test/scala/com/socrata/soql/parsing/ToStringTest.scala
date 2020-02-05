@@ -1,6 +1,6 @@
 package com.socrata.soql.parsing
 
-import com.socrata.NonEmptySeq
+import com.socrata.soql.collection.NonEmptySeq
 import org.scalatest.{FunSpec, MustMatchers}
 
 class ToStringTest extends FunSpec with MustMatchers {

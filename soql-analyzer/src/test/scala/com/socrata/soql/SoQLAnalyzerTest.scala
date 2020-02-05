@@ -1,6 +1,5 @@
 package com.socrata.soql
 
-import com.socrata.NonEmptySeq
 import com.socrata.soql.exceptions._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.PropertyChecks
@@ -8,12 +7,13 @@ import org.scalatest.prop.PropertyChecks
 import scala.util.parsing.input.NoPosition
 import org.scalatest.FunSuite
 import org.scalatest.MustMatchers
-import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
+import com.socrata.soql.environment.{ColumnName, DatasetContext, ResourceName, Qualified, TableRef}
 import com.socrata.soql.parsing.{Parser, StandaloneParser}
 import com.socrata.soql.typechecker.Typechecker
 import com.socrata.soql.types._
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typed.ColumnRef
+import com.socrata.soql.collection.{NonEmptySeq, OrderedMap}
 
 class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   val datasetCtx = new DatasetContext[TestType] {
@@ -61,25 +61,41 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     )
   }
 
-  implicit val datasetCtxMap =
-    Map(TableName.PrimaryTable.qualifier -> datasetCtx,
-        TableName("_aaaa-aaaa", None).qualifier -> joinCtx,
-        TableName("_aaaa-aaab", Some("_a1")).qualifier -> joinAliasCtx,
-        TableName("_aaaa-aaax", Some("_x1")).qualifier -> joinAliasWoOverlapCtx,
-        TableName("_aaaa-aaab", None).qualifier -> joinAliasCtx,
-        TableName("_aaaa-aaax", None).qualifier -> joinAliasWoOverlapCtx)
+  val primary = ResourceName("primary")
+  val datasetCtxMap =
+    Map(primary -> datasetCtx,
+        ResourceName("aaaa-aaaa") -> joinCtx,
+        ResourceName("aaaa-aaab") -> joinAliasCtx,
+        ResourceName("aaaa-aaax") -> joinAliasWoOverlapCtx)
 
-  val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo)
+  def tableFinder(in: Set[ResourceName]) = datasetCtxMap.filterKeys(in)
+
+  val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo, tableFinder)
+  type TypedExpr = typed.CoreExpr[Qualified[ColumnName], TestType]
 
   def expression(s: String) = new Parser().expression(s)
 
-  def typedExpression(s: String) = {
+  def typedExpression(s: String): TypedExpr =
+    typedExpression(s, Map.empty[ResourceName, (TableRef, DatasetContext[TestType])])
+
+  def typedExpression(s: String, otherCtxs: Map[ResourceName, (TableRef, Map[ColumnName, TestType])]): TypedExpr = {
     val tc = new Typechecker(TestTypeInfo, TestFunctionInfo)
-    tc(expression(s), Map.empty)
+    def convertTypes(ref: TableRef, columnName: ColumnName, columnType: TestType): TypedExpr = {
+      typed.ColumnRef[Qualified[ColumnName], TestType](
+        Qualified(ref, columnName),
+        columnType)(NoPosition)
+    }
+    tc(expression(s), Typechecker.Ctx(datasetCtx.schema.transform(convertTypes(TableRef.Primary(primary), _ ,_)),
+                                      otherCtxs.mapValues { case (ref, schema) =>
+                                        schema.transform(convertTypes(ref, _, _))
+                                      }))
+  }
+  def typedExpression(s: String, otherCtxs: Map[ResourceName, (TableRef, DatasetContext[TestType])])(implicit erasureEvasion: Unit = ()): TypedExpr = {
+    typedExpression(s, otherCtxs.mapValues { case (ref, dc) => (ref, dc.schema) })
   }
 
   test("analysis succeeds in a most minimal query") {
-    val analysis = analyzer.analyzeUnchainedQuery("select :id")
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "select :id")
     analysis.selection.toSeq must equal (Seq(ColumnName(":id") -> typedExpression(":id")))
     analysis.where must be (None)
     analysis.groupBys must be (Nil)
@@ -92,7 +108,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("analysis succeeds in a maximal group-by query") {
-    val analysis = analyzer.analyzeUnchainedQuery("select :id as i, sum(balance) where visits > 0 group by i having sum_balance < 5 order by i desc null last, sum(balance) null first limit 5 offset 10")
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "select :id as i, sum(balance) where visits > 0 group by i having sum_balance < 5 order by i desc null last, sum(balance) null first limit 5 offset 10")
     analysis.selection.toSeq must equal (Seq(ColumnName("i") -> typedExpression(":id"), ColumnName("sum_balance") -> typedExpression("sum(balance)")))
     analysis.selection(ColumnName("i")).position.column must equal (8)
     analysis.selection(ColumnName("sum_balance")).position.column must equal (18)
@@ -100,20 +116,20 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     analysis.where.get.position.column must equal (37)
     analysis.where.get.asInstanceOf[typed.FunctionCall[_,_]].functionNamePosition.column must equal (44)
     analysis.groupBys must equal (List(typedExpression(":id")))
-    analysis.groupBys.head.position.column must equal (8)
+    analysis.groupBys.head.position.column must equal (57)
     analysis.having must equal (Some(typedExpression("sum(balance) < 5")))
     analysis.having.get.position.column must equal (66)
-    analysis.having.get.asInstanceOf[typed.FunctionCall[_,_]].parameters(0).position.column must equal (18)
+    analysis.having.get.asInstanceOf[typed.FunctionCall[_,_]].parameters(0).position.column must equal (66)
     analysis.having.get.asInstanceOf[typed.FunctionCall[_,_]].functionNamePosition.column must equal (78)
     analysis.orderBys must equal (List(typed.OrderBy(typedExpression(":id"), false, true), typed.OrderBy(typedExpression("sum(balance)"), true, false)))
-    analysis.orderBys.map(_.expression.position.column) must equal (Seq(8, 109))
+    analysis.orderBys.map(_.expression.position.column) must equal (Seq(91, 109))
     analysis.limit must equal (Some(BigInt(5)))
     analysis.offset must equal (Some(BigInt(10)))
   }
 
   test("analysis succeeds in a maximal ungrouped query") {
-    val analysis = analyzer.analyzeUnchainedQuery("select :*, *(except name_first, name_last), nf || (' ' || nl) as name, name_first as nf, name_last as nl where nl < 'm' order by name desc, visits limit 5 offset 10")
-    analysis.selection.toSeq must equal (datasetCtx.schema.toSeq.filterNot(_._1.name.startsWith("name_")).map { case (n, t) => n -> typed.ColumnRef(None, n, t)(NoPosition) } ++ Seq(ColumnName("name") -> typedExpression("name_first || (' ' || name_last)"), ColumnName("nf") -> typedExpression("name_first"), ColumnName("nl") -> typedExpression("name_last")))
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "select :*, *(except name_first, name_last), nf || (' ' || nl) as name, name_first as nf, name_last as nl where nl < 'm' order by name desc, visits limit 5 offset 10")
+    analysis.selection.toSeq must equal (datasetCtx.schema.toSeq.filterNot(_._1.name.startsWith("name_")).map { case (n, t) => n -> typed.ColumnRef(Qualified(TableRef.Primary(primary), n), t)(NoPosition) } ++ Seq(ColumnName("name") -> typedExpression("name_first || (' ' || name_last)"), ColumnName("nf") -> typedExpression("name_first"), ColumnName("nl") -> typedExpression("name_last")))
     analysis.selection(ColumnName(":id")).position.column must equal (8)
     analysis.selection(ColumnName(":updated_at")).position.column must equal (8)
     analysis.selection(ColumnName(":created_at")).position.column must equal (8)
@@ -127,36 +143,17 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     analysis.where must equal (Some(typedExpression("name_last < 'm'")))
     analysis.where.get.position.column must equal (112)
     analysis.where.get.asInstanceOf[typed.FunctionCall[_,_]].functionNamePosition.column must equal (115)
-    analysis.where.get.asInstanceOf[typed.FunctionCall[_,_]].parameters(0).position.column must equal (90)
+    analysis.where.get.asInstanceOf[typed.FunctionCall[_,_]].parameters(0).position.column must equal (112)
     analysis.groupBys must equal (Nil)
     analysis.having must equal (None)
     analysis.orderBys must equal (List(typed.OrderBy(typedExpression("name_first || (' ' || name_last)"), false, false), typed.OrderBy(typedExpression("visits"), true, true)))
-    analysis.orderBys.map(_.expression.position.column) must equal (Seq(45, 141))
+    analysis.orderBys.map(_.expression.position.column) must equal (Seq(130, 141))
     analysis.limit must equal (Some(BigInt(5)))
     analysis.offset must equal (Some(BigInt(10)))
   }
 
-  test("Giving no values to the split-query analyzer returns the equivalent of `SELECT *'") {
-    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, None, None, None, None, None, None)(Map(TableName.PrimaryTable.qualifier -> datasetCtx))
-    analysis must equal (analyzer.analyzeUnchainedQuery("SELECT *"))
-  }
-
-  test("Putting an aggregate in the order-by slot causes aggregation to occur") {
-    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, None, None, Some("max(visits)"), None, None, None)
-    analysis must equal (analyzer.analyzeUnchainedQuery("SELECT count(*) ORDER BY max(visits)"))
-  }
-
-  test("Having a group by clause puts them in the selection list") {
-    val computed = "name_first || ' ' || name_last"
-    val sep = ", "
-    val uncomputed = "visits"
-    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, Some(computed + sep + uncomputed), None, None, None, None, None)
-    analysis must equal (analyzer.analyzeUnchainedQuery("SELECT "+computed+", "+uncomputed+", count(*) GROUP BY "+computed+", "+uncomputed))
-    analysis.selection(ColumnName("visits")).position.column must equal (1 + computed.length + sep.length)
-  }
-
   test("analysis succeeds in cast") {
-    val analysis = analyzer.analyzeUnchainedQuery("select name_last::number as c1, '123'::number as c2, 456::text as c3")
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "select name_last::number as c1, '123'::number as c2, 456::text as c3")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("c1") -> typedExpression("name_last::number"),
       ColumnName("c2") -> typedExpression("'123'::number"),
@@ -165,7 +162,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("json property and index") {
-    val analysis = analyzer.analyzeUnchainedQuery("select object.xxxx as c1, array[123] as c2, object.yyyy::text as c3, array[123]::number as c4")
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "select object.xxxx as c1, array[123] as c2, object.yyyy::text as c3, array[123]::number as c4")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("c1") -> typedExpression("object.xxxx"),
       ColumnName("c2") -> typedExpression("array[123]"),
@@ -176,8 +173,10 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
 
   test("subcolumn subscript converted") {
     val soql = "select address.human_address where address.latitude > 1.1 order by address.longitude"
-    val analysis = analyzer.analyzeUnchainedQuery(soql)
-    val typedCol = typed.ColumnRef(None, ColumnName("address"), TestLocation.t)(NoPosition)
+    val analysis = analyzer.analyzeUnchainedQuery(primary, soql)
+    val typedCol = typed.ColumnRef(Qualified(TableRef.Primary(primary),
+                                                       ColumnName("address")),
+                                   TestLocation.t)(NoPosition)
 
     analysis.selection.toSeq must equal (Seq(
       ColumnName("address_human_address") -> typed.FunctionCall(TestFunctions.LocationToAddress.monomorphic.get, Seq(typedCol))(NoPosition, NoPosition)
@@ -188,89 +187,89 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("null :: number succeeds") {
-    val analysis = analyzer.analyzeUnchainedQuery("select null :: number as x")
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "select null :: number as x")
     analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestNumber)).get.monomorphic.get,
       Seq(typed.NullLiteral(TestNumber.t)(NoPosition)))(NoPosition, NoPosition))
   }
 
   test("5 :: number succeeds") {
-    val analysis = analyzer.analyzeUnchainedQuery("select 5 :: number as x")
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "select 5 :: number as x")
     analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestNumber)).get.monomorphic.get,
       Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber.t)(NoPosition)))(NoPosition, NoPosition))
   }
 
   test("5 :: money succeeds") {
-    val analysis = analyzer.analyzeUnchainedQuery("select 5 :: money as x")
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "select 5 :: money as x")
     analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
       Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber.t)(NoPosition)))(NoPosition, NoPosition)))(NoPosition, NoPosition))
   }
 
   test("a subselect makes the output of the inner select available to the outer") {
-    val NonEmptySeq(inner, Seq(outer)) = analyzer.analyzeFullQuery("select 5 :: money as x |> select max(x)")
-    outer.selection(ColumnName("max_x")) must equal (typed.FunctionCall(MonomorphicFunction(TestFunctions.Max, Map("a" -> TestMoney)), Seq(typed.ColumnRef(None, ColumnName("x"), TestMoney : TestType)(NoPosition)))(NoPosition, NoPosition))
+    val NonEmptySeq(inner, Seq(outer)) = analyzer.analyzeFullQuery(primary, "select 5 :: money as x |> select max(x)")
+    outer.selection(ColumnName("max_x")) must equal (typed.FunctionCall(MonomorphicFunction(TestFunctions.Max, Map("a" -> TestMoney)), Seq(typed.ColumnRef(Qualified(TableRef.PreviousChainStep, ColumnName("x")), TestMoney.t)(NoPosition)))(NoPosition, NoPosition))
     inner.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
       Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber.t)(NoPosition)))(NoPosition, NoPosition)))(NoPosition, NoPosition))
   }
 
   test("cannot ORDER BY an unorderable type") {
-    an [UnorderableOrderBy] must be thrownBy analyzer.analyzeFullQuery("select * order by array")
+    an [UnorderableOrderBy] must be thrownBy analyzer.analyzeFullQuery(primary, "select * order by array")
   }
 
   test("cannot filter by a non-boolean type") {
-    a [NonBooleanWhere] must be thrownBy analyzer.analyzeFullQuery("select * where array")
-    a [NonBooleanHaving] must be thrownBy analyzer.analyzeFullQuery("select count(*) having count(*)")
+    a [NonBooleanWhere] must be thrownBy analyzer.analyzeFullQuery(primary, "select * where array")
+    a [NonBooleanHaving] must be thrownBy analyzer.analyzeFullQuery(primary, "select count(*) having count(*)")
   }
 
   test("cannot group by a non-groupable type") {
-    a [NonGroupableGroupBy] must be thrownBy analyzer.analyzeFullQuery("select array group by array")
+    a [NonGroupableGroupBy] must be thrownBy analyzer.analyzeFullQuery(primary, "select array group by array")
   }
 
   test("Merging two simple filter queries is the same as querying one") {
-    val analysis1 = analyzer.analyzeFullQuery("select 2*visits as twice_visits where twice_visits > 10 |> select * where twice_visits > 20")
-    val analysis2 = analyzer.analyzeFullQuery("select 2*visits as twice_visits where twice_visits > 10 and twice_visits > 20")
+    val analysis1 = analyzer.analyzeFullQuery(primary, "select 2*visits as twice_visits where twice_visits > 10 |> select * where twice_visits > 20")
+    val analysis2 = analyzer.analyzeFullQuery(primary, "select 2*visits as twice_visits where twice_visits > 10 and twice_visits > 20")
     SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
   }
 
   test("Merging a filter-on-a-group-on-a-filter is the same as a where-group-having one") {
-    val analysis1 = analyzer.analyzeFullQuery("select visits where visits > 10 |> select visits, count(*) as c group by visits |> select * where c > 5")
-    val analysis2 = analyzer.analyzeFullQuery("select visits, count(*) as c where visits > 10 group by visits having c > 5")
+    val analysis1 = analyzer.analyzeFullQuery(primary, "select visits where visits > 10 |> select visits, count(*) as c group by visits |> select * where c > 5")
+    val analysis2 = analyzer.analyzeFullQuery(primary, "select visits, count(*) as c where visits > 10 group by visits having c > 5")
     SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
   }
 
   test("Merging limits truncates the second limit to the window defined by the first") {
-    val analysis1 = analyzer.analyzeFullQuery("select visits offset 10 limit 5 |> select * offset 3 limit 10")
-    val analysis2 = analyzer.analyzeFullQuery("select visits offset 13 limit 2")
+    val analysis1 = analyzer.analyzeFullQuery(primary, "select visits offset 10 limit 5 |> select * offset 3 limit 10")
+    val analysis2 = analyzer.analyzeFullQuery(primary, "select visits offset 13 limit 2")
     SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
   }
 
   test("Merging an offset to the end of a limit reduces the limit to 0") {
-    val analysis1 = analyzer.analyzeFullQuery("select visits offset 10 limit 5 |> select * offset 5")
-    val analysis2 = analyzer.analyzeFullQuery("select visits offset 15 limit 0")
+    val analysis1 = analyzer.analyzeFullQuery(primary, "select visits offset 10 limit 5 |> select * offset 5")
+    val analysis2 = analyzer.analyzeFullQuery(primary, "select visits offset 15 limit 0")
     SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
   }
 
   test("Merging an offset past the end of a limit reduces the limit to 0 and does not move the offset past the end of the first query") {
-    val analysis1 = analyzer.analyzeFullQuery("select visits offset 10 limit 5 |> select * offset 50")
-    val analysis2 = analyzer.analyzeFullQuery("select visits offset 15 limit 0")
+    val analysis1 = analyzer.analyzeFullQuery(primary, "select visits offset 10 limit 5 |> select * offset 50")
+    val analysis2 = analyzer.analyzeFullQuery(primary, "select visits offset 15 limit 0")
     SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
   }
 
   test("Merging join") {
-    val analysis1 = analyzer.analyzeFullQuery("select name_last, visits where visits > 1 |> select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = name_last where @aaaa-aaaa.name_last='Almond'")
-    val analysis2 = analyzer.analyzeFullQuery("select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = name_last where visits > 1 and @aaaa-aaaa.name_last='Almond'")
+    val analysis1 = analyzer.analyzeFullQuery(primary, "select name_last, visits where visits > 1 |> select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = name_last where @aaaa-aaaa.name_last='Almond'")
+    val analysis2 = analyzer.analyzeFullQuery(primary, "select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = name_last where visits > 1 and @aaaa-aaaa.name_last='Almond'")
     val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1)
     merged must equal (analysis2)
   }
 
   test("Merging join with table alias") {
-    val analysis1 = analyzer.analyzeFullQuery("select name_last, name_first, visits where visits > 1 |> select visits as vis, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first where @a1.name_first='John'")
-    val analysis2 = analyzer.analyzeFullQuery("select visits as vis, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first where visits > 1 and @a1.name_first='John'")
+    val analysis1 = analyzer.analyzeFullQuery(primary, "select name_last, name_first, visits where visits > 1 |> select visits as vis, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first where @a1.name_first='John'")
+    val analysis2 = analyzer.analyzeFullQuery(primary, "select visits as vis, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first where visits > 1 and @a1.name_first='John'")
     val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1)
     merged must equal (analysis2)
   }
 
   test("Back to back joins do not merge") {
-    val analysis = analyzer.analyzeFullQuery("select name_first, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = name_last |> select name_last, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first")
+    val analysis = analyzer.analyzeFullQuery(primary, "select name_first, @aaaa-aaaa.name_last as name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = name_last |> select name_last, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first")
     val notMerged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
     notMerged must equal (analysis)
   }
@@ -311,7 +310,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("distinct") {
-    val analysis = analyzer.analyzeUnchainedQuery("select distinct name_last, visits")
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "select distinct name_last, visits")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("name_last") -> typedExpression("name_last"),
       ColumnName("visits") -> typedExpression("visits")
@@ -320,7 +319,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("alias reuse") {
-    val analysis = analyzer.analyzeUnchainedQuery("select name_last as last_name, last_name as ln")
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "select name_last as last_name, last_name as ln")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("last_name") -> typedExpression("name_last"),
       ColumnName("ln") -> typedExpression("name_last")
@@ -328,36 +327,46 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("qualified column name") {
-    val analysis = analyzer.analyzeUnchainedQuery("select object.a, object.b as ob, visits, @aaaa-aaaa.name_last, @a1.name_first")
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "select object.a, object.b as ob, visits, @aaaa-aaaa.name_last, @a1.name_last join @aaaa-aaaa on true join @aaaa-aaaa as a1 on true")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("object_a") -> typedExpression("object.a"),
       ColumnName("ob") -> typedExpression("object.b"),
       ColumnName("visits") -> typedExpression("visits"),
-      ColumnName("name_last") -> typedExpression("@aaaa-aaaa.name_last"),
-      ColumnName("name_first") -> typedExpression("@a1.name_first")
+      ColumnName("aaaa_aaaa_name_last") -> typedExpression("@aaaa-aaaa.name_last", Map(ResourceName("aaaa-aaaa") -> ((TableRef.Join(0), datasetCtxMap(ResourceName("aaaa-aaaa")))))),
+      ColumnName("a1_name_last") -> typedExpression("@a1.name_last", Map(ResourceName("a1") -> ((TableRef.Join(1), datasetCtxMap(ResourceName("aaaa-aaaa"))))))
     ))
   }
 
   test("join") {
-    val analysis = analyzer.analyzeUnchainedQuery("select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on name_last = @aaaa-aaaa.name_last")
-    val visit: ColumnRef[_, _] = typedExpression("visits").asInstanceOf[ColumnRef[_, _]]
-    visit.qualifier must equal(None)
-    val lastName: ColumnRef[_, _] = typedExpression("@aaaa-aaaa.name_last").asInstanceOf[ColumnRef[_, _]]
-    lastName.qualifier must equal(Some("_aaaa-aaaa"))
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on name_last = @aaaa-aaaa.name_last")
+    val visit = typedExpression("visits").asInstanceOf[ColumnRef[Qualified[ColumnName], _]]
+    visit.column.table must equal(TableRef.Primary(primary))
+    val joinTable = ResourceName("aaaa-aaaa")
+    val lastName= typedExpression("@aaaa-aaaa.name_last", Map(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable))))).asInstanceOf[ColumnRef[Qualified[ColumnName], _]]
+    lastName.column.table must equal(TableRef.Join(0))
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> visit,
-      ColumnName("name_last") -> lastName
+      ColumnName("aaaa_aaaa_name_last") -> lastName
     ))
-    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(TableName("_aaaa-aaaa"), None), typedExpression("name_last = @aaaa-aaaa.name_last"))))
+    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(TableRef.Primary(joinTable),
+                                                                 Nil,
+                                                                 TableRef.Join(0)),
+                                                    typedExpression("name_last = @aaaa-aaaa.name_last",
+                                                                    Map(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable))))))))
   }
 
   test("join with table alias") {
-    val analysis = analyzer.analyzeUnchainedQuery("select visits, @a1.name_first join @aaaa-aaaa as a1 on visits > 10")
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "select visits, @a1.name_last join @aaaa-aaaa as a1 on visits > 10")
+    val joinTable = ResourceName("aaaa-aaaa")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> typedExpression("visits"),
-      ColumnName("name_first") -> typedExpression("@a1.name_first")
+      ColumnName("a1_name_last") -> typedExpression("@aaaa-aaaa.name_last", Map(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable)))))
     ))
-    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(TableName("_aaaa-aaaa", Some("_a1")), None), typedExpression("visits > 10"))))
+    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(TableRef.Primary(joinTable),
+                                                                 Nil,
+                                                                 TableRef.Join(0)),
+                                                    typedExpression("visits > 10",
+                                                                    Map(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable))))))))
   }
 
   test("join toString") {
@@ -394,7 +403,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("multiple `SELECT *`'s") {
-    val analysis = analyzer.analyzeUnchainedQuery("select :*, *, @x1.* join @aaaa-aaax as x1 on visits > 10")
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "select :*, *, @x1.* join @aaaa-aaax as x1 on visits > 10")
+    val joinTable = ResourceName("aaaa-aaax")
     analysis.selection.toSeq must equal (Seq(
       ColumnName(":id") -> typedExpression(":id"),
       ColumnName(":updated_at") -> typedExpression(":updated_at"),
@@ -407,9 +417,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("balance") -> typedExpression("balance"),
       ColumnName("object") -> typedExpression("object"),
       ColumnName("array") -> typedExpression("array"),
-      ColumnName("x") -> typedExpression("@x1.x"),
-      ColumnName("y") -> typedExpression("@x1.y"),
-      ColumnName("z") -> typedExpression("@x1.z")
+      ColumnName("x1_x") -> typedExpression("@aaaa-aaax.x", Map(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable))))),
+      ColumnName("x1_y") -> typedExpression("@aaaa-aaax.y", Map(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable))))),
+      ColumnName("x1_z") -> typedExpression("@aaaa-aaax.z", Map(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable)))))
     ))
   }
 
@@ -424,91 +434,240 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     parsedAgain.toString must equal(expected)
   }
 
-  def parseJoin(joinSoql: String)(implicit ctx: analyzer.AnalysisContext): NonEmptySeq[SoQLAnalysis[ColumnName, TestType]] = {
-    val parsed = new StandaloneParser().parseJoinSelect(joinSoql)
-    analyzer.analyze(NonEmptySeq.fromSeqUnsafe(parsed.selects))(ctx)
+  def parseSubselectJoin(joinSoql: String): NonEmptySeq[SoQLAnalysis[Qualified[ColumnName], TestType]] = {
+    val parsed = new StandaloneParser().parseSubselectJoinSource(joinSoql)
+    analyzer.analyze(parsed.fromTable.resourceName, parsed.subSelect)
   }
 
   test("join with sub-query") {
     val joinSubSoqlInner = "select * from @aaaa-aaab where name_first = 'xxx'"
     val joinSubSoql = s"($joinSubSoqlInner) as a1"
-    val subAnalyses = parseJoin(joinSubSoql)(Map(TableName.PrimaryTable.qualifier -> joinAliasCtx))
-    val analysis = analyzer.analyzeUnchainedQuery(s"select visits, @a1.name_first join $joinSubSoql on name_first = @a1.name_first")
+    val subAnalyses = parseSubselectJoin(joinSubSoql)
+    val analysis = analyzer.analyzeUnchainedQuery(primary, s"select visits, @a1.name_first join $joinSubSoql on name_first = @a1.name_first")
+    val ctx = Map(ResourceName("a1") -> ((TableRef.Join(0), datasetCtxMap(ResourceName("aaaa-aaab")))))
     analysis.selection.toSeq must equal (Seq(
-      ColumnName("visits") -> typedExpression("visits"),
-      ColumnName("name_first") -> typedExpression("@a1.name_first")
+      ColumnName("visits") -> typedExpression("visits", ctx),
+      ColumnName("a1_name_first") -> typedExpression("@a1.name_first", ctx)
     ))
-    val expected = List(typed.InnerJoin(JoinAnalysis(TableName("_aaaa-aaab"), Some(SubAnalysis(subAnalyses, "_a1"))), typedExpression("name_first = @a1.name_first")))
+    val expected = List(typed.InnerJoin(JoinAnalysis(TableRef.Primary(ResourceName("aaaa-aaab")),
+                                                     subAnalyses.seq,
+                                                     TableRef.Join(0)),
+                                        typedExpression("name_first = @a1.name_first", ctx)))
     analysis.joins must equal (expected)
   }
 
   test("join with sub-chained-query") {
     val joinSubSoqlInner = "select * from @aaaa-aaab where name_first = 'aaa' |> select * where name_first = 'bbb'"
     val joinSubSoql = s"($joinSubSoqlInner) as a1"
-    val subAnalyses = parseJoin(joinSubSoql)(Map(TableName.PrimaryTable.qualifier -> joinAliasCtx))
-    val analysis = analyzer.analyzeUnchainedQuery(s"select visits, @a1.name_first join $joinSubSoql on name_first = @a1.name_first")
+    val subAnalyses = parseSubselectJoin(joinSubSoql)
+    val analysis = analyzer.analyzeUnchainedQuery(primary, s"select visits, @a1.name_first join $joinSubSoql on name_first = @a1.name_first")
+    val ctx = Map(ResourceName("a1") -> ((TableRef.Join(0), datasetCtxMap(ResourceName("aaaa-aaab")))))
     analysis.selection.toSeq must equal (Seq(
-      ColumnName("visits") -> typedExpression("visits"),
-      ColumnName("name_first") -> typedExpression("@a1.name_first")
+      ColumnName("visits") -> typedExpression("visits", ctx),
+      ColumnName("a1_name_first") -> typedExpression("@a1.name_first", ctx)
     ))
-    val expected = List(typed.InnerJoin(JoinAnalysis(TableName("_aaaa-aaab"), Some(SubAnalysis(subAnalyses, "_a1"))), typedExpression("name_first = @a1.name_first")))
+    val expected = List(typed.InnerJoin(JoinAnalysis(TableRef.Primary(ResourceName("aaaa-aaab")),
+                                                     subAnalyses.seq,
+                                                     TableRef.Join(0)),
+                                        typedExpression("name_first = @a1.name_first", ctx)))
+
     analysis.joins must equal (expected)
   }
 
   test("nested join") {
-    val analysis = analyzer.analyzeUnchainedQuery(s"""
+    val analysis = analyzer.analyzeUnchainedQuery(primary, s"""
 SELECT visits, @x3.x
-  JOIN (SELECT @x2.x, @a1.name_first FROM @aaaa-aaab as a1
-          JOIN (SELECT @x1.x FROM @aaaa-aaax as x1) as x2 on @x2.x = @a1.name_first
+  JOIN (SELECT @x2.x AS x, @a1.name_first FROM @aaaa-aaab as a1
+          JOIN (SELECT @x1.x AS x FROM @aaaa-aaax as x1) as x2 on @x2.x = @a1.name_first
        ) as x3 on @x3.x = name_first
       """)
 
-    val innermostJoins = analysis.joins.head.from.analyses.head.joins
-    val innermostAnalysis = innermostJoins.head.from.analyses.head
-    innermostAnalysis.selection.toSeq must equal (Seq(
-      ColumnName("x") -> ColumnRef(Some("_x1"), ColumnName("x"), TestText)(NoPosition)
-    ))
+    val expected =
+      SoQLAnalysis(false,
+                   false,
+                   OrderedMap(
+                     ColumnName("visits") -> typed.ColumnRef(Qualified(
+                                                               TableRef.Primary(primary),
+                                                               ColumnName("visits")),
+                                                             TestNumber.t)(NoPosition),
+                     ColumnName("x3_x") -> typed.ColumnRef(Qualified(
+                                                             TableRef.Join(1),
+                                                             ColumnName("x")),
+                                                           TestText.t)(NoPosition)),
+                   Seq(typed.InnerJoin(
+                         JoinAnalysis(TableRef.Primary(ResourceName("aaaa-aaab")),
+                                      Seq(SoQLAnalysis(
+                                            false,
+                                            false,
+                                            OrderedMap(
+                                              ColumnName("x") -> typed.ColumnRef(Qualified(
+                                                                                   TableRef.Join(0),
+                                                                                   ColumnName("x")),
+                                                                                 TestText.t)(NoPosition),
+                                              ColumnName("a1_name_first") -> typed.ColumnRef(Qualified(
+                                                                                               TableRef.Primary(ResourceName("aaaa-aaab")),
+                                                                                               ColumnName("name_first")),
+                                                                                             TestText.t)(NoPosition)),
+                                            Seq(typed.InnerJoin(
+                                                  JoinAnalysis(
+                                                    TableRef.Primary(ResourceName("aaaa-aaax")),
+                                                    Seq(SoQLAnalysis(
+                                                          false,
+                                                          false,
+                                                          OrderedMap(
+                                                            ColumnName("x") -> typed.ColumnRef(Qualified(
+                                                                                                 TableRef.Primary(ResourceName("aaaa-aaax")),
+                                                                                                 ColumnName("x")),
+                                                                                               TestText.t)(NoPosition)),
+                                                          Nil,
+                                                          None,
+                                                          Nil,
+                                                          None,
+                                                          Nil,
+                                                          None,
+                                                          None,
+                                                          None)),
+                                                    TableRef.Join(0)),
+                                                  typed.FunctionCall(MonomorphicFunction(
+                                                                       TestFunctions.Eq,
+                                                                       Map("a" -> TestText)),
+                                                                     Seq(
+                                                                       typed.ColumnRef(Qualified(
+                                                                                         TableRef.Join(0),
+                                                                                         ColumnName("x")),
+                                                                                       TestText.t)(NoPosition),
+                                                                       typed.ColumnRef(Qualified(
+                                                                                         TableRef.Primary(ResourceName("aaaa-aaab")),
+                                                                                         ColumnName("name_first")),
+                                                                                       TestText.t)(NoPosition)))(NoPosition, NoPosition))),
+                                            None,
+                                            Nil,
+                                            None,
+                                            Nil,
+                                            None,
+                                            None,
+                                            None)),
+                                      TableRef.Join(1)),
+                         typed.FunctionCall(MonomorphicFunction(
+                                              TestFunctions.Eq,
+                                              Map("a" -> TestText)),
+                                            Seq(
+                                              typed.ColumnRef(Qualified(
+                                                                TableRef.Join(1),
+                                                                ColumnName("x")),
+                                                              TestText.t)(NoPosition),
+                                              typed.ColumnRef(Qualified(
+                                                                TableRef.Primary(primary),
+                                                                ColumnName("name_first")),
+                                                              TestText.t)(NoPosition)))(NoPosition, NoPosition))),
+                   None,
+                   Nil,
+                   None,
+                   Nil,
+                   None,
+                   None,
+                   None)
 
-    val joins = analysis.joins
-    val joinAnalysis = joins.head.from.analyses.head
-    joinAnalysis.selection.toSeq must equal (Seq(
-      ColumnName("x") -> ColumnRef(Some("_x2"), ColumnName("x"), TestText)(NoPosition),
-      ColumnName("name_first") -> ColumnRef(Some("_a1"), ColumnName("name_first"), TestText)(NoPosition)
-    ))
-
-    analysis.selection.toSeq must equal (Seq(
-      ColumnName("visits") -> ColumnRef(None, ColumnName("visits"), TestNumber)(NoPosition),
-      ColumnName("x") -> ColumnRef(Some("_x3"), ColumnName("x"), TestText)(NoPosition)
-    ))
+    analysis must equal (expected)
   }
 
   test("nested join re-using table alias - x2") {
-    val analysis = analyzer.analyzeUnchainedQuery(s"""
+    val analysis = analyzer.analyzeUnchainedQuery(primary, s"""
 SELECT visits, @x2.zx
  RIGHT OUTER JOIN (SELECT @x2.x as zx FROM @aaaa-aaab as a1
-          LEFT OUTER JOIN (SELECT @x1.x FROM @aaaa-aaax as x1) as x2 on @x2.x = @a1.name_first
+          LEFT OUTER JOIN (SELECT @x1.x as x FROM @aaaa-aaax as x1) as x2 on @x2.x = @a1.name_first
        ) as x2 on @x2.zx = name_first
       """)
 
-    val innermostLeftOuterJoin = analysis.joins.head.from.analyses.head.joins
-    val innermostAnalysis = innermostLeftOuterJoin.head.from.analyses.head
-    innermostAnalysis.selection.toSeq must equal (Seq(
-      ColumnName("x") -> ColumnRef(Some("_x1"), ColumnName("x"), TestText)(NoPosition)
-    ))
-
-    val rightOuterJoinAnalysis = analysis.joins.head.from.analyses.head
-    rightOuterJoinAnalysis.selection.toSeq must equal (Seq(
-      ColumnName("zx") -> ColumnRef(Some("_x2"), ColumnName("x"), TestText)(NoPosition)
-    ))
-
-    analysis.selection.toSeq must equal (Seq(
-      ColumnName("visits") -> ColumnRef(None, ColumnName("visits"), TestNumber)(NoPosition),
-      ColumnName("zx") -> ColumnRef(Some("_x2"), ColumnName("zx"), TestText)(NoPosition)
-    ))
+    val expected =
+      SoQLAnalysis(false,
+                   false,
+                   OrderedMap(
+                     ColumnName("visits") -> typed.ColumnRef(Qualified(
+                                                               TableRef.Primary(primary),
+                                                               ColumnName("visits")),
+                                                             TestNumber.t)(NoPosition),
+                     ColumnName("x3_x") -> typed.ColumnRef(Qualified(
+                                                             TableRef.Join(1),
+                                                             ColumnName("x")),
+                                                           TestText.t)(NoPosition)),
+                   Seq(typed.RightOuterJoin(
+                         JoinAnalysis(TableRef.Primary(ResourceName("aaaa-aaab")),
+                                      Seq(SoQLAnalysis(
+                                            false,
+                                            false,
+                                            OrderedMap(
+                                              ColumnName("x") -> typed.ColumnRef(Qualified(
+                                                                                   TableRef.Join(0),
+                                                                                   ColumnName("x")),
+                                                                                 TestText.t)(NoPosition),
+                                              ColumnName("a1_name_first") -> typed.ColumnRef(Qualified(
+                                                                                               TableRef.Primary(ResourceName("aaaa-aaab")),
+                                                                                               ColumnName("name_first")),
+                                                                                             TestText.t)(NoPosition)),
+                                            Seq(typed.LeftOuterJoin(
+                                                  JoinAnalysis(
+                                                    TableRef.Primary(ResourceName("aaaa-aaax")),
+                                                    Seq(SoQLAnalysis(
+                                                          false,
+                                                          false,
+                                                          OrderedMap(
+                                                            ColumnName("x") -> typed.ColumnRef(Qualified(
+                                                                                                 TableRef.Primary(ResourceName("aaaa-aaax")),
+                                                                                                 ColumnName("x")),
+                                                                                               TestText.t)(NoPosition)),
+                                                          Nil,
+                                                          None,
+                                                          Nil,
+                                                          None,
+                                                          Nil,
+                                                          None,
+                                                          None,
+                                                          None)),
+                                                    TableRef.Join(0)),
+                                                  typed.FunctionCall(MonomorphicFunction(
+                                                                       TestFunctions.Eq,
+                                                                       Map("a" -> TestText)),
+                                                                     Seq(
+                                                                       typed.ColumnRef(Qualified(
+                                                                                         TableRef.Join(0),
+                                                                                         ColumnName("x")),
+                                                                                       TestText.t)(NoPosition),
+                                                                       typed.ColumnRef(Qualified(
+                                                                                         TableRef.Primary(ResourceName("aaaa-aaab")),
+                                                                                         ColumnName("name_first")),
+                                                                                       TestText.t)(NoPosition)))(NoPosition, NoPosition))),
+                                            None,
+                                            Nil,
+                                            None,
+                                            Nil,
+                                            None,
+                                            None,
+                                            None)),
+                                      TableRef.Join(1)),
+                         typed.FunctionCall(MonomorphicFunction(
+                                              TestFunctions.Eq,
+                                              Map("a" -> TestText)),
+                                            Seq(
+                                              typed.ColumnRef(Qualified(
+                                                                TableRef.Join(1),
+                                                                ColumnName("x")),
+                                                              TestText.t)(NoPosition),
+                                              typed.ColumnRef(Qualified(
+                                                                TableRef.Primary(ResourceName("aaaa-aaab")),
+                                                                ColumnName("name_first")),
+                                                              TestText.t)(NoPosition)))(NoPosition, NoPosition))),
+                   None,
+                   Nil,
+                   None,
+                   Nil,
+                   None,
+                   None,
+                   None)
   }
 
   test("window function") {
-    val analysisWordStyle = analyzer.analyzeUnchainedQuery("SELECT name_last, avg(visits) OVER (PARTITION BY name_last, 2, 3)")
+    val analysisWordStyle = analyzer.analyzeUnchainedQuery(primary, "SELECT name_last, avg(visits) OVER (PARTITION BY name_last, 2, 3)")
     analysisWordStyle.isGrouped must equal (false)
     val select = analysisWordStyle.selection.toSeq
     select must equal (Seq(
@@ -516,44 +675,49 @@ SELECT visits, @x2.zx
       ColumnName("avg_visits_over_partition_by_name_last_2_3") -> typedExpression("avg(visits) OVER (PARTITION BY name_last, 2, 3)")
     ))
 
-    val analysisWordStyleOverEmpty = analyzer.analyzeUnchainedQuery("SELECT avg(visits) OVER ()")
+    val analysisWordStyleOverEmpty = analyzer.analyzeUnchainedQuery(primary, "SELECT avg(visits) OVER ()")
     val selectOverEmpty = analysisWordStyleOverEmpty.selection.toSeq
     selectOverEmpty must equal (Seq(
       ColumnName("avg_visits_over") -> typedExpression("avg(visits) OVER ()")
     ))
 
-    val analysis = analyzer.analyzeUnchainedQuery("SELECT avg(visits)")
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "SELECT avg(visits)")
     analysis.isGrouped must equal (true)
     analysis.selection.toSeq must equal (Seq(
       ColumnName("avg_visits") -> typedExpression("avg(visits)")
     ))
 
     intercept[TypeMismatch] {
-      analyzer.analyzeUnchainedQuery("SELECT avg(name_last)")
+      analyzer.analyzeUnchainedQuery(primary, "SELECT avg(name_last)")
     }
 
     val expressionExpected = intercept[BadParse] {
-      analyzer.analyzeUnchainedQuery("SELECT name_last, avg(visits) OVER (PARTITION BY)")
+      analyzer.analyzeUnchainedQuery(primary, "SELECT name_last, avg(visits) OVER (PARTITION BY)")
     }
     expressionExpected.message must startWith("Expression expected")
 
 
     val partitionExpected = intercept[BadParse] {
-      analyzer.analyzeUnchainedQuery("SELECT name_last, avg(visits) OVER (name_last, 2, 3)")
+      analyzer.analyzeUnchainedQuery(primary, "SELECT name_last, avg(visits) OVER (name_last, 2, 3)")
     }
     partitionExpected.message must startWith("`)' expected")
   }
 
   test("aliases work") {
     val analysisWordStyle = analyzer.analyzeUnchainedQuery(
+      primary,
       "SELECT datez_trunc_ymd(:created_at) as dt, date_trunc_ymd(:created_at, 'PDT') as dt_pdt")
     analysisWordStyle.isGrouped must equal(false)
     val select = analysisWordStyle.selection.toSeq
     select must equal(Seq(
       ColumnName("dt") -> typed.FunctionCall(TestFunctions.FixedTimeStampZTruncYmd.monomorphic.get,
-        Seq(typed.ColumnRef(None, ColumnName(":created_at"), TestFixedTimestamp.t)(NoPosition)))(NoPosition, NoPosition),
+        Seq(typed.ColumnRef(Qualified(TableRef.Primary(primary),
+                                      ColumnName(":created_at")),
+                            TestFixedTimestamp.t)(NoPosition)))(NoPosition, NoPosition),
       ColumnName("dt_pdt") -> typed.FunctionCall(TestFunctions.FixedTimeStampTruncYmdAtTimeZone.monomorphic.get,
-        Seq(typed.ColumnRef(None, ColumnName(":created_at"), TestFixedTimestamp.t)(NoPosition),
+        Seq(typed.ColumnRef(Qualified(TableRef.Primary(primary),
+                                      ColumnName(":created_at")),
+                            TestFixedTimestamp.t)(NoPosition),
             typed.StringLiteral("PDT", TestText.t)(NoPosition)
            )
         )
@@ -562,7 +726,7 @@ SELECT visits, @x2.zx
   }
 
   test("joined table name alias is part of default function-column name") {
-    val analysis = analyzer.analyzeUnchainedQuery("select sum(@a1.:id) join @aaaa-aaab as a1 on :id = @a1.:id")
+    val analysis = analyzer.analyzeUnchainedQuery(primary, "select sum(@a1.:id) join @aaaa-aaab as a1 on :id = @a1.:id")
     analysis.selection.head._1.name must equal("sum_a1_id")
   }
 

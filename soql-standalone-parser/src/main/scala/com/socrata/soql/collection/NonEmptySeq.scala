@@ -1,4 +1,6 @@
-package com.socrata
+package com.socrata.soql.collection
+
+import SeqHelpers._
 
 // A collection that guarantees the existence of at least one element.
 // Fills the same role as scalaz's NonEmptyList, but now we don't have to include scalaz as a dependency,
@@ -10,6 +12,9 @@ case class NonEmptySeq[+T](head: T, tail: Seq[T] = Seq.empty) {
   def iterator: Iterator[T] = Iterator.single(head) ++ tail.iterator
   def last: T = tail.lastOption.getOrElse(head)
   def reverse: NonEmptySeq[T] = NonEmptySeq.fromSeqUnsafe(seq.reverse)
+
+  def mkString(join: String) = iterator.mkString(join)
+  def mkString(pfx: String, join: String, suffix: String) = iterator.mkString(pfx, join, suffix)
 
   def apply(index: Int): T = {
     if (index == 0) head
@@ -48,6 +53,12 @@ case class NonEmptySeq[+T](head: T, tail: Seq[T] = Seq.empty) {
   def foldLeft1[U](headF: T => U)(tailF: (U, T) => U): U = {
     val newHead = headF(head)
     tail.foldLeft(newHead)(tailF)
+  }
+
+  def mapAccum[S, U](init: S)(f: (S, T) => (S, U)): (S, NonEmptySeq[U]) = {
+    val (s1, head1) = f(init, head)
+    val (sLast, tail1) = tail.mapAccum(s1)(f)
+    (sLast, NonEmptySeq(head1, tail1))
   }
 }
 

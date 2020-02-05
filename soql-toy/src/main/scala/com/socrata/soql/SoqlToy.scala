@@ -3,8 +3,9 @@ package com.socrata.soql
 import com.socrata.soql.ast.Select
 import com.socrata.soql.exceptions.SoQLException
 import com.socrata.soql.types._
-import environment.{ColumnName, DatasetContext, TableName}
+import environment.{ColumnName, DatasetContext, ResourceName}
 import com.socrata.soql.functions.{SoQLFunctionInfo, SoQLTypeInfo}
+import com.socrata.soql.toy.Compat
 
 object SoqlToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -12,45 +13,64 @@ object SoqlToy extends (Array[String] => Unit) {
     sys.exit(1)
   }
 
-  implicit val datasetCtx = Map(TableName.PrimaryTable.qualifier -> new DatasetContext[SoQLType] {
-    private implicit def ctx = this
-    val locale = com.ibm.icu.util.ULocale.ENGLISH
-    val schema = com.socrata.soql.collection.OrderedMap(
-      ColumnName(":id") -> SoQLID,
-      ColumnName(":updated_at") -> SoQLFixedTimestamp,
-      ColumnName(":created_at") -> SoQLFixedTimestamp,
-      ColumnName(":version") -> SoQLVersion,
-      ColumnName("name_last") -> SoQLText,
-      ColumnName("name_first") -> SoQLText,
-      ColumnName("visits") -> SoQLNumber,
-      ColumnName("last_visit") -> SoQLFixedTimestamp,
-      ColumnName("address") -> SoQLLocation,
-      ColumnName("balance") -> SoQLMoney,
-      ColumnName("object") -> SoQLObject,
-      ColumnName("array") -> SoQLArray,
-      ColumnName("dbl") -> SoQLDouble,
-      ColumnName(":@meta") -> SoQLObject
-    )
-  })
+  val context = ResourceName("hello")
+
+  implicit val datasetCtx = Map(
+    context -> new DatasetContext[SoQLType] {
+      private implicit def ctx = this
+      val locale = com.ibm.icu.util.ULocale.ENGLISH
+      val schema = com.socrata.soql.collection.OrderedMap(
+        ColumnName(":id") -> SoQLID,
+        ColumnName(":updated_at") -> SoQLFixedTimestamp,
+        ColumnName(":created_at") -> SoQLFixedTimestamp,
+        ColumnName(":version") -> SoQLVersion,
+        ColumnName("name_last") -> SoQLText,
+        ColumnName("name_first") -> SoQLText,
+        ColumnName("visits") -> SoQLNumber,
+        ColumnName("last_visit") -> SoQLFixedTimestamp,
+        ColumnName("address") -> SoQLLocation,
+        ColumnName("balance") -> SoQLMoney,
+        ColumnName("object") -> SoQLObject,
+        ColumnName("array") -> SoQLArray,
+        ColumnName("dbl") -> SoQLDouble,
+        ColumnName(":@meta") -> SoQLObject
+      )
+    },
+    ResourceName("world") -> new DatasetContext[SoQLType] {
+      private implicit def ctx = this
+      val locale = com.ibm.icu.util.ULocale.ENGLISH
+      val schema = com.socrata.soql.collection.OrderedMap(
+        ColumnName(":id") -> SoQLID,
+        ColumnName(":updated_at") -> SoQLFixedTimestamp,
+        ColumnName(":created_at") -> SoQLFixedTimestamp,
+        ColumnName(":version") -> SoQLVersion,
+        ColumnName("name_last") -> SoQLText,
+        ColumnName("name_first") -> SoQLText,
+        ColumnName("extra_info") -> SoQLText
+      )
+    })
 
   def menu() {
     println("Columns:")
-    Util.printList(datasetCtx(TableName.PrimaryTable.qualifier).schema)
+    Util.printList(datasetCtx(context).schema)
   }
 
   def apply(args: Array[String]) {
     menu()
 
-    val analyzer = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo)
+    def tableFinder(in: Set[ResourceName]): Map[ResourceName, DatasetContext[SoQLType]] =
+      datasetCtx.filterKeys(in)
+
+    val analyzer = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo, tableFinder)
 
     while(true) {
-      val selection = readLine("> ")
-      if(selection == null) return;
+      val selection = Option(Compat.readLine("> ")).getOrElse("")
+      if(selection == "") return;
       if(selection == "?") {
         menu()
       } else {
         try {
-          val analyses = analyzer.analyzeFullQuery(selection)
+          val analyses = analyzer.analyzeFullQuery(context, selection)
 
           println("Outputs:")
           analyses.seq.foreach { analysis =>

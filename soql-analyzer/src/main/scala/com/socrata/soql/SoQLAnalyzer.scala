@@ -10,10 +10,9 @@ import com.socrata.soql.ast._
 import com.socrata.soql.parsing.{AbstractParser, Parser}
 import com.socrata.soql.typechecker._
 import com.socrata.soql.environment._
-import com.socrata.soql.collection.OrderedMap
-import com.socrata.soql.typed.Qualifier
+import com.socrata.soql.collection.{OrderedMap, OrderedSet, NonEmptySeq}
+import com.socrata.soql.collection.SeqHelpers._
 import Select._
-import com.socrata.NonEmptySeq
 
 /**
   * The type-checking version of [[com.socrata.soql.parsing.AbstractParser]]. Turns string soql statements into
@@ -22,19 +21,60 @@ import com.socrata.NonEmptySeq
   */
 class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                          functionInfo: FunctionInfo[Type],
+                         tableFinder: Set[ResourceName] => Map[ResourceName, DatasetContext[Type]],
                          parserParameters: AbstractParser.Parameters = AbstractParser.defaultParameters)
 {
   /** The typed version of [[com.socrata.soql.ast.Select]] */
-  type Analysis = SoQLAnalysis[ColumnName, Type]
-  type Expr = typed.CoreExpr[ColumnName, Type]
-  type Qualifier = String
-  type AnalysisContext = Map[Qualifier, DatasetContext[Type]]
+  type Analysis = SoQLAnalysis[Qualified[ColumnName], Type]
+  type Expr = typed.CoreExpr[Qualified[ColumnName], Type]
 
-  val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLAnalyzer[_]])
+  type Universe = Map[ResourceName, DatasetContext[Type]]
+  case class Context(
+    // The current table that unqualified column names _that are
+    // columns_ refers to.  If this is a `PrimaryTableRef` then its
+    // resourceName is a key in `universe`.
+    primaryTableRef: TableRef with TableRef.Implicit,
+    // The current "primary context" that is used to look up
+    // unqualified column names.  Most, but not all, of the Exprs will
+    // just be ColumnRefs.
+    primaryContext: OrderedMap[ColumnName, Expr],
+    // This is all the actual physical tables we're working with in
+    // this entire chained query.  It does not change while moving
+    // through the query.
+    universe: Universe,
+    // The visible table names that can be referred to.  If a value
+    // here is `PrimaryTableRef`, then the value's resourceName is a
+    // key in `universe`.
+    visible: Map[ResourceName, TableRef]
+  )
 
-  def ns2ms(ns: Long) = ns / 1000000
 
-  val aggregateChecker = new AggregateChecker[Type]
+  private val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLAnalyzer[_]])
+
+  private def ns2ms(ns: Long) = ns / 1000000
+
+  private val aggregateChecker = new AggregateChecker[Type]
+  private val typechecker = new Typechecker(typeInfo, functionInfo)
+
+  private def contextToSimpleSelection(ctx: DatasetContext[Type], tableRef: TableRef): OrderedMap[ColumnName, Expr] =
+    ctx.schema.transformOrdered { (columnName, columnType) =>
+      typed.ColumnRef(Qualified(tableRef, columnName), columnType)(NoPosition)
+    }
+
+  private def analysisToSimpleSelection(analysis: Analysis, tableRef: TableRef): OrderedMap[ColumnName, Expr] =
+    analysis.selection.transformOrdered { (columnName, expr) =>
+      typed.ColumnRef(Qualified(tableRef, columnName), expr.typ)(expr.position)
+    }
+
+  private def tablesOfInterest(context: ResourceName, tables: Set[ResourceName]): Context = {
+    val allTables = tables + context
+    val universe = tableFinder(allTables)
+    require(universe.keySet == allTables, "Table finder did not return the right set of tables")
+    Context(TableRef.Primary(context),
+            contextToSimpleSelection(universe(context), TableRef.Primary(context)),
+            universe,
+            Map(context -> TableRef.Primary(context)))
+  }
 
   /** Turn a SoQL SELECT statement into a sequence of typed `Analysis` objects.
     *
@@ -51,17 +91,23 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     * @param query The SELECT to parse and analyze
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
     * @return The analysis of the query*/
-  def analyzeFullQuery(query: String)(implicit ctx: AnalysisContext): NonEmptySeq[Analysis] = {
+  def analyzeFullQuery(context: ResourceName, query: String): NonEmptySeq[Analysis] = {
     log.debug("Analyzing full query {}", query)
     val start = System.nanoTime()
     val parsed = new Parser(parserParameters).selectStatement(query)
     val end = System.nanoTime()
     log.trace("Parsing took {}ms", ns2ms(end - start))
-    analyze(parsed)
+
+    analyze(context, parsed)
   }
 
-  def analyze(selects: NonEmptySeq[Select])(implicit ctx: AnalysisContext): NonEmptySeq[Analysis] = {
-    selects.scanLeft1(analyzeWithSelection(_)(ctx))(analyzeInOuterSelectionContext(ctx))
+  def analyze(context: ResourceName, selects: NonEmptySeq[Select]): NonEmptySeq[Analysis] = {
+    analyze(tablesOfInterest(context, selects.iterator.map(_.allTableReferences).foldLeft(Set.empty[ResourceName])(_ union _)),
+            selects)
+  }
+
+  def analyze(context: Context, selects: NonEmptySeq[Select]): NonEmptySeq[Analysis] = {
+    selects.scanLeft1(analyzeInContext(context, _))(analyzeChainedFrom(context.universe, _, _))
   }
 
   /** Turn a simple SoQL SELECT statement into an `Analysis` object.
@@ -69,339 +115,270 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     * @param query The SELECT to parse and analyze
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
     * @return The analysis of the query */
-  def analyzeUnchainedQuery(query: String)(implicit ctx: AnalysisContext): Analysis = {
+  def analyzeUnchainedQuery(context: ResourceName, query: String): Analysis = {
     log.debug("Analyzing full unchained query {}", query)
     val start = System.nanoTime()
     val parsed = new Parser(parserParameters).unchainedSelectStatement(query)
     val end = System.nanoTime()
     log.trace("Parsing took {}ms", ns2ms(end - start))
 
-    analyzeWithSelection(parsed)(ctx)
+    analyzeInContext(tablesOfInterest(context, parsed.allTableReferences),
+                     parsed)
   }
 
-  private def baseAnalysis(implicit ctx: AnalysisContext) = {
-
-    val selections = ctx.map { case (qual, dsCtx) =>
-      val q = if (qual == TableName.PrimaryTable.qualifier) None else Some(qual)
-      dsCtx.schema.transform(typed.ColumnRef(q, _, _)(NoPosition))
-    }
-    // TODO: Enhance resolution of column name conflict from different tables in chained SoQLs
-    val mergedSelection = selections.reduce(_ ++ _)
-    SoQLAnalysis(isGrouped = false,
-                 distinct = false,
-                 selection = mergedSelection,
-                 joins = Nil,
-                 where = None,
-                 groupBys = Nil,
-                 having = None,
-                 orderBys = Nil,
-                 limit = None,
-                 offset = None,
-                 search = None)
+  // "partially analyzing" a join means analyzing the query part but
+  // not the ON part.
+  private case class PartiallyAnalyzedJoin(originalJoin: Join, analysis: NonEmptySeq[Analysis]) {
+    def outputTableIdentifier = originalJoin.outputTableIdentifier
+    def name = originalJoin.name
   }
 
-  /** Turn framents of a SoQL SELECT statement into a typed `Analysis` object.  If no `selection` is provided,
-    * one is generated based on whether the rest of the parameters indicate an aggregate query or not.  If it
-    * is not an aggregate query, a selection list equivalent to `*` (i.e., every non-system column) is generated.
-    * If it is an aggregate query, a selection list made up of the expressions from `groupBy` (if provided) together
-    * with "`count(*)`" is generated.
-    *
-    * @param distinct   Reduce identical tuples into one.
-    * @param selection  A selection list.
-    * @param joins       A join list.
-    * @param where      An expression to be used as the query's WHERE clause.
-    * @param groupBys    A comma-separated list of expressions to be used as the query's GROUP BY cluase.
-    * @param having     An expression to be used as the query's HAVING clause.
-    * @param orderBys    A comma-separated list of expressions and sort-order specifiers to be uesd as the query's ORDER BY clause.
-    * @param limit      A non-negative integer to be used as the query's LIMIT parameter
-    * @param offset     A non-negative integer to be used as the query's OFFSET parameter
-    * @param sourceFrom The analysis-chain of the query this query is based upon, if applicable.
-    * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous.
-    * @return The analysis of the query.  Note this should be appended to `sourceFrom` to form a full query-chain. */
-  def analyzeSplitQuery(distinct: Boolean,
-                        selection: Option[String],
-                        joins: Option[String],
-                        where: Option[String],
-                        groupBys: Option[String],
-                        having: Option[String],
-                        orderBys: Option[String],
-                        limit: Option[String],
-                        offset: Option[String],
-                        search: Option[String],
-                        sourceFrom: Seq[Analysis] = Nil)(implicit ctx: AnalysisContext): Analysis = {
-    log.debug("analyzing split query")
-
-    val p = new Parser(parserParameters)
-
-    val lastQuery =
-      if(sourceFrom.isEmpty) baseAnalysis
-      else sourceFrom.last
-
-    def dispatch(distinct: Boolean, selection: Option[Selection],
-                 joins: List[Join],
-                 where: Option[Expression], groupBys: List[Expression], having: Option[Expression], orderBys: List[OrderBy], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) =
-      selection match {
-        case None => analyzeNoSelectionInOuterSelectionContext(lastQuery, distinct, joins, where, groupBys, having, orderBys, limit, offset, search)
-        case Some(s) => analyzeInOuterSelectionContext(ctx)(lastQuery, Select(distinct, s, joins, where, groupBys, having, orderBys, limit, offset, search))
+  private def partialAnalyzeJoin(universe: Universe, join: Join): PartiallyAnalyzedJoin = {
+    log.debug("Partially analyzing join {} in {}", join : Any, universe)
+    val analysis =
+      join.from match {
+        case JoinTable(table, _, _) =>
+          NonEmptySeq(SoQLAnalysis(
+                        false,
+                        false,
+                        contextToSimpleSelection(universe(table.resourceName),
+                                                 TableRef.Primary(table.resourceName)),
+                        Nil,
+                        None,
+                        Nil,
+                        None,
+                        Nil,
+                        None,
+                        None,
+                        None))
+        case JoinSelect(from, innerAlias, subselects, _, _) =>
+          val fromRef = TableRef.Primary(from.resourceName)
+          analyze(Context(primaryTableRef = fromRef,
+                          primaryContext = contextToSimpleSelection(universe(from.resourceName), fromRef),
+                          universe = universe,
+                          visible = innerAlias match {
+                            case Some(a) => Map(a.resourceName -> fromRef)
+                            case None => Map(from.resourceName -> fromRef)
+                          }),
+                  subselects)
       }
-
-    dispatch(
-      distinct,
-      selection.map(p.selection),
-      joins.map(p.joins).toList.flatten,
-      where.map(p.expression),
-      groupBys.map(p.groupBys).toList.flatten,
-      having.map(p.expression),
-      orderBys.map(p.orderings).toList.flatten,
-      limit.map(p.limit),
-      offset.map(p.offset),
-      search.map(p.search)
-    )
+    PartiallyAnalyzedJoin(join, analysis)
   }
 
-  def analyzeNoSelectionInOuterSelectionContext(lastQuery: Analysis,
-                                                distinct: Boolean,
-                                                joins: List[Join],
-                                                where: Option[Expression],
-                                                groupBys: List[Expression],
-                                                having: Option[Expression],
-                                                orderBys: List[OrderBy],
-                                                limit: Option[BigInt],
-                                                offset: Option[BigInt],
-                                                search: Option[String]): Analysis = {
-    implicit val fakeCtx = contextFromAnalysis(lastQuery)
-    analyzeNoSelection(distinct, joins, where, groupBys, having, orderBys, limit, offset, search)
+  private def analyzeChainedFrom(universe: Universe, lastQuery: Analysis, query: Select): Analysis = {
+    val context = Context(primaryTableRef = TableRef.PreviousChainStep,
+                          primaryContext = analysisToSimpleSelection(lastQuery, TableRef.PreviousChainStep),
+                          universe = universe,
+                          visible = Map.empty)
+
+    analyzeInContext(context, query)
   }
 
-  private def joinCtx(joins: Seq[Join])(implicit ctx: AnalysisContext) = {
-    joins.map(_.from).collect {
-      case JoinSelect(tableName, Some(SubSelect(selects, alias))) if !SimpleSelect.isSimple(selects.seq) =>
-        val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx +
-          (TableName.PrimaryTable.qualifier -> ctx(tableName.name))
-        val analyses = analyze(selects)(joinCtx)
-        contextFromAnalysis(alias, analyses.last)
-    }
-  }
-
-  // TODO: do we need this? wat
-  def analyzeNoSelection(distinct: Boolean,
-                         joins: List[Join],
-                         where: Option[Expression],
-                         groupBys: List[Expression],
-                         having: Option[Expression],
-                         orderBys: List[OrderBy],
-                         limit: Option[BigInt],
-                         offset: Option[BigInt],
-                         search: Option[String])(implicit ctx: AnalysisContext): Analysis = {
-    log.debug("No selection; doing typechecking of the other parts then deciding what to make the selection")
-
-    val ctxFromJoins = joinCtx(joins)
-    val ctxWithJoins = ctx ++ ctxFromJoins
-    // ok, so the only tricky thing here is the selection itself.  Since it isn't provided, there are two cases:
-    //   1. If there are groupBys, having, or aggregates in orderBy, then selection should be the equivalent of
-    //      selecting the group-by clauses together with "count(*)".
-    //   2. Otherwise, it should be the equivalent of selecting "*".
-    val typechecker = new Typechecker(typeInfo, functionInfo)(ctxWithJoins)
-
-    val typecheck = typechecker(_ : Expression, Map.empty)
-
-    val t0 = System.nanoTime()
-    val checkedWhere = where.map(typecheck)
-    val t1 = System.nanoTime()
-    val checkedGroupBy = groupBys.map(typecheck)
-    val t2 = System.nanoTime()
-    val checkedHaving = having.map(typecheck)
-    val t3 = System.nanoTime()
-    val checkedOrderBy = orderBys.map { ob => ob -> typecheck(ob.expression) }
-    val t4 = System.nanoTime()
-    val isGrouped = aggregateChecker(Nil, checkedWhere, checkedGroupBy, checkedHaving, checkedOrderBy.map(_._2))
-    val t5 = System.nanoTime()
-
-    if(log.isTraceEnabled) {
-      log.trace("typechecking WHERE took {}ms", ns2ms(t1 - t0))
-      log.trace("typechecking GROUP BY took {}ms", ns2ms(t2 - t1))
-      log.trace("typechecking HAVING took {}ms", ns2ms(t3 - t2))
-      log.trace("typechecking ORDER BY took {}ms", ns2ms(t4 - t3))
-      log.trace("checking for aggregation took {}ms", ns2ms(t5 - t4))
-    }
-
-    val (names, typedSelectedExpressions) = if(isGrouped) {
-      log.debug("It is grouped; selecting the group bys plus count(*)")
-
-      val beforeAliasAnalysis = System.nanoTime()
-      val count_* = FunctionCall(SpecialFunctions.StarFunc("count"), Nil)(NoPosition, NoPosition)
-      val untypedSelectedExpressions = groupBys :+ count_*
-      val names = AliasAnalysis(Selection(None, Seq.empty, untypedSelectedExpressions.map(SelectedExpression(_, None)))).expressions.keys.toSeq
-      val afterAliasAnalysis = System.nanoTime()
-
-      log.trace("alias analysis took {}ms", ns2ms(afterAliasAnalysis - beforeAliasAnalysis))
-
-      val typedSelectedExpressions = checkedGroupBy :+ typechecker(count_*, Map.empty)
-
-      (names, typedSelectedExpressions)
-    } else { // ok, no group by...
-      log.debug("It is not grouped; selecting *")
-
-      val beforeAliasAnalysis = System.nanoTime()
-      val names = AliasAnalysis(Selection(None, Seq(StarSelection(None, Nil)), Nil)).expressions.keys.toSeq
-      val afterAliasAnalyis = System.nanoTime()
-
-      log.trace("alias analysis took {}ms", ns2ms(afterAliasAnalyis - beforeAliasAnalysis))
-
-      val typedSelectedExpressions = names.map { column =>
-        typed.ColumnRef(None, column, ctx(TableName.PrimaryTable.qualifier).schema(column))(NoPosition)
-      }
-
-      (names, typedSelectedExpressions)
-    }
-
-    val checkedJoin = joins.map { j: Join =>
-      val subAnalysisOpt = subAnalysis(j)(ctx)
-      typed.Join(j.typ, JoinAnalysis(j.from.fromTable, subAnalysisOpt), typecheck(j.on))
-    }
-
-    finishAnalysis(
-      isGrouped,
-      distinct,
-      OrderedMap(names.zip(typedSelectedExpressions): _*),
-      checkedJoin,
-      checkedWhere,
-      checkedGroupBy,
-      checkedHaving,
-      checkedOrderBy,
-      limit,
-      offset,
-      search)
-  }
-
-  def analyzeInOuterSelectionContext(initialCtx: AnalysisContext)(lastQuery: Analysis, query: Select): Analysis = {
-    val prevCtx = contextFromAnalysis(lastQuery)
-    val nextCtx = prevCtx ++ initialCtx.filterKeys(qualifier => TableName.PrimaryTable.qualifier != qualifier)
-    analyzeWithSelection(query)(nextCtx)
-  }
-
-  def contextFromAnalysis(a: Analysis): AnalysisContext = {
-    val ctx = new DatasetContext[Type] {
-      override val schema: OrderedMap[ColumnName, Type] = a.selection.mapValues(_.typ)
-    }
-    Map(TableName.PrimaryTable.qualifier -> ctx)
-  }
-
-  private def contextFromAnalysis(qualifier: Qualifier, a: Analysis) = {
-    val ctx = new DatasetContext[Type] {
-      override val schema: OrderedMap[ColumnName, Type] = a.selection.mapValues(_.typ)
-    }
-    (qualifier -> ctx)
-  }
-
-  def subAnalysis(join: Join)(ctx: AnalysisContext) = {
-    join.from.subSelect.map {
-      case SubSelect(selects, alias) =>
-        val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx +
-          (TableName.PrimaryTable.qualifier -> ctx(join.from.fromTable.name))
-        val analyses = analyze(selects)(joinCtx)
-        SubAnalysis(analyses, alias)
-    }
-  }
-
-  def analyzeWithSelection(query: Select)(implicit ctx: AnalysisContext): Analysis = {
+  private def analyzeInContext(baseContext: Context, query: Select): Analysis = {
     log.debug("There is a selection; typechecking all parts")
 
-    val ctxFromJoins = joinCtx(query.joins)
-    val ctxWithJoins = ctx ++ ctxFromJoins
-    val typechecker = new Typechecker(typeInfo, functionInfo)(ctxWithJoins)
+    // The base context is the context we inherit from our position in
+    // the whole query (i.e., the primary dataset if we're the first
+    // step in the top level chain, the FROM dataset if we're the
+    // first step in a subselect chain, or the output of the previous
+    // step if we're not the first step in a chain).  We need to
+    // augment it with tables from joins located here, now.
 
-    val t0 = System.nanoTime()
-    val aliasAnalysis = AliasAnalysis(query.selection)
-    val t1 = System.nanoTime()
-    val typedAliases = aliasAnalysis.evaluationOrder.foldLeft(Map.empty[ColumnName, Expr]) { (acc, alias) =>
-      acc + (alias -> typechecker(aliasAnalysis.expressions(alias), acc))
+    // time info is t_{previousthing}_{nextthing}
+    val t_start_partialAnalysis = System.nanoTime()
+
+    val partiallyAnalyzedJoins = query.joins.map(partialAnalyzeJoin(baseContext.universe, _))
+
+    val paJoinsBySubselectId = partiallyAnalyzedJoins.map { paJoin =>
+      paJoin.outputTableIdentifier -> paJoin
+    }.toMap
+
+    val t_partialAnalysis_fullContext = System.nanoTime()
+
+    val fullContext =
+      partiallyAnalyzedJoins.foldLeft(baseContext) { (ctx, partiallyAnalyzedJoin) =>
+        val freshName = partiallyAnalyzedJoin.name
+        log.debug("Adding {} to fullContext", freshName)
+        if(ctx.visible.contains(freshName.resourceName)) {
+          throw new DuplicateTableAlias(freshName.resourceName, freshName.position)
+        } else {
+          ctx.copy(visible = ctx.visible + (freshName.resourceName -> TableRef.Join(partiallyAnalyzedJoin.outputTableIdentifier)))
+        }
+      }
+
+    log.debug("Full context visible: {}", fullContext.visible)
+
+    val t_fullContext_aliasAnalysis = System.nanoTime()
+
+    // ok so when we're doing alias-analysis, we need to tell it,
+    // given a (source-code) qualifier, what are the columns in that
+    // table.
+    val aliasAnalysisContext: Map[Option[ResourceName], OrderedSet[ColumnName]] = locally {
+      val base =
+        baseContext.primaryTableRef match {
+          case TableRef.Primary(rn) =>
+            Map(None -> baseContext.primaryContext.keySet,
+                Some(rn) -> baseContext.primaryContext.keySet)
+          case TableRef.PreviousChainStep =>
+            Map(None -> baseContext.primaryContext.keySet)
+        }
+
+      base ++ partiallyAnalyzedJoins.map { paJoin =>
+        Some(paJoin.name.resourceName) -> paJoin.analysis.last.selection.keySet
+      }
+    }
+    val aliasAnalysis = AliasAnalysis(aliasAnalysisContext, query.selection)
+
+    val t_aliasAnalysis_selectionTypechecking = System.nanoTime()
+
+    // ok so here we're goin' a little CRAZY
+    //
+    // so
+    //
+    // typechecking aliases needs to know the whole context, joins and
+    // everything including other aliases, though we know there's
+    // _some_ order (supplied by alias analysis) in which we can
+    // typecheck them without cycles.  This is that.  The output will
+    // be the typechecked selections together with a context that
+    // includes all aliases.
+
+    log.debug("Join IDs: {}", paJoinsBySubselectId.keys)
+
+    val (typecheckerContext, typecheckedSelections) = locally {
+      val initialTypecheckerContext =
+        Typechecker.Ctx(fullContext.primaryContext, fullContext.visible.mapValues { tableRef =>
+                          tableRef match {
+                            case ref@TableRef.Primary(tn) =>
+                              contextToSimpleSelection(fullContext.universe(tn), ref)
+                            case ref@TableRef.Join(i) =>
+                              analysisToSimpleSelection(paJoinsBySubselectId(i).analysis.last, ref)
+                            case ref@TableRef.PreviousChainStep =>
+                              fullContext.primaryContext.transformOrdered { (columnName, expr) =>
+                                typed.ColumnRef(Qualified(ref, columnName), expr.typ)(expr.position)
+                              }
+                          }
+                        })
+
+      // "unordered" because while they are, in fact, in a particular
+      // order (the alias evaluation order) they're not in the order we
+      // care about (which is left-to-right).
+      val (typecheckerContext, unorderedTypecheckedSelections) = aliasAnalysis.evaluationOrder.mapAccum(initialTypecheckerContext) { (acc, alias) =>
+        val typechecked = typechecker(aliasAnalysis.expressions(alias), acc)
+        (acc.copy(primarySchema = acc.primarySchema + (alias -> typechecked)), alias -> typechecked)
+      }
+
+      val unorderedTypecheckedSelectionsMap = unorderedTypecheckedSelections.toMap
+
+      (typecheckerContext, aliasAnalysis.expressions.transformOrdered { (k, _) => unorderedTypecheckedSelectionsMap(k) })
     }
 
-    val typecheck = typechecker(_ : Expression, typedAliases)
+    val t_selectionTypechecking_joinTypechecking = System.nanoTime()
 
-    val checkedJoin = query.joins.map { j: Join =>
-      val subAnalysisOpt = subAnalysis(j)(ctx)
-      typed.Join(j.typ, JoinAnalysis(j.from.fromTable, subAnalysisOpt), typecheck(j.on))
+    // Ok, done with that noise.  Back to analyzing things.
+    // `typecheckerContext` is the context for the expression as a
+    // whole, but we need something less than that, as columns on
+    // future join tables don't exist until the join actually occurs
+
+    val typecheckedJoins = locally {
+      val initialTypecheckerContext =
+        Typechecker.Ctx(baseContext.primaryContext, baseContext.visible.mapValues { tableRef =>
+                          tableRef match {
+                            case ref@TableRef.Primary(tn) =>
+                              contextToSimpleSelection(baseContext.universe(tn), ref)
+                            case ref@TableRef.Join(i) =>
+                              // this shouldn't happen; the whole  point of starting from the base
+                              // context is that a join _is't_ visible until after we've started
+                              // typechecking its join condition.
+                              throw UnexpectedlyVisibleJoin()
+                            case ref@TableRef.PreviousChainStep =>
+                              baseContext.primaryContext.transformOrdered { (columnName, expr) =>
+                                typed.ColumnRef(Qualified(ref, columnName), expr.typ)(expr.position)
+                              }
+                          }
+                        })
+      partiallyAnalyzedJoins.mapAccum(initialTypecheckerContext) { (typecheckerCtx, paJoin) =>
+        val (analysis, augmentedTypecheckerCtx) =
+          paJoin.originalJoin.from match {
+            case JoinTable(from, alias, outputTableIdentifier) =>
+              val ref = TableRef.Join(outputTableIdentifier)
+              val a = JoinAnalysis[Qualified[ColumnName], Type](TableRef.Primary(from.resourceName), Nil, ref)
+              val ctx =
+                typecheckerCtx.copy(schemas = typecheckerCtx.schemas + (alias.getOrElse(from).resourceName -> contextToSimpleSelection(fullContext.universe(from.resourceName), ref)))
+
+              (a, ctx)
+            case JoinSelect(from, _, _, alias, outputTableIdentifier) =>
+              val ref = TableRef.Join(outputTableIdentifier)
+              val a = JoinAnalysis[Qualified[ColumnName], Type](TableRef.Primary(from.resourceName), paJoin.analysis.seq, ref)
+              val ctx =
+                typecheckerCtx.copy(schemas = typecheckerCtx.schemas + (alias.resourceName -> analysisToSimpleSelection(paJoin.analysis.last, ref)))
+
+              (a, ctx)
+          }
+        log.debug("Typechecking join ON, current schemas: {}", augmentedTypecheckerCtx.schemas.keySet)
+        val onExpr = typechecker(paJoin.originalJoin.on, augmentedTypecheckerCtx)
+        (augmentedTypecheckerCtx, typed.Join[Qualified[ColumnName], Type](paJoin.originalJoin.typ, analysis, onExpr))
+      }._2 // TODO: should we sanity check that _1 == typecheckerContext?
     }
+    val typecheck = typechecker(_ : Expression, typecheckerContext)
 
-    val outputs = OrderedMap(aliasAnalysis.expressions.keys.map { k => k -> typedAliases(k) }.toList : _*)
-    val t2 = System.nanoTime()
-    val checkedWhere = query.where.map(typecheck)
-    val t3 = System.nanoTime()
-    val checkedGroupBy = query.groupBys.map(typecheck)
-    val t4 = System.nanoTime()
-    val checkedHaving = query.having.map(typecheck)
-    val t5 = System.nanoTime()
-    val checkedOrderBy = query.orderBys.map { ob => ob -> typecheck(ob.expression) }
-    val t6 = System.nanoTime()
+    val t_joinTypechecking_whereTypechecking = System.nanoTime()
+    val typecheckedWhere = query.where.map(typecheck)
+    val t_whereTypechecking_groupByTypechecking = System.nanoTime()
+    val typecheckedGroupBy = query.groupBys.map(typecheck)
+    val t_groupByTypechecking_havingTypechecking = System.nanoTime()
+    val typecheckedHaving = query.having.map(typecheck)
+    val t_havingTypechecking_orderByTypechecking = System.nanoTime()
+    val typecheckedOrderBy = query.orderBys.map { ob => ob -> typecheck(ob.expression) }
+    val t_orderByTypechecking_isGrouped = System.nanoTime()
     val isGrouped = aggregateChecker(
-      outputs.values.toList,
-      checkedWhere,
-      checkedGroupBy,
-      checkedHaving,
-      checkedOrderBy.map(_._2))
-    val t7 = System.nanoTime()
+      typecheckedSelections.values.toList,
+      typecheckedWhere,
+      typecheckedGroupBy,
+      typecheckedHaving,
+      typecheckedOrderBy.map(_._2))
+    val t_isGrouped_validateTypes = System.nanoTime()
 
-    if(log.isTraceEnabled) {
-      log.trace("alias analysis took {}ms", ns2ms(t1 - t0))
-      log.trace("typechecking aliases took {}ms", ns2ms(t2 - t1))
-      log.trace("typechecking WHERE took {}ms", ns2ms(t3 - t2))
-      log.trace("typechecking GROUP BY took {}ms", ns2ms(t4 - t3))
-      log.trace("typechecking HAVING took {}ms", ns2ms(t5 - t4))
-      log.trace("typechecking ORDER BY took {}ms", ns2ms(t6 - t5))
-      log.trace("checking for aggregation took {}ms", ns2ms(t7 - t6))
-    }
-
-    finishAnalysis(isGrouped, query.distinct,
-                   outputs,
-                   checkedJoin, checkedWhere, checkedGroupBy, checkedHaving, checkedOrderBy,
-                   query.limit, query.offset, query.search)
-  }
-
-  def finishAnalysis(isGrouped: Boolean,
-                     distinct: Boolean,
-                     output: OrderedMap[ColumnName, Expr],
-                     joins: Seq[typed.Join[ColumnName, Type]],
-                     where: Option[Expr],
-                     groupBys: Seq[Expr],
-                     having: Option[Expr],
-                     orderBys: Seq[(OrderBy, Expr)],
-                     limit: Option[BigInt],
-                     offset: Option[BigInt],
-                     search: Option[String]): Analysis =
-  {
     def check(items: TraversableOnce[Expr], pred: Type => Boolean, onError: (TypeName, Position) => Throwable) {
       for(item <- items if !pred(item.typ)) throw onError(typeInfo.typeNameFor(item.typ), item.position)
     }
 
-    check(where, typeInfo.isBoolean, NonBooleanWhere)
-    check(groupBys, typeInfo.isGroupable, NonGroupableGroupBy)
-    check(having, typeInfo.isBoolean, NonBooleanHaving)
-    check(orderBys.map(_._2), typeInfo.isOrdered, UnorderableOrderBy)
+    check(typecheckedWhere, typeInfo.isBoolean, NonBooleanWhere)
+    check(typecheckedGroupBy, typeInfo.isGroupable, NonGroupableGroupBy)
+    check(typecheckedHaving, typeInfo.isBoolean, NonBooleanHaving)
+    check(typecheckedOrderBy.map(_._2), typeInfo.isOrdered, UnorderableOrderBy)
+
+    val t_validateTypes_end = System.nanoTime()
+
+    if(log.isTraceEnabled) {
+      log.trace("vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv")
+      log.trace("join partial analysis took {}ms", ns2ms(t_partialAnalysis_fullContext - t_start_partialAnalysis))
+      log.trace("computing the full context took {}ms", ns2ms(t_fullContext_aliasAnalysis - t_partialAnalysis_fullContext))
+      log.trace("alias analysis took {}ms", ns2ms(t_aliasAnalysis_selectionTypechecking - t_fullContext_aliasAnalysis))
+      log.trace("typechecking selection took {}ms", ns2ms(t_selectionTypechecking_joinTypechecking - t_aliasAnalysis_selectionTypechecking))
+      log.trace("typechecking joins took {}ms", ns2ms(t_joinTypechecking_whereTypechecking - t_selectionTypechecking_joinTypechecking))
+      log.trace("typechecking WHERE took {}ms", ns2ms(t_whereTypechecking_groupByTypechecking - t_joinTypechecking_whereTypechecking))
+      log.trace("typechecking GROUP BY took {}ms", ns2ms(t_groupByTypechecking_havingTypechecking - t_whereTypechecking_groupByTypechecking))
+      log.trace("typechecking HAVING took {}ms", ns2ms(t_havingTypechecking_orderByTypechecking - t_groupByTypechecking_havingTypechecking))
+      log.trace("typechecking ORDER BY took {}ms", ns2ms(t_orderByTypechecking_isGrouped - t_havingTypechecking_orderByTypechecking))
+      log.trace("checking for aggregation took {}ms", ns2ms(t_isGrouped_validateTypes - t_orderByTypechecking_isGrouped))
+      log.trace("validating the types of where/group/having/order clauses took {}ms", ns2ms(t_validateTypes_end - t_isGrouped_validateTypes))
+      log.trace("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
+    }
 
     SoQLAnalysis(
       isGrouped,
-      distinct,
-      output,
-      joins,
-      where,
-      groupBys,
-      having,
-      orderBys.map { case (ob, e) => typed.OrderBy(e, ob.ascending, ob.nullLast) },
-      limit,
-      offset,
-      search)
+      query.distinct,
+      typecheckedSelections,
+      typecheckedJoins,
+      typecheckedWhere,
+      typecheckedGroupBy,
+      typecheckedHaving,
+      typecheckedOrderBy.map { case (ob, e) => typed.OrderBy(e, ob.ascending, ob.nullLast) },
+      query.limit,
+      query.offset,
+      query.search)
   }
 }
-
-/**
-  * The typed version of [[com.socrata.soql.ast.SubSelect]]
-  *
-  * A SubAnalysis represents (potentially chained) soql that is required to have an alias
-  * (because subqueries need aliases)
-  */
-case class SubAnalysis[ColumnId, Type](analyses: NonEmptySeq[SoQLAnalysis[ColumnId, Type]], alias: String)
 
 /**
   * The typed version of [[com.socrata.soql.ast.JoinSelect]]
@@ -416,49 +393,20 @@ case class SubAnalysis[ColumnId, Type](analyses: NonEmptySeq[SoQLAnalysis[Column
   *   "join (select c.id from 4x4 as c) as a" =>
   *     JoinAnalysis(TableName(4x4, Some(c)), Some(SubAnalysis(List(_select_id_), a))) { aliasOpt = a }
   */
-case class JoinAnalysis[ColumnId, Type](fromTable: TableName, subAnalysis: Option[SubAnalysis[ColumnId, Type]]) {
-  val alias: Option[String] =  subAnalysis.map(_.alias).orElse(fromTable.alias)
-  def analyses: Seq[SoQLAnalysis[ColumnId, Type]] = subAnalysis.map(_.analyses.seq).getOrElse(Seq.empty)
-
-  def mapColumnIds[NewColumnId](qColumnIdNewColumnIdMap: Map[(ColumnId, Qualifier), NewColumnId],
-                                qColumnNameToQColumnId: (Qualifier, ColumnName) => (ColumnId, Qualifier),
-                                columnNameToNewColumnId: ColumnName => NewColumnId,
-                                columnIdToNewColumnId: ColumnId => NewColumnId): JoinAnalysis[NewColumnId, Type] = {
-    val firstJoinMap =
-      qColumnIdNewColumnIdMap.foldLeft(Map.empty[(ColumnId, Qualifier), NewColumnId]) { (acc, kv) =>
-        val ((cid, qual), ncid) = kv
-        if (qual.exists(_ == fromTable.name)) acc + ((cid, None) -> ncid)
-        else acc
-      }
-
-    def nextJoinMap(prevAna: SoQLAnalysis[NewColumnId, Type]) =
-      prevAna.selection.foldLeft(qColumnIdNewColumnIdMap) { (acc, selCol) =>
-        val (colName, expr) = selCol
-        acc + (qColumnNameToQColumnId(None, colName) -> columnNameToNewColumnId(colName))
-      }
-
-    def headF(a: SoQLAnalysis[ColumnId, Type]) =
-      a.mapColumnIds(firstJoinMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
-    def tailF(prevAna: SoQLAnalysis[NewColumnId, Type], a: SoQLAnalysis[ColumnId, Type]) =
-      a.mapColumnIds(nextJoinMap(prevAna), qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
-
-    val mappedSubAnalysis = subAnalysis.map { case SubAnalysis(analyses, subAlias) =>
-      val mappedAnas = analyses.scanLeft1(headF)(tailF)
-      SubAnalysis(mappedAnas, subAlias)
-    }
-
-    JoinAnalysis(fromTable, mappedSubAnalysis)
-  }
-
+case class JoinAnalysis[ColumnId, Type](fromTable: TableRef.Primary, analyses: Seq[SoQLAnalysis[ColumnId, Type]], outputTable: TableRef.Join) {
   override def toString: String = {
-    val (subAnasStr, aliasStrOpt) = subAnalysis.map { case SubAnalysis(NonEmptySeq(h, tail), subAlias) =>
-      val selectWithFromStr = h.toStringWithFrom(fromTable)
-      val selectStr = (selectWithFromStr +: tail.map(_.toString)).mkString(" |> ")
-      (s"($selectStr)", Some(subAlias))
-    }.getOrElse((fromTable.toString, None))
+    val subAnasStr =
+      if(analyses.isEmpty) {
+        "@" + fromTable.resourceName.name
+      } else {
+        val selectWithFromStr = analyses.head.toStringWithFrom(fromTable)
+                                                              (selectWithFromStr +: analyses.tail.map(_.toString)).mkString("(", " |> ", ")")
+      }
 
-    List(Some(subAnasStr), itrToString("AS", aliasStrOpt.map(TableName.removeValidPrefix))).flatString
+    s"$subAnasStr AS subselect_${outputTable.subselect}"
   }
+
+  def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId) = JoinAnalysis(fromTable, analyses.map(_.mapColumnIds(f)), outputTable)
 }
 
 /**
@@ -490,7 +438,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                         limit: Option[BigInt],
                                         offset: Option[BigInt],
                                         search: Option[String]) {
-  def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): SoQLAnalysis[NewColumnId, Type] =
+  def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId): SoQLAnalysis[NewColumnId, Type] =
     copy(
       selection = selection.mapValues(_.mapColumnIds(f)),
       joins = joins.map(_.mapColumnIds(f)),
@@ -500,39 +448,10 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
       orderBys = orderBys.map(_.mapColumnIds(f))
     )
 
-  def mapColumnIds[NewColumnId](qColumnIdNewColumnIdMap: Map[(ColumnId, Qualifier), NewColumnId],
-                                qColumnNameToQColumnId: (Qualifier, ColumnName) => (ColumnId, Qualifier),
-                                columnNameToNewColumnId: ColumnName => NewColumnId,
-                                columnIdToNewColumnId: ColumnId => NewColumnId): SoQLAnalysis[NewColumnId, Type] = {
-
-    val newColumnsFromJoin = joins.flatMap { j =>
-      j.from.analyses.lastOption.map(_.selection.map { case (columnName, _) =>
-        qColumnNameToQColumnId(j.from.alias, columnName) -> columnNameToNewColumnId(columnName)
-      }).getOrElse(OrderedMap.empty)
-    }.toMap
-
-    val qColumnIdNewColumnIdWithJoinsMap = qColumnIdNewColumnIdMap ++ newColumnsFromJoin
-
-    def mapJoin(j: typed.Join[ColumnId, Type]): typed.Join[NewColumnId, Type] = {
-      val mappedAnalysis = j.from.mapColumnIds(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
-      val mappedOn = j.on.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))
-      typed.Join(j.typ, mappedAnalysis, mappedOn)
-    }
-
-    copy(
-      selection = selection.mapValues(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
-      joins = joins.map(mapJoin),
-      where = where.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
-      groupBys = groupBys.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
-      having = having.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
-      orderBys = orderBys.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
-    )
-  }
-
-  private def toString(from: Option[TableName]): String = {
+  private def toString(from: Option[TableRef]): String = {
     val distinctStr = if (distinct) "DISTINCT " else ""
     val selectStr = Some(s"SELECT $distinctStr$selection")
-    val fromStr = from.map(t => s"FROM $t")
+    val fromStr = from.map(t => s"FROM @$t")
     val joinsStr = itrToString(None, joins.map(_.toString), " ")
     val whereStr = itrToString("WHERE", where)
     val groupByStr = itrToString("GROUP BY", groupBys, ", ")
@@ -546,19 +465,19 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
     parts.flatString
   }
 
-  def toStringWithFrom(fromTable: TableName): String = toString(Some(fromTable))
+  def toStringWithFrom(fromTable: TableRef): String = toString(Some(fromTable))
 
   override def toString: String = toString(None)
 }
 
 object SoQLAnalysis {
-  def merge[T](andFunction: MonomorphicFunction[T], stages: NonEmptySeq[SoQLAnalysis[ColumnName, T]]): NonEmptySeq[SoQLAnalysis[ColumnName, T]] =
+  def merge[T](andFunction: MonomorphicFunction[T], stages: NonEmptySeq[SoQLAnalysis[Qualified[ColumnName], T]]): NonEmptySeq[SoQLAnalysis[Qualified[ColumnName], T]] =
     new Merger(andFunction).merge(stages)
 }
 
 private class Merger[T](andFunction: MonomorphicFunction[T]) {
-  type Analysis = SoQLAnalysis[ColumnName, T]
-  type Expr = typed.CoreExpr[ColumnName, T]
+  type Analysis = SoQLAnalysis[Qualified[ColumnName], T]
+  type Expr = typed.CoreExpr[Qualified[ColumnName], T]
 
   def merge(stages: NonEmptySeq[Analysis]): NonEmptySeq[Analysis] = {
     stages.foldLeft1(NonEmptySeq(_)) { case (acc, nextStage) =>
@@ -586,7 +505,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
       Some(SoQLAnalysis(isGrouped = aIsGroup,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        joins = bJoins,
+                        joins = replaceJoinOnRefs(aSelect, bJoins),
                         where = aWhere,
                         groupBys = aGroup,
                         having = aHaving,
@@ -600,7 +519,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
       Some(SoQLAnalysis(isGrouped = false,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        joins = bJoins,
+                        joins = replaceJoinOnRefs(aSelect, bJoins),
                         where = mergeWhereLike(aSelect, aWhere, bWhere),
                         groupBys = Nil,
                         having = None,
@@ -614,7 +533,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
       Some(SoQLAnalysis(isGrouped = true,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        joins = bJoins,
+                        joins = replaceJoinOnRefs(aSelect, bJoins),
                         where = mergeWhereLike(aSelect, aWhere, bWhere),
                         groupBys = mergeGroupBy(aSelect, bGroup),
                         having = mergeWhereLike(aSelect, None, bHaving),
@@ -655,8 +574,8 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
     b.mapValues(replaceRefs(a, _))
 
   private def mergeOrderBy(aliases: OrderedMap[ColumnName, Expr],
-                           obA: Seq[typed.OrderBy[ColumnName, T]],
-                           obB: Seq[typed.OrderBy[ColumnName, T]]): Seq[typed.OrderBy[ColumnName, T]] =
+                           obA: Seq[typed.OrderBy[Qualified[ColumnName], T]],
+                           obB: Seq[typed.OrderBy[Qualified[ColumnName], T]]): Seq[typed.OrderBy[Qualified[ColumnName], T]] =
     (obA, obB) match {
       case (Nil, Nil) => Seq.empty
       case (a, Nil) => a
@@ -678,13 +597,24 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
     gb.map(replaceRefs(aliases, _))
   }
 
+  private def replaceJoinOnRefs(a: OrderedMap[ColumnName, Expr],
+                                bJoins: Seq[typed.Join[Qualified[ColumnName], T]]) =
+    bJoins.map { bJoin =>
+      bJoin match {
+        case typed.InnerJoin(from, on) => typed.InnerJoin(from, replaceRefs(a, on))
+        case typed.LeftOuterJoin(from, on) => typed.LeftOuterJoin(from, replaceRefs(a, on))
+        case typed.RightOuterJoin(from, on) => typed.RightOuterJoin(from, replaceRefs(a, on))
+        case typed.FullOuterJoin(from, on) => typed.FullOuterJoin(from, replaceRefs(a, on))
+      }
+    }
+
   private def replaceRefs(a: OrderedMap[ColumnName, Expr],
-                             b: Expr): Expr =
+                          b: Expr): Expr =
     b match {
-      case cr@typed.ColumnRef(Some(q), c, t) =>
-        cr
-      case cr@typed.ColumnRef(None, c, t) =>
+      case cr@typed.ColumnRef(Qualified(TableRef.PreviousChainStep, c), t) =>
         a.getOrElse(c, cr)
+      case cr@typed.ColumnRef(_, _) =>
+        cr
       case tl: typed.TypedLiteral[T] =>
         tl
       case fc@typed.FunctionCall(f, params) =>

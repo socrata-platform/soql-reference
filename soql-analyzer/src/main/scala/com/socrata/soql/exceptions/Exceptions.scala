@@ -2,7 +2,7 @@ package com.socrata.soql.exceptions
 
 import scala.util.parsing.input.Position
 
-import com.socrata.soql.environment.{TypeName, FunctionName, ColumnName}
+import com.socrata.soql.environment.{TypeName, FunctionName, ColumnName, ResourceName}
 
 sealed abstract class SoQLException(m: String, p: Position) extends RuntimeException(m + ":\n" + p.longString) {
   def position: Position
@@ -15,8 +15,9 @@ case class ColumnNotInGroupBys(column: ColumnName, position: Position) extends S
 sealed trait AliasAnalysisException extends SoQLException
 case class RepeatedException(name: ColumnName, position: Position) extends SoQLException("Column `" + name + "' has already been excluded", position) with AliasAnalysisException
 case class DuplicateAlias(name: ColumnName, position: Position) extends SoQLException("There is already a column named `" + name + "' selected", position) with AliasAnalysisException
+case class DuplicateTableAlias(name: ResourceName, position: Position) extends SoQLException("There is already a table named `" + name + "' selected", position) with AliasAnalysisException
 case class NoSuchColumn(name: ColumnName, position: Position) extends SoQLException("No such column `" + name + "'", position) with AliasAnalysisException with TypecheckException
-case class NoSuchTable(qualifier: String, position: Position) extends SoQLException("No such table `" + qualifier + "'", position) with AliasAnalysisException with TypecheckException
+case class NoSuchTable(qualifier: ResourceName, position: Position) extends SoQLException("No such table `" + qualifier.name + "'", position) with AliasAnalysisException with TypecheckException
 case class CircularAliasDefinition(name: ColumnName, position: Position) extends SoQLException("Circular reference while defining alias `" + name + "'", position) with AliasAnalysisException
 
 sealed trait LexerException extends SoQLException
@@ -38,3 +39,7 @@ case class NonBooleanWhere(typ: TypeName, position: Position) extends SoQLExcept
 case class NonGroupableGroupBy(typ: TypeName, position: Position) extends SoQLException("Cannot group by an expression of type `" + typ + "'", position) with TypecheckException
 case class NonBooleanHaving(typ: TypeName, position: Position) extends SoQLException("Cannot filter by an expression of type `" + typ + "'", position) with TypecheckException
 case class UnorderableOrderBy(typ: TypeName, position: Position) extends SoQLException("Cannot order by an expression of type `" + typ + "'", position) with TypecheckException
+
+// This deliberately does not extend SoQLException.
+sealed abstract class SoQLInternalException(m: String) extends RuntimeException(m)
+case class UnexpectedlyVisibleJoin() extends SoQLInternalException("Unexpectedly visible join when building initial typechecker context for joins")

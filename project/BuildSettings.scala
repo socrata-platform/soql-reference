@@ -17,7 +17,7 @@ object BuildSettings {
     testOptions in Test ++= Seq(
       Tests.Argument(TestFrameworks.ScalaTest, "-oFD")
     ),
-    scalacOptions += "-language:implicitConversions",
+    scalacOptions ++= Seq("-language:implicitConversions", "-feature", "-deprecation"),
     libraryDependencies ++= Seq(
       "org.slf4j" % "slf4j-api" % slf4jVersion,
       "org.slf4j" % "jcl-over-slf4j" % slf4jVersion,

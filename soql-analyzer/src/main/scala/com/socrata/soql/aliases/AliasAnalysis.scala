@@ -3,16 +3,15 @@ package com.socrata.soql.aliases
 import scala.util.parsing.input.Position
 import scala.collection.mutable
 import com.socrata.soql.ast._
-import com.socrata.soql.exceptions.{CircularAliasDefinition, DuplicateAlias, NoSuchColumn, RepeatedException}
-import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, UntypedDatasetContext}
+import com.socrata.soql.exceptions.{CircularAliasDefinition, DuplicateAlias, NoSuchTable, NoSuchColumn, RepeatedException}
+import com.socrata.soql.environment.{ColumnName, DatasetContext, ResourceName}
 import com.socrata.soql.collection.{OrderedMap, OrderedSet}
 
 trait AliasAnalysis {
-  type Qualifier = String
-  type AnalysisContext = Map[Qualifier, UntypedDatasetContext]
+  type AnalysisContext = Map[Option[ResourceName], OrderedSet[ColumnName]]
 
   case class Analysis(expressions: OrderedMap[ColumnName, Expression], evaluationOrder: Seq[ColumnName])
-  def apply(selection: Selection)(implicit ctx: AnalysisContext): Analysis
+  def apply(ctx: AnalysisContext, selection: Selection): Analysis
 }
 
 object AliasAnalysis extends AliasAnalysis {
@@ -28,15 +27,15 @@ object AliasAnalysis extends AliasAnalysis {
     * @throws com.socrata.soql.exceptions.DuplicateAlias if duplicate aliases are detected
     * @throws com.socrata.soql.exceptions.CircularAliasDefinition if an alias is defined in terms of itself
     */
-  def apply(selection: Selection)(implicit ctx: AnalysisContext): Analysis = {
+  def apply(ctx: AnalysisContext, selection: Selection): Analysis = {
     log.debug("Input: {}", selection)
-    val starsExpanded = expandSelection(selection)
+    val starsExpanded = expandSelection(ctx, selection)
     log.debug("After expanding stars: {}", starsExpanded)
-    val (semiExplicit, explicitAndSemiExplicitAssigned) = assignExplicitAndSemiExplicit(starsExpanded)
+    val (semiExplicit, explicitAndSemiExplicitAssigned) = assignExplicitAndSemiExplicit(ctx, starsExpanded)
     log.debug("After assigning explicit and semi-explicit: {}", explicitAndSemiExplicitAssigned)
-    val allAliasesAssigned = assignImplicit(explicitAndSemiExplicitAssigned)
+    val allAliasesAssigned = assignImplicit(ctx, explicitAndSemiExplicitAssigned)
     log.debug("After assigning implicit aliases: {}", allAliasesAssigned)
-    Analysis(allAliasesAssigned, orderAliasesForEvaluation(allAliasesAssigned, semiExplicit))
+    Analysis(allAliasesAssigned, orderAliasesForEvaluation(ctx, allAliasesAssigned, semiExplicit))
   }
 
   /**
@@ -49,15 +48,19 @@ object AliasAnalysis extends AliasAnalysis {
    * @throws com.socrata.soql.exceptions.RepeatedException if the same column is excepted more than once
    * @throws com.socrata.soql.exceptions.NoSuchColumn if a column not on the dataset is excepted
    */
-  def expandSelection(selection: Selection)(implicit ctx: AnalysisContext): Seq[SelectedExpression] = {
+  def expandSelection(ctx: AnalysisContext, selection: Selection): Seq[SelectedExpression] = {
     val Selection(systemStar, userStars, expressions) = selection
-    val ctxKeyForSystem = systemStar.flatMap(_.qualifier).getOrElse(TableName.PrimaryTable.qualifier)
-    val systemColumns = ctx(ctxKeyForSystem).columns.filter(_.name.startsWith(":"))
-    systemStar.toSeq.flatMap(processStar(_, systemColumns)) ++
+    val ctxKeyForSystem = systemStar.flatMap(_.qualifier)
+    val systemColumns = ctxKeyForSystem.fold(ctx(None)) { qual =>
+      ctx.getOrElse(Some(qual.resourceName), throw NoSuchTable(qual.resourceName, qual.position))
+    }.filter(_.name.startsWith(":"))
+    systemStar.toSeq.flatMap(processStar(ctx, _, systemColumns)) ++
       userStars.flatMap { userStar =>
-        val ctxKeyForUser = userStar.qualifier.getOrElse(TableName.PrimaryTable.qualifier)
-        val userColumns = ctx(ctxKeyForUser).columns.filterNot(_.name.startsWith(":"))
-        processStar(userStar, userColumns)
+        val ctxKeyForUser = userStar.qualifier
+        val userColumns = ctxKeyForUser.fold(ctx(None)) { qual =>
+          ctx.getOrElse(Some(qual.resourceName), throw NoSuchTable(qual.resourceName, qual.position))
+        }.filterNot(_.name.startsWith(":"))
+        processStar(ctx, userStar, userColumns)
       } ++
       expressions
   }
@@ -76,8 +79,7 @@ object AliasAnalysis extends AliasAnalysis {
    * @throws com.socrata.soql.exceptions.RepeatedException if the same column is EXCEPTed more than once
    * @throws com.socrata.soql.exceptions.NoSuchColumn if a column not on the dataset is excepted.
    */
-  def processStar(starSelection: StarSelection, columns: OrderedSet[ColumnName])(implicit ctx: AnalysisContext): Seq[SelectedExpression] = {
-    // TODO: Actually handle qualifier
+  def processStar(ctx: AnalysisContext, starSelection: StarSelection, columns: OrderedSet[ColumnName]): Seq[SelectedExpression] = {
     val StarSelection(qual, exceptions) = starSelection
     val exceptedColumnNames = new mutable.HashSet[ColumnName]
     for((column, position) <- exceptions) {
@@ -103,7 +105,7 @@ object AliasAnalysis extends AliasAnalysis {
    *         a new selection list in the same order but with semi-explicit aliases assigned.
    * @throws com.socrata.soql.exceptions.DuplicateAlias if a duplicate alias is detected
    */
-  def assignExplicitAndSemiExplicit(selections: Seq[SelectedExpression])(implicit ctx: AnalysisContext): (Set[ColumnName], Seq[SelectedExpression]) = {
+  def assignExplicitAndSemiExplicit(ctx: AnalysisContext, selections: Seq[SelectedExpression]): (Set[ColumnName], Seq[SelectedExpression]) = {
     val (_, semiExplicit, newSelected) = selections.foldLeft((Set.empty[ColumnName], Set.empty[ColumnName], Vector.empty[SelectedExpression])) { (results, selection) =>
       val (assigned, semiExplicit, mapped) = results
 
@@ -116,8 +118,21 @@ object AliasAnalysis extends AliasAnalysis {
       selection match {
         case SelectedExpression(expr, Some((alias, position))) =>
           register(alias, position, expr, isExplicit = true)
-        case SelectedExpression(expr: ColumnOrAliasRef, None) =>
-          register(expr.column, expr.position, expr, isExplicit = false)
+        case SelectedExpression(expr@ColumnOrAliasRef(None, name), None) =>
+          register(name, expr.position, expr, isExplicit = false)
+
+        // I'm not sure I like this; what this is doing is
+        // making @foo.:bar get aliased to :foo_bar (i.e., maintaining
+        // its system-column-ness.  But this does/could introduce
+        // namespacing issues that I'm not sure we want.  I don't
+        // think there are any _right now_ though...
+        case SelectedExpression(expr@ColumnOrAliasRef(Some(_), name), None) if name.name.startsWith(":@") =>
+          register(ColumnName(":@" + expr.toSyntheticIdentifierBase), expr.position, expr, isExplicit = false)
+        case SelectedExpression(expr@ColumnOrAliasRef(Some(_), name), None) if name.name.startsWith(":") =>
+          register(ColumnName(":" + expr.toSyntheticIdentifierBase), expr.position, expr, isExplicit = false)
+
+        case SelectedExpression(expr@ColumnOrAliasRef(Some(_), _), None) =>
+          register(ColumnName(expr.toSyntheticIdentifierBase), expr.position, expr, isExplicit = false)
         case other =>
           (assigned, semiExplicit, mapped :+ other)
       }
@@ -131,7 +146,7 @@ object AliasAnalysis extends AliasAnalysis {
    * @param selections The selection-list, with semi-explicit and explicit aliases already assigned
    * @return The fully-aliased selections, in the same order as they arrived
    */
-  def assignImplicit(selections: Seq[SelectedExpression])(implicit ctx: AnalysisContext): OrderedMap[ColumnName, Expression] = {
+  def assignImplicit(ctx: AnalysisContext, selections: Seq[SelectedExpression]): OrderedMap[ColumnName, Expression] = {
     val assignedAliases: Set[ColumnName] = selections.collect {
       case SelectedExpression(_, Some((alias, _))) => alias
     } (scala.collection.breakOut)
@@ -142,7 +157,7 @@ object AliasAnalysis extends AliasAnalysis {
           (assignedSoFar, mapped + (name -> expr))
         case SelectedExpression(expr, None) =>
           assert(!expr.isInstanceOf[ColumnOrAliasRef], "found un-aliased pure identifier")
-          val newName = implicitAlias(expr, assignedSoFar)
+          val newName = implicitAlias(ctx, expr, assignedSoFar)
           (assignedSoFar + newName, mapped + (newName -> expr))
       }
     }._2
@@ -155,12 +170,12 @@ object AliasAnalysis extends AliasAnalysis {
    * @param selection The expression for which to generate an alias
    * @param existingAliases The set of already-present aliases
    * @return A new name for the expression */
-  def implicitAlias(selection: Expression, existingAliases: Set[ColumnName])(implicit ctx: AnalysisContext): ColumnName = {
+  def implicitAlias(ctx: AnalysisContext, selection: Expression, existingAliases: Set[ColumnName]): ColumnName = {
 
     def inUse(name: ColumnName) =
       existingAliases.contains(name) ||
       ctx.exists { case (_, dsCtx) =>
-        dsCtx.columns.contains(name)
+        dsCtx.contains(name)
       }
 
     val base = selection.toSyntheticIdentifierBase
@@ -202,7 +217,7 @@ object AliasAnalysis extends AliasAnalysis {
     * @return the aliases in evaluation order
     * @throws com.socrata.soql.exceptions.CircularAliasDefinition if an alias's expansion refers to itself,
     *                                                             even indirectly. */
-  def orderAliasesForEvaluation(in: OrderedMap[ColumnName, Expression], semiExplicit: Set[ColumnName])(implicit ctx: AnalysisContext): Seq[ColumnName] = {
+  def orderAliasesForEvaluation(ctx: AnalysisContext, in: OrderedMap[ColumnName, Expression], semiExplicit: Set[ColumnName]): Seq[ColumnName] = {
     // We'll divide all the aliases up into two categories -- aliases which refer
     // to a column of the same name ("selfRefs") and everything else ("otherRefs").
     val (semiExplicitRefs, otherRefs) = in.partition {

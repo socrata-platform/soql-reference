@@ -16,6 +16,8 @@ class OrderedMap[A, +B](underlying: Map[A, (Int, B)], ordering: Vector[A]) exten
 
   override def mapValues[C](f: B => C): OrderedMap[A, C] = new OrderedMap(underlying.mapValues { case (k,v) => (k,f(v)) }, ordering)
 
+  def transformOrdered[C](f: (A, B) => C): OrderedMap[A, C] = new OrderedMap(underlying.transform { (k, kv) => (kv._1, f(k, kv._2)) }, ordering)
+
   override def foreach[U](f: ((A, B)) =>  U): Unit = iterator.foreach(f)
 
   def get(key: A): Option[B] =

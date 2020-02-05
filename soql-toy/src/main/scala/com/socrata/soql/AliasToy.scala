@@ -4,7 +4,8 @@ import collection.OrderedSet
 import com.socrata.soql.aliases._
 import com.socrata.soql.parsing.Parser
 import com.socrata.soql.exceptions.SoQLException
-import environment.{ColumnName, TableName, UntypedDatasetContext}
+import environment.{ColumnName, ResourceName}
+import com.socrata.soql.toy.Compat
 
 object AliasToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -12,24 +13,24 @@ object AliasToy extends (Array[String] => Unit) {
     sys.exit(1)
   }
 
-  implicit val datasetCtx = Map(TableName.PrimaryTable.qualifier -> new UntypedDatasetContext {
-    val locale = com.ibm.icu.util.ULocale.ENGLISH
-    val columns = com.socrata.soql.collection.OrderedSet(":id", ":created_at", "a", "b", "c", "d").map(ColumnName(_))
-  })
+  val context = ResourceName("hello")
+
+  implicit val datasetCtx = Map((Some(context) : Option[ResourceName]) ->
+                                  com.socrata.soql.collection.OrderedSet(":id", ":created_at", "a", "b", "c", "d").map(ColumnName(_)))
 
   def menu() {
     println("Columns:")
-    println(datasetCtx(TableName.PrimaryTable.qualifier).columns.mkString("  ", ", ", ""))
+    println(datasetCtx(Some(context)).mkString("  ", ", ", ""))
   }
 
   def apply(args: Array[String]) {
     menu()
     val p = new Parser
     while(true) {
-      val selection = readLine("> ")
+      val selection = Compat.readLine("> ")
       if(selection == null) return;
       try {
-        val analysis = AliasAnalysis(p.selection(selection))
+        val analysis = AliasAnalysis(datasetCtx, p.selection(selection))
         println("Resulting aliases:")
         Util.printList(analysis.expressions, "  ")
         println(analysis.evaluationOrder.mkString("Typecheck in this order:\n  ", ", ", ""))

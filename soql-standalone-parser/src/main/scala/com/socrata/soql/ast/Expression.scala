@@ -2,7 +2,7 @@ package com.socrata.soql.ast
 
 import scala.util.parsing.input.Position
 import scala.runtime.ScalaRunTime
-import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
+import com.socrata.soql.environment.{ColumnName, FunctionName, TypeName, ResourceName}
 
 sealed abstract class Expression extends Product {
   val position: Position
@@ -41,7 +41,7 @@ object Expression {
 
   private def findIdentsAndLiterals(e: Expression): Seq[String] = e match {
     case v: Literal => Vector(v.asString)
-    case ColumnOrAliasRef(aliasOpt, name) => aliasOpt ++: Vector(name.name)
+    case ColumnOrAliasRef(aliasOpt, name) => aliasOpt.map(_.resourceName.name) ++: Vector(name.name)
     case fc: FunctionCall =>
       fc match {
         case FunctionCall(SpecialFunctions.StarFunc(base), Seq()) => Vector(base)
@@ -142,13 +142,11 @@ object SpecialFunctions {
   }
 }
 
-case class ColumnOrAliasRef(qualifier: Option[String], column: ColumnName)(val position: Position) extends Expression {
+case class ColumnOrAliasRef(qualifier: Option[TableName], column: ColumnName)(val position: Position) extends Expression {
 
   protected def asString = {
     qualifier.map { q =>
-      TableName.SoqlPrefix +
-        q.substring(TableName.PrefixIndex) +
-        TableName.Field
+      q.toString + "."
     }.getOrElse("") + "`" + column.name + "`"
   }
   def format(depth: Int, sb: StringBuilder, limit: Option[Int]) = Some(sb.append(asString))
