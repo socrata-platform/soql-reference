@@ -85,6 +85,8 @@ object SpecialFunctions {
   val NotIn = FunctionName("#NOT_IN")
   val NotLike = FunctionName("#NOT_LIKE")
 
+  val CountDistinct = FunctionName("count_distinct")
+
   // window function: aggregatefunction(x) over (partition by a,b,c...)
   val WindowFunctionOver = FunctionName("#WF_OVER")
 
@@ -273,6 +275,12 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
         appendParams(sb, parameters.iterator, " LIKE ", d, limit)
       case SpecialFunctions.NotLike =>
         appendParams(sb, parameters.iterator, " NOT LIKE ", d, limit)
+      case SpecialFunctions.CountDistinct =>
+        sb.append("COUNT(DISTINCT ")
+        for {
+          sb <- parameters(0).format(d, sb, limit)
+          _ = sb.append(")")
+        } yield sb
       case SpecialFunctions.WindowFunctionOver =>
         val head = parameters.head
         val tail = parameters.tail
