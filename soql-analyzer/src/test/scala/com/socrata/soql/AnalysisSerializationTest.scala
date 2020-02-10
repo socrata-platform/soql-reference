@@ -47,11 +47,14 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
 
   val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo, tableFinder)
 
+  def serializeColumnName(c: ColumnName) = c.name
+  def deserializeColumnName(s: String) = ColumnName(s)
+
   def serializeTestType(t: TestType) = t.name.name
   def deserializeTestType(s: String): TestType = TestType.typesByName(TypeName(s))
 
-  val serializer = new AnalysisSerializer[TestType](serializeTestType)
-  val deserializer = new AnalysisDeserializer(deserializeTestType, TestFunctions.functionsByIdentity)
+  val serializer = new AnalysisSerializer[ColumnName, TestType](serializeColumnName, serializeTestType)
+  val deserializer = new AnalysisDeserializer(deserializeColumnName, deserializeTestType, TestFunctions.functionsByIdentity)
 
   type Analysis = SoQLAnalysis[ColumnName, TestType]
 

@@ -17,10 +17,11 @@ private case class SimplePosition(line: Int, column: Int, lineContents: String) 
 
 class UnknownAnalysisSerializationVersion(val version: Int) extends Exception("Unknown analysis serialization version " + version)
 
-private trait DeserializationDictionary[T] {
+private trait DeserializationDictionary[C, T] {
   def types(i: Int): T
   def resourceNames(i: Int): ResourceName
-  def columnNames(i: Int): ColumnName
+  def labels(i: Int): ColumnName
+  def columnNames(i: Int): C
   def functions(i: Int): MonomorphicFunction[T]
   def strings(i: Int): String
 }
@@ -30,23 +31,25 @@ object AnalysisDeserializer {
   val CurrentVersion = TestVersionV10
 }
 
-class AnalysisDeserializer[T](typeDeserializer: String => T, functionMap: String => Function[T]) extends (InputStream => NonEmptySeq[SoQLAnalysis[Qualified[ColumnName], T]]) {
+class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializer: String => T, functionMap: String => Function[T]) extends (InputStream => NonEmptySeq[SoQLAnalysis[Qualified[C], T]]) {
   import AnalysisDeserializer._
 
-  type Expr = CoreExpr[Qualified[ColumnName], T]
-  type Order = OrderBy[Qualified[ColumnName], T]
+  type Expr = CoreExpr[Qualified[C], T]
+  type Order = OrderBy[Qualified[C], T]
 
   private class DeserializationDictionaryImpl(typesRegistry: TIntObjectHashMap[T],
                                               stringsRegistry: TIntObjectHashMap[String],
                                               resourceNamesRegistry: TIntObjectHashMap[ResourceName],
-                                              columnsRegistry: TIntObjectHashMap[ColumnName],
+                                              labelsRegistry: TIntObjectHashMap[ColumnName],
+                                              columnsRegistry: TIntObjectHashMap[C],
                                               functionsRegistry: TIntObjectHashMap[MonomorphicFunction[T]])
-    extends DeserializationDictionary[T]
+    extends DeserializationDictionary[C, T]
   {
     def types(i: Int): T = typesRegistry.get(i)
     def strings(i: Int): String = stringsRegistry.get(i)
     def resourceNames(i: Int): ResourceName = resourceNamesRegistry.get(i)
-    def columnNames(i: Int): ColumnName = columnsRegistry.get(i)
+    def labels(i: Int): ColumnName = labelsRegistry.get(i)
+    def columnNames(i: Int): C = columnsRegistry.get(i)
     def functions(i: Int): MonomorphicFunction[T] = functionsRegistry.get(i)
   }
 
@@ -70,12 +73,13 @@ class AnalysisDeserializer[T](typeDeserializer: String => T, functionMap: String
       result
     }
 
-    def fromInput(in: CodedInputStream): DeserializationDictionary[T] = {
+    def fromInput(in: CodedInputStream): DeserializationDictionary[C, T] = {
       val strings = readRegistry(in) {
         in.readString()
       }
       val resourceNames = readSimpleRegistry(in, strings, ResourceName)
-      val columnNames = readSimpleRegistry(in, strings, ColumnName)
+      val labels = readSimpleRegistry(in, strings, ColumnName)
+      val columnNames = readSimpleRegistry(in, strings, columnDeserializer)
       val types = readSimpleRegistry(in, strings, typeDeserializer)
       val functions = readRegistry(in) {
         val function = functionMap(strings.get(in.readUInt32()))
@@ -88,12 +92,12 @@ class AnalysisDeserializer[T](typeDeserializer: String => T, functionMap: String
         MonomorphicFunction(function, bindings)
       }
 
-      new DeserializationDictionaryImpl(types, strings, resourceNames, columnNames, functions)
+      new DeserializationDictionaryImpl(types, strings, resourceNames, labels, columnNames, functions)
     }
   }
 
   private class Deserializer(in: CodedInputStream,
-                             dictionary: DeserializationDictionary[T],
+                             dictionary: DeserializationDictionary[C, T],
                              version: Int)
   {
     def readPosition(): Position =
@@ -117,7 +121,7 @@ class AnalysisDeserializer[T](typeDeserializer: String => T, functionMap: String
       val pos = readPosition()
       in.readRawByte() match {
         case 1 =>
-          val name = readQualified()
+          val name = readColumnName()
           val typ = dictionary.types(in.readUInt32())
           ColumnRef(name, typ)(pos)
         case 2 =>
@@ -161,14 +165,14 @@ class AnalysisDeserializer[T](typeDeserializer: String => T, functionMap: String
 
     def readSelection(): OrderedMap[ColumnName, Expr] = {
       val elems = readSeq {
-        val name =  dictionary.columnNames(in.readUInt32())
+        val name =  dictionary.labels(in.readUInt32())
         val expr = readExpr()
         name -> expr
       }
       OrderedMap(elems: _*)
     }
 
-    def readJoins(): Seq[Join[Qualified[ColumnName], T]] = {
+    def readJoins(): Seq[Join[Qualified[C], T]] = {
       readSeq {
         val joinType = readJoinType()
         val joinAnalysis = readJoinAnalysis()
@@ -205,9 +209,9 @@ class AnalysisDeserializer[T](typeDeserializer: String => T, functionMap: String
 
     def readOffset(): Option[BigInt] = readLimit()
 
-    def readQualified(): Qualified[ColumnName] = {
+    def readColumnName(): Qualified[C] = {
       Qualified(readTableRef(),
-                          dictionary.columnNames(in.readUInt32()))
+                dictionary.columnNames(in.readUInt32()))
     }
 
     def readTableRef(): TableRef =
@@ -220,7 +224,7 @@ class AnalysisDeserializer[T](typeDeserializer: String => T, functionMap: String
           TableRef.Join(in.readUInt32())
       }
 
-    def readJoinAnalysis(): JoinAnalysis[Qualified[ColumnName], T] = {
+    def readJoinAnalysis(): JoinAnalysis[Qualified[C], T] = {
       JoinAnalysis(TableRef.Primary(dictionary.resourceNames(in.readUInt32())),
                    readSeq { readAnalysis() },
                    TableRef.Join(in.readUInt32()))
@@ -231,7 +235,7 @@ class AnalysisDeserializer[T](typeDeserializer: String => T, functionMap: String
         dictionary.strings(in.readUInt32())
       }
 
-    def readAnalysis(): SoQLAnalysis[Qualified[ColumnName], T] = {
+    def readAnalysis(): SoQLAnalysis[Qualified[C], T] = {
       val ig = readIsGrouped()
       val d = readDistinct()
       val s = readSelection()
@@ -247,12 +251,12 @@ class AnalysisDeserializer[T](typeDeserializer: String => T, functionMap: String
       SoQLAnalysis(ig, d, s, j, w, gb, h, ob, l, o, search)
     }
 
-    def read(): NonEmptySeq[SoQLAnalysis[Qualified[ColumnName], T]] = {
+    def read(): NonEmptySeq[SoQLAnalysis[Qualified[C], T]] = {
       readNonEmptySeq { readAnalysis() }
     }
   }
 
-  def apply(in: InputStream): NonEmptySeq[SoQLAnalysis[Qualified[ColumnName], T]] = {
+  def apply(in: InputStream): NonEmptySeq[SoQLAnalysis[Qualified[C], T]] = {
     val cis = CodedInputStream.newInstance(in)
     cis.readInt32() match {
       case v@CurrentVersion =>
