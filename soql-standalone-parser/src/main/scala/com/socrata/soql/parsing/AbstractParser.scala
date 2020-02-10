@@ -378,7 +378,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def identifier_or_funcall: Parser[Expression] = {
     identifier ~ countDistinctParam ^^ {
       case ((_, ident, identPos)) ~ param =>
-        functionWithParams(s"${ident}_distinct", Right(Seq(param)), identPos)
+        functionWithParams(s"${ident.toLowerCase}_distinct", Right(Seq(param)), identPos)
     } |
     identifier ~ opt(params ~ opt(OVER() ~ windowFunctionParams)) ^^ {
       case ((qual, ident, identPos)) ~ None =>
