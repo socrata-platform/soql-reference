@@ -288,7 +288,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     }
 
   def convertJoinAnalysis(state: ConvertState, ja: OldJoinAnalysis[OldQ, T]): (ConvertState, JoinAnalysis[Qualified[C], T]) = {
-    val newPrimary = TableRef.Primary(ResourceName(convertFourFourish(ja.fromTable.name)))
+    val newPrimary = TableRef.JoinPrimary(ResourceName(convertFourFourish(ja.fromTable.name)))
     val tableAlias = ja.fromTable.alias.getOrElse(ja.fromTable.name)
     ja.subAnalysis match {
       case None =>
@@ -352,6 +352,6 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     val dictionary = DeserializationDictionaryImpl.fromInput(cis)
     val deserializer = new Deserializer(cis, dictionary)
     val old = deserializer.read()
-    convert(ConvertState(Map(None -> TableRef.Primary(ResourceName("__outermost__"))), Map.empty, 0), old)._2
+    convert(ConvertState(Map(None -> TableRef.Primary), Map.empty, 0), old)._2
   }
 }

@@ -75,23 +75,30 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
 
   def expression(s: String) = new Parser().expression(s)
 
-  def typedExpression(s: String): TypedExpr =
-    typedExpression(s, Map.empty[ResourceName, (TableRef, DatasetContext[TestType])])
+  sealed case class Options(primary: TableRef with TableRef.PrimaryCandidate,
+                            otherCtxs: Map[ResourceName, (TableRef, Map[ColumnName, TestType])]) {
+    def withPrimary(primary: TableRef with TableRef.PrimaryCandidate) =
+      copy(primary = primary)
 
-  def typedExpression(s: String, otherCtxs: Map[ResourceName, (TableRef, Map[ColumnName, TestType])]): TypedExpr = {
+    def withSchemas(otherCtxs: (ResourceName, (TableRef, Map[ColumnName, TestType]))*) =
+      copy(otherCtxs = otherCtxs.toMap)
+
+    def withSchemas(otherCtxs: (ResourceName, (TableRef, DatasetContext[TestType]))*)(implicit erasureEvasion: Unit = ()) =
+      copy(otherCtxs = otherCtxs.toMap.mapValues { case (ref, dc) => (ref, dc.schema) })
+  }
+  object Options extends Options(TableRef.Primary, Map.empty)
+
+  def typedExpression(s: String, options: Options = Options): TypedExpr = {
     val tc = new Typechecker(TestTypeInfo, TestFunctionInfo)
     def convertTypes(ref: TableRef, columnName: ColumnName, columnType: TestType): TypedExpr = {
       typed.ColumnRef[Qualified[ColumnName], TestType](
         Qualified(ref, columnName),
         columnType)(NoPosition)
     }
-    tc(expression(s), Typechecker.Ctx(datasetCtx.schema.transform(convertTypes(TableRef.Primary(primary), _ ,_)),
-                                      otherCtxs.mapValues { case (ref, schema) =>
+    tc(expression(s), Typechecker.Ctx(datasetCtx.schema.transform(convertTypes(options.primary, _ ,_)),
+                                      options.otherCtxs.mapValues { case (ref, schema) =>
                                         schema.transform(convertTypes(ref, _, _))
                                       }))
-  }
-  def typedExpression(s: String, otherCtxs: Map[ResourceName, (TableRef, DatasetContext[TestType])])(implicit erasureEvasion: Unit = ()): TypedExpr = {
-    typedExpression(s, otherCtxs.mapValues { case (ref, dc) => (ref, dc.schema) })
   }
 
   test("analysis succeeds in a most minimal query") {
@@ -129,7 +136,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
 
   test("analysis succeeds in a maximal ungrouped query") {
     val analysis = analyzer.analyzeUnchainedQuery(primary, "select :*, *(except name_first, name_last), nf || (' ' || nl) as name, name_first as nf, name_last as nl where nl < 'm' order by name desc, visits limit 5 offset 10")
-    analysis.selection.toSeq must equal (datasetCtx.schema.toSeq.filterNot(_._1.name.startsWith("name_")).map { case (n, t) => n -> typed.ColumnRef(Qualified(TableRef.Primary(primary), n), t)(NoPosition) } ++ Seq(ColumnName("name") -> typedExpression("name_first || (' ' || name_last)"), ColumnName("nf") -> typedExpression("name_first"), ColumnName("nl") -> typedExpression("name_last")))
+    analysis.selection.toSeq must equal (datasetCtx.schema.toSeq.filterNot(_._1.name.startsWith("name_")).map { case (n, t) => n -> typed.ColumnRef(Qualified(TableRef.Primary, n), t)(NoPosition) } ++ Seq(ColumnName("name") -> typedExpression("name_first || (' ' || name_last)"), ColumnName("nf") -> typedExpression("name_first"), ColumnName("nl") -> typedExpression("name_last")))
     analysis.selection(ColumnName(":id")).position.column must equal (8)
     analysis.selection(ColumnName(":updated_at")).position.column must equal (8)
     analysis.selection(ColumnName(":created_at")).position.column must equal (8)
@@ -174,8 +181,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   test("subcolumn subscript converted") {
     val soql = "select address.human_address where address.latitude > 1.1 order by address.longitude"
     val analysis = analyzer.analyzeUnchainedQuery(primary, soql)
-    val typedCol = typed.ColumnRef(Qualified(TableRef.Primary(primary),
-                                                       ColumnName("address")),
+    val typedCol = typed.ColumnRef(Qualified(TableRef.Primary,
+                                             ColumnName("address")),
                                    TestLocation.t)(NoPosition)
 
     analysis.selection.toSeq must equal (Seq(
@@ -332,27 +339,27 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("object_a") -> typedExpression("object.a"),
       ColumnName("ob") -> typedExpression("object.b"),
       ColumnName("visits") -> typedExpression("visits"),
-      ColumnName("aaaa_aaaa_name_last") -> typedExpression("@aaaa-aaaa.name_last", Map(ResourceName("aaaa-aaaa") -> ((TableRef.Join(0), datasetCtxMap(ResourceName("aaaa-aaaa")))))),
-      ColumnName("a1_name_last") -> typedExpression("@a1.name_last", Map(ResourceName("a1") -> ((TableRef.Join(1), datasetCtxMap(ResourceName("aaaa-aaaa"))))))
+      ColumnName("aaaa_aaaa_name_last") -> typedExpression("@aaaa-aaaa.name_last", Options.withSchemas(ResourceName("aaaa-aaaa") -> ((TableRef.Join(0), datasetCtxMap(ResourceName("aaaa-aaaa")))))),
+      ColumnName("a1_name_last") -> typedExpression("@a1.name_last", Options.withSchemas(ResourceName("a1") -> ((TableRef.Join(1), datasetCtxMap(ResourceName("aaaa-aaaa"))))))
     ))
   }
 
   test("join") {
     val analysis = analyzer.analyzeUnchainedQuery(primary, "select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on name_last = @aaaa-aaaa.name_last")
     val visit = typedExpression("visits").asInstanceOf[ColumnRef[Qualified[ColumnName], _]]
-    visit.column.table must equal(TableRef.Primary(primary))
+    visit.column.table must equal(TableRef.Primary)
     val joinTable = ResourceName("aaaa-aaaa")
-    val lastName= typedExpression("@aaaa-aaaa.name_last", Map(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable))))).asInstanceOf[ColumnRef[Qualified[ColumnName], _]]
+    val lastName= typedExpression("@aaaa-aaaa.name_last", Options.withSchemas(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable))))).asInstanceOf[ColumnRef[Qualified[ColumnName], _]]
     lastName.column.table must equal(TableRef.Join(0))
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> visit,
       ColumnName("aaaa_aaaa_name_last") -> lastName
     ))
-    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(TableRef.Primary(joinTable),
+    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(TableRef.JoinPrimary(joinTable),
                                                                  Nil,
                                                                  TableRef.Join(0)),
                                                     typedExpression("name_last = @aaaa-aaaa.name_last",
-                                                                    Map(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable))))))))
+                                                                    Options.withSchemas(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable))))))))
   }
 
   test("join with table alias") {
@@ -360,13 +367,13 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     val joinTable = ResourceName("aaaa-aaaa")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> typedExpression("visits"),
-      ColumnName("a1_name_last") -> typedExpression("@aaaa-aaaa.name_last", Map(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable)))))
+      ColumnName("a1_name_last") -> typedExpression("@aaaa-aaaa.name_last", Options.withSchemas(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable)))))
     ))
-    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(TableRef.Primary(joinTable),
+    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(TableRef.JoinPrimary(joinTable),
                                                                  Nil,
                                                                  TableRef.Join(0)),
                                                     typedExpression("visits > 10",
-                                                                    Map(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable))))))))
+                                                                    Options.withSchemas(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable))))))))
   }
 
   test("join toString") {
@@ -417,9 +424,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("balance") -> typedExpression("balance"),
       ColumnName("object") -> typedExpression("object"),
       ColumnName("array") -> typedExpression("array"),
-      ColumnName("x1_x") -> typedExpression("@aaaa-aaax.x", Map(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable))))),
-      ColumnName("x1_y") -> typedExpression("@aaaa-aaax.y", Map(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable))))),
-      ColumnName("x1_z") -> typedExpression("@aaaa-aaax.z", Map(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable)))))
+      ColumnName("x1_x") -> typedExpression("@aaaa-aaax.x", Options.withSchemas(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable))))),
+      ColumnName("x1_y") -> typedExpression("@aaaa-aaax.y", Options.withSchemas(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable))))),
+      ColumnName("x1_z") -> typedExpression("@aaaa-aaax.z", Options.withSchemas(joinTable -> ((TableRef.Join(0), datasetCtxMap(joinTable)))))
     ))
   }
 
@@ -436,7 +443,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
 
   def parseSubselectJoin(joinSoql: String): NonEmptySeq[SoQLAnalysis[Qualified[ColumnName], TestType]] = {
     val parsed = new StandaloneParser().parseSubselectJoinSource(joinSoql)
-    analyzer.analyze(parsed.fromTable.resourceName, parsed.subSelect)
+    analyzer.analyze(parsed.fromTable.resourceName, parsed.subSelect, TableRef.JoinPrimary(parsed.fromTable.resourceName))
   }
 
   test("join with sub-query") {
@@ -444,15 +451,17 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     val joinSubSoql = s"($joinSubSoqlInner) as a1"
     val subAnalyses = parseSubselectJoin(joinSubSoql)
     val analysis = analyzer.analyzeUnchainedQuery(primary, s"select visits, @a1.name_first join $joinSubSoql on name_first = @a1.name_first")
-    val ctx = Map(ResourceName("a1") -> ((TableRef.Join(0), datasetCtxMap(ResourceName("aaaa-aaab")))))
+    val ctx = Options.withSchemas(ResourceName("a1") -> ((TableRef.Join(0), datasetCtxMap(ResourceName("aaaa-aaab")))))
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> typedExpression("visits", ctx),
       ColumnName("a1_name_first") -> typedExpression("@a1.name_first", ctx)
     ))
-    val expected = List(typed.InnerJoin(JoinAnalysis(TableRef.Primary(ResourceName("aaaa-aaab")),
+
+    val expected = List(typed.InnerJoin(JoinAnalysis(TableRef.JoinPrimary(ResourceName("aaaa-aaab")),
                                                      subAnalyses.seq,
                                                      TableRef.Join(0)),
                                         typedExpression("name_first = @a1.name_first", ctx)))
+
     analysis.joins must equal (expected)
   }
 
@@ -461,12 +470,12 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     val joinSubSoql = s"($joinSubSoqlInner) as a1"
     val subAnalyses = parseSubselectJoin(joinSubSoql)
     val analysis = analyzer.analyzeUnchainedQuery(primary, s"select visits, @a1.name_first join $joinSubSoql on name_first = @a1.name_first")
-    val ctx = Map(ResourceName("a1") -> ((TableRef.Join(0), datasetCtxMap(ResourceName("aaaa-aaab")))))
+    val ctx = Options.withSchemas(ResourceName("a1") -> ((TableRef.Join(0), datasetCtxMap(ResourceName("aaaa-aaab")))))
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> typedExpression("visits", ctx),
       ColumnName("a1_name_first") -> typedExpression("@a1.name_first", ctx)
     ))
-    val expected = List(typed.InnerJoin(JoinAnalysis(TableRef.Primary(ResourceName("aaaa-aaab")),
+    val expected = List(typed.InnerJoin(JoinAnalysis(TableRef.JoinPrimary(ResourceName("aaaa-aaab")),
                                                      subAnalyses.seq,
                                                      TableRef.Join(0)),
                                         typedExpression("name_first = @a1.name_first", ctx)))
@@ -487,7 +496,7 @@ SELECT visits, @x3.x
                    false,
                    OrderedMap(
                      ColumnName("visits") -> typed.ColumnRef(Qualified(
-                                                               TableRef.Primary(primary),
+                                                               TableRef.Primary,
                                                                ColumnName("visits")),
                                                              TestNumber.t)(NoPosition),
                      ColumnName("x3_x") -> typed.ColumnRef(Qualified(
@@ -495,7 +504,7 @@ SELECT visits, @x3.x
                                                              ColumnName("x")),
                                                            TestText.t)(NoPosition)),
                    Seq(typed.InnerJoin(
-                         JoinAnalysis(TableRef.Primary(ResourceName("aaaa-aaab")),
+                         JoinAnalysis(TableRef.JoinPrimary(ResourceName("aaaa-aaab")),
                                       Seq(SoQLAnalysis(
                                             false,
                                             false,
@@ -505,18 +514,18 @@ SELECT visits, @x3.x
                                                                                    ColumnName("x")),
                                                                                  TestText.t)(NoPosition),
                                               ColumnName("a1_name_first") -> typed.ColumnRef(Qualified(
-                                                                                               TableRef.Primary(ResourceName("aaaa-aaab")),
+                                                                                               TableRef.JoinPrimary(ResourceName("aaaa-aaab")),
                                                                                                ColumnName("name_first")),
                                                                                              TestText.t)(NoPosition)),
                                             Seq(typed.InnerJoin(
                                                   JoinAnalysis(
-                                                    TableRef.Primary(ResourceName("aaaa-aaax")),
+                                                    TableRef.JoinPrimary(ResourceName("aaaa-aaax")),
                                                     Seq(SoQLAnalysis(
                                                           false,
                                                           false,
                                                           OrderedMap(
                                                             ColumnName("x") -> typed.ColumnRef(Qualified(
-                                                                                                 TableRef.Primary(ResourceName("aaaa-aaax")),
+                                                                                                 TableRef.JoinPrimary(ResourceName("aaaa-aaax")),
                                                                                                  ColumnName("x")),
                                                                                                TestText.t)(NoPosition)),
                                                           Nil,
@@ -537,7 +546,7 @@ SELECT visits, @x3.x
                                                                                          ColumnName("x")),
                                                                                        TestText.t)(NoPosition),
                                                                        typed.ColumnRef(Qualified(
-                                                                                         TableRef.Primary(ResourceName("aaaa-aaab")),
+                                                                                         TableRef.JoinPrimary(ResourceName("aaaa-aaab")),
                                                                                          ColumnName("name_first")),
                                                                                        TestText.t)(NoPosition)))(NoPosition, NoPosition))),
                                             None,
@@ -557,7 +566,7 @@ SELECT visits, @x3.x
                                                                 ColumnName("x")),
                                                               TestText.t)(NoPosition),
                                               typed.ColumnRef(Qualified(
-                                                                TableRef.Primary(primary),
+                                                                TableRef.Primary,
                                                                 ColumnName("name_first")),
                                                               TestText.t)(NoPosition)))(NoPosition, NoPosition))),
                    None,
@@ -584,7 +593,7 @@ SELECT visits, @x2.zx
                    false,
                    OrderedMap(
                      ColumnName("visits") -> typed.ColumnRef(Qualified(
-                                                               TableRef.Primary(primary),
+                                                               TableRef.Primary,
                                                                ColumnName("visits")),
                                                              TestNumber.t)(NoPosition),
                      ColumnName("x3_x") -> typed.ColumnRef(Qualified(
@@ -592,7 +601,7 @@ SELECT visits, @x2.zx
                                                              ColumnName("x")),
                                                            TestText.t)(NoPosition)),
                    Seq(typed.RightOuterJoin(
-                         JoinAnalysis(TableRef.Primary(ResourceName("aaaa-aaab")),
+                         JoinAnalysis(TableRef.JoinPrimary(ResourceName("aaaa-aaab")),
                                       Seq(SoQLAnalysis(
                                             false,
                                             false,
@@ -602,18 +611,18 @@ SELECT visits, @x2.zx
                                                                                    ColumnName("x")),
                                                                                  TestText.t)(NoPosition),
                                               ColumnName("a1_name_first") -> typed.ColumnRef(Qualified(
-                                                                                               TableRef.Primary(ResourceName("aaaa-aaab")),
+                                                                                               TableRef.JoinPrimary(ResourceName("aaaa-aaab")),
                                                                                                ColumnName("name_first")),
                                                                                              TestText.t)(NoPosition)),
                                             Seq(typed.LeftOuterJoin(
                                                   JoinAnalysis(
-                                                    TableRef.Primary(ResourceName("aaaa-aaax")),
+                                                    TableRef.JoinPrimary(ResourceName("aaaa-aaax")),
                                                     Seq(SoQLAnalysis(
                                                           false,
                                                           false,
                                                           OrderedMap(
                                                             ColumnName("x") -> typed.ColumnRef(Qualified(
-                                                                                                 TableRef.Primary(ResourceName("aaaa-aaax")),
+                                                                                                 TableRef.JoinPrimary(ResourceName("aaaa-aaax")),
                                                                                                  ColumnName("x")),
                                                                                                TestText.t)(NoPosition)),
                                                           Nil,
@@ -634,7 +643,7 @@ SELECT visits, @x2.zx
                                                                                          ColumnName("x")),
                                                                                        TestText.t)(NoPosition),
                                                                        typed.ColumnRef(Qualified(
-                                                                                         TableRef.Primary(ResourceName("aaaa-aaab")),
+                                                                                         TableRef.JoinPrimary(ResourceName("aaaa-aaab")),
                                                                                          ColumnName("name_first")),
                                                                                        TestText.t)(NoPosition)))(NoPosition, NoPosition))),
                                             None,
@@ -654,7 +663,7 @@ SELECT visits, @x2.zx
                                                                 ColumnName("x")),
                                                               TestText.t)(NoPosition),
                                               typed.ColumnRef(Qualified(
-                                                                TableRef.Primary(ResourceName("aaaa-aaab")),
+                                                                TableRef.Primary,
                                                                 ColumnName("name_first")),
                                                               TestText.t)(NoPosition)))(NoPosition, NoPosition))),
                    None,
@@ -711,11 +720,11 @@ SELECT visits, @x2.zx
     val select = analysisWordStyle.selection.toSeq
     select must equal(Seq(
       ColumnName("dt") -> typed.FunctionCall(TestFunctions.FixedTimeStampZTruncYmd.monomorphic.get,
-        Seq(typed.ColumnRef(Qualified(TableRef.Primary(primary),
+        Seq(typed.ColumnRef(Qualified(TableRef.Primary,
                                       ColumnName(":created_at")),
                             TestFixedTimestamp.t)(NoPosition)))(NoPosition, NoPosition),
       ColumnName("dt_pdt") -> typed.FunctionCall(TestFunctions.FixedTimeStampTruncYmdAtTimeZone.monomorphic.get,
-        Seq(typed.ColumnRef(Qualified(TableRef.Primary(primary),
+        Seq(typed.ColumnRef(Qualified(TableRef.Primary,
                                       ColumnName(":created_at")),
                             TestFixedTimestamp.t)(NoPosition),
             typed.StringLiteral("PDT", TestText.t)(NoPosition)

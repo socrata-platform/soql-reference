@@ -83,7 +83,7 @@ class SoQLTypeAnalyzerTest extends FunSuite with MustMatchers with PropertyCheck
         Qualified(ref, columnName),
         columnType)(NoPosition)
     }
-    tc(expression(s), Typechecker.Ctx(datasetCtx.schema.transform(convertTypes(TableRef.Primary(primary), _ ,_)),
+    tc(expression(s), Typechecker.Ctx(datasetCtx.schema.transform(convertTypes(TableRef.Primary, _ ,_)),
                                       otherCtxs.mapValues { case (ref, schema) =>
                                         schema.transform(convertTypes(ref, _, _))
                                       }))

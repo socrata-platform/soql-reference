@@ -28,16 +28,20 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   type Analysis = SoQLAnalysis[Qualified[ColumnName], Type]
   type Expr = typed.CoreExpr[Qualified[ColumnName], Type]
 
-  type Universe = Map[ResourceName, DatasetContext[Type]]
-  case class Context(
+  private type Universe = Map[ResourceName, DatasetContext[Type]]
+  private case class Context(
+    // The current source table for unqualified column names.
+    primaryDataset: ResourceName,
     // The current table that unqualified column names _that are
-    // columns_ refers to.  If this is a `PrimaryTableRef` then its
-    // resourceName is a key in `universe`.
-    primaryTableRef: TableRef with TableRef.Implicit,
-    // The current "primary context" that is used to look up
+    // columns_ (as opposed to aliases for computed values) refers
+    // to.  If this is a `JoinTableRef` then its resourceName is
+    // a key in `universe`; if this is `Primary` then `primaryDataset`
+    // is a key in `universe`.
+    implicitTableRef: TableRef with TableRef.Implicit,
+    // The current "implicit schema" that is used to look up
     // unqualified column names.  Most, but not all, of the Exprs will
     // just be ColumnRefs.
-    primaryContext: OrderedMap[ColumnName, Expr],
+    implicitSchema: OrderedMap[ColumnName, Expr],
     // This is all the actual physical tables we're working with in
     // this entire chained query.  It does not change while moving
     // through the query.
@@ -66,14 +70,15 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       typed.ColumnRef(Qualified(tableRef, columnName), expr.typ)(expr.position)
     }
 
-  private def tablesOfInterest(context: ResourceName, tables: Set[ResourceName]): Context = {
+  private def tablesOfInterest(context: ResourceName, tables: Set[ResourceName], primaryRef: TableRef with TableRef.PrimaryCandidate): Context = {
     val allTables = tables + context
     val universe = tableFinder(allTables)
     require(universe.keySet == allTables, "Table finder did not return the right set of tables")
-    Context(TableRef.Primary(context),
-            contextToSimpleSelection(universe(context), TableRef.Primary(context)),
+    Context(context,
+            primaryRef,
+            contextToSimpleSelection(universe(context), primaryRef),
             universe,
-            Map(context -> TableRef.Primary(context)))
+            Map(context -> primaryRef))
   }
 
   /** Turn a SoQL SELECT statement into a sequence of typed `Analysis` objects.
@@ -91,23 +96,24 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     * @param query The SELECT to parse and analyze
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
     * @return The analysis of the query*/
-  def analyzeFullQuery(context: ResourceName, query: String): NonEmptySeq[Analysis] = {
+  def analyzeFullQuery(context: ResourceName, query: String, primaryRef: TableRef with TableRef.PrimaryCandidate = TableRef.Primary): NonEmptySeq[Analysis] = {
     log.debug("Analyzing full query {}", query)
     val start = System.nanoTime()
     val parsed = new Parser(parserParameters).selectStatement(query)
     val end = System.nanoTime()
     log.trace("Parsing took {}ms", ns2ms(end - start))
 
-    analyze(context, parsed)
+    analyze(context, parsed, primaryRef)
   }
 
-  def analyze(context: ResourceName, selects: NonEmptySeq[Select]): NonEmptySeq[Analysis] = {
-    analyze(tablesOfInterest(context, selects.iterator.map(_.allTableReferences).foldLeft(Set.empty[ResourceName])(_ union _)),
-            selects)
+  def analyze(context: ResourceName, selects: NonEmptySeq[Select], primaryRef: TableRef with TableRef.PrimaryCandidate = TableRef.Primary): NonEmptySeq[Analysis] = {
+    analyzeChainInContext(
+      tablesOfInterest(context, selects.iterator.map(_.allTableReferences).foldLeft(Set.empty[ResourceName])(_ union _), primaryRef),
+      selects)
   }
 
-  def analyze(context: Context, selects: NonEmptySeq[Select]): NonEmptySeq[Analysis] = {
-    selects.scanLeft1(analyzeInContext(context, _))(analyzeChainedFrom(context.universe, _, _))
+  private def analyzeChainInContext(context: Context, selects: NonEmptySeq[Select]): NonEmptySeq[Analysis] = {
+    selects.scanLeft1(analyzeInContext(context, _))(analyzeChainedFrom(context, _, _))
   }
 
   /** Turn a simple SoQL SELECT statement into an `Analysis` object.
@@ -115,14 +121,14 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     * @param query The SELECT to parse and analyze
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous
     * @return The analysis of the query */
-  def analyzeUnchainedQuery(context: ResourceName, query: String): Analysis = {
+  def analyzeUnchainedQuery(context: ResourceName, query: String, primaryRef: TableRef with TableRef.PrimaryCandidate = TableRef.Primary): Analysis = {
     log.debug("Analyzing full unchained query {}", query)
     val start = System.nanoTime()
     val parsed = new Parser(parserParameters).unchainedSelectStatement(query)
     val end = System.nanoTime()
     log.trace("Parsing took {}ms", ns2ms(end - start))
 
-    analyzeInContext(tablesOfInterest(context, parsed.allTableReferences),
+    analyzeInContext(tablesOfInterest(context, parsed.allTableReferences, primaryRef),
                      parsed)
   }
 
@@ -142,7 +148,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                         false,
                         false,
                         contextToSimpleSelection(universe(table.resourceName),
-                                                 TableRef.Primary(table.resourceName)),
+                                                 TableRef.JoinPrimary(table.resourceName)),
                         Nil,
                         None,
                         Nil,
@@ -152,26 +158,29 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                         None,
                         None))
         case JoinSelect(from, innerAlias, subselects, _, _) =>
-          val fromRef = TableRef.Primary(from.resourceName)
-          analyze(Context(primaryTableRef = fromRef,
-                          primaryContext = contextToSimpleSelection(universe(from.resourceName), fromRef),
-                          universe = universe,
-                          visible = innerAlias match {
-                            case Some(a) => Map(a.resourceName -> fromRef)
-                            case None => Map(from.resourceName -> fromRef)
-                          }),
-                  subselects)
+          val fromRef = TableRef.JoinPrimary(from.resourceName)
+          analyzeChainInContext(
+            Context(from.resourceName,
+                    implicitTableRef = fromRef,
+                    implicitSchema = contextToSimpleSelection(universe(from.resourceName), fromRef),
+                    universe = universe,
+                    visible = innerAlias match {
+                      case Some(a) => Map(a.resourceName -> fromRef)
+                      case None => Map(from.resourceName -> fromRef)
+                    }),
+            subselects)
       }
     PartiallyAnalyzedJoin(join, analysis)
   }
 
-  private def analyzeChainedFrom(universe: Universe, lastQuery: Analysis, query: Select): Analysis = {
-    val context = Context(primaryTableRef = TableRef.PreviousChainStep,
-                          primaryContext = analysisToSimpleSelection(lastQuery, TableRef.PreviousChainStep),
-                          universe = universe,
-                          visible = Map.empty)
+  private def analyzeChainedFrom(context: Context, lastQuery: Analysis, query: Select): Analysis = {
+    val newContext = Context(primaryDataset = context.primaryDataset,
+                             implicitTableRef = TableRef.PreviousChainStep,
+                             implicitSchema = analysisToSimpleSelection(lastQuery, TableRef.PreviousChainStep),
+                             universe = context.universe,
+                             visible = Map.empty)
 
-    analyzeInContext(context, query)
+    analyzeInContext(newContext, query)
   }
 
   private def analyzeInContext(baseContext: Context, query: Select): Analysis = {
@@ -215,12 +224,15 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     // table.
     val aliasAnalysisContext: Map[Option[ResourceName], OrderedSet[ColumnName]] = locally {
       val base =
-        baseContext.primaryTableRef match {
-          case TableRef.Primary(rn) =>
-            Map(None -> baseContext.primaryContext.keySet,
-                Some(rn) -> baseContext.primaryContext.keySet)
+        baseContext.implicitTableRef match {
+          case TableRef.Primary =>
+            Map(None -> baseContext.implicitSchema.keySet,
+                Some(baseContext.primaryDataset) -> baseContext.implicitSchema.keySet)
+          case TableRef.JoinPrimary(rn) =>
+            Map(None -> baseContext.implicitSchema.keySet,
+                Some(rn) -> baseContext.implicitSchema.keySet)
           case TableRef.PreviousChainStep =>
-            Map(None -> baseContext.primaryContext.keySet)
+            Map(None -> baseContext.implicitSchema.keySet)
         }
 
       base ++ partiallyAnalyzedJoins.map { paJoin =>
@@ -246,14 +258,16 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
     val (typecheckerContext, typecheckedSelections) = locally {
       val initialTypecheckerContext =
-        Typechecker.Ctx(fullContext.primaryContext, fullContext.visible.mapValues { tableRef =>
+        Typechecker.Ctx(fullContext.implicitSchema, fullContext.visible.mapValues { tableRef =>
                           tableRef match {
-                            case ref@TableRef.Primary(tn) =>
+                            case ref@TableRef.Primary =>
+                              contextToSimpleSelection(fullContext.universe(fullContext.primaryDataset), ref)
+                            case ref@TableRef.JoinPrimary(tn) =>
                               contextToSimpleSelection(fullContext.universe(tn), ref)
                             case ref@TableRef.Join(i) =>
                               analysisToSimpleSelection(paJoinsBySubselectId(i).analysis.last, ref)
                             case ref@TableRef.PreviousChainStep =>
-                              fullContext.primaryContext.transformOrdered { (columnName, expr) =>
+                              fullContext.implicitSchema.transformOrdered { (columnName, expr) =>
                                 typed.ColumnRef(Qualified(ref, columnName), expr.typ)(expr.position)
                               }
                           }
@@ -281,17 +295,19 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
     val typecheckedJoins = locally {
       val initialTypecheckerContext =
-        Typechecker.Ctx(baseContext.primaryContext, baseContext.visible.mapValues { tableRef =>
+        Typechecker.Ctx(baseContext.implicitSchema, baseContext.visible.mapValues { tableRef =>
                           tableRef match {
-                            case ref@TableRef.Primary(tn) =>
+                            case ref@TableRef.Primary =>
+                              contextToSimpleSelection(baseContext.universe(baseContext.primaryDataset), ref)
+                            case ref@TableRef.JoinPrimary(tn) =>
                               contextToSimpleSelection(baseContext.universe(tn), ref)
-                            case ref@TableRef.Join(i) =>
+                            case ref@TableRef.Join(_) =>
                               // this shouldn't happen; the whole  point of starting from the base
                               // context is that a join _is't_ visible until after we've started
                               // typechecking its join condition.
-                              throw UnexpectedlyVisibleJoin()
+                              throw UnexpectedlyVisibleJoin(ref)
                             case ref@TableRef.PreviousChainStep =>
-                              baseContext.primaryContext.transformOrdered { (columnName, expr) =>
+                              baseContext.implicitSchema.transformOrdered { (columnName, expr) =>
                                 typed.ColumnRef(Qualified(ref, columnName), expr.typ)(expr.position)
                               }
                           }
@@ -301,14 +317,14 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
           paJoin.originalJoin.from match {
             case JoinTable(from, alias, outputTableIdentifier) =>
               val ref = TableRef.Join(outputTableIdentifier)
-              val a = JoinAnalysis[Qualified[ColumnName], Type](TableRef.Primary(from.resourceName), Nil, ref)
+              val a = JoinAnalysis[Qualified[ColumnName], Type](TableRef.JoinPrimary(from.resourceName), Nil, ref)
               val ctx =
                 typecheckerCtx.copy(schemas = typecheckerCtx.schemas + (alias.getOrElse(from).resourceName -> contextToSimpleSelection(fullContext.universe(from.resourceName), ref)))
 
               (a, ctx)
             case JoinSelect(from, _, _, alias, outputTableIdentifier) =>
               val ref = TableRef.Join(outputTableIdentifier)
-              val a = JoinAnalysis[Qualified[ColumnName], Type](TableRef.Primary(from.resourceName), paJoin.analysis.seq, ref)
+              val a = JoinAnalysis[Qualified[ColumnName], Type](TableRef.JoinPrimary(from.resourceName), paJoin.analysis.seq, ref)
               val ctx =
                 typecheckerCtx.copy(schemas = typecheckerCtx.schemas + (alias.resourceName -> analysisToSimpleSelection(paJoin.analysis.last, ref)))
 
@@ -393,7 +409,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   *   "join (select c.id from 4x4 as c) as a" =>
   *     JoinAnalysis(TableName(4x4, Some(c)), Some(SubAnalysis(List(_select_id_), a))) { aliasOpt = a }
   */
-case class JoinAnalysis[ColumnId, Type](fromTable: TableRef.Primary, analyses: Seq[SoQLAnalysis[ColumnId, Type]], outputTable: TableRef.Join) {
+case class JoinAnalysis[ColumnId, Type](fromTable: TableRef.JoinPrimary, analyses: Seq[SoQLAnalysis[ColumnId, Type]], outputTable: TableRef.Join) {
   override def toString: String = {
     val subAnasStr =
       if(analyses.isEmpty) {

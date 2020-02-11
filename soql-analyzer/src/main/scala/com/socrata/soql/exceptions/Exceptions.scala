@@ -2,7 +2,7 @@ package com.socrata.soql.exceptions
 
 import scala.util.parsing.input.Position
 
-import com.socrata.soql.environment.{TypeName, FunctionName, ColumnName, ResourceName}
+import com.socrata.soql.environment.{TypeName, FunctionName, ColumnName, ResourceName, TableRef}
 
 sealed abstract class SoQLException(m: String, p: Position) extends RuntimeException(m + ":\n" + p.longString) {
   def position: Position
@@ -42,4 +42,4 @@ case class UnorderableOrderBy(typ: TypeName, position: Position) extends SoQLExc
 
 // This deliberately does not extend SoQLException.
 sealed abstract class SoQLInternalException(m: String) extends RuntimeException(m)
-case class UnexpectedlyVisibleJoin() extends SoQLInternalException("Unexpectedly visible join when building initial typechecker context for joins")
+case class UnexpectedlyVisibleJoin(ref: TableRef) extends SoQLInternalException("Unexpectedly visible join when building initial typechecker context for joins: " + ref)

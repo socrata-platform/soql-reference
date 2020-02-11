@@ -7,7 +7,15 @@ object TableRef {
   // it's either the primary table ref or the previous chain step)
   sealed trait Implicit
 
-  case class Primary(resourceName: ResourceName) extends TableRef with Implicit {
+  // A primary candidate can be the primary datset for a select-chain;
+  // all PrimaryCandidates are Implicit
+  sealed trait PrimaryCandidate extends Implicit
+
+  case object Primary extends TableRef with PrimaryCandidate {
+    override def toString = "<primary>"
+  }
+
+  case class JoinPrimary(resourceName: ResourceName) extends TableRef with PrimaryCandidate {
     override def toString = resourceName.name
   }
 

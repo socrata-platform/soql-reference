@@ -73,10 +73,7 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
 
   def testV5(query: String, v5Encoded: String)(implicit convert : NonEmptySeq[Analysis] => NonEmptySeq[Analysis] = identity) = {
     val bytes = b64Decoder.decode(v5Encoded)
-    val analysis = deserializer(new ByteArrayInputStream(bytes)).map(_.mapColumnIds {
-      case Qualified(TableRef.Primary(q), n) if q == ResourceName("__outermost__") => Qualified(TableRef.Primary(primary), n)
-      case other => other
-    })
+    val analysis = deserializer(new ByteArrayInputStream(bytes))
     analysis must equal (convert(analyzeFull(query)))
   }
 
