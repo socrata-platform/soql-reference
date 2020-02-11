@@ -491,6 +491,17 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
 }
 
 object SoQLAnalysis {
+  def allTableRefs(analyses: NonEmptySeq[SoQLAnalysis[_, _]]): Set[TableRef] =
+    foldTableRefs(Set.empty[TableRef], analyses)(_ + _)
+
+  private def foldTableRefs[A](seed: A, analyses: NonEmptySeq[SoQLAnalysis[_, _]])(f: (A, TableRef) => A): A =
+    analyses.tail.foldLeft(foldTableRefs(f(seed, TableRef.Primary), analyses.head)(f))(foldTableRefs(_, _)(f))
+
+  private def foldTableRefs[A](seed: A, analysis: SoQLAnalysis[_, _])(f: (A, TableRef) => A): A =
+    analysis.joins.foldLeft(seed) { (state, join) =>
+      join.from.analyses.foldLeft(f(f(state, join.from.fromTable), join.from.outputTable))(foldTableRefs(_, _)(f))
+    }
+
   def merge[T](andFunction: MonomorphicFunction[T], stages: NonEmptySeq[SoQLAnalysis[Qualified[ColumnName], T]]): NonEmptySeq[SoQLAnalysis[Qualified[ColumnName], T]] =
     new Merger(andFunction).merge(stages)
 }
