@@ -19,8 +19,8 @@ object TableRef {
     override def toString = s"join[${resourceName.name}, $joinNumber]"
   }
 
-  case object PreviousChainStep extends TableRef with Implicit {
-    override def toString = "previous"
+  case class PreviousChainStep(root: TableRef with PrimaryCandidate, count: Int) extends TableRef with Implicit {
+    override def toString = s"$root//$count"
   }
 
   case class Join(subselect: Int) extends TableRef {

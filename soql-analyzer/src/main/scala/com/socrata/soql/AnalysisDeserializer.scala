@@ -216,16 +216,33 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
     def readTableRef(): TableRef =
       in.readRawByte() match {
+        case i@(0|1|2) => readImplicitTableRef(i)
+        case 3 =>
+          TableRef.Join(in.readUInt32())
+      }
+
+    def readPrimaryTableRef(which: Byte): TableRef with TableRef.PrimaryCandidate =
+      which match {
         case 0 =>
           TableRef.Primary
         case 1 =>
           TableRef.JoinPrimary(dictionary.resourceNames(in.readUInt32()),
                                in.readUInt32())
-        case 2 =>
-          TableRef.PreviousChainStep
-        case 3 =>
-          TableRef.Join(in.readUInt32())
       }
+
+    def readPrimaryTableRef(): TableRef with TableRef.PrimaryCandidate =
+      readPrimaryTableRef(in.readRawByte())
+
+    def readImplicitTableRef(which: Byte): TableRef with TableRef.Implicit =
+      which match {
+        case 0|1 =>
+          readPrimaryTableRef(which)
+        case 2 =>
+          TableRef.PreviousChainStep(readPrimaryTableRef(), in.readUInt32())
+      }
+
+    def readImplicitTableRef(): TableRef with TableRef.Implicit =
+      readImplicitTableRef(in.readRawByte())
 
     def readJoinAnalysis(): JoinAnalysis[Qualified[C], T] = {
       JoinAnalysis(dictionary.resourceNames(in.readUInt32()),

@@ -174,9 +174,13 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   }
 
   private def analyzeChainedFrom(context: Context, lastQuery: Analysis, query: Select): Analysis = {
+    val ref = context.implicitTableRef match {
+      case TableRef.PreviousChainStep(root, num) => TableRef.PreviousChainStep(root, num+1)
+      case other : TableRef.PrimaryCandidate => TableRef.PreviousChainStep(other, 1)
+    }
     val newContext = Context(primaryDataset = context.primaryDataset,
-                             implicitTableRef = TableRef.PreviousChainStep,
-                             implicitSchema = analysisToSimpleSelection(lastQuery, TableRef.PreviousChainStep),
+                             implicitTableRef = ref,
+                             implicitSchema = analysisToSimpleSelection(lastQuery, ref),
                              universe = context.universe,
                              visible = Map.empty)
 
@@ -231,7 +235,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
           case TableRef.JoinPrimary(rn, _) =>
             Map(None -> baseContext.implicitSchema.keySet,
                 Some(rn) -> baseContext.implicitSchema.keySet)
-          case TableRef.PreviousChainStep =>
+          case TableRef.PreviousChainStep(_, _) =>
             Map(None -> baseContext.implicitSchema.keySet)
         }
 
@@ -266,7 +270,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                               contextToSimpleSelection(fullContext.universe(tn), ref)
                             case ref@TableRef.Join(i) =>
                               analysisToSimpleSelection(paJoinsBySubselectId(i).analysis.last, ref)
-                            case ref@TableRef.PreviousChainStep =>
+                            case ref@TableRef.PreviousChainStep(_, _) =>
                               fullContext.implicitSchema.transformOrdered { (columnName, expr) =>
                                 typed.ColumnRef(Qualified(ref, columnName), expr.typ)(expr.position)
                               }
@@ -306,7 +310,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                               // context is that a join _is't_ visible until after we've started
                               // typechecking its join condition.
                               throw UnexpectedlyVisibleJoin(ref)
-                            case ref@TableRef.PreviousChainStep =>
+                            case ref@TableRef.PreviousChainStep(_, _) =>
                               baseContext.implicitSchema.transformOrdered { (columnName, expr) =>
                                 typed.ColumnRef(Qualified(ref, columnName), expr.typ)(expr.position)
                               }
@@ -627,7 +631,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   private def replaceRefs(a: OrderedMap[ColumnName, Expr],
                           b: Expr): Expr =
     b match {
-      case cr@typed.ColumnRef(Qualified(TableRef.PreviousChainStep, c), t) =>
+      case cr@typed.ColumnRef(Qualified(TableRef.PreviousChainStep(_, _), c), t) =>
         a.getOrElse(c, cr)
       case cr@typed.ColumnRef(_, _) =>
         cr

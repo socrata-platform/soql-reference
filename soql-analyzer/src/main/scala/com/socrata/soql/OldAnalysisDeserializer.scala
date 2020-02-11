@@ -262,7 +262,13 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     }
   }
 
-  case class ConvertState(prefixRefs: Map[Option[String], TableRef], aliases: Map[String, String], subselectCtr: Int)
+  case class ConvertState(
+    prefixRefs: Map[Option[String], TableRef],
+    aliases: Map[String, String],
+    subselectCtr: Int,
+    rootRef: TableRef with TableRef.PrimaryCandidate,
+    lastRefNum: Int
+  )
 
   def convertExpr(state: ConvertState, expr: CoreExpr[OldQ, T]): CoreExpr[Qualified[C], T] =
     expr match {
@@ -297,20 +303,26 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         val analysis = JoinAnalysis[Qualified[C], T](newPrimary, newJoinNum, Nil)
         (ConvertState(state.prefixRefs + (Some(ja.fromTable.name) -> analysis.outputTable),
                       state.aliases + (tableAlias -> ja.fromTable.name),
-                      state.subselectCtr + 1),
+                      state.subselectCtr + 1,
+                      state.rootRef,
+                      state.lastRefNum),
          analysis)
       case Some(OldSubAnalysis(analyses, resultAlias)) =>
         // "join (select ...) as bar" type - recursively covert analysis
         val (joinState, joinAnalysis) = convert(ConvertState(Map(None -> TableRef.JoinPrimary(newPrimary, newJoinNum),
                                                                  Some(ja.fromTable.name) -> TableRef.JoinPrimary(newPrimary, newJoinNum)),
                                                              Map(tableAlias -> ja.fromTable.name),
-                                                             newJoinNum),
+                                                             newJoinNum,
+                                                             TableRef.JoinPrimary(newPrimary, newJoinNum),
+                                                             0),
                                                 analyses)
         val analysis = JoinAnalysis(newPrimary, newJoinNum, joinAnalysis.seq)
         val resultRef = TableRef.Join(joinState.subselectCtr)
         (ConvertState(state.prefixRefs + (Some(resultAlias) -> resultRef),
                       state.aliases,
-                      joinState.subselectCtr + 1),
+                      joinState.subselectCtr + 1,
+                      state.rootRef,
+                      state.lastRefNum),
          analysis)
     }
   }
@@ -330,9 +342,12 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
     val newSelection = selection.mapValues(convertExpr(intermediateState, _))
 
-    (intermediateState.copy(prefixRefs = Map(None -> TableRef.PreviousChainStep) ++
+    val ref = TableRef.PreviousChainStep(state.rootRef, state.lastRefNum + 1)
+
+    (intermediateState.copy(prefixRefs = Map(None -> ref) ++
                                              // this is because the old system didn't keep close tabs on where columns came from
-                                             intermediateState.prefixRefs.mapValues(_ => TableRef.PreviousChainStep)),
+                                             intermediateState.prefixRefs.mapValues(_ => ref),
+                            lastRefNum = ref.count),
      SoQLAnalysis(isGrouped,
                   distinct,
                   newSelection,
@@ -354,6 +369,6 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     val dictionary = DeserializationDictionaryImpl.fromInput(cis)
     val deserializer = new Deserializer(cis, dictionary)
     val old = deserializer.read()
-    convert(ConvertState(Map(None -> TableRef.Primary), Map.empty, 0), old)._2
+    convert(ConvertState(Map(None -> TableRef.Primary), Map.empty, 0, TableRef.Primary, 0), old)._2
   }
 }

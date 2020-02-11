@@ -260,17 +260,33 @@ class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: 
 
     private def writeTableRef(tn: TableRef) = {
       tn match {
+        case ref: TableRef.Implicit =>
+          writeImplicitTableRef(ref)
+        case TableRef.Join(num) =>
+          out.writeRawByte(3)
+          out.writeUInt32NoTag(num)
+      }
+    }
+
+    private def writePrimaryTableRef(tn: TableRef with TableRef.PrimaryCandidate): Unit = {
+      tn match {
         case TableRef.Primary =>
           out.writeRawByte(0)
         case TableRef.JoinPrimary(name, joinNum) =>
           out.writeRawByte(1)
           out.writeUInt32NoTag(dictionary.registerResourceName(name))
           out.writeUInt32NoTag(joinNum)
-        case TableRef.PreviousChainStep =>
+      }
+    }
+
+    private def writeImplicitTableRef(tn: TableRef with TableRef.Implicit): Unit = {
+      tn match {
+        case ref: TableRef.PrimaryCandidate =>
+          writePrimaryTableRef(ref)
+        case TableRef.PreviousChainStep(primary, root) =>
           out.writeRawByte(2)
-        case TableRef.Join(num) =>
-          out.writeRawByte(3)
-          out.writeUInt32NoTag(num)
+          writePrimaryTableRef(primary)
+          out.writeUInt32NoTag(root)
       }
     }
 
