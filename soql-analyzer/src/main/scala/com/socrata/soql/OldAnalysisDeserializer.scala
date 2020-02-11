@@ -348,7 +348,8 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
                                              // this is because the old system didn't keep close tabs on where columns came from
                                              intermediateState.prefixRefs.mapValues(_ => ref),
                             lastRefNum = ref.count),
-     SoQLAnalysis(isGrouped,
+     SoQLAnalysis(if(state.lastRefNum == 0) state.rootRef else TableRef.PreviousChainStep(state.rootRef, state.lastRefNum),
+                  isGrouped,
                   distinct,
                   newSelection,
                   newJoins,

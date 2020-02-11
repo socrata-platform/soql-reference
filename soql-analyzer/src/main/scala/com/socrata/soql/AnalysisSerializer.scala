@@ -336,7 +336,8 @@ class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: 
       }
 
     def writeAnalysis(analysis: SoQLAnalysis[Qualified[C], T]) {
-      val SoQLAnalysis(isGrouped,
+      val SoQLAnalysis(input,
+                       isGrouped,
                        distinct,
                        selection,
                        join,
@@ -347,6 +348,7 @@ class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: 
                        limit,
                        offset,
                        search) = analysis
+      writeImplicitTableRef(input)
       writeGrouped(isGrouped)
       writeDistinct(analysis.distinct)
       writeSelection(selection)

@@ -66,14 +66,20 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
 
   def testRoundtrip(query: String) = {
     val analysis = analyzeFull(query)
+    SoQLAnalysis.assertSaneInputs(analysis, TableRef.Primary)
+
     val baos = new ByteArrayOutputStream
     serializer(baos, analysis)
-    deserializer(new ByteArrayInputStream(baos.toByteArray)) must equal(analysis)
+    val result = deserializer(new ByteArrayInputStream(baos.toByteArray))
+
+    SoQLAnalysis.assertSaneInputs(result, TableRef.Primary)
+    result must equal(analysis)
   }
 
   def testV5(query: String, v5Encoded: String)(implicit convert : NonEmptySeq[Analysis] => NonEmptySeq[Analysis] = identity) = {
     val bytes = b64Decoder.decode(v5Encoded)
     val analysis = deserializer(new ByteArrayInputStream(bytes))
+    SoQLAnalysis.assertSaneInputs(analysis, TableRef.Primary)
     analysis must equal (convert(analyzeFull(query)))
   }
 

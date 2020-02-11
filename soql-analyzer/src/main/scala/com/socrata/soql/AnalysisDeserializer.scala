@@ -256,6 +256,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       }
 
     def readAnalysis(): SoQLAnalysis[Qualified[C], T] = {
+      val input = readImplicitTableRef()
       val ig = readIsGrouped()
       val d = readDistinct()
       val s = readSelection()
@@ -268,7 +269,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val o = readOffset()
       val search = readSearch()
 
-      SoQLAnalysis(ig, d, s, j, w, gb, h, ob, l, o, search)
+      SoQLAnalysis(input, ig, d, s, j, w, gb, h, ob, l, o, search)
     }
 
     def read(): NonEmptySeq[SoQLAnalysis[Qualified[C], T]] = {

@@ -484,7 +484,8 @@ SELECT visits, @x3.x
       """)
 
     val expected =
-      SoQLAnalysis(false,
+      SoQLAnalysis(TableRef.Primary,
+                   false,
                    false,
                    OrderedMap(
                      ColumnName("visits") -> typed.ColumnRef(Qualified(
@@ -499,6 +500,7 @@ SELECT visits, @x3.x
                          JoinAnalysis(ResourceName("aaaa-aaab"),
                                       1,
                                       Seq(SoQLAnalysis(
+                                            TableRef.JoinPrimary(ResourceName("aaaa-aaab"), 1),
                                             false,
                                             false,
                                             OrderedMap(
@@ -515,6 +517,7 @@ SELECT visits, @x3.x
                                                     ResourceName("aaaa-aaax"),
                                                     0,
                                                     Seq(SoQLAnalysis(
+                                                          TableRef.JoinPrimary(ResourceName("aaaa-aaax"), 0),
                                                           false,
                                                           false,
                                                           OrderedMap(
@@ -581,7 +584,8 @@ SELECT visits, @x2.zx
       """)
 
     val expected =
-      SoQLAnalysis(false,
+      SoQLAnalysis(TableRef.Primary,
+                   false,
                    false,
                    OrderedMap(
                      ColumnName("visits") -> typed.ColumnRef(Qualified(
@@ -596,6 +600,7 @@ SELECT visits, @x2.zx
                          JoinAnalysis(ResourceName("aaaa-aaab"),
                                       1,
                                       Seq(SoQLAnalysis(
+                                            TableRef.JoinPrimary(ResourceName("aaaa-aaab"), 1),
                                             false,
                                             false,
                                             OrderedMap(
@@ -612,6 +617,7 @@ SELECT visits, @x2.zx
                                                     ResourceName("aaaa-aaax"),
                                                     0,
                                                     Seq(SoQLAnalysis(
+                                                          TableRef.JoinPrimary(ResourceName("aaaa-aaax"), 0),
                                                           false,
                                                           false,
                                                           OrderedMap(

@@ -107,13 +107,25 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   }
 
   def analyze(context: ResourceName, selects: NonEmptySeq[Select], primaryRef: TableRef with TableRef.PrimaryCandidate = TableRef.Primary): NonEmptySeq[Analysis] = {
-    analyzeChainInContext(
-      tablesOfInterest(context, selects.iterator.map(_.allTableReferences).foldLeft(Set.empty[ResourceName])(_ union _), primaryRef),
-      selects)
+    val result =
+      analyzeChainInContext(
+        tablesOfInterest(context, selects.iterator.map(_.allTableReferences).foldLeft(Set.empty[ResourceName])(_ union _), primaryRef),
+        selects)
+    SoQLAnalysis.assertSaneInputs(result, primaryRef)
+    result
   }
 
   private def analyzeChainInContext(context: Context, selects: NonEmptySeq[Select]): NonEmptySeq[Analysis] = {
-    selects.scanLeft1(analyzeInContext(context, _))(analyzeChainedFrom(context, _, _))
+    selects.scanLeft1(sel => (context, analyzeInContext(context, sel))) { (ctxAnalysis, select) =>
+      val (ctx, lastAnalysis) = ctxAnalysis
+      val ref = ctx.implicitTableRef.next
+      val newContext = Context(primaryDataset = ctx.primaryDataset,
+                               implicitTableRef = ref,
+                               implicitSchema = analysisToSimpleSelection(lastAnalysis, ref),
+                               universe = context.universe,
+                               visible = Map.empty)
+      (newContext, analyzeInContext(newContext, select))
+    }.map(_._2)
   }
 
   /** Turn a simple SoQL SELECT statement into an `Analysis` object.
@@ -144,11 +156,12 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     val analysis =
       join.from match {
         case JoinTable(table, _, joinNum) =>
+          val primary = TableRef.JoinPrimary(table.resourceName, joinNum)
           NonEmptySeq(SoQLAnalysis(
+                        primary,
                         false,
                         false,
-                        contextToSimpleSelection(universe(table.resourceName),
-                                                 TableRef.JoinPrimary(table.resourceName, joinNum)),
+                        contextToSimpleSelection(universe(table.resourceName), primary),
                         Nil,
                         None,
                         Nil,
@@ -171,20 +184,6 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
             subselects)
       }
     PartiallyAnalyzedJoin(join, analysis)
-  }
-
-  private def analyzeChainedFrom(context: Context, lastQuery: Analysis, query: Select): Analysis = {
-    val ref = context.implicitTableRef match {
-      case TableRef.PreviousChainStep(root, num) => TableRef.PreviousChainStep(root, num+1)
-      case other : TableRef.PrimaryCandidate => TableRef.PreviousChainStep(other, 1)
-    }
-    val newContext = Context(primaryDataset = context.primaryDataset,
-                             implicitTableRef = ref,
-                             implicitSchema = analysisToSimpleSelection(lastQuery, ref),
-                             universe = context.universe,
-                             visible = Map.empty)
-
-    analyzeInContext(newContext, query)
   }
 
   private def analyzeInContext(baseContext: Context, query: Select): Analysis = {
@@ -384,6 +383,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     }
 
     SoQLAnalysis(
+      baseContext.implicitTableRef,
       isGrouped,
       query.distinct,
       typecheckedSelections,
@@ -414,6 +414,9 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 case class JoinAnalysis[ColumnId, Type](fromTableName: ResourceName, joinNum: Int, analyses: Seq[SoQLAnalysis[ColumnId, Type]]) {
   val fromTable = TableRef.JoinPrimary(fromTableName, joinNum)
   val outputTable = TableRef.Join(joinNum)
+
+  SoQLAnalysis.assertSaneInputs(analyses, fromTable)
+
   override def toString: String = {
     val subAnasStr =
       if(analyses.isEmpty) {
@@ -447,7 +450,8 @@ case class JoinAnalysis[ColumnId, Type](fromTableName: ResourceName, joinNum: In
   * @param isGrouped true iff there is a group by or aggregation function applied. Can be derived from the selection
   *                  and the groupBy
   */
-case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
+case class SoQLAnalysis[ColumnId, Type](input: TableRef with TableRef.Implicit,
+                                        isGrouped: Boolean,
                                         distinct: Boolean,
                                         selection: OrderedMap[ColumnName, typed.CoreExpr[ColumnId, Type]],
                                         joins: Seq[typed.Join[ColumnId, Type]],
@@ -502,6 +506,17 @@ object SoQLAnalysis {
       join.from.analyses.foldLeft(f(f(state, join.from.fromTable), join.from.outputTable))(foldTableRefs(_, _)(f))
     }
 
+  def assertSaneInputs(analyses: Seq[SoQLAnalysis[_, _]], initial: TableRef with TableRef.PrimaryCandidate) {
+    var expected: TableRef with TableRef.Implicit = initial
+    for(analysis <- analyses) {
+      assert(analysis.input == expected)
+      expected = expected.next
+    }
+  }
+  def assertSaneInputs(analyses: NonEmptySeq[SoQLAnalysis[_, _]], initial: TableRef with TableRef.PrimaryCandidate) {
+    assertSaneInputs(analyses.seq, initial)
+  }
+
   def merge[T](andFunction: MonomorphicFunction[T], stages: NonEmptySeq[SoQLAnalysis[Qualified[ColumnName], T]]): NonEmptySeq[SoQLAnalysis[Qualified[ColumnName], T]] =
     new Merger(andFunction).merge(stages)
 }
@@ -511,12 +526,19 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   type Expr = typed.CoreExpr[Qualified[ColumnName], T]
 
   def merge(stages: NonEmptySeq[Analysis]): NonEmptySeq[Analysis] = {
-    stages.foldLeft1(NonEmptySeq(_)) { case (acc, nextStage) =>
-      tryMerge(acc.head , nextStage) match {
-        case Some(merged) => acc.copy(head = merged)
-        case None => acc.prepend(nextStage)
-      }
-    }.reverse
+    val result =
+      stages.foldLeft1(NonEmptySeq(_)) { case (acc, nextStage) =>
+        tryMerge(acc.head , nextStage) match {
+          case Some(merged) => acc.copy(head = merged)
+          case None => acc.prepend(nextStage)
+        }
+      }.reverse.mapAccum(stages.head.input) { (input, analysis) =>
+        (input.next, analysis.copy(input = input))
+      }._2
+
+    SoQLAnalysis.assertSaneInputs(result, stages.head.input.asInstanceOf[TableRef with TableRef.PrimaryCandidate])
+
+    result
   }
 
   // Currently a search on the second query prevents merging, as its meaning ought to
@@ -525,15 +547,16 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   // for a query that contains a search.
   private def tryMerge(a: Analysis, b: Analysis): Option[Analysis] = (a, b) match {
     case (a, _) if (hasWindowFunction(a)) => None
-    case (SoQLAnalysis(aIsGroup, false, aSelect, Nil, aWhere, aGroup, aHaving, aOrder, aLim, aOff, aSearch),
-          SoQLAnalysis(false,    false, bSelect, bJoins, None,   Nil,   None,    Nil,   bLim, bOff, None)) if
+    case (SoQLAnalysis(aInput, aIsGroup, false, aSelect, Nil, aWhere, aGroup, aHaving, aOrder, aLim, aOff, aSearch),
+          SoQLAnalysis(_,      false,    false, bSelect, bJoins, None,   Nil,   None,    Nil,   bLim, bOff, None)) if
           // Do not merge when the previous soql is grouped and the next soql has joins
           // select g, count(x) as cx group by g |> select g, cx, @b.a join @b on @b.g=g
           // Newly introduced columns from joins cannot be merged and brought in w/o grouping and aggregate functions.
           !(aIsGroup && bJoins.nonEmpty) => // TODO: relaxed requirement on aFrom = bFrom? is this ok?
       // we can merge a change of only selection and limit + offset onto anything
       val (newLim, newOff) = Merger.combineLimits(aLim, aOff, bLim, bOff)
-      Some(SoQLAnalysis(isGrouped = aIsGroup,
+      Some(SoQLAnalysis(input = aInput,
+                        isGrouped = aIsGroup,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
                         joins = replaceJoinOnRefs(aSelect, bJoins),
@@ -544,10 +567,11 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         limit = newLim,
                         offset = newOff,
                         search = aSearch))
-    case (SoQLAnalysis(false, false, aSelect, Nil, aWhere, Nil, None, aOrder, None, None, aSearch),
-          SoQLAnalysis(false, false, bSelect, bJoins, bWhere, Nil, None, bOrder, bLim, bOff, None)) =>
+    case (SoQLAnalysis(aInput, false, false, aSelect, Nil, aWhere, Nil, None, aOrder, None, None, aSearch),
+          SoQLAnalysis(_,      false, false, bSelect, bJoins, bWhere, Nil, None, bOrder, bLim, bOff, None)) =>
       // Can merge a change of filter or order only if no window was specified on the left
-      Some(SoQLAnalysis(isGrouped = false,
+      Some(SoQLAnalysis(input = aInput,
+                        isGrouped = false,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
                         joins = replaceJoinOnRefs(aSelect, bJoins),
@@ -558,10 +582,11 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         limit = bLim,
                         offset = bOff,
                         search = aSearch))
-    case (SoQLAnalysis(false, false, aSelect, Nil, aWhere, Nil,     None,    _,      None, None, aSearch),
-          SoQLAnalysis(true, false, bSelect, bJoins, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None)) =>
+    case (SoQLAnalysis(aInput, false, false, aSelect, Nil, aWhere, Nil,     None,    _,      None, None, aSearch),
+          SoQLAnalysis(_,      true, false, bSelect, bJoins, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None)) =>
       // an aggregate on a non-aggregate
-      Some(SoQLAnalysis(isGrouped = true,
+      Some(SoQLAnalysis(input = aInput,
+                        isGrouped = true,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
                         joins = replaceJoinOnRefs(aSelect, bJoins),
@@ -572,10 +597,11 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         limit = bLim,
                         offset = bOff,
                         search = aSearch))
-    case (SoQLAnalysis(true,  false, aSelect, Nil, aWhere, aGroup, aHaving, aOrder, None, None, aSearch),
-          SoQLAnalysis(false, false, bSelect, Nil, bWhere, Nil,      None,    bOrder, bLim, bOff, None)) =>
+    case (SoQLAnalysis(aInput, true,  false, aSelect, Nil, aWhere, aGroup, aHaving, aOrder, None, None, aSearch),
+          SoQLAnalysis(_,      false, false, bSelect, Nil, bWhere, Nil,      None,    bOrder, bLim, bOff, None)) =>
       // a non-aggregate on an aggregate -- merge the WHERE of the second with the HAVING of the first
-      Some(SoQLAnalysis(isGrouped = true,
+      Some(SoQLAnalysis(input = aInput,
+                        isGrouped = true,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
                         joins = Nil,

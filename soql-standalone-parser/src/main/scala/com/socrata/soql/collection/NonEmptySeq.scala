@@ -60,6 +60,11 @@ case class NonEmptySeq[+T](head: T, tail: Seq[T] = Seq.empty) {
     val (sLast, tail1) = tail.mapAccum(s1)(f)
     (sLast, NonEmptySeq(head1, tail1))
   }
+
+  def foreach[U](f: T => U) = {
+    f(head)
+    tail.foreach(f)
+  }
 }
 
 object NonEmptySeq {
