@@ -12,15 +12,15 @@ object TableRef {
   sealed trait PrimaryCandidate extends Implicit
 
   case object Primary extends TableRef with PrimaryCandidate {
-    override def toString = "<primary>"
+    override def toString = "primary"
   }
 
-  case class JoinPrimary(resourceName: ResourceName) extends TableRef with PrimaryCandidate {
-    override def toString = resourceName.name
+  case class JoinPrimary(resourceName: ResourceName, joinNumber: Int) extends TableRef with PrimaryCandidate {
+    override def toString = s"join[${resourceName.name}, $joinNumber]"
   }
 
   case object PreviousChainStep extends TableRef with Implicit {
-    override def toString = "<previous chain step>"
+    override def toString = "previous"
   }
 
   case class Join(subselect: Int) extends TableRef {

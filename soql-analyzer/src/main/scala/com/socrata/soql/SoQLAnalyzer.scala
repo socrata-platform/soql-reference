@@ -143,12 +143,12 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     log.debug("Partially analyzing join {} in {}", join : Any, universe)
     val analysis =
       join.from match {
-        case JoinTable(table, _, _) =>
+        case JoinTable(table, _, joinNum) =>
           NonEmptySeq(SoQLAnalysis(
                         false,
                         false,
                         contextToSimpleSelection(universe(table.resourceName),
-                                                 TableRef.JoinPrimary(table.resourceName)),
+                                                 TableRef.JoinPrimary(table.resourceName, joinNum)),
                         Nil,
                         None,
                         Nil,
@@ -157,8 +157,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                         None,
                         None,
                         None))
-        case JoinSelect(from, innerAlias, subselects, _, _) =>
-          val fromRef = TableRef.JoinPrimary(from.resourceName)
+        case JoinSelect(from, innerAlias, subselects, _, joinNum) =>
+          val fromRef = TableRef.JoinPrimary(from.resourceName, joinNum)
           analyzeChainInContext(
             Context(from.resourceName,
                     implicitTableRef = fromRef,
@@ -228,7 +228,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
           case TableRef.Primary =>
             Map(None -> baseContext.implicitSchema.keySet,
                 Some(baseContext.primaryDataset) -> baseContext.implicitSchema.keySet)
-          case TableRef.JoinPrimary(rn) =>
+          case TableRef.JoinPrimary(rn, _) =>
             Map(None -> baseContext.implicitSchema.keySet,
                 Some(rn) -> baseContext.implicitSchema.keySet)
           case TableRef.PreviousChainStep =>
@@ -262,7 +262,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                           tableRef match {
                             case ref@TableRef.Primary =>
                               contextToSimpleSelection(fullContext.universe(fullContext.primaryDataset), ref)
-                            case ref@TableRef.JoinPrimary(tn) =>
+                            case ref@TableRef.JoinPrimary(tn, _) =>
                               contextToSimpleSelection(fullContext.universe(tn), ref)
                             case ref@TableRef.Join(i) =>
                               analysisToSimpleSelection(paJoinsBySubselectId(i).analysis.last, ref)
@@ -299,7 +299,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                           tableRef match {
                             case ref@TableRef.Primary =>
                               contextToSimpleSelection(baseContext.universe(baseContext.primaryDataset), ref)
-                            case ref@TableRef.JoinPrimary(tn) =>
+                            case ref@TableRef.JoinPrimary(tn, _) =>
                               contextToSimpleSelection(baseContext.universe(tn), ref)
                             case ref@TableRef.Join(_) =>
                               // this shouldn't happen; the whole  point of starting from the base
@@ -316,17 +316,15 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
         val (analysis, augmentedTypecheckerCtx) =
           paJoin.originalJoin.from match {
             case JoinTable(from, alias, outputTableIdentifier) =>
-              val ref = TableRef.Join(outputTableIdentifier)
-              val a = JoinAnalysis[Qualified[ColumnName], Type](TableRef.JoinPrimary(from.resourceName), Nil, ref)
+              val a = JoinAnalysis[Qualified[ColumnName], Type](from.resourceName, outputTableIdentifier, Nil)
               val ctx =
-                typecheckerCtx.copy(schemas = typecheckerCtx.schemas + (alias.getOrElse(from).resourceName -> contextToSimpleSelection(fullContext.universe(from.resourceName), ref)))
+                typecheckerCtx.copy(schemas = typecheckerCtx.schemas + (alias.getOrElse(from).resourceName -> contextToSimpleSelection(fullContext.universe(from.resourceName), a.outputTable)))
 
               (a, ctx)
             case JoinSelect(from, _, _, alias, outputTableIdentifier) =>
-              val ref = TableRef.Join(outputTableIdentifier)
-              val a = JoinAnalysis[Qualified[ColumnName], Type](TableRef.JoinPrimary(from.resourceName), paJoin.analysis.seq, ref)
+              val a = JoinAnalysis[Qualified[ColumnName], Type](from.resourceName, outputTableIdentifier, paJoin.analysis.seq)
               val ctx =
-                typecheckerCtx.copy(schemas = typecheckerCtx.schemas + (alias.resourceName -> analysisToSimpleSelection(paJoin.analysis.last, ref)))
+                typecheckerCtx.copy(schemas = typecheckerCtx.schemas + (alias.resourceName -> analysisToSimpleSelection(paJoin.analysis.last, a.outputTable)))
 
               (a, ctx)
           }
@@ -409,7 +407,9 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   *   "join (select c.id from 4x4 as c) as a" =>
   *     JoinAnalysis(TableName(4x4, Some(c)), Some(SubAnalysis(List(_select_id_), a))) { aliasOpt = a }
   */
-case class JoinAnalysis[ColumnId, Type](fromTable: TableRef.JoinPrimary, analyses: Seq[SoQLAnalysis[ColumnId, Type]], outputTable: TableRef.Join) {
+case class JoinAnalysis[ColumnId, Type](fromTableName: ResourceName, joinNum: Int, analyses: Seq[SoQLAnalysis[ColumnId, Type]]) {
+  val fromTable = TableRef.JoinPrimary(fromTableName, joinNum)
+  val outputTable = TableRef.Join(joinNum)
   override def toString: String = {
     val subAnasStr =
       if(analyses.isEmpty) {
@@ -422,7 +422,7 @@ case class JoinAnalysis[ColumnId, Type](fromTable: TableRef.JoinPrimary, analyse
     s"$subAnasStr AS subselect_${outputTable.subselect}"
   }
 
-  def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId) = JoinAnalysis(fromTable, analyses.map(_.mapColumnIds(f)), outputTable)
+  def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId) = JoinAnalysis(fromTableName, joinNum, analyses.map(_.mapColumnIds(f)))
 }
 
 /**

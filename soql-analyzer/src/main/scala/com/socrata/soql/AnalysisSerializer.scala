@@ -252,19 +252,20 @@ class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: 
     }
 
     private def writeJoinAnalysis(ja: JoinAnalysis[Qualified[C], T]): Unit = {
-      val JoinAnalysis(TableRef.JoinPrimary(from), analyses, TableRef.Join(to)) = ja
+      val JoinAnalysis(from, joinNum, analyses) = ja
       out.writeUInt32NoTag(dictionary.registerResourceName(from))
+      out.writeUInt32NoTag(joinNum)
       writeSeq(analyses)(writeAnalysis)
-      out.writeUInt32NoTag(to)
     }
 
     private def writeTableRef(tn: TableRef) = {
       tn match {
         case TableRef.Primary =>
           out.writeRawByte(0)
-        case TableRef.JoinPrimary(name) =>
+        case TableRef.JoinPrimary(name, joinNum) =>
           out.writeRawByte(1)
           out.writeUInt32NoTag(dictionary.registerResourceName(name))
+          out.writeUInt32NoTag(joinNum)
         case TableRef.PreviousChainStep =>
           out.writeRawByte(2)
         case TableRef.Join(num) =>

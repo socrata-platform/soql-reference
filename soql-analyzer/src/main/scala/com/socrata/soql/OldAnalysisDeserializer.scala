@@ -288,28 +288,30 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     }
 
   def convertJoinAnalysis(state: ConvertState, ja: OldJoinAnalysis[OldQ, T]): (ConvertState, JoinAnalysis[Qualified[C], T]) = {
-    val newPrimary = TableRef.JoinPrimary(ResourceName(convertFourFourish(ja.fromTable.name)))
+    val newPrimary = ResourceName(convertFourFourish(ja.fromTable.name))
+    val newJoinNum = state.subselectCtr
     val tableAlias = ja.fromTable.alias.getOrElse(ja.fromTable.name)
     ja.subAnalysis match {
       case None =>
         // "join @foo [as bar]" type - add bar/foo to the state and continue
-        val resultRef = TableRef.Join(state.subselectCtr)
-        (ConvertState(state.prefixRefs + (Some(ja.fromTable.name) -> resultRef),
+        val analysis = JoinAnalysis[Qualified[C], T](newPrimary, newJoinNum, Nil)
+        (ConvertState(state.prefixRefs + (Some(ja.fromTable.name) -> analysis.outputTable),
                       state.aliases + (tableAlias -> ja.fromTable.name),
                       state.subselectCtr + 1),
-         JoinAnalysis(newPrimary, Nil, resultRef))
+         analysis)
       case Some(OldSubAnalysis(analyses, resultAlias)) =>
         // "join (select ...) as bar" type - recursively covert analysis
-        val (joinState, joinAnalysis) = convert(ConvertState(Map(None -> newPrimary,
-                                                                 Some(ja.fromTable.name) -> newPrimary),
+        val (joinState, joinAnalysis) = convert(ConvertState(Map(None -> TableRef.JoinPrimary(newPrimary, newJoinNum),
+                                                                 Some(ja.fromTable.name) -> TableRef.JoinPrimary(newPrimary, newJoinNum)),
                                                              Map(tableAlias -> ja.fromTable.name),
-                                                             state.subselectCtr),
+                                                             newJoinNum),
                                                 analyses)
+        val analysis = JoinAnalysis(newPrimary, newJoinNum, joinAnalysis.seq)
         val resultRef = TableRef.Join(joinState.subselectCtr)
         (ConvertState(state.prefixRefs + (Some(resultAlias) -> resultRef),
                       state.aliases,
                       joinState.subselectCtr + 1),
-         JoinAnalysis(newPrimary, joinAnalysis.seq, resultRef))
+         analysis)
     }
   }
 
