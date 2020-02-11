@@ -27,8 +27,8 @@ private trait DeserializationDictionary[C, T] {
 }
 
 object AnalysisDeserializer {
-  val TestVersionV10 = 10
-  val CurrentVersion = TestVersionV10
+  val PreviousVersion = 5
+  val CurrentVersion = 6
 }
 
 class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializer: String => T, functionMap: String => Function[T]) extends (InputStream => NonEmptySeq[SoQLAnalysis[Qualified[C], T]]) {
@@ -259,6 +259,8 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
   def apply(in: InputStream): NonEmptySeq[SoQLAnalysis[Qualified[C], T]] = {
     val cis = CodedInputStream.newInstance(in)
     cis.readInt32() match {
+      case v@PreviousVersion =>
+        new oldanalysis.AnalysisDeserializer(columnDeserializer, typeDeserializer, functionMap).apply(cis)
       case v@CurrentVersion =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
