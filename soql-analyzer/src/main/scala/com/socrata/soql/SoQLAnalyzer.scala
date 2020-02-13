@@ -421,6 +421,7 @@ sealed trait JoinAnalysis[ColumnId, Type] {
   val outputTable: TableRef
 
   def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId): JoinAnalysis[NewColumnId, Type]
+  def mapAccumColumnIds[State, NewColumnId](s: State)(f: (State, ColumnId) => (State, NewColumnId)): (State, JoinAnalysis[NewColumnId, Type])
 }
 
 case class JoinSelectAnalysis[ColumnId, Type](fromTableName: ResourceName, joinNum: Int, analyses: NonEmptySeq[SoQLAnalysis[ColumnId, Type]]) extends JoinAnalysis[ColumnId, Type] {
@@ -435,7 +436,13 @@ case class JoinSelectAnalysis[ColumnId, Type](fromTableName: ResourceName, joinN
     s"$subAnasStr AS ${outputTable}"
   }
 
-  def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId) = JoinSelectAnalysis(fromTableName, joinNum, analyses.map(_.mapColumnIds(f)))
+  def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId) =
+    JoinSelectAnalysis(fromTableName, joinNum, analyses.map(_.mapColumnIds(f)))
+
+  def mapAccumColumnIds[State, NewColumnId](s: State)(f: (State, ColumnId) => (State, NewColumnId)) = {
+    val (resultState, newAnalyses) = analyses.mapAccum(s) { (s1, a) => a.mapAccumColumnIds(s1)(f) }
+    (resultState, JoinSelectAnalysis(fromTableName, joinNum, newAnalyses))
+  }
 }
 
 case class JoinTableAnalysis[ColumnId, Type](fromTableName: ResourceName, joinNum: Int) extends JoinAnalysis[ColumnId, Type] {
@@ -446,7 +453,11 @@ case class JoinTableAnalysis[ColumnId, Type](fromTableName: ResourceName, joinNu
     s"@${fromTable.resourceName.name} AS ${fromTable}"
   }
 
-  def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId) = JoinTableAnalysis[NewColumnId, Type](fromTableName, joinNum)
+  def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId) =
+    JoinTableAnalysis(fromTableName, joinNum)
+
+  def mapAccumColumnIds[State, NewColumnId](s: State)(f: (State, ColumnId) => (State, NewColumnId)) =
+    (s, JoinTableAnalysis[NewColumnId, Type](fromTableName, joinNum))
 }
 
 /**
@@ -480,14 +491,24 @@ case class SoQLAnalysis[ColumnId, Type](input: TableRef with TableRef.Implicit,
                                         offset: Option[BigInt],
                                         search: Option[String]) {
   def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId): SoQLAnalysis[NewColumnId, Type] =
-    copy(
-      selection = selection.mapValues(_.mapColumnIds(f)),
-      joins = joins.map(_.mapColumnIds(f)),
-      where = where.map(_.mapColumnIds(f)),
-      groupBys = groupBys.map(_.mapColumnIds(f)),
-      having = having.map(_.mapColumnIds(f)),
-      orderBys = orderBys.map(_.mapColumnIds(f))
-    )
+    mapAccumColumnIds(()) { (_, cid) => ((), f(cid)) }._2
+
+  def mapAccumColumnIds[State, NewColumnId](s0: State)(f: (State, ColumnId) => (State, NewColumnId)): (State, SoQLAnalysis[NewColumnId, Type]) = {
+    val (s1, newSel) = selection.mapAccumValues(s0) { (s, v) => v.mapAccumColumnIds(s)(f) }
+    val (s2, newJoins) = joins.mapAccum(s1) { (s, v) => v.mapAccumColumnIds(s)(f) }
+    val (s3, newWhere) = where.mapAccum(s2) { (s, v) => v.mapAccumColumnIds(s)(f) }
+    val (s4, newGroupBys) = groupBys.mapAccum(s3) { (s, v) => v.mapAccumColumnIds(s)(f) }
+    val (s5, newHaving) = having.mapAccum(s4) { (s, v) => v.mapAccumColumnIds(s)(f) }
+    val (s6, newOrderBys) = orderBys.mapAccum(s5) { (s, v) => v.mapAccumColumnIds(s)(f) }
+    (s6, copy(
+       selection = newSel,
+       joins = newJoins,
+       where = newWhere,
+       groupBys = newGroupBys,
+       having = newHaving,
+       orderBys = newOrderBys
+     ))
+  }
 
   private def toString(from: Option[TableRef]): String = {
     val distinctStr = if (distinct) "DISTINCT " else ""

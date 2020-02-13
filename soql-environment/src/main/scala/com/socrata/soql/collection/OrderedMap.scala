@@ -4,6 +4,8 @@ import scala.collection.GenTraversableOnce
 import scala.collection.immutable.{HashMap, MapLike}
 import scala.collection.generic.{CanBuildFrom, ImmutableMapFactory}
 
+import SeqHelpers._
+
 class OrderedMap[A, +B](underlying: Map[A, (Int, B)], ordering: Vector[A]) extends Map[A,B] with MapLike[A, B, OrderedMap[A, B]] with Serializable {
 
   override def size: Int = underlying.size
@@ -15,6 +17,15 @@ class OrderedMap[A, +B](underlying: Map[A, (Int, B)], ordering: Vector[A]) exten
   }
 
   override def mapValues[C](f: B => C): OrderedMap[A, C] = new OrderedMap(underlying.mapValues { case (k,v) => (k,f(v)) }, ordering)
+
+  def mapAccumValues[S, C](s0: S)(f: (S, B) => (S, C)): (S, OrderedMap[A, C]) = {
+    val (s1, newUnderlying) = underlying.mapAccumValues(s0) { (s, kv) =>
+      val (k, v) = kv
+      val (r, newV) = f(s, v)
+      (r, (k, newV))
+    }
+    (s1, new OrderedMap(newUnderlying, ordering))
+  }
 
   def transformOrdered[C](f: (A, B) => C): OrderedMap[A, C] = new OrderedMap(underlying.transform { (k, kv) => (kv._1, f(k, kv._2)) }, ordering)
 

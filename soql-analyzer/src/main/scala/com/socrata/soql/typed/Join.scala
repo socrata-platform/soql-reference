@@ -13,6 +13,12 @@ sealed trait Join[ColumnId, Type] {
     typed.Join(typ, from.mapColumnIds(f), on.mapColumnIds(f))
   }
 
+  def mapAccumColumnIds[State,NewColumnId](s0: State)(f: (State, ColumnId) => (State, NewColumnId)): (State, Join[NewColumnId, Type]) = {
+    val (s1, newFrom) = from.mapAccumColumnIds(s0)(f)
+    val (s2, newOn) = on.mapAccumColumnIds(s1)(f)
+    (s2, typed.Join(typ, newFrom, newOn))
+  }
+
   override def toString: String =
     s"$typ $from ON $on"
 }

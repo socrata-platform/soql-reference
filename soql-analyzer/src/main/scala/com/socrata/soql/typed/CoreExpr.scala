@@ -2,6 +2,7 @@ package com.socrata.soql.typed
 
 import com.socrata.soql.ast.Expression
 import com.socrata.soql.environment.ResourceName
+import com.socrata.soql.collection.SeqHelpers._
 
 import scala.util.parsing.input.Position
 import scala.runtime.ScalaRunTime
@@ -18,6 +19,7 @@ sealed abstract class CoreExpr[+ColumnId, Type] extends Product with Typable[Typ
   override final lazy val hashCode = ScalaRunTime._hashCode(this)
 
   def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId): CoreExpr[NewColumnId, Type]
+  def mapAccumColumnIds[State, NewColumnId](s0: State)(f: (State, ColumnId) => (State, NewColumnId)): (State, CoreExpr[NewColumnId, Type])
 
   def at(newPosition: Position): CoreExpr[ColumnId, Type]
 }
@@ -29,6 +31,10 @@ object CoreExpr {
 case class ColumnRef[ColumnId, Type](column: ColumnId, typ: Type)(val position: Position) extends CoreExpr[ColumnId, Type] {
   protected def asString = column.toString
   def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId) = copy(column = f(column))
+  def mapAccumColumnIds[State, NewColumnId](s0: State)(f: (State, ColumnId) => (State, NewColumnId)) = {
+    val (s1, result) = f(s0, column)
+    (s1, copy(column = result))
+  }
   val size = 0
 
   def copy[C, T](column: C = column,
@@ -39,6 +45,7 @@ case class ColumnRef[ColumnId, Type](column: ColumnId, typ: Type)(val position: 
 
 sealed abstract class TypedLiteral[Type] extends CoreExpr[Nothing, Type] {
   def mapColumnIds[NewColumnId](f: Nothing => NewColumnId) = this
+  def mapAccumColumnIds[State, NewColumnId](s0: State)(f: (State, Nothing) => (State, NewColumnId)) = (s0, this)
 
   val size = 0
 }
@@ -83,6 +90,11 @@ case class FunctionCall[ColumnId, Type](function: MonomorphicFunction[Type], par
   def typ = function.result
 
   def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId) = copy(parameters = parameters.map(_.mapColumnIds(f)))
+  def mapAccumColumnIds[State, NewColumnId](s0: State)(f: (State, ColumnId) => (State, NewColumnId)) = {
+    val (sn, newParams) = parameters.mapAccum(s0) { (s, p) => p.mapAccumColumnIds(s)(f) }
+    (sn, copy(parameters = newParams))
+  }
+
   val size = parameters.foldLeft(1) { (acc, param) => acc + param.size }
 
   def copy[C, T](function: MonomorphicFunction[T] = function,
