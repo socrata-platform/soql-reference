@@ -10,7 +10,7 @@ import com.socrata.soql.environment.{ColumnName, Qualified, TableRef, ResourceNa
 import com.socrata.soql.functions.{Function, MonomorphicFunction}
 import com.socrata.soql.parsing.SoQLPosition
 import com.socrata.soql.typed._
-import com.socrata.soql.{SoQLAnalysis, JoinAnalysis}
+import com.socrata.soql.{SoQLAnalysis, JoinAnalysis, JoinTableAnalysis, JoinSelectAnalysis}
 import gnu.trove.map.hash.TIntObjectHashMap
 
 import scala.util.parsing.input.{NoPosition, Position}
@@ -300,7 +300,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     ja.subAnalysis match {
       case None =>
         // "join @foo [as bar]" type - add bar/foo to the state and continue
-        val analysis = JoinAnalysis[Qualified[C], T](newPrimary, newJoinNum, Nil)
+        val analysis = JoinTableAnalysis[Qualified[C], T](newPrimary, newJoinNum)
         (ConvertState(state.prefixRefs + (Some(ja.fromTable.name) -> analysis.outputTable),
                       state.aliases + (tableAlias -> ja.fromTable.name),
                       state.subselectCtr + 1,
@@ -316,7 +316,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
                                                              TableRef.JoinPrimary(newPrimary, newJoinNum),
                                                              0),
                                                 analyses)
-        val analysis = JoinAnalysis(newPrimary, newJoinNum, joinAnalysis.seq)
+        val analysis = JoinSelectAnalysis(newPrimary, newJoinNum, joinAnalysis)
         val resultRef = TableRef.Join(joinState.subselectCtr)
         (ConvertState(state.prefixRefs + (Some(resultAlias) -> resultRef),
                       state.aliases,

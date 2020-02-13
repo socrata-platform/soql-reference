@@ -245,9 +245,15 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       readImplicitTableRef(in.readRawByte())
 
     def readJoinAnalysis(): JoinAnalysis[Qualified[C], T] = {
-      JoinAnalysis(dictionary.resourceNames(in.readUInt32()),
-                   in.readUInt32(),
-                   readSeq { readAnalysis() })
+      in.readRawByte() match {
+        case 0 =>
+          JoinTableAnalysis(dictionary.resourceNames(in.readUInt32()),
+                            in.readUInt32())
+        case 1 =>
+          JoinSelectAnalysis(dictionary.resourceNames(in.readUInt32()),
+                             in.readUInt32(),
+                             readNonEmptySeq { readAnalysis() })
+      }
     }
 
     def readSearch(): Option[String] =
