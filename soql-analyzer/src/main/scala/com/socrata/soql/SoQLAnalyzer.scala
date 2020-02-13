@@ -491,7 +491,14 @@ case class SoQLAnalysis[ColumnId, Type](input: TableRef with TableRef.Implicit,
                                         offset: Option[BigInt],
                                         search: Option[String]) {
   def mapColumnIds[NewColumnId](f: ColumnId => NewColumnId): SoQLAnalysis[NewColumnId, Type] =
-    mapAccumColumnIds(()) { (_, cid) => ((), f(cid)) }._2
+    copy(
+      selection = selection.mapValues(_.mapColumnIds(f)),
+      joins = joins.map(_.mapColumnIds(f)),
+      where = where.map(_.mapColumnIds(f)),
+      groupBys = groupBys.map(_.mapColumnIds(f)),
+      having = having.map(_.mapColumnIds(f)),
+      orderBys = orderBys.map(_.mapColumnIds(f))
+    )
 
   def mapAccumColumnIds[State, NewColumnId](s0: State)(f: (State, ColumnId) => (State, NewColumnId)): (State, SoQLAnalysis[NewColumnId, Type]) = {
     val (s1, newSel) = selection.mapAccumValues(s0) { (s, v) => v.mapAccumColumnIds(s)(f) }
@@ -509,6 +516,23 @@ case class SoQLAnalysis[ColumnId, Type](input: TableRef with TableRef.Implicit,
        orderBys = newOrderBys
      ))
   }
+
+  def foldColumnIds[T](init: T)(f: (T, ColumnId) => T): T = {
+    // This isn't particularly efficient, as it builds a copy of the
+    // query, but queries aren't all _that_ big and this is obviously
+    // correct.
+    mapAccumColumnIds(init) { (s, cid) => (f(s, cid), cid) }._1
+  }
+
+  def foldTableRefs[A](seed: A)(f: (A, TableRef) => A): A =
+    joins.foldLeft(seed) { (state, join) =>
+      join.from match {
+        case jta: JoinTableAnalysis[_, _] =>
+          f(state, jta.fromTable)
+        case jsa: JoinSelectAnalysis[_, _] =>
+          jsa.analyses.iterator.foldLeft(f(f(state, join.from.fromTable), join.from.outputTable))(SoQLAnalysis.foldTableRefs(_, _)(f))
+      }
+    }
 
   private def toString(from: Option[TableRef]): String = {
     val distinctStr = if (distinct) "DISTINCT " else ""
@@ -533,11 +557,16 @@ case class SoQLAnalysis[ColumnId, Type](input: TableRef with TableRef.Implicit,
 }
 
 object SoQLAnalysis {
+  def allColumnRefs[ColumnId](analyses: NonEmptySeq[SoQLAnalysis[ColumnId, _]]): Set[ColumnId] =
+    analyses.iterator.foldLeft(Set.empty[ColumnId]) { (set, analysis) => analysis.foldColumnIds(set)(_ + _) }
+
   def allTableRefs(analyses: NonEmptySeq[SoQLAnalysis[_, _]]): Set[TableRef] =
     foldTableRefs(Set.empty[TableRef], analyses)(_ + _)
 
   private def foldTableRefs[A](seed: A, analyses: NonEmptySeq[SoQLAnalysis[_, _]])(f: (A, TableRef) => A): A =
-    analyses.tail.foldLeft(foldTableRefs(f(seed, TableRef.Primary), analyses.head)(f))(foldTableRefs(_, _)(f))
+    analyses.iterator.foldLeft(seed) { (s, a) =>
+      a.foldTableRefs(s)(f)
+    }
 
   private def foldTableRefs[A](seed: A, analysis: SoQLAnalysis[_, _])(f: (A, TableRef) => A): A =
     analysis.joins.foldLeft(seed) { (state, join) =>
