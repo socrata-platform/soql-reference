@@ -563,6 +563,16 @@ object SoQLAnalysis {
   def allTableRefs(analyses: NonEmptySeq[SoQLAnalysis[_, _]]): Set[TableRef] =
     foldTableRefs(Set.empty[TableRef], analyses)(_ + _)
 
+  def joinChains[ColumnId, Type](analyses: NonEmptySeq[SoQLAnalysis[ColumnId, Type]]): Map[Int, typed.Join[ColumnId, Type]] =
+    analyses.iterator.foldLeft(Map.empty[Int, typed.Join[ColumnId, Type]]) { (acc, analysis) =>
+      analysis.joins.foldLeft(acc) { (acc, join) =>
+        join.from match {
+          case JoinTableAnalysis(_, i) => acc + (i -> join)
+          case JoinSelectAnalysis(_, i, analyses) => acc ++ joinChains(analyses) + (i -> join)
+        }
+      }
+    }
+
   private def foldTableRefs[A](seed: A, analyses: NonEmptySeq[SoQLAnalysis[_, _]])(f: (A, TableRef) => A): A =
     analyses.iterator.foldLeft(seed) { (s, a) =>
       a.foldTableRefs(s)(f)
