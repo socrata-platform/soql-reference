@@ -448,7 +448,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     val joinSubSoql = s"($joinSubSoqlInner) as a1"
     val subAnalyses = parseSubselectJoin(joinSubSoql)
     val analysis = analyzer.analyzeUnchainedQuery(primary, s"select visits, @a1.name_first join $joinSubSoql on name_first = @a1.name_first")
-    val ctx = Options.withSchemas(ResourceName("a1") -> ((TableRef.Join(0), datasetCtxMap(ResourceName("aaaa-aaab")))))
+    val ctx = Options.withSchemas(ResourceName("a1") -> ((TableRef.SubselectJoin(TableRef.JoinPrimary(ResourceName("aaaa-aaab"), 0)), datasetCtxMap(ResourceName("aaaa-aaab")))))
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> typedExpression("visits", ctx),
       ColumnName("a1_name_first") -> typedExpression("@a1.name_first", ctx)
@@ -465,7 +465,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     val joinSubSoql = s"($joinSubSoqlInner) as a1"
     val subAnalyses = parseSubselectJoin(joinSubSoql)
     val analysis = analyzer.analyzeUnchainedQuery(primary, s"select visits, @a1.name_first join $joinSubSoql on name_first = @a1.name_first")
-    val ctx = Options.withSchemas(ResourceName("a1") -> ((TableRef.Join(0), datasetCtxMap(ResourceName("aaaa-aaab")))))
+    val ctx = Options.withSchemas(ResourceName("a1") -> ((TableRef.SubselectJoin(TableRef.JoinPrimary(ResourceName("aaaa-aaab"), 0)), datasetCtxMap(ResourceName("aaaa-aaab")))))
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> typedExpression("visits", ctx),
       ColumnName("a1_name_first") -> typedExpression("@a1.name_first", ctx)
@@ -494,7 +494,7 @@ SELECT visits, @x3.x
                                                                ColumnName("visits")),
                                                              TestNumber.t)(NoPosition),
                      ColumnName("x3_x") -> typed.ColumnRef(Qualified(
-                                                             TableRef.Join(1),
+                                                             TableRef.SubselectJoin(TableRef.JoinPrimary(ResourceName("aaaa-aaab"), 1)),
                                                              ColumnName("x")),
                                                            TestText.t)(NoPosition)),
                    Seq(typed.InnerJoin(
@@ -508,7 +508,7 @@ SELECT visits, @x3.x
                                false,
                                OrderedMap(
                                  ColumnName("x") -> typed.ColumnRef(Qualified(
-                                                                      TableRef.Join(0),
+                                                                      TableRef.SubselectJoin(TableRef.JoinPrimary(ResourceName("aaaa-aaax"), 0)),
                                                                       ColumnName("x")),
                                                                     TestText.t)(NoPosition),
                                  ColumnName("a1_name_first") -> typed.ColumnRef(Qualified(
@@ -542,7 +542,7 @@ SELECT visits, @x3.x
                                                           Map("a" -> TestText)),
                                                         Seq(
                                                           typed.ColumnRef(Qualified(
-                                                                            TableRef.Join(0),
+                                                                            TableRef.SubselectJoin(TableRef.JoinPrimary(ResourceName("aaaa-aaax"), 0)),
                                                                             ColumnName("x")),
                                                                           TestText.t)(NoPosition),
                                                           typed.ColumnRef(Qualified(
@@ -561,7 +561,7 @@ SELECT visits, @x3.x
                                               Map("a" -> TestText)),
                                             Seq(
                                               typed.ColumnRef(Qualified(
-                                                                TableRef.Join(1),
+                                                                TableRef.SubselectJoin(TableRef.JoinPrimary(ResourceName("aaaa-aaab"), 1)),
                                                                 ColumnName("x")),
                                                               TestText.t)(NoPosition),
                                               typed.ColumnRef(Qualified(
@@ -597,7 +597,7 @@ SELECT visits, @x2.zx
                                                                ColumnName("visits")),
                                                              TestNumber.t)(NoPosition),
                      ColumnName("x3_x") -> typed.ColumnRef(Qualified(
-                                                             TableRef.Join(1),
+                                                             TableRef.SubselectJoin(TableRef.JoinPrimary(ResourceName("aaaa-aaab"), 1)),
                                                              ColumnName("x")),
                                                            TestText.t)(NoPosition)),
                    Seq(typed.RightOuterJoin(
@@ -611,7 +611,7 @@ SELECT visits, @x2.zx
                                false,
                                OrderedMap(
                                  ColumnName("x") -> typed.ColumnRef(Qualified(
-                                                                      TableRef.Join(0),
+                                                                      TableRef.SubselectJoin(TableRef.JoinPrimary(ResourceName("aaaa-aaax"), 0)),
                                                                       ColumnName("x")),
                                                                     TestText.t)(NoPosition),
                                  ColumnName("a1_name_first") -> typed.ColumnRef(Qualified(
@@ -645,7 +645,7 @@ SELECT visits, @x2.zx
                                                           Map("a" -> TestText)),
                                                         Seq(
                                                           typed.ColumnRef(Qualified(
-                                                                            TableRef.Join(0),
+                                                                            TableRef.SubselectJoin(TableRef.JoinPrimary(ResourceName("aaaa-aaax"), 0)),
                                                                             ColumnName("x")),
                                                                           TestText.t)(NoPosition),
                                                           typed.ColumnRef(Qualified(
@@ -664,7 +664,7 @@ SELECT visits, @x2.zx
                                               Map("a" -> TestText)),
                                             Seq(
                                               typed.ColumnRef(Qualified(
-                                                                TableRef.Join(1),
+                                                                TableRef.SubselectJoin(TableRef.JoinPrimary(ResourceName("aaaa-aaab"), 1)),
                                                                 ColumnName("x")),
                                                               TestText.t)(NoPosition),
                                               typed.ColumnRef(Qualified(

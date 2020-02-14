@@ -218,7 +218,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       in.readRawByte() match {
         case i@(0|1|2) => readImplicitTableRef(i)
         case 3 =>
-          TableRef.Join(in.readUInt32())
+          TableRef.SubselectJoin(readJoinPrimary())
       }
 
     def readPrimaryTableRef(which: Byte): TableRef with TableRef.PrimaryCandidate =
@@ -226,9 +226,12 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         case 0 =>
           TableRef.Primary
         case 1 =>
-          TableRef.JoinPrimary(dictionary.resourceNames(in.readUInt32()),
-                               in.readUInt32())
+          readJoinPrimary()
       }
+
+    def readJoinPrimary(): TableRef.JoinPrimary =
+      TableRef.JoinPrimary(dictionary.resourceNames(in.readUInt32()),
+                           in.readUInt32())
 
     def readPrimaryTableRef(): TableRef with TableRef.PrimaryCandidate =
       readPrimaryTableRef(in.readRawByte())

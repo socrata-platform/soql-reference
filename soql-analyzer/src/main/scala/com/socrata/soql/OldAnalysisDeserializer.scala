@@ -309,15 +309,16 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
          analysis)
       case Some(OldSubAnalysis(analyses, resultAlias)) =>
         // "join (select ...) as bar" type - recursively covert analysis
-        val (joinState, joinAnalysis) = convert(ConvertState(Map(None -> TableRef.JoinPrimary(newPrimary, newJoinNum),
-                                                                 Some(ja.fromTable.name) -> TableRef.JoinPrimary(newPrimary, newJoinNum)),
+        val joinPrimary = TableRef.JoinPrimary(newPrimary, newJoinNum)
+        val (joinState, joinAnalysis) = convert(ConvertState(Map(None -> joinPrimary,
+                                                                 Some(ja.fromTable.name) -> joinPrimary),
                                                              Map(tableAlias -> ja.fromTable.name),
                                                              newJoinNum,
-                                                             TableRef.JoinPrimary(newPrimary, newJoinNum),
+                                                             joinPrimary,
                                                              0),
                                                 analyses)
         val analysis = JoinSelectAnalysis(newPrimary, newJoinNum, joinAnalysis)
-        val resultRef = TableRef.Join(joinState.subselectCtr)
+        val resultRef = TableRef.SubselectJoin(joinPrimary)
         (ConvertState(state.prefixRefs + (Some(resultAlias) -> resultRef),
                       state.aliases,
                       joinState.subselectCtr + 1,

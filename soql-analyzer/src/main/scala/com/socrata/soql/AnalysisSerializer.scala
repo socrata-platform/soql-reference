@@ -269,9 +269,9 @@ class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: 
       tn match {
         case ref: TableRef.Implicit =>
           writeImplicitTableRef(ref)
-        case TableRef.Join(num) =>
+        case TableRef.SubselectJoin(joinPrimary) =>
           out.writeRawByte(3)
-          out.writeUInt32NoTag(num)
+          writeJoinPrimary(joinPrimary)
       }
     }
 
@@ -279,11 +279,16 @@ class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: 
       tn match {
         case TableRef.Primary =>
           out.writeRawByte(0)
-        case TableRef.JoinPrimary(name, joinNum) =>
+        case jp: TableRef.JoinPrimary =>
           out.writeRawByte(1)
-          out.writeUInt32NoTag(dictionary.registerResourceName(name))
-          out.writeUInt32NoTag(joinNum)
+          writeJoinPrimary(jp)
       }
+    }
+
+    private def writeJoinPrimary(jp: TableRef.JoinPrimary): Unit = {
+      val TableRef.JoinPrimary(name, joinNum) = jp
+      out.writeUInt32NoTag(dictionary.registerResourceName(name))
+      out.writeUInt32NoTag(joinNum)
     }
 
     private def writeImplicitTableRef(tn: TableRef with TableRef.Implicit): Unit = {

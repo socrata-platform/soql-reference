@@ -185,7 +185,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                         case None => Map(from.resourceName -> fromRef)
                       }),
               subselects)
-          (analysis, TableRef.Join(joinNum))
+          (analysis, TableRef.SubselectJoin(fromRef))
       }
     PartiallyAnalyzedJoin(join, analysis, ref)
   }
@@ -271,8 +271,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                               contextToSimpleSelection(fullContext.universe(fullContext.primaryDataset), ref)
                             case ref@TableRef.JoinPrimary(tn, _) =>
                               contextToSimpleSelection(fullContext.universe(tn), ref)
-                            case ref@TableRef.Join(i) =>
-                              analysisToSimpleSelection(paJoinsBySubselectId(i).analysis.last, ref)
+                            case ref@TableRef.SubselectJoin(_) =>
+                              analysisToSimpleSelection(paJoinsBySubselectId(ref.joinNumber).analysis.last, ref)
                             case ref@TableRef.PreviousChainStep(_, _) =>
                               fullContext.implicitSchema.transformOrdered { (columnName, expr) =>
                                 typed.ColumnRef(Qualified(ref, columnName), expr.typ)(expr.position)
@@ -308,7 +308,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                               contextToSimpleSelection(baseContext.universe(baseContext.primaryDataset), ref)
                             case ref@TableRef.JoinPrimary(tn, _) =>
                               contextToSimpleSelection(baseContext.universe(tn), ref)
-                            case ref@TableRef.Join(_) =>
+                            case ref@TableRef.SubselectJoin(_) =>
                               // this shouldn't happen; the whole  point of starting from the base
                               // context is that a join _is't_ visible until after we've started
                               // typechecking its join condition.
@@ -426,7 +426,7 @@ sealed trait JoinAnalysis[ColumnId, Type] {
 
 case class JoinSelectAnalysis[ColumnId, Type](fromTableName: ResourceName, joinNum: Int, analyses: NonEmptySeq[SoQLAnalysis[ColumnId, Type]]) extends JoinAnalysis[ColumnId, Type] {
   val fromTable = TableRef.JoinPrimary(fromTableName, joinNum)
-  val outputTable = TableRef.Join(joinNum)
+  val outputTable = TableRef.SubselectJoin(fromTable)
 
   SoQLAnalysis.assertSaneInputs(analyses, fromTable)
 

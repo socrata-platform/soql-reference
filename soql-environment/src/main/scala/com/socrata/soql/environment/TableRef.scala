@@ -26,9 +26,11 @@ object TableRef {
   case class PreviousChainStep(root: TableRef with PrimaryCandidate, count: Int) extends TableRef with Implicit {
     override def toString = s"$root//$count"
     def next = PreviousChainStep(root, count + 1)
+    def previous = if(count == 1) root else PreviousChainStep(root, count - 1)
   }
 
-  case class Join(subselect: Int) extends TableRef {
-    override def toString = s"subselect[$subselect]"
+  case class SubselectJoin(root: JoinPrimary) extends TableRef {
+    override def toString = s"subselect[$joinNumber]"
+    val joinNumber = root.joinNumber
   }
 }
