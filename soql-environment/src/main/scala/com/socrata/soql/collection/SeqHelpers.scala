@@ -3,6 +3,14 @@ package com.socrata.soql.collection
 import scala.collection.immutable.ListMap
 
 object SeqHelpers {
+  implicit class addToOrderedMap[T, U](ts: TraversableOnce[(T, U)]) {
+    def toOrderedMap: OrderedMap[T, U] = {
+      val builder = OrderedMap.newBuilder[T, U]
+      ts.foreach { case (k, v) => builder += k -> v }
+      builder.result()
+    }
+  }
+
   implicit class addMapAccum[T](ts: Seq[T]) {
     def mapAccum[S, U](init: S)(f: (S, T) => (S, U)): (S, Seq[U]) = {
       val result = ts.companion.newBuilder[U]

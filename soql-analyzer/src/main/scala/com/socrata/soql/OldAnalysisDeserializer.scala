@@ -16,7 +16,7 @@ import gnu.trove.map.hash.TIntObjectHashMap
 import scala.util.parsing.input.{NoPosition, Position}
 
 private case class SimplePosition(line: Int, column: Int, lineContents: String) extends Position
-
+/*
 class UnknownAnalysisSerializationVersion(val version: Int) extends Exception("Unknown analysis serialization version " + version)
 
 private trait DeserializationDictionary[C, T] {
@@ -374,3 +374,4 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     convert(ConvertState(Map(None -> TableRef.Primary), Map.empty, 0, TableRef.Primary, 0), old)._2
   }
 }
+ */

@@ -13,20 +13,26 @@ import com.socrata.soql.collection.{OrderedMap, NonEmptySeq}
 import com.socrata.soql.environment.{ResourceName, ColumnName, Qualified, TableRef}
 import com.socrata.soql.ast.{JoinType, InnerJoinType, LeftOuterJoinType, RightOuterJoinType, FullOuterJoinType}
 
-private trait SerializationDictionary[C, T] {
+private trait SerializationDictionary[C, Q, T] {
   def registerType(typ: T): Int
   def registerString(s: String): Int
   def registerResourceName(rn: ResourceName): Int
-  def registerColumnName(cn: C): Int
-  def registerLabel(l: ColumnName): Int
+  def registerLabel(l: C): Int
+  def registerColumnName(cn: Q): Int
   def registerFunction(func: MonomorphicFunction[T]): Int
 }
 
-class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: T => String) extends ((OutputStream, NonEmptySeq[SoQLAnalysis[Qualified[C], T]]) => Unit) {
-  type Expr = CoreExpr[Qualified[C], T]
-  type Order = OrderBy[Qualified[C], T]
+trait SerializationPrimitives {
+  def writeInt(i: Int)
+  def writeString(s: String)
+  def writeTableRef(tr: TableRef)
+}
 
-  private class SerializationDictionaryImpl extends SerializationDictionary[C, T] {
+class AnalysisSerializer[C, Q, T](serializeColumnName: C => String, serializeQualified: Q => String, serializeType: T => String) extends ((OutputStream, NonEmptySeq[SoQLAnalysis[C, Q, T]]) => Unit) {
+  type Expr = CoreExpr[Q, T]
+  type Order = OrderBy[Q, T]
+
+  private class SerializationDictionaryImpl extends SerializationDictionary[C, Q, T] {
     private def makeMap[A] = new TObjectIntHashMap[A](Constants.DEFAULT_CAPACITY, Constants.DEFAULT_LOAD_FACTOR, -1)
     private def register[A](map: TObjectIntHashMap[A], a: A): Int = {
       val count = map.size()
@@ -39,8 +45,8 @@ class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: 
     val strings = makeMap[String] // This MUST be written BEFORE types, resourceNames, labels, columnNames and functions!
     val types = makeMap[T] // This MUST be written BEFORE functions!
     val resourceNames = makeMap[ResourceName]
-    val labels = makeMap[ColumnName]
-    val columnNames = makeMap[C]
+    val labels = makeMap[C]
+    val columnNames = makeMap[Q]
     val functions = makeMap[MonomorphicFunction[T]]
 
     def registerString(s: String): Int =
@@ -66,20 +72,20 @@ class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: 
           id
       }
 
-    def registerLabel(l: ColumnName): Int =
+    def registerLabel(l: C): Int =
       labels.get(l) match {
         case -1 =>
-          val id = registerString(l.name)
+          val id = registerString(serializeColumnName(l))
           labels.put(l, id)
           id
         case id =>
           id
       }
 
-    def registerColumnName(col: C): Int =
+    def registerColumnName(col: Q): Int =
       columnNames.get(col) match {
         case -1 =>
-          val id = registerString(serializeColumnName(col))
+          val id = registerString(serializeQualified(col))
           columnNames.put(col, id)
           id
         case id =>
@@ -157,7 +163,7 @@ class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: 
     }
   }
 
-  private class Serializer(out: CodedOutputStream, dictionary: SerializationDictionary[C, T]) {
+  private class Serializer(out: CodedOutputStream, dictionary: SerializationDictionary[C, Q, T]) {
     import dictionary._
 
     private def writePosition(pos: Position) {
@@ -183,18 +189,12 @@ class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: 
       }
     }
 
-    private def writeColumnName(col: Qualified[C]) {
-      val Qualified(qualifier, colName) = col
-      writeTableRef(qualifier)
-      out.writeUInt32NoTag(dictionary.registerColumnName(colName))
-    }
-
     private def writeExpr(e: Expr) {
       writePosition(e.position)
       e match {
         case ColumnRef(col, typ) =>
           out.writeRawByte(1)
-          writeColumnName(col)
+          out.writeUInt32NoTag(dictionary.registerColumnName(col))
           out.writeUInt32NoTag(registerType(typ))
         case StringLiteral(value, typ) =>
           out.writeRawByte(2)
@@ -225,7 +225,7 @@ class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: 
     private def writeDistinct(distinct: Boolean) =
       out.writeBoolNoTag(distinct)
 
-    private def writeSelection(selection: OrderedMap[ColumnName, Expr]) {
+    private def writeSelection(selection: Iterable[(C, Expr)]) {
       writeSeq(selection) { case (col, expr) =>
         out.writeUInt32NoTag(dictionary.registerLabel(col))
         writeExpr(expr)
@@ -243,7 +243,7 @@ class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: 
       out.writeRawByte(n)
     }
 
-    private def writeJoins(joins: Seq[Join[Qualified[C], T]]) {
+    private def writeJoins(joins: Seq[Join[C, Q, T]]) {
       writeSeq(joins) { join =>
         writeJoinType(join.typ)
         writeJoinAnalysis(join.from)
@@ -251,7 +251,7 @@ class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: 
       }
     }
 
-    private def writeJoinAnalysis(ja: JoinAnalysis[Qualified[C], T]): Unit = {
+    private def writeJoinAnalysis(ja: JoinAnalysis[C, Q, T]): Unit = {
       ja match {
         case JoinTableAnalysis(from, joinNum) =>
           out.writeRawByte(0)
@@ -347,7 +347,7 @@ class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: 
         out.writeUInt32NoTag(registerString(s))
       }
 
-    def writeAnalysis(analysis: SoQLAnalysis[Qualified[C], T]) {
+    def writeAnalysis(analysis: SoQLAnalysis[C, Q, T]) {
       val SoQLAnalysis(input,
                        isGrouped,
                        distinct,
@@ -374,12 +374,12 @@ class AnalysisSerializer[C, T](serializeColumnName: C => String, serializeType: 
       writeSearch(search)
     }
 
-    def write(analyses: NonEmptySeq[SoQLAnalysis[Qualified[C], T]]): Unit = {
+    def write(analyses: NonEmptySeq[SoQLAnalysis[C, Q, T]]): Unit = {
       writeSeq(analyses.seq)(writeAnalysis)
     }
   }
 
-  def apply(outputStream: OutputStream, analyses: NonEmptySeq[SoQLAnalysis[Qualified[C], T]]) {
+  def apply(outputStream: OutputStream, analyses: NonEmptySeq[SoQLAnalysis[C, Q, T]]) {
     val dictionary = new SerializationDictionaryImpl
     val postDictionaryData = new ByteArrayOutputStream
     val out = CodedOutputStream.newInstance(postDictionaryData)

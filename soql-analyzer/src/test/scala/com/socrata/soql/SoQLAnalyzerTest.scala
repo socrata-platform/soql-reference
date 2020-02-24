@@ -356,9 +356,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> visit,
       ColumnName("aaaa_aaaa_name_last") -> lastName
     ))
-    analysis.joins must equal (List(typed.InnerJoin(JoinTableAnalysis(joinTable, 0),
-                                                    typedExpression("name_last = @aaaa-aaaa.name_last",
-                                                                    Options.withSchemas(joinTable -> ((TableRef.JoinPrimary(joinTable, 0), datasetCtxMap(joinTable))))))))
+    analysis.joins must equal (List(typed.Join.inner(JoinTableAnalysis(joinTable, 0),
+                                                     typedExpression("name_last = @aaaa-aaaa.name_last",
+                                                                     Options.withSchemas(joinTable -> ((TableRef.JoinPrimary(joinTable, 0), datasetCtxMap(joinTable))))))))
   }
 
   test("join with table alias") {
@@ -368,9 +368,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("a1_name_last") -> typedExpression("@aaaa-aaaa.name_last", Options.withSchemas(joinTable -> ((TableRef.JoinPrimary(joinTable, 0), datasetCtxMap(joinTable)))))
     ))
-    analysis.joins must equal (List(typed.InnerJoin(JoinTableAnalysis(joinTable, 0),
-                                                    typedExpression("visits > 10",
-                                                                    Options.withSchemas(joinTable -> ((TableRef.JoinPrimary(joinTable, 0), datasetCtxMap(joinTable))))))))
+    analysis.joins must equal (List(typed.Join.inner(JoinTableAnalysis(joinTable, 0),
+                                                     typedExpression("visits > 10",
+                                                                     Options.withSchemas(joinTable -> ((TableRef.JoinPrimary(joinTable, 0), datasetCtxMap(joinTable))))))))
   }
 
   test("join toString") {
@@ -438,7 +438,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     parsedAgain.toString must equal(expected)
   }
 
-  def parseSubselectJoin(joinSoql: String): NonEmptySeq[SoQLAnalysis[Qualified[ColumnName], TestType]] = {
+  def parseSubselectJoin(joinSoql: String): NonEmptySeq[SoQLAnalysis[ColumnName, Qualified[ColumnName], TestType]] = {
     val parsed = new StandaloneParser().parseSubselectJoinSource(joinSoql)
     analyzer.analyze(parsed.fromTable.resourceName, parsed.subSelect, TableRef.JoinPrimary(parsed.fromTable.resourceName, 0))
   }
@@ -454,8 +454,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("a1_name_first") -> typedExpression("@a1.name_first", ctx)
     ))
 
-    val expected = List(typed.InnerJoin(JoinSelectAnalysis(ResourceName("aaaa-aaab"), 0, subAnalyses),
-                                        typedExpression("name_first = @a1.name_first", ctx)))
+    val expected = List(typed.Join.inner(JoinSelectAnalysis(ResourceName("aaaa-aaab"), 0, subAnalyses),
+                                         typedExpression("name_first = @a1.name_first", ctx)))
 
     analysis.joins must equal (expected)
   }
@@ -470,8 +470,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> typedExpression("visits", ctx),
       ColumnName("a1_name_first") -> typedExpression("@a1.name_first", ctx)
     ))
-    val expected = List(typed.InnerJoin(JoinSelectAnalysis(ResourceName("aaaa-aaab"), 0, subAnalyses),
-                                        typedExpression("name_first = @a1.name_first", ctx)))
+    val expected = List(typed.Join.inner(JoinSelectAnalysis(ResourceName("aaaa-aaab"), 0, subAnalyses),
+                                         typedExpression("name_first = @a1.name_first", ctx)))
 
     analysis.joins must equal (expected)
   }
@@ -497,7 +497,7 @@ SELECT visits, @x3.x
                                                              TableRef.SubselectJoin(TableRef.JoinPrimary(ResourceName("aaaa-aaab"), 1)),
                                                              ColumnName("x")),
                                                            TestText.t)(NoPosition)),
-                   Seq(typed.InnerJoin(
+                   Seq(typed.Join.inner(
                          JoinSelectAnalysis(
                            ResourceName("aaaa-aaab"),
                            1,
@@ -515,7 +515,7 @@ SELECT visits, @x3.x
                                                                                   TableRef.JoinPrimary(ResourceName("aaaa-aaab"), 1),
                                                                                   ColumnName("name_first")),
                                                                                 TestText.t)(NoPosition)),
-                               Seq(typed.InnerJoin(
+                               Seq(typed.Join.inner(
                                      JoinSelectAnalysis(
                                        ResourceName("aaaa-aaax"),
                                        0,
@@ -600,7 +600,7 @@ SELECT visits, @x2.zx
                                                              TableRef.SubselectJoin(TableRef.JoinPrimary(ResourceName("aaaa-aaab"), 1)),
                                                              ColumnName("x")),
                                                            TestText.t)(NoPosition)),
-                   Seq(typed.RightOuterJoin(
+                   Seq(typed.Join.rightOuter(
                          JoinSelectAnalysis(
                            ResourceName("aaaa-aaab"),
                            1,
@@ -618,7 +618,7 @@ SELECT visits, @x2.zx
                                                                                   TableRef.JoinPrimary(ResourceName("aaaa-aaab"), 1),
                                                                                   ColumnName("name_first")),
                                                                                 TestText.t)(NoPosition)),
-                               Seq(typed.LeftOuterJoin(
+                               Seq(typed.Join.leftOuter(
                                      JoinSelectAnalysis(
                                        ResourceName("aaaa-aaax"),
                                        0,
