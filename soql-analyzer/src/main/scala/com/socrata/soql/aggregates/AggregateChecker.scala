@@ -2,10 +2,10 @@ package com.socrata.soql.aggregates
 
 import com.socrata.soql.typed._
 import com.socrata.soql.exceptions.{AggregateInUngroupedContext, ColumnNotInGroupBys}
-import com.socrata.soql.environment.ColumnName
+import com.socrata.soql.environment.{ColumnName, Qualified}
 
 class AggregateChecker[Type] {
-  type Expr = CoreExpr[ColumnName, Type]
+  type Expr = CoreExpr[Qualified[ColumnName], Type]
 
   /** Check that aggregates and column-names are used as appropriate for
     * the query.
@@ -74,8 +74,8 @@ class AggregateChecker[Type] {
           params.foreach(checkPostgroupExpression(clause, _, groupExpressions))
         case _: TypedLiteral[_] =>
           // ok, this is always good
-        case col: ColumnRef[ColumnName, _] =>
-          throw ColumnNotInGroupBys(col.column, col.position)
+        case col: ColumnRef[Qualified[ColumnName], _] =>
+          throw ColumnNotInGroupBys(col.column.columnName, col.position)
       }
     }
   }

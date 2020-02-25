@@ -1,48 +1,49 @@
 package com.socrata.soql.typechecker
 
+import scala.util.parsing.input.Position
+
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions._
 import com.socrata.soql.typed
-import com.socrata.soql.environment.{ColumnName, DatasetContext, FunctionName, TableName}
+import com.socrata.soql.environment.{ColumnName, Qualified, DatasetContext, FunctionName, ResourceName}
 
-class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: Map[String, DatasetContext[Type]]) extends ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]]) => typed.CoreExpr[ColumnName, Type]) { self =>
+object Typechecker {
+  type Schema[Type] = Map[ColumnName, typed.CoreExpr[Qualified[ColumnName], Type]]
+  case class Ctx[Type](primarySchema: Schema[Type], schemas: Map[ResourceName, Schema[Type]])
+}
+
+class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type]) extends ((Expression, Typechecker.Ctx[Type]) => typed.CoreExpr[Qualified[ColumnName], Type]) {
   import typeInfo._
 
-  type Expr = typed.CoreExpr[ColumnName, Type]
+  type Expr = typed.CoreExpr[Qualified[ColumnName], Type]
+  type Ctx = Typechecker.Ctx[Type]
+  type Schema = Typechecker.Schema[Type]
 
   val functionCallTypechecker = new FunctionCallTypechecker(typeInfo, functionInfo)
 
-  def apply(e: Expression, aliases: Map[ColumnName, Expr]) = typecheck(e, aliases) match {
-    case Left(tm) => throw tm
-    case Right(es) => disambiguate(es)
-  }
+  def apply(e: Expression, ctx: Ctx): Expr =
+    typecheck(e, ctx) match {
+      case Left(tm) => throw tm
+      case Right(es) => disambiguate(es)
+    }
 
   // never returns an empty value
-  private def typecheck(e: Expression, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = e match {
+  private def typecheck(e: Expression, ctx: Ctx): Either[TypecheckException, Seq[Expr]] = e match {
     case r@ColumnOrAliasRef(qual, col) =>
-      aliases.get(col) match {
-        case Some(typed.ColumnRef(aQual, name, typ)) if name == col && qual == aQual =>
-          // special case: if this is an alias that refers directly to itself, position the typed tree _here_
-          // (as if there were no alias at all) to make error messages that much clearer.  This will only catch
-          // semi-implicitly assigned aliases, so it's better anyway.
-          Right(Seq(typed.ColumnRef(aQual, col, typ)(r.position)))
-        case Some(typed.ColumnRef(aQual, name, typ)) if name == col && qual != aQual =>
-          typecheck(e, Map.empty) // TODO: Revisit aliases from multiple schemas
-        case Some(tree) =>
-          Right(Seq(tree))
+      qual match {
         case None =>
-          val theQual = qual.getOrElse(TableName.PrimaryTable.qualifier)
-          val columns = ctx.getOrElse(theQual, throw NoSuchTable(theQual, r.position)).schema
-          columns.get(col) match {
-            case Some(typ) =>
-              Right(Seq(typed.ColumnRef(qual, col, typ)(r.position)))
+          typecheckColRef(col, r.position, ctx.primarySchema, ctx)
+        case Some(tableName) =>
+          ctx.schemas.get(tableName.resourceName) match {
+            case Some(schema) =>
+              typecheckColRef(col, r.position, schema, ctx)
             case None =>
-              throw NoSuchColumn(col, r.position)
+              Left(NoSuchTable(tableName.resourceName, r.position))
           }
       }
     case FunctionCall(SpecialFunctions.Parens, params) =>
       assert(params.length == 1, "Parens with more than one parameter?!")
-      typecheck(params(0), aliases)
+      typecheck(params(0), ctx)
     case fc@FunctionCall(SpecialFunctions.Subscript, Seq(base, StringLiteral(prop))) =>
       // Subscripting special case.  Some types have "subfields" that
       // can be accessed with dot notation.  The parser turns this
@@ -50,14 +51,14 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       // Here's where we find that that corresponds to a field access.
       // If we don't find anything that works, we pretend that we
       // never did this and just typecheck it as a subscript access.
-      typecheck(base, aliases).right.flatMap { basePossibilities =>
+      typecheck(base, ctx).right.flatMap { basePossibilities =>
         val asFieldAccesses =
           basePossibilities.flatMap { basePossibility =>
             val typ = basePossibility.typ
             val fnName = SpecialFunctions.Field(typeNameFor(typ), prop)
-            typecheckFuncall(fc.copy(functionName = fnName, parameters = Seq(base))(fc.position, fc.functionNamePosition), aliases).right.getOrElse(Nil)
+            typecheckFuncall(fc.copy(functionName = fnName, parameters = Seq(base))(fc.position, fc.functionNamePosition), ctx).right.getOrElse(Nil)
           }
-        val rawSubscript = typecheckFuncall(fc, aliases)
+        val rawSubscript = typecheckFuncall(fc, ctx)
         if(asFieldAccesses.isEmpty) {
           rawSubscript
         } else {
@@ -68,7 +69,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
         }
       }
     case fc@FunctionCall(_, _) =>
-      typecheckFuncall(fc, aliases)
+      typecheckFuncall(fc, ctx)
     case bl@BooleanLiteral(b) =>
       Right(booleanLiteralExpr(b, bl.position))
     case sl@StringLiteral(s) =>
@@ -79,10 +80,18 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       Right(nullLiteralExpr(nl.position))
   }
 
-  def typecheckFuncall(fc: FunctionCall, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = {
+  def typecheckColRef(col: ColumnName, position: Position, schema: Schema, ctx: Ctx): Either[TypecheckException, Seq[Expr]] =
+    schema.get(col) match {
+      case Some(pretyped) =>
+        Right(Seq(pretyped.at(position)))
+      case None =>
+        Left(NoSuchColumn(col, position))
+    }
+
+  def typecheckFuncall(fc: FunctionCall, ctx: Ctx): Either[TypecheckException, Seq[Expr]] = {
     val FunctionCall(name, parameters) = fc
 
-    val typedParameters = parameters.map(typecheck(_, aliases)).map {
+    val typedParameters = parameters.map(typecheck(_, ctx)).map {
       case Left(tm) => return Left(tm)
       case Right(es) => es
     }

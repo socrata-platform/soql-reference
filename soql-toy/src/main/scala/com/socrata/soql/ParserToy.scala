@@ -6,6 +6,7 @@ import com.ibm.icu.util.ULocale
 
 import com.socrata.soql.exceptions.SoQLException
 import com.socrata.soql.parsing.Parser
+import com.socrata.soql.toy.Compat
 
 object ParserToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -27,7 +28,7 @@ object ParserToy extends (Array[String] => Unit) {
     menu()
     val p = new Parser
     while(true) {
-      val cmd = readLine("> ")
+      val cmd = Compat.readLine("> ")
       if(cmd == null) return;
       breakable {
         val f = cmd match {
@@ -41,7 +42,7 @@ object ParserToy extends (Array[String] => Unit) {
           case "?" => menu(); break(); sys.error("can't get here")
           case other => println("bad command"); break(); sys.error("can't get here")
         }
-        val input = readLine("... ")
+        val input = Compat.readLine("... ")
         if(input == null) return;
         try {
           println(f(input))

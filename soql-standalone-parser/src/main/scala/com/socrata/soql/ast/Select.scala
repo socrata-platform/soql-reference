@@ -1,15 +1,16 @@
 package com.socrata.soql.ast
 
 import scala.util.parsing.input.{NoPosition, Position}
+import scala.runtime.ScalaRunTime
 import com.socrata.soql.environment._
 import Select._
-import com.socrata.NonEmptySeq
+import com.socrata.soql.collection.NonEmptySeq
 
-/**
-  * A SubSelect represents (potentially chained) soql that is required to have an alias
-  * (because subqueries need aliases)
-  */
-case class SubSelect(selects: NonEmptySeq[Select], alias: String)
+sealed trait JoinSource {
+  def allTableReferences: Set[ResourceName]
+  def name: TableName
+  def outputTableIdentifier: Int
+}
 
 /**
   * All joins must select from another table. A join may also join on sub-select. A join on a sub-select requires an
@@ -22,22 +23,31 @@ case class SubSelect(selects: NonEmptySeq[Select], alias: String)
   *   "join (select c.id from 4x4 as c) as a" =>
   *     JoinSelect(TableName(4x4, Some(c)), Some(SubSelect(List(_select_id_), a))) { aliasOpt = a }
   */
-case class JoinSelect(fromTable: TableName, subSelect: Option[SubSelect]) {
-  // The overall alias for the join select, which is the alias for the subSelect, if defined.
-  // Otherwise, it is the alias for the TableName, if defined.
-  val alias: Option[String] =  subSelect.map(_.alias).orElse(fromTable.alias)
-  def selects: Seq[Select] = subSelect.map(_.selects.seq).getOrElse(Seq.empty)
+case class JoinTable(fromTable: TableName, alias: Option[TableName], outputTableIdentifier: Int) extends JoinSource {
+  override def toString =
+    if(AST.pretty) {
+      fromTable.toString + alias.fold("") { case TableName(rn) => " AS " + rn.name }
+    } else {
+      ScalaRunTime._toString(this)
+    }
 
-  override def toString: String = {
-    val (subSelectStr, aliasStrOpt) = subSelect.map {
-      case SubSelect(NonEmptySeq(h, tail), subAlias) =>
-        val selectWithFromStr = h.toStringWithFrom(fromTable)
-        val selectStr = (selectWithFromStr +: tail.map(_.toString)).mkString(" |> ")
-        (s"($selectStr)", Some(subAlias))
-    }.getOrElse((fromTable.toString, None))
+  def allTableReferences = Set(fromTable.resourceName)
+  def name = alias.getOrElse(fromTable)
+}
 
-    List(Some(subSelectStr), itrToString("AS", aliasStrOpt.map(TableName.removeValidPrefix))).flatString
-  }
+case class JoinSelect(fromTable: TableName, innerAlias: Option[TableName], subSelect: NonEmptySeq[Select], alias: TableName, outputTableIdentifier: Int) extends JoinSource {
+  override def toString: String =
+    if(AST.pretty) {
+      val NonEmptySeq(h, tail) = subSelect
+      val selectWithFromStr = h.toStringWithFrom(AliasedTable(fromTable, innerAlias))
+      val selectStr = NonEmptySeq(selectWithFromStr, tail).mkString(" |> ")
+      s"($selectStr) AS ${alias.resourceName.name}"
+    } else {
+      ScalaRunTime._toString(this)
+    }
+
+  def allTableReferences = subSelect.iterator.map(_.allTableReferences).foldLeft(Set(fromTable.resourceName))(_ union _)
+  def name = alias
 }
 
 object Select {
@@ -83,7 +93,7 @@ case class Select(
   offset: Option[BigInt],
   search: Option[String]) {
 
-  private def toString(from: Option[TableName]): String = {
+  private def toString(from: Option[AliasedTable]): String = {
     if(AST.pretty) {
       val distinctStr = if (distinct) "DISTINCT " else ""
       val selectStr = Some(s"SELECT $distinctStr$selection")
@@ -104,7 +114,9 @@ case class Select(
     }
   }
 
-  def toStringWithFrom(fromTable: TableName): String = toString(Some(fromTable))
+  def allTableReferences: Set[ResourceName] = joins.iterator.map(_.allTableReferences).foldLeft(Set.empty[ResourceName])(_ union _)
+
+  def toStringWithFrom(fromTable: AliasedTable): String = toString(Some(fromTable))
 
   override def toString: String = toString(None)
 }
@@ -121,8 +133,7 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[
       def star(s: StarSelection, token: String) = {
         val sb = new StringBuilder()
         s.qualifier.foreach { x =>
-          sb.append(TableName.withSoqlPrefix(x))
-          sb.append(TableName.Field)
+          sb.append(x).append('.')
         }
         sb.append(token)
         if(s.exceptions.nonEmpty) {
@@ -130,7 +141,7 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[
         }
         sb.toString
       }
-      (allSystemExcept.map(star(_, ":*")) ++ allUserExcept.map(star(_, "*")) ++ expressions.map(_.toString)).mkString(", ")
+      (allSystemExcept.map(star(_, ":*")) ++ allUserExcept.map(star(_, "*")) ++ expressions).mkString(", ")
     } else {
       AST.unpretty(this)
     }
@@ -139,7 +150,7 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[
   def isSimple = allSystemExcept.isEmpty && allUserExcept.isEmpty && expressions.isEmpty
 }
 
-case class StarSelection(qualifier: Option[String], exceptions: Seq[(ColumnName, Position)]) {
+case class StarSelection(qualifier: Option[TableName], exceptions: Seq[(ColumnName, Position)]) {
   var starPosition: Position = NoPosition
   def positionedAt(p: Position): this.type = {
     starPosition = p

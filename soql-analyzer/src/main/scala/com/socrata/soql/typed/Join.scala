@@ -1,70 +1,31 @@
 package com.socrata.soql.typed
 
-import com.socrata.NonEmptySeq
+import com.socrata.soql.collection.NonEmptySeq
 import com.socrata.soql._
 import com.socrata.soql.ast._
 
-sealed trait Join[ColumnId, Type] {
-  val from: JoinAnalysis[ColumnId, Type]
-  val on: CoreExpr[ColumnId, Type]
-  val typ: JoinType
-
-  def useTableQualifier[ColumnId](id: ColumnId, qual: Qualifier) = (id, qual.orElse(Some(from.fromTable.name)))
-
-  def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): Join[NewColumnId, Type] = {
-    def fWithTable(id: ColumnId, qual: Qualifier) = f(id, qual.orElse(Some(from.fromTable.name)))
-
-    val mappedSub = from.subAnalysis.map {
-      case SubAnalysis(NonEmptySeq(head, tail), alias) =>
-        val newAnas = NonEmptySeq(head.mapColumnIds(fWithTable), tail.map(_.mapColumnIds(f)))
-        SubAnalysis(newAnas, alias)
-    }
-
-    typed.Join(typ, JoinAnalysis(from.fromTable, mappedSub), on.mapColumnIds(f))
+case class Join[ColumnId, QualifiedColumnId, Type](typ: JoinType, from: JoinAnalysis[ColumnId, QualifiedColumnId, Type], on: CoreExpr[QualifiedColumnId, Type]) {
+  def mapColumnIds[NewColumnId, NewQualifiedColumnId](f: ColumnIdTransform[ColumnId, QualifiedColumnId, NewColumnId, NewQualifiedColumnId]): Join[NewColumnId, NewQualifiedColumnId, Type] = {
+    typed.Join(typ, from.mapColumnIds(f), on.mapColumnIds(f.mapQualifiedColumnId))
   }
 
-  override def toString: String = {
+  def mapAccumColumnIds[State, NewColumnId, NewQualifiedColumnId](s0: State)(f: ColumnIdTransformAccum[State, ColumnId, QualifiedColumnId, NewColumnId, NewQualifiedColumnId]): (State, Join[NewColumnId, NewQualifiedColumnId, Type]) = {
+    val (s1, newFrom) = from.mapAccumColumnIds(s0)(f)
+    val (s2, newOn) = on.mapAccumColumnIds(s1)(f.mapQualifiedColumnId)
+    (s2, typed.Join(typ, newFrom, newOn))
+  }
+
+  override def toString: String =
     s"$typ $from ON $on"
-  }
-
-  // joins are simple if there is no subAnalysis, e.g. "join @aaaa-aaaa[ as a]"
-  def isSimple: Boolean = from.subAnalysis.isEmpty
-
-}
-
-case class InnerJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
-  val typ: JoinType = InnerJoinType
-}
-
-case class LeftOuterJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
-  val typ: JoinType = LeftOuterJoinType
-}
-
-case class RightOuterJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
-  val typ: JoinType = RightOuterJoinType
-}
-
-case class FullOuterJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
-  val typ: JoinType = FullOuterJoinType
 }
 
 object Join {
-
-  def apply[ColumnId, Type](joinType: JoinType, from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]): Join[ColumnId, Type] = {
-    joinType match {
-      case InnerJoinType => typed.InnerJoin(from, on)
-      case LeftOuterJoinType => typed.LeftOuterJoin(from, on)
-      case RightOuterJoinType => typed.RightOuterJoin(from, on)
-      case FullOuterJoinType => typed.FullOuterJoin(from, on)
-    }
-  }
-
-  def expandJoins[ColumnId, Type](analyses: Seq[SoQLAnalysis[ColumnId, Type]]): Seq[typed.Join[ColumnId, Type]] = {
-    def expandJoin(join: typed.Join[ColumnId, Type]): Seq[typed.Join[ColumnId, Type]] = {
-      if (join.isSimple) Seq(join)
-      else expandJoins(join.from.analyses) :+ join
-    }
-
-    analyses.flatMap(_.joins.flatMap(expandJoin))
-  }
+  def inner[ColumnId, QualifiedColumnId, Type](from: JoinAnalysis[ColumnId, QualifiedColumnId, Type], on: CoreExpr[QualifiedColumnId, Type]) =
+    Join(InnerJoinType, from, on)
+  def leftOuter[ColumnId, QualifiedColumnId, Type](from: JoinAnalysis[ColumnId, QualifiedColumnId, Type], on: CoreExpr[QualifiedColumnId, Type]) =
+    Join(LeftOuterJoinType, from, on)
+  def rightOuter[ColumnId, QualifiedColumnId, Type](from: JoinAnalysis[ColumnId, QualifiedColumnId, Type], on: CoreExpr[QualifiedColumnId, Type]) =
+    Join(RightOuterJoinType, from, on)
+  def fullOuter[ColumnId, QualifiedColumnId, Type](from: JoinAnalysis[ColumnId, QualifiedColumnId, Type], on: CoreExpr[QualifiedColumnId, Type]) =
+    Join(RightOuterJoinType, from, on)
 }

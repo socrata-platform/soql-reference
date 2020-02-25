@@ -1,5 +1,6 @@
 package com.socrata.soql.ast
 
+import scala.runtime.ScalaRunTime
 
 import com.socrata.soql.tokens.{FULL, LEFT, RIGHT, Token}
 
@@ -26,42 +27,28 @@ object JoinType {
   val LeftOuterJoinName = "LEFT OUTER JOIN"
   val RightOuterJoinName = "RIGHT OUTER JOIN"
   val FullOuterJoinName = "FULL OUTER JOIN"
-
-  def apply(joinType: String): JoinType = {
-    joinType match {
-      case InnerJoinName => InnerJoinType
-      case LeftOuterJoinName => LeftOuterJoinType
-      case RightOuterJoinName => RightOuterJoinType
-      case FullOuterJoinName => FullOuterJoinType
-      case x => throw new IllegalArgumentException(s"invalid join type: $x")
-    }
-  }
 }
 
-sealed trait Join {
-  val from: JoinSelect
+sealed trait Join extends Product {
+  val from: JoinSource
+  def name: TableName = from.name
+  def outputTableIdentifier: Int = from.outputTableIdentifier
   val on: Expression
   val typ: JoinType
 
-  // joins are simple if there is no subAnalysis, e.g. "join @aaaa-aaaa[ as a]"
-  def isSimple = from.subSelect.isEmpty
+  def allTableReferences = from.allTableReferences
 
   override def toString: String = {
-    s"$typ $from ON $on"
+    if(AST.pretty) {
+      s"$typ $from ON $on"
+    } else {
+      ScalaRunTime._toString(this)
+    }
   }
 }
 
 object Join {
-  def expandJoins(selects: Seq[Select]): Seq[Join] = {
-    def expandJoin(join: Join): Seq[Join] = {
-      if (join.isSimple) Seq(join)
-      else expandJoins(join.from.selects) :+ join
-    }
-
-    selects.flatMap(_.joins.flatMap(expandJoin))
-  }
-
-  def apply(joinType: JoinType, from: JoinSelect, on: Expression): Join = {
+  def apply(joinType: JoinType, from: JoinSource, on: Expression): Join = {
     joinType match {
       case InnerJoinType => InnerJoin(from, on)
       case LeftOuterJoinType => LeftOuterJoin(from, on)
@@ -71,19 +58,19 @@ object Join {
   }
 }
 
-case class InnerJoin(from: JoinSelect, on: Expression) extends Join {
+case class InnerJoin(from: JoinSource, on: Expression) extends Join {
   val typ: JoinType = InnerJoinType
 }
 
-case class LeftOuterJoin(from: JoinSelect, on: Expression) extends Join {
+case class LeftOuterJoin(from: JoinSource, on: Expression) extends Join {
   val typ: JoinType = LeftOuterJoinType
 }
 
-case class RightOuterJoin(from: JoinSelect, on: Expression) extends Join {
+case class RightOuterJoin(from: JoinSource, on: Expression) extends Join {
   val typ: JoinType = RightOuterJoinType
 }
 
-case class FullOuterJoin(from: JoinSelect, on: Expression) extends Join {
+case class FullOuterJoin(from: JoinSource, on: Expression) extends Join {
   val typ: JoinType = FullOuterJoinType
 }
 
@@ -94,7 +81,7 @@ object OuterJoin {
     FULL() -> FullOuterJoinType
   )
 
-  def apply(direction: Token, from: JoinSelect, on: Expression): Join = {
+  def apply(direction: Token, from: JoinSource, on: Expression): Join = {
     dirToJoinType.get(direction).map { joinType =>
       Join(joinType, from, on)
     }.getOrElse {

@@ -15,6 +15,15 @@ case class MonomorphicFunction[Type](function: Function[Type], bindings: Map[Str
   def allParameters =
     if (repeated.isEmpty) parameters else parameters.toStream ++ Stream.continually(repeated).flatten
 
+  def matches(inputs: Seq[Type]): Boolean = {
+    if(isVariadic) {
+      val (required, optional) = inputs.splitAt(parameters.length)
+      required == parameters && (Stream.continually(repeated).flatten, optional).zipped.forall(_ == _)
+    } else {
+      inputs == parameters
+    }
+  }
+
   def minArity = function.minArity
   def isVariadic = function.isVariadic
   def result: Type = bind(function.result)

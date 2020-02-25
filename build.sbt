@@ -28,3 +28,5 @@ lazy val soqlToy = (project in file("soql-toy")).
 lazy val soqlPack = (project in file("soql-pack")).
   settings(SoqlPack.settings).
   dependsOn(soqlTypes)
+
+skip in publish := true
