@@ -87,17 +87,17 @@ case class Select(
     if(AST.pretty) {
       val distinctStr = if (distinct) "DISTINCT " else ""
       val selectStr = Some(s"SELECT $distinctStr$selection")
-      val fromStr = from.map(t => s"FROM $t")
-      val joinsStr = itrToString(None, joins.map(_.toString), " ")
-      val whereStr = itrToString("WHERE", where)
-      val groupByStr = itrToString("GROUP BY", groupBys, ", ")
-      val havingStr = itrToString("HAVING", having)
-      val obStr = itrToString("ORDER BY", orderBys, ", ")
-      val limitStr = itrToString("LIMIT", limit)
-      val offsetStr = itrToString("OFFSET", offset)
-      val searchStr = itrToString("SEARCH", search.map(Expression.escapeString))
+      val fromStr = from.map(t => s"\nFROM $t")
+      val joinsStr = itrToString(None, joins.map(j => s"\n${j.toString}"), "\n ")
+      val whereStr = itrToString("\nWHERE", where)
+      val groupByStr = itrToString("\nGROUP BY", groupBys, ", ")
+      val havingStr = itrToString("\nHAVING", having)
+      val obStr = itrToString("\nORDER BY", orderBys, ", ")
+      val limitStr = itrToString("\nLIMIT", limit)
+      val offsetStr = itrToString("\nOFFSET", offset)
+      val searchStr = itrToString("\nSEARCH", search.map(Expression.escapeString))
 
-      val parts = List(selectStr, fromStr, joinsStr, whereStr, groupByStr, havingStr, obStr, limitStr, offsetStr, searchStr)
+      val parts = List(selectStr, fromStr, joinsStr, whereStr, groupByStr, havingStr, obStr, searchStr, limitStr, offsetStr)
       parts.flatString
     } else {
       AST.unpretty(this)
