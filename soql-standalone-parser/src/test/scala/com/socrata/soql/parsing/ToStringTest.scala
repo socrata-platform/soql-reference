@@ -115,8 +115,9 @@ class ToStringTest extends FunSpec with MustMatchers {
           |  limit 5
           |  offset 10""".stripMargin
       val expected1 = "SELECT `:id`, `balance` AS amt, `visits`"
-      val expected2 = "SELECT `:id` AS i, sum(`amt`) WHERE `visits` > 0 GROUP BY `i`, `visits` HAVING `sum_amt` < 5 ORDER BY `i` DESC NULL FIRST, sum(`amt`) ASC NULL FIRST LIMIT 5 OFFSET 10 SEARCH 'gnu'"
+      val expected2 = "SELECT `:id` AS i, sum(`amt`) WHERE `visits` > 0 GROUP BY `i`, `visits` HAVING `sum_amt` < 5 ORDER BY `i` DESC NULL FIRST, sum(`amt`) ASC NULL FIRST SEARCH 'gnu' LIMIT 5 OFFSET 10"
       val parsed = parser.selectStatement(query).map(_.toString)
+      println(parsed)
       parsed must equal(NonEmptySeq(expected1, List(expected2)))
     }
   }
