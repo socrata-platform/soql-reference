@@ -93,9 +93,9 @@ case class Select(
       val groupByStr = itrToString("\nGROUP BY", groupBys, ", ")
       val havingStr = itrToString("\nHAVING", having)
       val obStr = itrToString("\nORDER BY", orderBys, ", ")
+      val searchStr = itrToString("\nSEARCH", search.map(Expression.escapeString))
       val limitStr = itrToString("\nLIMIT", limit)
       val offsetStr = itrToString("\nOFFSET", offset)
-      val searchStr = itrToString("\nSEARCH", search.map(Expression.escapeString))
 
       val parts = List(selectStr, fromStr, joinsStr, whereStr, groupByStr, havingStr, obStr, searchStr, limitStr, offsetStr)
       parts.flatString
