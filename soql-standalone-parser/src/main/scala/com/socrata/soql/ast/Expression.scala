@@ -298,7 +298,19 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
               Some(sb)
             case orders =>
               sb.append(" ORDER BY ")
-              appendParams(sb, orders.iterator, ",", d, limit)
+              orders.head.format(d, sb, limit)
+              orders.tail.foreach {
+                case StringLiteral("desc") =>
+                  sb.append(" DESC")
+                case StringLiteral("null_first") =>
+                  sb.append(" NULL FIRST")
+                case StringLiteral("null_last") =>
+                  sb.append(" NULL LAST")
+                case expr =>
+                  sb.append(", ")
+                  expr.format(d, sb, limit)
+              }
+              Some(sb)
           }
         }.map(_.append(")"))
       case other => {

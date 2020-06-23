@@ -231,7 +231,12 @@ class ParserTest extends WordSpec with MustMatchers {
 
     "window function over partition order round trip" in {
       val x = parseFull("select row_number() over(partition by x, y order by m, n)")
-      x.selection.expressions.head.expression.toString must be ("row_number() OVER ( PARTITION BY `x`,`y` ORDER BY `m`,`n`)")
+      x.selection.expressions.head.expression.toString must be ("row_number() OVER ( PARTITION BY `x`,`y` ORDER BY `m` NULL LAST, `n` NULL LAST)")
+    }
+
+    "window function over partition order desc round trip" in {
+      val x = parseFull("select row_number() over(partition by x, y order by m desc null last, n)")
+      x.selection.expressions.head.expression.toString must be ("row_number() OVER ( PARTITION BY `x`,`y` ORDER BY `m` DESC NULL LAST, `n` NULL LAST)")
     }
 
     "window function over partition round trip" in {
@@ -241,7 +246,7 @@ class ParserTest extends WordSpec with MustMatchers {
 
     "window function over order round trip" in {
       val x = parseFull("select avg(x) over(order by m, n)")
-      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( ORDER BY `m`,`n`)")
+      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( ORDER BY `m` NULL LAST, `n` NULL LAST)")
     }
 
     "window function empty over round trip" in {
