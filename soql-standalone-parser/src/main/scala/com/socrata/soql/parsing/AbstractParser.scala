@@ -347,17 +347,28 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def windowFunctionParamList: Parser[Either[Position, Seq[Expression]]] =
     rep1sep(expr, COMMA()) ^^ (Right(_))
 
+  def orderbyToExpressions(orderby: OrderBy): Seq[Expression] = {
+    val es0 = Seq(orderby.expression)
+    val es1 = if (orderby.ascending) es0
+              else es0 :+ com.socrata.soql.ast.StringLiteral("desc")(orderby.expression.position)
+    val es2 = if (orderby.nullLast) es1 :+ com.socrata.soql.ast.StringLiteral("null_last")(orderby.expression.position)
+              else es1 :+ com.socrata.soql.ast.StringLiteral("null_first")(orderby.expression.position)
+    es2
+  }
+
   def windowFunctionParams: Parser[Seq[Expression]] = {
     def partitionKey(position: Position) = com.socrata.soql.ast.StringLiteral("partition_by")(position)
     def orderKey(position: Position) =  com.socrata.soql.ast.StringLiteral("order_by")(position)
 
-    LPAREN() ~ opt(PARTITION() ~ BY() ~ windowFunctionParamList) ~ opt(ORDER() ~ BY() ~ windowFunctionParamList) ~ RPAREN() ^^ {
-      case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ Some(_ ~ _ ~ Right(order)) ~ _) =>
-        mergePartitionOrder(partitionKey(lp.position) +: partition, orderKey(lp.position) +: order)
+    LPAREN() ~ opt(PARTITION() ~ BY() ~ windowFunctionParamList) ~ opt(ORDER() ~ BY() ~ orderingList) ~ RPAREN() ^^ {
+      case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ Some(_ ~ _ ~ orderings) ~ _) =>
+        val orderingExprs = orderings.flatMap(ordering => orderbyToExpressions(ordering))
+        mergePartitionOrder(partitionKey(lp.position) +: partition, orderKey(lp.position) +: orderingExprs)
       case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ None ~ _) =>
         partitionKey(lp.position) +: partition
-      case (lp ~ None ~ Some(_ ~ _ ~ Right(order)) ~ _) =>
-        orderKey(lp.position) +: order
+      case (lp ~ None ~ Some(_ ~ _ ~ orderings) ~ _) =>
+        val orderingExprs = orderings.flatMap(ordering => orderbyToExpressions(ordering))
+        orderKey(lp.position) +: orderingExprs
       case _ => // ( )
         Seq.empty
     } | failure(errors.missingArg)
