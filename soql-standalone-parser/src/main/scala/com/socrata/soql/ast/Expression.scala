@@ -312,6 +312,14 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
               }
               Some(sb)
           }
+        }.flatMap { sb =>
+          val frame = windowOverFrame(tail)
+          frame.foreach {
+            case StringLiteral(x) => sb.append(" "); sb.append(x)
+            case NumberLiteral(n) => sb.append(" "); sb.append(n)
+            case _ =>
+          }
+          Some(sb)
         }.map(_.append(")"))
       case other => {
         sb.append(other).append("(")
@@ -345,6 +353,8 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
     }
     val ps1 = ps.takeWhile {
       case StringLiteral("order_by") => false
+      case StringLiteral("range") => false
+      case StringLiteral("rows") => false
       case _ => true
     }
     if (ps1.nonEmpty) ps1.tail
@@ -356,8 +366,22 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
       case StringLiteral("order_by") => false
       case _ => true
     }
-    if (ps.nonEmpty) ps.tail
-    else ps
+    val ps1 = ps.takeWhile {
+      case StringLiteral("range") => false
+      case StringLiteral("rows") => false
+      case _ => true
+    }
+    if (ps1.nonEmpty) ps1.tail
+    else ps1
+  }
+
+  private def windowOverFrame(es: Seq[Expression]): Seq[Expression] = {
+    val ps = es.dropWhile {
+      case StringLiteral("range") => false
+      case StringLiteral("rows") => false
+      case _ => true
+    }
+    ps
   }
 
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)

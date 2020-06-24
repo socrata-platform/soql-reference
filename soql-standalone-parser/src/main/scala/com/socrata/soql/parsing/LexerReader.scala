@@ -97,8 +97,15 @@ object LexerReader {
     // Window functions
     OVER,
     PARTITION,
+    RANGE,
+    ROWS,
+    UNBOUNDED,
+    PRECEDING,
+    FOLLOWING,
+    CURRENT,
+    ROW,
 
-    // Literals
+  // Literals
     () => BooleanLiteral(true),
     () => BooleanLiteral(false),
     NULL

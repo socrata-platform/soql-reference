@@ -254,6 +254,19 @@ class ParserTest extends WordSpec with MustMatchers {
       x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ()")
     }
 
+    "window function over partition frame" in {
+      val x = parseFull("select avg(x) over(order by m range 123 PRECEDING)")
+      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( ORDER BY `m` NULL LAST range 123 preceding)")
+    }
+
+    "window frame clause should start with rows or range, not row" in {
+      expectFailure("Expression expected", "select avg(x) over(order by m row 123 PRECEDING)")
+    }
+
+    "order by nulls last should be null last w/o s" in {
+      expectFailure("Expression expected", "select avg(x) over(order by m nulls last)")
+    }
+
     // def show[T](x: => T) {
     //   try {
     //     println(x)

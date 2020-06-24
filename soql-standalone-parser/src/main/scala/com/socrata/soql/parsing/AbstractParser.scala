@@ -360,18 +360,41 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     def partitionKey(position: Position) = com.socrata.soql.ast.StringLiteral("partition_by")(position)
     def orderKey(position: Position) =  com.socrata.soql.ast.StringLiteral("order_by")(position)
 
-    LPAREN() ~ opt(PARTITION() ~ BY() ~ windowFunctionParamList) ~ opt(ORDER() ~ BY() ~ orderingList) ~ RPAREN() ^^ {
-      case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ Some(_ ~ _ ~ orderings) ~ _) =>
+    LPAREN() ~ opt(PARTITION() ~ BY() ~ windowFunctionParamList) ~ opt(ORDER() ~ BY() ~ orderingList) ~ opt(frameClause) ~ RPAREN() ^^ {
+      case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ Some(_ ~ _ ~ orderings) ~ optFrame ~ rp) =>
         val orderingExprs = orderings.flatMap(ordering => orderbyToExpressions(ordering))
-        mergePartitionOrder(partitionKey(lp.position) +: partition, orderKey(lp.position) +: orderingExprs)
-      case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ None ~ _) =>
-        partitionKey(lp.position) +: partition
-      case (lp ~ None ~ Some(_ ~ _ ~ orderings) ~ _) =>
+        mergePartitionOrder(partitionKey(lp.position) +: partition, orderKey(lp.position) +: orderingExprs) ++ optFrame.toSeq.flatten
+      case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ None ~ optFrame ~ rp) =>
+        Seq(partitionKey(lp.position)) ++ partition ++ optFrame.toSeq.flatten
+      case (lp ~ None ~ Some(_ ~ _ ~ orderings) ~ optFrame ~ rp) =>
         val orderingExprs = orderings.flatMap(ordering => orderbyToExpressions(ordering))
-        orderKey(lp.position) +: orderingExprs
+        Seq(orderKey(lp.position)) ++ orderingExprs ++ optFrame.toSeq.flatten
       case _ => // ( )
         Seq.empty
     } | failure(errors.missingArg)
+  }
+
+  def frameClause: Parser[Seq[Expression]] = {
+    RANGE() ~ frameStartEnd  ^^ {
+      case r ~ f =>
+        Seq(tokenToLiteral(r)) ++ f
+    } |
+      (RANGE() | ROWS()) ~ BETWEEN() ~ frameStartEnd ~ AND() ~ frameStartEnd ^^ {
+        case r ~ b ~ fa ~ a ~ fb => (Seq(tokenToLiteral(r), tokenToLiteral(b)) ++ fa :+ tokenToLiteral(a)) ++ fb
+      }
+  }
+
+  def frameStartEnd: Parser[Seq[Expression]] = {
+    UNBOUNDED() ~ PRECEDING() ^^ {
+      case a ~ b =>
+        Seq(tokenToLiteral(a), tokenToLiteral(b))
+    } | CURRENT() ~ ROW() ^^ {
+      case a ~ b => Seq(tokenToLiteral(a), tokenToLiteral(b))
+    } |
+    integer ~ (PRECEDING() | FOLLOWING()) ^^ {
+      case a ~ b =>
+        Seq(com.socrata.soql.ast.NumberLiteral(BigDecimal(a.bigInteger))(b.position), tokenToLiteral(b))
+    }
   }
 
   def mergePartitionOrder(a: Seq[Expression], b: Seq[Expression]): Seq[Expression] = {
@@ -521,4 +544,8 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     }
 
   def expr = disjunction | failure(errors.missingExpr)
+
+  private def tokenToLiteral(token: Token): Literal = {
+    com.socrata.soql.ast.StringLiteral(token.printable.toLowerCase)(token.position)
+  }
 }
