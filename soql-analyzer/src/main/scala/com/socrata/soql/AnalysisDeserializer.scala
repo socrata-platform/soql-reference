@@ -144,7 +144,8 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
           val functionNamePosition = readPosition()
           val func = dictionary.functions(in.readUInt32())
           val params = readSeq { readExpr() }
-          FunctionCall(func, params)(pos, functionNamePosition)
+          val window = readWindowFunctionInfo()
+          FunctionCall(func, params, window)(pos, functionNamePosition)
       }
     }
 
@@ -188,6 +189,15 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
           }
         Join(joinType, joinAnalysis, readExpr())
       }
+    }
+
+    def readWindowFunctionInfo(): Option[WindowFunctionInfo[C, T]] = {
+      readSeq {
+        val partitions = readSeq { readExpr() }
+        val orderings = readOrderBy()
+        val frames = readSeq { readExpr() }
+        WindowFunctionInfo(partitions, orderings, frames)
+      }.headOption
     }
 
     // TODO: remove after release of 2.10.6 or higher (for 2.10.5- backwards-compatibility)

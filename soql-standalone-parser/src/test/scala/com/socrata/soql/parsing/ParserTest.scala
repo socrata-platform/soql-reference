@@ -23,7 +23,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
   def ident(name: String) = ColumnOrAliasRef(None, ColumnName(name))(NoPosition)
-  def functionCall(name: FunctionName, args: Seq[Expression]) = FunctionCall(name, args)(NoPosition, NoPosition)
+  def functionCall(name: FunctionName, args: Seq[Expression], window: Option[WindowFunctionInfo]) = FunctionCall(name, args, window)(NoPosition, NoPosition)
   def stringLiteral(s: String) = StringLiteral(s)(NoPosition)
   def numberLiteral(num: BigDecimal) = NumberLiteral(num)(NoPosition)
 
@@ -65,7 +65,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "accept expr.identifier" in {
-      parseExpression("a.b") must equal (functionCall(SpecialFunctions.Subscript, Seq(ident("a"), stringLiteral("b"))))
+      parseExpression("a.b") must equal (functionCall(SpecialFunctions.Subscript, Seq(ident("a"), stringLiteral("b")), None))
     }
 
     "reject expr.identifier." in {
@@ -90,7 +90,7 @@ class ParserTest extends WordSpec with MustMatchers {
               SpecialFunctions.Operator("*"),
               Seq(
                 numberLiteral(2),
-                ident("b"))))))
+                ident("b")), None)), None))
     }
 
     "reject expr[expr]." in {
@@ -105,8 +105,8 @@ class ParserTest extends WordSpec with MustMatchers {
             ident("a"),
             functionCall(SpecialFunctions.Operator("*"), Seq(
               numberLiteral(2),
-              ident("b"))))),
-        stringLiteral("c"))))
+              ident("b")), None)), None),
+        stringLiteral("c")), None))
     }
 
     "accept expr[expr].ident[expr]" in {
@@ -120,14 +120,14 @@ class ParserTest extends WordSpec with MustMatchers {
                 ident("a"),
                 functionCall(SpecialFunctions.Operator("*"), Seq(
                   numberLiteral(2),
-                  ident("b"))))),
-            stringLiteral("c"))),
-        numberLiteral(3))))
+                  ident("b")), None)), None),
+            stringLiteral("c")), None),
+        numberLiteral(3)), None))
     }
 
     "accept modulo" in {
       parseExpression("11 % 2") must equal (
-        functionCall(SpecialFunctions.Operator("%"), Seq(numberLiteral(11), numberLiteral(2))))
+        functionCall(SpecialFunctions.Operator("%"), Seq(numberLiteral(11), numberLiteral(2)), None))
     }
 
     "^ has higher precedence than *" in {
@@ -135,8 +135,8 @@ class ParserTest extends WordSpec with MustMatchers {
       expr must equal (
         functionCall(SpecialFunctions.Operator("*"), Seq(
           numberLiteral(10),
-          functionCall(SpecialFunctions.Operator("^"), Seq(numberLiteral(3), numberLiteral(2)))
-        ))
+          functionCall(SpecialFunctions.Operator("^"), Seq(numberLiteral(3), numberLiteral(2)), None)
+        ), None)
       )
     }
 
@@ -231,27 +231,41 @@ class ParserTest extends WordSpec with MustMatchers {
 
     "window function over partition order round trip" in {
       val x = parseFull("select row_number() over(partition by x, y order by m, n)")
-      x.selection.expressions.head.expression.toString must be ("row_number() OVER ( PARTITION BY `x`,`y` ORDER BY `m` NULL LAST, `n` NULL LAST)")
+      x.selection.expressions.head.expression.toString must be ("row_number() OVER ( PARTITION BY `x`, `y` ORDER BY `m` ASC NULL LAST, `n` ASC NULL LAST)")
     }
 
     "window function over partition order desc round trip" in {
       val x = parseFull("select row_number() over(partition by x, y order by m desc null last, n)")
-      x.selection.expressions.head.expression.toString must be ("row_number() OVER ( PARTITION BY `x`,`y` ORDER BY `m` DESC NULL LAST, `n` NULL LAST)")
+      x.selection.expressions.head.expression.toString must be ("row_number() OVER ( PARTITION BY `x`, `y` ORDER BY `m` DESC NULL LAST, `n` ASC NULL LAST)")
     }
 
     "window function over partition round trip" in {
       val x = parseFull("select avg(x) over(partition by x, y)")
-      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( PARTITION BY `x`,`y`)")
+      val hh = x.selection.expressions.head.expression
+      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( PARTITION BY `x`, `y`)")
     }
 
     "window function over order round trip" in {
       val x = parseFull("select avg(x) over(order by m, n)")
-      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( ORDER BY `m` NULL LAST, `n` NULL LAST)")
+      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( ORDER BY `m` ASC NULL LAST, `n` ASC NULL LAST)")
     }
 
     "window function empty over round trip" in {
       val x = parseFull("select avg(x) over()")
       x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ()")
+    }
+
+    "window function over partition frame" in {
+      val x = parseFull("select avg(x) over(order by m range 123 PRECEDING)")
+      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( ORDER BY `m` ASC NULL LAST RANGE 123 PRECEDING)")
+    }
+
+    "window frame clause should start with rows or range, not row" in {
+      expectFailure("Expression expected", "select avg(x) over(order by m row 123 PRECEDING)")
+    }
+
+    "order by nulls last should be null last w/o s" in {
+      expectFailure("Expression expected", "select avg(x) over(order by m nulls last)")
     }
 
     // def show[T](x: => T) {

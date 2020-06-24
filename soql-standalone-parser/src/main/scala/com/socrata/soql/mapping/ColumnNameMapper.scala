@@ -59,13 +59,21 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
     case e: ColumnOrAliasRef =>
       ColumnOrAliasRef(e.qualifier, columnNameMap(e.column))(NoPosition)
     case e: FunctionCall =>
-      FunctionCall(e.functionName, e.parameters map mapExpression)(NoPosition, NoPosition)
+      FunctionCall(e.functionName, e.parameters map mapExpression, e.window map mapWindow)(NoPosition, NoPosition)
   }
 
   def mapOrderBy(o: OrderBy): OrderBy = OrderBy(
     expression = mapExpression(o.expression),
     ascending = o.ascending,
     nullLast = o.nullLast)
+
+  def mapWindow(w: WindowFunctionInfo): WindowFunctionInfo = {
+    val WindowFunctionInfo(partitions, orderings, frames) = w
+    WindowFunctionInfo(
+      partitions.map(mapExpression),
+      orderings.map(mapOrderBy),
+      frames)
+  }
 
   def mapColumnNameAndPosition(s: (ColumnName, Position)): (ColumnName, Position) =
     (columnNameMap(s._1), NoPosition)

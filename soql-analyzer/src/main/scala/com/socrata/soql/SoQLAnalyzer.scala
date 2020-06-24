@@ -229,7 +229,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       log.debug("It is grouped; selecting the group bys plus count(*)")
 
       val beforeAliasAnalysis = System.nanoTime()
-      val count_* = FunctionCall(SpecialFunctions.StarFunc("count"), Nil)(NoPosition, NoPosition)
+      val count_* = FunctionCall(SpecialFunctions.StarFunc("count"), Nil, None)(NoPosition, NoPosition)
       val untypedSelectedExpressions = groupBys :+ count_*
       val names = AliasAnalysis(Selection(None, Seq.empty, untypedSelectedExpressions.map(SelectedExpression(_, None)))).expressions.keys.toSeq
       val afterAliasAnalysis = System.nanoTime()
@@ -671,7 +671,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
       case (None, None) => None
       case (Some(a), None) => Some(a)
       case (None, Some(b)) => Some(replaceRefs(aliases, b))
-      case (Some(a), Some(b)) => Some(typed.FunctionCall(andFunction, List(a, replaceRefs(aliases, b)))(NoPosition, NoPosition))
+      case (Some(a), Some(b)) => Some(typed.FunctionCall(andFunction, List(a, replaceRefs(aliases, b)), None)(NoPosition, NoPosition))
     }
 
   private def mergeGroupBy(aliases: OrderedMap[ColumnName, Expr], gb: Seq[Expr]): Seq[Expr] = {
@@ -687,8 +687,8 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
         a.getOrElse(c, cr)
       case tl: typed.TypedLiteral[T] =>
         tl
-      case fc@typed.FunctionCall(f, params) =>
-        typed.FunctionCall(f, params.map(replaceRefs(a, _)))(fc.position, fc.functionNamePosition)
+      case fc@typed.FunctionCall(f, params, window) =>
+        typed.FunctionCall(f, params.map(replaceRefs(a, _)), window)(fc.position, fc.functionNamePosition)
     }
 }
 

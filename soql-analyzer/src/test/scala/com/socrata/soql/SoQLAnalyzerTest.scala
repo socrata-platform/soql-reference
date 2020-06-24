@@ -180,36 +180,36 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     val typedCol = typed.ColumnRef(None, ColumnName("address"), TestLocation.t)(NoPosition)
 
     analysis.selection.toSeq must equal (Seq(
-      ColumnName("address_human_address") -> typed.FunctionCall(TestFunctions.LocationToAddress.monomorphic.get, Seq(typedCol))(NoPosition, NoPosition)
+      ColumnName("address_human_address") -> typed.FunctionCall(TestFunctions.LocationToAddress.monomorphic.get, Seq(typedCol), None)(NoPosition, NoPosition)
     ))
-    analysis.where must equal (Some(typed.FunctionCall(MonomorphicFunction(TestFunctions.Gt, Map("a" -> TestNumber)), Seq(typed.FunctionCall(TestFunctions.LocationToLatitude.monomorphic.get, Seq(typedCol))(NoPosition, NoPosition), typed.NumberLiteral(new java.math.BigDecimal("1.1"), TestNumber.t)(NoPosition)))(NoPosition, NoPosition)))
+    analysis.where must equal (Some(typed.FunctionCall(MonomorphicFunction(TestFunctions.Gt, Map("a" -> TestNumber)), Seq(typed.FunctionCall(TestFunctions.LocationToLatitude.monomorphic.get, Seq(typedCol), None)(NoPosition, NoPosition), typed.NumberLiteral(new java.math.BigDecimal("1.1"), TestNumber.t)(NoPosition)), None)(NoPosition, NoPosition)))
     analysis.where.get.position.column must equal (36)
-    analysis.orderBys must equal (List(typed.OrderBy(typed.FunctionCall(TestFunctions.LocationToLongitude.monomorphic.get, Seq(typedCol))(NoPosition, NoPosition), true, true)))
+    analysis.orderBys must equal (List(typed.OrderBy(typed.FunctionCall(TestFunctions.LocationToLongitude.monomorphic.get, Seq(typedCol), None)(NoPosition, NoPosition), true, true)))
   }
 
   test("null :: number succeeds") {
     val analysis = analyzer.analyzeUnchainedQuery("select null :: number as x")
     analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestNumber)).get.monomorphic.get,
-      Seq(typed.NullLiteral(TestNumber.t)(NoPosition)))(NoPosition, NoPosition))
+      Seq(typed.NullLiteral(TestNumber.t)(NoPosition)), None)(NoPosition, NoPosition))
   }
 
   test("5 :: number succeeds") {
     val analysis = analyzer.analyzeUnchainedQuery("select 5 :: number as x")
     analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestNumber)).get.monomorphic.get,
-      Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber.t)(NoPosition)))(NoPosition, NoPosition))
+      Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber.t)(NoPosition)), None)(NoPosition, NoPosition))
   }
 
   test("5 :: money succeeds") {
     val analysis = analyzer.analyzeUnchainedQuery("select 5 :: money as x")
     analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
-      Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber.t)(NoPosition)))(NoPosition, NoPosition)))(NoPosition, NoPosition))
+      Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber.t)(NoPosition)), None)(NoPosition, NoPosition)), None)(NoPosition, NoPosition))
   }
 
   test("a subselect makes the output of the inner select available to the outer") {
     val NonEmptySeq(inner, Seq(outer)) = analyzer.analyzeFullQuery("select 5 :: money as x |> select max(x)")
-    outer.selection(ColumnName("max_x")) must equal (typed.FunctionCall(MonomorphicFunction(TestFunctions.Max, Map("a" -> TestMoney)), Seq(typed.ColumnRef(None, ColumnName("x"), TestMoney : TestType)(NoPosition)))(NoPosition, NoPosition))
+    outer.selection(ColumnName("max_x")) must equal (typed.FunctionCall(MonomorphicFunction(TestFunctions.Max, Map("a" -> TestMoney)), Seq(typed.ColumnRef(None, ColumnName("x"), TestMoney : TestType)(NoPosition)), None)(NoPosition, NoPosition))
     inner.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
-      Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber.t)(NoPosition)))(NoPosition, NoPosition)))(NoPosition, NoPosition))
+      Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber.t)(NoPosition)), None)(NoPosition, NoPosition)), None)(NoPosition, NoPosition))
   }
 
   test("cannot ORDER BY an unorderable type") {
@@ -551,11 +551,12 @@ SELECT visits, @x2.zx
     val select = analysisWordStyle.selection.toSeq
     select must equal(Seq(
       ColumnName("dt") -> typed.FunctionCall(TestFunctions.FixedTimeStampZTruncYmd.monomorphic.get,
-        Seq(typed.ColumnRef(None, ColumnName(":created_at"), TestFixedTimestamp.t)(NoPosition)))(NoPosition, NoPosition),
+        Seq(typed.ColumnRef(None, ColumnName(":created_at"), TestFixedTimestamp.t)(NoPosition)), None)(NoPosition, NoPosition),
       ColumnName("dt_pdt") -> typed.FunctionCall(TestFunctions.FixedTimeStampTruncYmdAtTimeZone.monomorphic.get,
         Seq(typed.ColumnRef(None, ColumnName(":created_at"), TestFixedTimestamp.t)(NoPosition),
             typed.StringLiteral("PDT", TestText.t)(NoPosition)
-           )
+           ),
+        None
         )
         (NoPosition, NoPosition)
     ))

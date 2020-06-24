@@ -63,7 +63,8 @@ case class NullLiteral[Type](typ: Type)(val position: Position) extends TypedLit
   def copy[T](typ: T = typ): NullLiteral[T] = NullLiteral[T](typ)(position)
 }
 
-case class FunctionCall[ColumnId, Type](function: MonomorphicFunction[Type], parameters: Seq[CoreExpr[ColumnId, Type]])(val position: Position, val functionNamePosition: Position) extends CoreExpr[ColumnId, Type] {
+case class FunctionCall[ColumnId, Type](function: MonomorphicFunction[Type], parameters: Seq[CoreExpr[ColumnId, Type]], window: Option[WindowFunctionInfo[ColumnId, Type]])
+                                       (val position: Position, val functionNamePosition: Position) extends CoreExpr[ColumnId, Type] {
   if(function.isVariadic) {
     require(parameters.length >= function.minArity, "parameter/arity mismatch")
   } else {
@@ -74,10 +75,25 @@ case class FunctionCall[ColumnId, Type](function: MonomorphicFunction[Type], par
   protected def asString = parameters.mkString(function.name.toString + "(", ",", ")")
   def typ = function.result
 
-  def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId) = copy(parameters = parameters.map(_.mapColumnIds(f)))
+  def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId) = {
+    val mw = window.map { w =>
+      val mp = w.partitions.map(_.mapColumnIds(f))
+      val mo = w.orderings.map(_.mapColumnIds(f))
+      val mf = w.frames.map(_.mapColumnIds(f))
+      WindowFunctionInfo(mp, mo, mf)
+    }
+
+    copy(parameters = parameters.map(_.mapColumnIds(f)), window = mw)
+  }
   val size = parameters.foldLeft(1) { (acc, param) => acc + param.size }
 
   def copy[C, T](function: MonomorphicFunction[T] = function,
-           parameters: Seq[CoreExpr[C, T]] = parameters): FunctionCall[C, T] =
-    FunctionCall(function, parameters)(position, functionNamePosition)
+                 parameters: Seq[CoreExpr[C, T]] = parameters,
+                 window: Option[WindowFunctionInfo[C, T]]): FunctionCall[C, T] =
+    FunctionCall(function, parameters, window)(position, functionNamePosition)
+}
+
+case class WindowFunctionInfo[ColumnId, Type](partitions: Seq[CoreExpr[ColumnId, Type]],
+                                              orderings: Seq[com.socrata.soql.typed.OrderBy[ColumnId, Type]],
+                                              frames: Seq[CoreExpr[ColumnId, Type]]) {
 }

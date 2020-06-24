@@ -25,10 +25,6 @@ case class MonomorphicFunction[Type](function: Function[Type], bindings: Map[Str
     case VariableType(n) => bindings(n)
   }
 
-  def isWindowFunction: Boolean = {
-    function.wildcards.nonEmpty
-  }
-
   override def toString = {
     val sb = new StringBuilder(name.toString).append(" :: ")
     sb.append(parameters.mkString("", " -> ", " -> "))
