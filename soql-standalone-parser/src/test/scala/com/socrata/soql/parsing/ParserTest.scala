@@ -231,22 +231,23 @@ class ParserTest extends WordSpec with MustMatchers {
 
     "window function over partition order round trip" in {
       val x = parseFull("select row_number() over(partition by x, y order by m, n)")
-      x.selection.expressions.head.expression.toString must be ("row_number() OVER ( PARTITION BY `x`,`y` ORDER BY `m` NULL LAST, `n` NULL LAST)")
+      x.selection.expressions.head.expression.toString must be ("row_number() OVER ( PARTITION BY `x`, `y` ORDER BY `m` ASC NULL LAST, `n` ASC NULL LAST)")
     }
 
     "window function over partition order desc round trip" in {
       val x = parseFull("select row_number() over(partition by x, y order by m desc null last, n)")
-      x.selection.expressions.head.expression.toString must be ("row_number() OVER ( PARTITION BY `x`,`y` ORDER BY `m` DESC NULL LAST, `n` NULL LAST)")
+      x.selection.expressions.head.expression.toString must be ("row_number() OVER ( PARTITION BY `x`, `y` ORDER BY `m` DESC NULL LAST, `n` ASC NULL LAST)")
     }
 
     "window function over partition round trip" in {
       val x = parseFull("select avg(x) over(partition by x, y)")
-      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( PARTITION BY `x`,`y`)")
+      val hh = x.selection.expressions.head.expression
+      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( PARTITION BY `x`, `y`)")
     }
 
     "window function over order round trip" in {
       val x = parseFull("select avg(x) over(order by m, n)")
-      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( ORDER BY `m` NULL LAST, `n` NULL LAST)")
+      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( ORDER BY `m` ASC NULL LAST, `n` ASC NULL LAST)")
     }
 
     "window function empty over round trip" in {
@@ -256,7 +257,7 @@ class ParserTest extends WordSpec with MustMatchers {
 
     "window function over partition frame" in {
       val x = parseFull("select avg(x) over(order by m range 123 PRECEDING)")
-      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( ORDER BY `m` NULL LAST range 123 preceding)")
+      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( ORDER BY `m` ASC NULL LAST RANGE 123 PRECEDING)")
     }
 
     "window frame clause should start with rows or range, not row" in {

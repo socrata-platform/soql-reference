@@ -347,30 +347,16 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def windowFunctionParamList: Parser[Either[Position, Seq[Expression]]] =
     rep1sep(expr, COMMA()) ^^ (Right(_))
 
-  def orderbyToExpressions(orderby: OrderBy): Seq[Expression] = {
-    val es0 = Seq(orderby.expression)
-    val es1 = if (orderby.ascending) es0
-              else es0 :+ com.socrata.soql.ast.StringLiteral("desc")(orderby.expression.position)
-    val es2 = if (orderby.nullLast) es1 :+ com.socrata.soql.ast.StringLiteral("null_last")(orderby.expression.position)
-              else es1 :+ com.socrata.soql.ast.StringLiteral("null_first")(orderby.expression.position)
-    es2
-  }
-
-  def windowFunctionParams: Parser[Seq[Expression]] = {
-    def partitionKey(position: Position) = com.socrata.soql.ast.StringLiteral("partition_by")(position)
-    def orderKey(position: Position) =  com.socrata.soql.ast.StringLiteral("order_by")(position)
-
+  def windowFunctionParams: Parser[WindowFunctionInfo] = {
     LPAREN() ~ opt(PARTITION() ~ BY() ~ windowFunctionParamList) ~ opt(ORDER() ~ BY() ~ orderingList) ~ opt(frameClause) ~ RPAREN() ^^ {
       case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ Some(_ ~ _ ~ orderings) ~ optFrame ~ rp) =>
-        val orderingExprs = orderings.flatMap(ordering => orderbyToExpressions(ordering))
-        mergePartitionOrder(partitionKey(lp.position) +: partition, orderKey(lp.position) +: orderingExprs) ++ optFrame.toSeq.flatten
+        WindowFunctionInfo(partition, orderings, optFrame.toSeq.flatten)
       case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ None ~ optFrame ~ rp) =>
-        Seq(partitionKey(lp.position)) ++ partition ++ optFrame.toSeq.flatten
+        WindowFunctionInfo(partition, Seq.empty, optFrame.toSeq.flatten)
       case (lp ~ None ~ Some(_ ~ _ ~ orderings) ~ optFrame ~ rp) =>
-        val orderingExprs = orderings.flatMap(ordering => orderbyToExpressions(ordering))
-        Seq(orderKey(lp.position)) ++ orderingExprs ++ optFrame.toSeq.flatten
-      case _ => // ( )
-        Seq.empty
+        WindowFunctionInfo(Seq.empty, orderings, optFrame.toSeq.flatten)
+      case _ =>
+        WindowFunctionInfo(Seq.empty, Seq.empty, Seq.empty)
     } | failure(errors.missingArg)
   }
 
@@ -397,10 +383,6 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     }
   }
 
-  def mergePartitionOrder(a: Seq[Expression], b: Seq[Expression]): Seq[Expression] = {
-    a ++ b
-  }
-
   def functionWithParams(ident: String, params: Either[Position, Seq[Expression]], pos: Position) =
     params match {
       case Left(_) =>
@@ -421,7 +403,8 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
         functionWithParams(ident, params, identPos)
       case ((_, ident, identPos)) ~ Some(params ~ Some(_ ~ wfParams)) =>
         val innerFc = functionWithParams(ident, params, identPos)
-        FunctionCall(SpecialFunctions.WindowFunctionOver, innerFc +: wfParams)(identPos, identPos)
+        val rightParams = params.right.get
+        WindowFunctionCall(FunctionName(ident), rightParams, wfParams)(identPos, identPos)
     }
   }
 
@@ -546,6 +529,6 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def expr = disjunction | failure(errors.missingExpr)
 
   private def tokenToLiteral(token: Token): Literal = {
-    com.socrata.soql.ast.StringLiteral(token.printable.toLowerCase)(token.position)
+    com.socrata.soql.ast.StringLiteral(token.printable)(token.position)
   }
 }

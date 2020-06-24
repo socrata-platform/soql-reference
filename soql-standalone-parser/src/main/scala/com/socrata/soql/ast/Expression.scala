@@ -57,10 +57,13 @@ object Expression {
           findIdentsAndLiterals(a) ++ Vector("between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
         case FunctionCall(SpecialFunctions.NotBetween, Seq(a,b,c)) =>
           findIdentsAndLiterals(a) ++ Vector("not", "between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
-        case FunctionCall(SpecialFunctions.WindowFunctionOver, args) =>
-          (findIdentsAndLiterals(args.head) :+ "over") ++ args.tail.flatMap(findIdentsAndLiterals)
         case FunctionCall(other, args) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals)
       }
+    case WindowFunctionCall(name, args, info) =>
+      Vector(name.name) ++ args.flatMap(findIdentsAndLiterals) ++
+        info.partitions.flatMap(findIdentsAndLiterals) ++
+        info.orderings.map(_.expression).flatMap(findIdentsAndLiterals)
+        info.frames.flatMap(findIdentsAndLiterals)
   }
 }
 
@@ -175,6 +178,28 @@ case class NullLiteral()(val position: Position) extends Literal {
 case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])(val position: Position, val functionNamePosition: Position) extends Expression with FunctionBase {
 }
 
-case class WindowFunctionCall(functionName: FunctionName, parameters: Seq[Expression], partitions: Seq[Expression], orderings: Seq[OrderBy], frames: Seq[String])
+case class WindowFunctionInfo(partitions: Seq[Expression], orderings: Seq[OrderBy], frames: Seq[Expression])
+
+case class WindowFunctionCall(functionName: FunctionName, parameters: Seq[Expression], info: WindowFunctionInfo)
                              (val position: Position, val functionNamePosition: Position) extends Expression with FunctionBase {
+
+  override def format(d: Int, sb: StringBuilder, limit: Option[Int]): Option[StringBuilder] = {
+    formatBase(sb, d, limit, functionName, parameters).map(_.append(" OVER (")).flatMap { sb =>
+      val preamble = if (info.partitions.isEmpty) "" else " PARTITION BY "
+      sb.append(info.partitions.map(_.toString).mkString(preamble, ", ", ""))
+      Some(sb)
+    }.flatMap { sb =>
+      val preamble = if (info.orderings.isEmpty) "" else " ORDER BY "
+      sb.append(info.orderings.map(_.toString).mkString(preamble, ", ", ""))
+      Some(sb)
+    }.flatMap { sb =>
+      info.frames.foreach {
+        case StringLiteral(x) => sb.append(" "); sb.append(x)
+        case NumberLiteral(n) => sb.append(" "); sb.append(n)
+        case _ =>
+      }
+      Some(sb)
+    }.map(_.append(")"))
+    Some(sb)
+  }
 }
