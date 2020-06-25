@@ -2,7 +2,7 @@ package com.socrata.soql.typechecker
 
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions._
-import com.socrata.soql.typed
+import com.socrata.soql.{AnalysisDeserializer, typed}
 import com.socrata.soql.environment.{ColumnName, DatasetContext, FunctionName, TableName}
 
 class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: Map[String, DatasetContext[Type]]) extends ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]]) => typed.CoreExpr[ColumnName, Type]) { self =>
@@ -81,7 +81,11 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       Right(nullLiteralExpr(nl.position))
   }
 
-  def typecheckFuncall(fc: FunctionCall, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = {
+  def typecheckFuncall(fc0: FunctionCall, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = {
+
+    val fc = if (AnalysisDeserializer.CurrentVersion == AnalysisDeserializer.TestVersionV5) fc0.toOldStyleWindowFunctionCall()
+             else fc0
+
     val FunctionCall(name, parameters, window) = fc
 
     val typedParameters = parameters.map(typecheck(_, aliases)).map {

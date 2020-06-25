@@ -198,7 +198,9 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
           writePosition(f.functionNamePosition)
           out.writeUInt32NoTag(registerFunction(func))
           writeSeq(params)(writeExpr)
-          writeWindowFunctionInfo(window)
+          if (AnalysisDeserializer.CurrentVersion > 5) {
+            writeWindowFunctionInfo(window)
+          }
       }
     }
 
