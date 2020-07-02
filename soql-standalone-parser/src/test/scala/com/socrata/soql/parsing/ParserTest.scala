@@ -241,7 +241,6 @@ class ParserTest extends WordSpec with MustMatchers {
 
     "window function over partition round trip" in {
       val x = parseFull("select avg(x) over(partition by x, y)")
-      val hh = x.selection.expressions.head.expression
       x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( PARTITION BY `x`, `y`)")
     }
 
