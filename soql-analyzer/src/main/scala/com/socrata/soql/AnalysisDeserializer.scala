@@ -28,6 +28,7 @@ private trait DeserializationDictionary[C, T] {
 
 object AnalysisDeserializer {
   val CurrentVersion = 5
+  val CurrentVersionPlusOne = CurrentVersion + 1
 
   // This is odd and for smooth deploy transition.
   val TestVersionV4 = 0
@@ -144,7 +145,9 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
           val functionNamePosition = readPosition()
           val func = dictionary.functions(in.readUInt32())
           val params = readSeq { readExpr() }
-          FunctionCall(func, params)(pos, functionNamePosition)
+          val window = if (this.version > 5) readWindowFunctionInfo()
+                       else None
+          FunctionCall(func, params, window)(pos, functionNamePosition)
       }
     }
 
@@ -188,6 +191,15 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
           }
         Join(joinType, joinAnalysis, readExpr())
       }
+    }
+
+    def readWindowFunctionInfo(): Option[WindowFunctionInfo[C, T]] = {
+      readSeq {
+        val partitions = readSeq { readExpr() }
+        val orderings = readOrderBy()
+        val frames = readSeq { readExpr() }
+        WindowFunctionInfo(partitions, orderings, frames)
+      }.headOption
     }
 
     // TODO: remove after release of 2.10.6 or higher (for 2.10.5- backwards-compatibility)
@@ -301,7 +313,11 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
         deserializer.read()
-      case v@CurrentVersion =>
+      case v@CurrentVersion  =>
+        val dictionary = DeserializationDictionaryImpl.fromInput(cis)
+        val deserializer = new Deserializer(cis, dictionary, v)
+        deserializer.read()
+      case v@CurrentVersionPlusOne =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
         deserializer.read()

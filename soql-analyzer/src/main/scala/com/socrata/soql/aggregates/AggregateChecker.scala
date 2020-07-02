@@ -52,11 +52,11 @@ class AggregateChecker[Type] {
 
   def checkPregroupExpression(clause: String, e: Expr) {
     e match {
-      case FunctionCall(function, _) if function.isWindowFunction =>
-      case FunctionCall(function, _) if function.isAggregate =>
+      case FunctionCall(function, _, None) if function.isAggregate =>
         throw AggregateInUngroupedContext(function.name, clause, e.position)
-      case FunctionCall(_, params) =>
+      case FunctionCall(_, params, None) =>
         params.foreach(checkPregroupExpression(clause, _))
+      case FunctionCall(_, _, Some(_)) => // ok
       case _: ColumnRef[_, _] | _: TypedLiteral[_] =>
         // ok, these are always good
     }
@@ -65,13 +65,14 @@ class AggregateChecker[Type] {
   def checkPostgroupExpression(clause: String, e: Expr, groupExpressions: Iterable[Expr]) {
     if(!isGroupExpression(e, groupExpressions)) {
       e match {
-        case FunctionCall(function, params) if function.isWindowFunction =>
-          // Skip the first parameter which is supposedly an aggregate function.
-          params.tail.foreach(checkPregroupExpression(clause, _))
-        case FunctionCall(function, params) if function.isAggregate =>
+        case FunctionCall(function, params, None) if function.isAggregate =>
           params.foreach(checkPregroupExpression(clause, _))
-        case FunctionCall(_, params) =>
+        case FunctionCall(_, params, None) =>
           params.foreach(checkPostgroupExpression(clause, _, groupExpressions))
+        case FunctionCall(_, params, Some(info)) =>
+          params.foreach(checkPostgroupExpression(clause, _, groupExpressions))
+          info.partitions.foreach(checkPostgroupExpression(clause, _, groupExpressions))
+          info.orderings.foreach(ob => checkPostgroupExpression(clause, ob.expression, groupExpressions))
         case _: TypedLiteral[_] =>
           // ok, this is always good
         case col: ColumnRef[ColumnName, _] =>

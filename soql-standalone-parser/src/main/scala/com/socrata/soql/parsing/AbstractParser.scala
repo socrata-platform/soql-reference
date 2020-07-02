@@ -347,43 +347,48 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def windowFunctionParamList: Parser[Either[Position, Seq[Expression]]] =
     rep1sep(expr, COMMA()) ^^ (Right(_))
 
-  def orderbyToExpressions(orderby: OrderBy): Seq[Expression] = {
-    val es0 = Seq(orderby.expression)
-    val es1 = if (orderby.ascending) es0
-              else es0 :+ com.socrata.soql.ast.StringLiteral("desc")(orderby.expression.position)
-    val es2 = if (orderby.nullLast) es1 :+ com.socrata.soql.ast.StringLiteral("null_last")(orderby.expression.position)
-              else es1 :+ com.socrata.soql.ast.StringLiteral("null_first")(orderby.expression.position)
-    es2
-  }
-
-  def windowFunctionParams: Parser[Seq[Expression]] = {
-    def partitionKey(position: Position) = com.socrata.soql.ast.StringLiteral("partition_by")(position)
-    def orderKey(position: Position) =  com.socrata.soql.ast.StringLiteral("order_by")(position)
-
-    LPAREN() ~ opt(PARTITION() ~ BY() ~ windowFunctionParamList) ~ opt(ORDER() ~ BY() ~ orderingList) ~ RPAREN() ^^ {
-      case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ Some(_ ~ _ ~ orderings) ~ _) =>
-        val orderingExprs = orderings.flatMap(ordering => orderbyToExpressions(ordering))
-        mergePartitionOrder(partitionKey(lp.position) +: partition, orderKey(lp.position) +: orderingExprs)
-      case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ None ~ _) =>
-        partitionKey(lp.position) +: partition
-      case (lp ~ None ~ Some(_ ~ _ ~ orderings) ~ _) =>
-        val orderingExprs = orderings.flatMap(ordering => orderbyToExpressions(ordering))
-        orderKey(lp.position) +: orderingExprs
-      case _ => // ( )
-        Seq.empty
+  def windowFunctionParams: Parser[WindowFunctionInfo] = {
+    LPAREN() ~ opt(PARTITION() ~ BY() ~ windowFunctionParamList) ~ opt(ORDER() ~ BY() ~ orderingList) ~ opt(frameClause) ~ RPAREN() ^^ {
+      case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ Some(_ ~ _ ~ orderings) ~ optFrame ~ rp) =>
+        WindowFunctionInfo(partition, orderings, optFrame.toSeq.flatten)
+      case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ None ~ optFrame ~ rp) =>
+        WindowFunctionInfo(partition, Seq.empty, optFrame.toSeq.flatten)
+      case (lp ~ None ~ Some(_ ~ _ ~ orderings) ~ optFrame ~ rp) =>
+        WindowFunctionInfo(Seq.empty, orderings, optFrame.toSeq.flatten)
+      case _ =>
+        WindowFunctionInfo(Seq.empty, Seq.empty, Seq.empty)
     } | failure(errors.missingArg)
   }
 
-  def mergePartitionOrder(a: Seq[Expression], b: Seq[Expression]): Seq[Expression] = {
-    a ++ b
+  def frameClause: Parser[Seq[Expression]] = {
+    RANGE() ~ frameStartEnd  ^^ {
+      case r ~ f =>
+        Seq(tokenToLiteral(r)) ++ f
+    } |
+      (RANGE() | ROWS()) ~ BETWEEN() ~ frameStartEnd ~ AND() ~ frameStartEnd ^^ {
+        case r ~ b ~ fa ~ a ~ fb => (Seq(tokenToLiteral(r), tokenToLiteral(b)) ++ fa :+ tokenToLiteral(a)) ++ fb
+      }
+  }
+
+  def frameStartEnd: Parser[Seq[Expression]] = {
+    UNBOUNDED() ~ PRECEDING() ^^ {
+      case a ~ b =>
+        Seq(tokenToLiteral(a), tokenToLiteral(b))
+    } | CURRENT() ~ ROW() ^^ {
+      case a ~ b => Seq(tokenToLiteral(a), tokenToLiteral(b))
+    } |
+    integer ~ (PRECEDING() | FOLLOWING()) ^^ {
+      case a ~ b =>
+        Seq(com.socrata.soql.ast.NumberLiteral(BigDecimal(a.bigInteger))(b.position), tokenToLiteral(b))
+    }
   }
 
   def functionWithParams(ident: String, params: Either[Position, Seq[Expression]], pos: Position) =
     params match {
       case Left(_) =>
-        FunctionCall(SpecialFunctions.StarFunc(ident), Seq.empty)(pos, pos)
+        FunctionCall(SpecialFunctions.StarFunc(ident), Seq.empty, None)(pos, pos)
       case Right(params) =>
-        FunctionCall(FunctionName(ident), params)(pos, pos)
+        FunctionCall(FunctionName(ident), params, None)(pos, pos)
     }
 
   def identifier_or_funcall: Parser[Expression] = {
@@ -398,12 +403,13 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
         functionWithParams(ident, params, identPos)
       case ((_, ident, identPos)) ~ Some(params ~ Some(_ ~ wfParams)) =>
         val innerFc = functionWithParams(ident, params, identPos)
-        FunctionCall(SpecialFunctions.WindowFunctionOver, innerFc +: wfParams)(identPos, identPos)
+        val rightParams = params.right.get
+        FunctionCall(FunctionName(ident), rightParams, Some(wfParams))(identPos, identPos)
     }
   }
 
   def paren: Parser[Expression] =
-    LPAREN() ~> expr <~ RPAREN() ^^ { e => FunctionCall(SpecialFunctions.Parens, Seq(e))(e.position, e.position) }
+    LPAREN() ~> expr <~ RPAREN() ^^ { e => FunctionCall(SpecialFunctions.Parens, Seq(e), None)(e.position, e.position) }
 
   def atom =
     literal | identifier_or_funcall | paren | failure(errors.missingExpr)
@@ -411,18 +417,18 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   lazy val dereference: PackratParser[Expression] =
     dereference ~ DOT() ~ simpleIdentifier ^^ {
       case a ~ dot ~ ((b, bPos)) =>
-        FunctionCall(SpecialFunctions.Subscript, Seq(a, ast.StringLiteral(b)(bPos)))(a.position, dot.position)
+        FunctionCall(SpecialFunctions.Subscript, Seq(a, ast.StringLiteral(b)(bPos)), None)(a.position, dot.position)
     } |
     dereference ~ LBRACKET() ~ expr ~ RBRACKET() ^^ {
       case a ~ lbrak ~ b ~ _ =>
-        FunctionCall(SpecialFunctions.Subscript, Seq(a, b))(a.position, lbrak.position)
+        FunctionCall(SpecialFunctions.Subscript, Seq(a, b), None)(a.position, lbrak.position)
     } |
     atom
 
   lazy val cast: PackratParser[Expression] =
     cast ~ COLONCOLON() ~ simpleIdentifier ^^ {
       case a ~ colcol ~ ((b, bPos)) =>
-        FunctionCall(SpecialFunctions.Cast(TypeName(b)), Seq(a))(a.position, bPos)
+        FunctionCall(SpecialFunctions.Cast(TypeName(b)), Seq(a), None)(a.position, bPos)
     } |
     dereference
 
@@ -432,7 +438,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   lazy val unary: PackratParser[Expression] =
     opt(unary_op) ~ unary ^^ {
       case None ~ b => b
-      case Some(f) ~ b => FunctionCall(SpecialFunctions.Operator(f.printable), Seq(b))(f.position, f.position)
+      case Some(f) ~ b => FunctionCall(SpecialFunctions.Operator(f.printable), Seq(b), None)(f.position, f.position)
     } |
     cast
 
@@ -442,7 +448,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   lazy val exp: PackratParser[Expression] =
     unary ~ opt(exp_op ~ exp) ^^ {
         case a ~ None => a
-        case a ~ Some(op ~ b) => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b))(a.position, op.position)
+        case a ~ Some(op ~ b) => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b), None)(a.position, op.position)
       }
 
   val factor_op =
@@ -451,7 +457,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   lazy val factor: PackratParser[Expression] =
     opt(factor ~ factor_op) ~ exp ^^ {
       case None ~ a => a
-      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b))(a.position, op.position)
+      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b), None)(a.position, op.position)
     }
 
   val term_op =
@@ -460,7 +466,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   lazy val term: PackratParser[Expression] =
     opt(term ~ term_op) ~ factor ^^ {
       case None ~ a => a
-      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b))(a.position, op.position)
+      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b), None)(a.position, op.position)
     }
 
   val order_op =
@@ -469,56 +475,60 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   lazy val order: PackratParser[Expression] =
     opt(order ~ order_op) ~ term ^^ {
       case None ~ a => a
-      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b))(a.position, op.position)
+      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b), None)(a.position, op.position)
     }
 
   lazy val isLikeBetweenIn: PackratParser[Expression] =
     isLikeBetweenIn ~ IS() ~ NULL() ^^ {
-      case a ~ is ~ _ => FunctionCall(SpecialFunctions.IsNull, Seq(a))(a.position, is.position)
+      case a ~ is ~ _ => FunctionCall(SpecialFunctions.IsNull, Seq(a), None)(a.position, is.position)
     } |
     isLikeBetweenIn ~ IS() ~ (NOT() | failure(errors.missingKeywords(NOT(), NULL()))) ~ NULL() ^^ {
       case a ~ is ~ not ~ _ =>
-        FunctionCall(SpecialFunctions.IsNotNull, Seq(a))(a.position, is.position)
+        FunctionCall(SpecialFunctions.IsNotNull, Seq(a), None)(a.position, is.position)
     } |
     isLikeBetweenIn ~ LIKE() ~ isLikeBetweenIn ^^ {
-      case a ~ like ~ b => FunctionCall(SpecialFunctions.Like, Seq(a, b))(a.position, like.position)
+      case a ~ like ~ b => FunctionCall(SpecialFunctions.Like, Seq(a, b), None)(a.position, like.position)
     } |
     isLikeBetweenIn ~ BETWEEN() ~ isLikeBetweenIn ~ AND() ~ isLikeBetweenIn ^^ {
       case a ~ between ~ b ~ _ ~ c =>
-        FunctionCall(SpecialFunctions.Between, Seq(a, b, c))(a.position, between.position)
+        FunctionCall(SpecialFunctions.Between, Seq(a, b, c), None)(a.position, between.position)
     } |
     isLikeBetweenIn ~ NOT() ~ BETWEEN() ~ isLikeBetweenIn ~ AND() ~ isLikeBetweenIn ^^ {
       case a ~ not ~ _ ~ b ~ _ ~ c =>
-        FunctionCall(SpecialFunctions.NotBetween, Seq(a, b, c))(a.position, not.position)
+        FunctionCall(SpecialFunctions.NotBetween, Seq(a, b, c), None)(a.position, not.position)
     } |
     isLikeBetweenIn ~ NOT() ~ IN() ~ LPAREN() ~ rep1sep(expr, COMMA()) ~ RPAREN() ^^  {
       case a ~ not ~ _ ~ _ ~ es ~ _ =>
-        FunctionCall(SpecialFunctions.NotIn, a +: es)(a.position, not.position)
+        FunctionCall(SpecialFunctions.NotIn, a +: es, None)(a.position, not.position)
     } |
     isLikeBetweenIn ~ NOT() ~ (LIKE() | failure(errors.missingKeywords(BETWEEN(), IN(), LIKE()))) ~ isLikeBetweenIn ^^ {
       case a ~ not ~ _ ~ b =>
-        FunctionCall(SpecialFunctions.NotLike, Seq(a, b))(a.position, not.position)
+        FunctionCall(SpecialFunctions.NotLike, Seq(a, b), None)(a.position, not.position)
     } |
     isLikeBetweenIn ~ (IN() | failure(errors.missingKeywords(NOT(), BETWEEN(), IN(), LIKE()))) ~ LPAREN() ~ rep1sep(expr, COMMA()) ~ RPAREN() ^^  {
-      case a ~ in ~ _ ~ es ~ _ => FunctionCall(SpecialFunctions.In, a +: es)(a.position, in.position)
+      case a ~ in ~ _ ~ es ~ _ => FunctionCall(SpecialFunctions.In, a +: es, None)(a.position, in.position)
     } |
     order
 
   lazy val negation: PackratParser[Expression] =
-    NOT() ~ negation ^^ { case op ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(b))(op.position, op.position) } |
+    NOT() ~ negation ^^ { case op ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(b), None)(op.position, op.position) } |
     isLikeBetweenIn
 
   lazy val conjunction: PackratParser[Expression] =
     opt(conjunction ~ AND()) ~ negation ^^ {
       case None ~ b => b
-      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b))(a.position, op.position)
+      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b), None)(a.position, op.position)
     }
 
   lazy val disjunction: PackratParser[Expression] =
     opt(disjunction ~ OR()) ~ conjunction ^^ {
       case None ~ b => b
-      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b))(a.position, op.position)
+      case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b), None)(a.position, op.position)
     }
 
   def expr = disjunction | failure(errors.missingExpr)
+
+  private def tokenToLiteral(token: Token): Literal = {
+    com.socrata.soql.ast.StringLiteral(token.printable)(token.position)
+  }
 }

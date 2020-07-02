@@ -29,8 +29,8 @@ object TestTypeInfo extends TypeInfo[TestType] {
     val baseNum = typed.NumberLiteral(n, TestNumber.t)(pos)
     Seq(
       baseNum,
-      typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(baseNum))(pos, pos),
-      typed.FunctionCall(TestFunctions.NumberToDouble.monomorphic.get, Seq(baseNum))(pos, pos)
+      typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(baseNum), None)(pos, pos),
+      typed.FunctionCall(TestFunctions.NumberToDouble.monomorphic.get, Seq(baseNum), None)(pos, pos)
     )
   }
 

@@ -193,11 +193,14 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
         case NullLiteral(typ) =>
           out.writeRawByte(5)
           out.writeUInt32NoTag(registerType(typ))
-        case f@FunctionCall(func, params) =>
+        case f@FunctionCall(func, params, window) =>
           out.writeRawByte(6)
           writePosition(f.functionNamePosition)
           out.writeUInt32NoTag(registerFunction(func))
           writeSeq(params)(writeExpr)
+          if (AnalysisDeserializer.CurrentVersion > 5) {
+            writeWindowFunctionInfo(window)
+          }
       }
     }
 
@@ -219,6 +222,14 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
         out.writeStringNoTag(join.typ.toString)
         writeJoinAnalysis(join.from)
         writeExpr(join.on)
+      }
+    }
+
+    private def writeWindowFunctionInfo(windowFunctionInfo: Option[WindowFunctionInfo[C, T]]) {
+      writeSeq(windowFunctionInfo.toSeq) { w =>
+        writeSeq(w.partitions)(writeExpr)
+        writeOrderBy(w.orderings)
+        writeSeq(w.frames)(writeExpr)
       }
     }
 

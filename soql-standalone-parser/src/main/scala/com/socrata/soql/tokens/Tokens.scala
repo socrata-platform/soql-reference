@@ -100,6 +100,13 @@ case class BANG() extends FormattedToken("!")
 // Window functions
 case class OVER() extends Token
 case class PARTITION() extends Token
+case class RANGE() extends Token
+case class ROWS() extends Token
+case class UNBOUNDED() extends Token
+case class PRECEDING() extends Token
+case class FOLLOWING() extends Token
+case class CURRENT() extends Token
+case class ROW() extends Token
 
 // Literals
 

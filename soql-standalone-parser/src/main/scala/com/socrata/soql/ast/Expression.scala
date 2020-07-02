@@ -1,6 +1,6 @@
 package com.socrata.soql.ast
 
-import scala.util.parsing.input.Position
+import scala.util.parsing.input.{NoPosition, Position}
 import scala.runtime.ScalaRunTime
 import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
 
@@ -44,23 +44,33 @@ object Expression {
     case ColumnOrAliasRef(aliasOpt, name) => aliasOpt ++: Vector(name.name)
     case fc: FunctionCall =>
       fc match {
-        case FunctionCall(SpecialFunctions.StarFunc(base), Seq()) => Vector(base)
-        case FunctionCall(SpecialFunctions.Operator("-"), args) => args.flatMap(findIdentsAndLiterals) // otherwise minus looks like a non-synthetic underscore
-        case FunctionCall(SpecialFunctions.Operator(op), Seq(arg)) => op +: findIdentsAndLiterals(arg)
-        case FunctionCall(SpecialFunctions.Operator(op), Seq(arg1, arg2)) => findIdentsAndLiterals(arg1) ++ Vector(op) ++ findIdentsAndLiterals(arg2)
-        case FunctionCall(SpecialFunctions.Operator(_), _) => sys.error("Found a non-unary, non-binary operator: " + fc)
-        case FunctionCall(SpecialFunctions.Cast(typ), Seq(arg)) => findIdentsAndLiterals(arg) :+ typ.name
-        case FunctionCall(SpecialFunctions.Cast(_), _) => sys.error("Found a non-unary cast: " + fc)
-        case FunctionCall(SpecialFunctions.IsNull, args) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "null")
-        case FunctionCall(SpecialFunctions.IsNotNull, args) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "not", "null")
-        case FunctionCall(SpecialFunctions.Between, Seq(a,b,c)) =>
+        case FunctionCall(SpecialFunctions.StarFunc(base), Seq(), _) => Vector(base)
+        case FunctionCall(SpecialFunctions.Operator("-"), args, _) => args.flatMap(findIdentsAndLiterals) // otherwise minus looks like a non-synthetic underscore
+        case FunctionCall(SpecialFunctions.Operator(op), Seq(arg), _) => op +: findIdentsAndLiterals(arg)
+        case FunctionCall(SpecialFunctions.Operator(op), Seq(arg1, arg2), _) => findIdentsAndLiterals(arg1) ++ Vector(op) ++ findIdentsAndLiterals(arg2)
+        case FunctionCall(SpecialFunctions.Operator(_), _, _) => sys.error("Found a non-unary, non-binary operator: " + fc)
+        case FunctionCall(SpecialFunctions.Cast(typ), Seq(arg), _) => findIdentsAndLiterals(arg) :+ typ.name
+        case FunctionCall(SpecialFunctions.Cast(_), _, _) => sys.error("Found a non-unary cast: " + fc)
+        case FunctionCall(SpecialFunctions.IsNull, args, _) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "null")
+        case FunctionCall(SpecialFunctions.IsNotNull, args, _) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "not", "null")
+        case FunctionCall(SpecialFunctions.Between, Seq(a,b,c), _) =>
           findIdentsAndLiterals(a) ++ Vector("between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
-        case FunctionCall(SpecialFunctions.NotBetween, Seq(a,b,c)) =>
+        case FunctionCall(SpecialFunctions.NotBetween, Seq(a,b,c), _) =>
           findIdentsAndLiterals(a) ++ Vector("not", "between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
-        case FunctionCall(SpecialFunctions.WindowFunctionOver, args) =>
-          (findIdentsAndLiterals(args.head) :+ "over") ++ args.tail.flatMap(findIdentsAndLiterals)
-        case FunctionCall(other, args) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals)
+        case FunctionCall(other, args, window) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals) ++ findIdentsAndLiterals(window)
       }
+  }
+
+  private def findIdentsAndLiterals(windowFunctionInfo: Option[WindowFunctionInfo]): Seq[String] =  {
+    windowFunctionInfo.toSeq.map { w =>
+      val WindowFunctionInfo(partitions, orderings, frames) = w
+      val ps = partitions.flatMap(findIdentsAndLiterals)
+      val os = orderings.map(_.expression).flatMap(findIdentsAndLiterals)
+      Seq("over") ++
+        (if (partitions.isEmpty) ps else  "partition_by" +: ps) ++
+        (if (orderings.isEmpty) os else  "order_by" +: os) ++
+        frames.flatMap(findIdentsAndLiterals)
+    }.flatten
   }
 }
 
@@ -172,7 +182,7 @@ case class NullLiteral()(val position: Position) extends Literal {
   override final def asString = "null"
 }
 
-case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])(val position: Position, val functionNamePosition: Position) extends Expression {
+case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression], window: Option[WindowFunctionInfo])(val position: Position, val functionNamePosition: Position) extends Expression  {
   protected def asString() = format(0, new StringBuilder, None).get.toString
 
   private implicit class Interspersable[T](xs: Seq[T]) {
@@ -281,84 +291,65 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression])
           sb <- parameters(0).format(d, sb, limit)
           _ = sb.append(")")
         } yield sb
-      case SpecialFunctions.WindowFunctionOver =>
-        val head = parameters.head
-        val tail = parameters.tail
-        head.format(d, sb, limit).map(_.append(" OVER (")).flatMap { sb =>
-          windowOverPartition(tail) match {
-            case Seq() =>
-              Some(sb)
-            case partitions =>
-              sb.append(" PARTITION BY ")
-              appendParams(sb, partitions.iterator, ",", d, limit)
-          }
-        }.flatMap { sb =>
-          windowOverOrder(tail) match {
-            case Seq() =>
-              Some(sb)
-            case orders =>
-              sb.append(" ORDER BY ")
-              orders.head.format(d, sb, limit)
-              orders.tail.foreach {
-                case StringLiteral("desc") =>
-                  sb.append(" DESC")
-                case StringLiteral("null_first") =>
-                  sb.append(" NULL FIRST")
-                case StringLiteral("null_last") =>
-                  sb.append(" NULL LAST")
-                case expr =>
-                  sb.append(", ")
-                  expr.format(d, sb, limit)
-              }
-              Some(sb)
-          }
-        }.map(_.append(")"))
       case other => {
-        sb.append(other).append("(")
-        val startLength = sb.length
-        appendParams(sb, parameters.iterator, ", ", d, limit.orElse(Some(startLength + 30))) match {
-          case Some(sb) =>
-            // it all fit on one line
-            sb.append(")")
-            Some(sb)
-          case None =>
-            limit match {
-              case Some(l) =>
-                None
-              case None =>
-                // it didn't, we'll need to line-break
-                sb.setLength(startLength) // undo anything that got written
-                sb.append("\n").append(indent(d+1))
-                appendParams(sb, parameters.iterator, ",\n" + indent(d+1), d+1, None)
-                sb.append("\n").append(indent(d))
-                Some(sb.append(")"))
-            }
-        }
+        formatBase(sb, d, limit, other, parameters)
+        window.foreach(_.format(d, sb, limit))
+        Some(sb)
       }
     }
   }
 
-  private def windowOverPartition(es: Seq[Expression]): Seq[Expression] = {
-    val ps = es.dropWhile {
-      case StringLiteral("partition_by") => false
-      case _ => true
+  private def formatBase(sb: StringBuilder, d: Int, limit: Option[Int], other: FunctionName, parameters: Seq[Expression]): Option[StringBuilder] = {
+    sb.append(other).append("(")
+    val startLength = sb.length
+    appendParams(sb, parameters.iterator, ", ", d, limit.orElse(Some(startLength + 30))) match {
+      case Some(sb) =>
+        // it all fit on one line
+        sb.append(")")
+        Some(sb)
+      case None =>
+        limit match {
+          case Some(l) =>
+            None
+          case None =>
+            // it didn't, we'll need to line-break
+            sb.setLength(startLength) // undo anything that got written
+            sb.append("\n").append(indent(d+1))
+            appendParams(sb, parameters.iterator, ",\n" + indent(d+1), d+1, None)
+            sb.append("\n").append(indent(d))
+            Some(sb.append(")"))
+        }
     }
-    val ps1 = ps.takeWhile {
-      case StringLiteral("order_by") => false
-      case _ => true
-    }
-    if (ps1.nonEmpty) ps1.tail
-    else ps1
   }
 
-  private def windowOverOrder(es: Seq[Expression]): Seq[Expression] = {
-    val ps = es.dropWhile {
-      case StringLiteral("order_by") => false
-      case _ => true
-    }
-    if (ps.nonEmpty) ps.tail
-    else ps
+  def toOldStyleWindowFunctionCall(): FunctionCall = {
+    val innerFc = FunctionCall(functionName, parameters, None)(position, functionNamePosition)
+    val wfParams = window.get.toOldStyleParams()
+    FunctionCall(SpecialFunctions.WindowFunctionOver, innerFc +: wfParams, None)(position, functionNamePosition)
   }
 
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
+}
+
+case class WindowFunctionInfo(partitions: Seq[Expression], orderings: Seq[OrderBy], frames: Seq[Expression]) {
+
+  def format(d: Int, sb: StringBuilder, limit: Option[Int]): Option[StringBuilder] = {
+    sb.append(" OVER (")
+    if (partitions.nonEmpty) sb.append(" PARTITION BY ")
+    sb.append(partitions.map(_.toString).mkString(", "))
+    if (orderings.nonEmpty) sb.append(" ORDER BY ")
+    sb.append(orderings.map(_.toString).mkString(", "))
+    frames.foreach {
+      case StringLiteral(x) => sb.append(" "); sb.append(x)
+      case NumberLiteral(n) => sb.append(" "); sb.append(n)
+      case _ =>
+    }
+    sb.append(")")
+    Some(sb)
+  }
+
+  def toOldStyleParams(): Seq[Expression] = {
+    if (partitions.nonEmpty) Seq(com.socrata.soql.ast.StringLiteral("partition_by")(NoPosition)) ++ partitions  else Seq.empty
+    if (orderings.nonEmpty) Seq(com.socrata.soql.ast.StringLiteral("order_by")(NoPosition)) ++ orderings.map(_.expression) else Seq.empty
+  }
 }

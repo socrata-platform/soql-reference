@@ -21,7 +21,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
   def ident(name: String) = ColumnOrAliasRef(None, ColumnName(name))(NoPosition)
-  def functionCall(name: FunctionName, args: Seq[Expression]) = FunctionCall(name, args)(NoPosition, NoPosition)
+  def functionCall(name: FunctionName, args: Seq[Expression], window: Option[WindowFunctionInfo]) = FunctionCall(name, args, window)(NoPosition, NoPosition)
   def stringLiteral(s: String) = StringLiteral(s)(NoPosition)
   def numberLiteral(num: BigDecimal) = NumberLiteral(num)(NoPosition)
 
@@ -63,7 +63,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "accept expr.identifier" in {
-      parseExpression("a.b") must equal (functionCall(SpecialFunctions.Subscript, Seq(ident("a"), stringLiteral("b"))))
+      parseExpression("a.b") must equal (functionCall(SpecialFunctions.Subscript, Seq(ident("a"), stringLiteral("b")), None))
     }
 
     "reject expr.identifier." in {
@@ -88,7 +88,7 @@ class ParserTest extends WordSpec with MustMatchers {
               SpecialFunctions.Operator("*"),
               Seq(
                 numberLiteral(2),
-                ident("b"))))))
+                ident("b")), None)), None))
     }
 
     "reject expr[expr]." in {
@@ -103,8 +103,8 @@ class ParserTest extends WordSpec with MustMatchers {
             ident("a"),
             functionCall(SpecialFunctions.Operator("*"), Seq(
               numberLiteral(2),
-              ident("b"))))),
-        stringLiteral("c"))))
+              ident("b")), None)), None),
+        stringLiteral("c")), None))
     }
 
     "accept expr[expr].ident[expr]" in {
@@ -118,9 +118,9 @@ class ParserTest extends WordSpec with MustMatchers {
                 ident("a"),
                 functionCall(SpecialFunctions.Operator("*"), Seq(
                   numberLiteral(2),
-                  ident("b"))))),
-            stringLiteral("c"))),
-        numberLiteral(3))))
+                  ident("b")), None)), None),
+            stringLiteral("c")), None),
+        numberLiteral(3)), None))
     }
 
     "allow offset/limit" in {

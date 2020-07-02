@@ -2,7 +2,7 @@ package com.socrata.soql.typechecker
 
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions._
-import com.socrata.soql.typed
+import com.socrata.soql.{AnalysisDeserializer, typed}
 import com.socrata.soql.environment.{ColumnName, DatasetContext, FunctionName, TableName}
 
 class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: Map[String, DatasetContext[Type]]) extends ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]]) => typed.CoreExpr[ColumnName, Type]) { self =>
@@ -40,10 +40,12 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
               throw NoSuchColumn(col, r.position)
           }
       }
-    case FunctionCall(SpecialFunctions.Parens, params) =>
+    case FunctionCall(SpecialFunctions.Parens, params, window) =>
       assert(params.length == 1, "Parens with more than one parameter?!")
+      assert(window.isEmpty, "Window clause exists?!")
       typecheck(params(0), aliases)
-    case fc@FunctionCall(SpecialFunctions.Subscript, Seq(base, StringLiteral(prop))) =>
+    case fc@FunctionCall(SpecialFunctions.Subscript, Seq(base, StringLiteral(prop)), window) =>
+      assert(window.isEmpty, "Window clause exists?!")
       // Subscripting special case.  Some types have "subfields" that
       // can be accessed with dot notation.  The parser turns this
       // into a subscript operator with a string literal parameter.
@@ -67,7 +69,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
           }
         }
       }
-    case fc@FunctionCall(_, _) =>
+    case fc@FunctionCall(_, _, _) =>
       typecheckFuncall(fc, aliases)
     case bl@BooleanLiteral(b) =>
       Right(booleanLiteralExpr(b, bl.position))
@@ -79,12 +81,23 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       Right(nullLiteralExpr(nl.position))
   }
 
-  def typecheckFuncall(fc: FunctionCall, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = {
-    val FunctionCall(name, parameters) = fc
+  def typecheckFuncall(fc0: FunctionCall, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = {
+
+    val fc = if (AnalysisDeserializer.CurrentVersion == AnalysisDeserializer.TestVersionV5) fc0.toOldStyleWindowFunctionCall()
+             else fc0
+
+    val FunctionCall(name, parameters, window) = fc
 
     val typedParameters = parameters.map(typecheck(_, aliases)).map {
       case Left(tm) => return Left(tm)
       case Right(es) => es
+    }
+
+    val typedWindow = window.map { w =>
+      val typedPartitions = w.partitions.map(apply(_, aliases))
+      val typedOrderings = w.orderings.map(ob => typed.OrderBy(apply(ob.expression, aliases), ob.ascending, ob.nullLast) )
+      val typedFrames = w.frames.map { x => apply(x, aliases) }
+      typed.WindowFunctionInfo(typedPartitions, typedOrderings, typedFrames)
     }
 
     val options = functionInfo.functionsWithArity(name, typedParameters.length)
@@ -98,10 +111,10 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       Left(TypeMismatch(name, typeNameFor(found.head), parameters(idx).position))
     } else {
       val potentials = resolved.flatMap { f =>
-        val skipTypeCheckAfter = if (f.isWindowFunction) f.parameters.size else typedParameters.size
+        val skipTypeCheckAfter = typedParameters.size
         val selectedParameters = (f.allParameters, typedParameters, Stream.from(0)).zipped.map { (expected, options, idx) =>
           val choices = if (idx < skipTypeCheckAfter) options.filter(_.typ == expected)
-          else options.headOption.toSeq // any type is ok for window functions
+                        else options.headOption.toSeq // any type is ok for window functions
           if(choices.isEmpty) sys.error("Can't happen, we passed typechecking")
           // we can't commit to a choice here.  Because if we decide this is ambiguous, we have to wait to find out
           // later if "f" is eliminated as a contender by typechecking.  It's only an error if f survives
@@ -116,7 +129,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
 
         selectedParameters.toVector.foldRight(Seq(List.empty[Expr])) { (choices, remainingParams) =>
           choices.flatMap { choice => remainingParams.map(choice :: _) }
-        }.map(typed.FunctionCall(f, _)(fc.position, fc.functionNamePosition))
+        }.map(typed.FunctionCall(f, _, typedWindow)(fc.position, fc.functionNamePosition))
       }
 
       // If all possibilities result in the same type, we can disambiguate here.

@@ -114,7 +114,7 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
       testV5Unchained(query)
     }
 
-    it("v4 deserializes to v5 analysis") {
+    ignore("v4 deserializes to v5 analysis") {
       testCompatibilityUnchained(query, v4Serialized)
     }
   }
@@ -127,7 +127,7 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
       testV5Full(query)
     }
 
-    it("v4 deserializes to v5 analysis") {
+    ignore("v4 deserializes to v5 analysis") {
       testCompatibilityFull(query, v4Serialized)
     }
   }
@@ -150,7 +150,7 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
       testV5Full(query)
     }
 
-    it("v4 deserializes to v5 analysis") {
+    ignore("v4 deserializes to v5 analysis") {
       testCompatibilityFull(query, v4Serialized)
     }
   }
@@ -163,7 +163,7 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
       testV5Full(query)
     }
 
-    it("v4 deserializes to v5 analysis") {
+    ignore("v4 deserializes to v5 analysis") {
       testCompatibilityFull(query, v4Serialized)
     }
   }
@@ -176,7 +176,7 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
       testV5Full(query)
     }
 
-    it("v4 deserializes to v5 analysis") {
+    ignore("v4 deserializes to v5 analysis") {
       testCompatibilityFull(query, v4Serialized)
     }
   }
