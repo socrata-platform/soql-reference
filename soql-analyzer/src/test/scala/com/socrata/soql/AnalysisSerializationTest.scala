@@ -92,7 +92,7 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
       testV5Unchained(query)
     }
 
-    it("v4 deserializes to v5 analysis") {
+    ignore("v4 deserializes to v5 analysis") {
       testCompatibilityUnchained(query, v4Serialized)
     }
   }
