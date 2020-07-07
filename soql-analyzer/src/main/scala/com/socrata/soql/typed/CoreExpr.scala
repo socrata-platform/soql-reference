@@ -89,7 +89,7 @@ case class FunctionCall[ColumnId, Type](function: MonomorphicFunction[Type], par
 
   def copy[C, T](function: MonomorphicFunction[T] = function,
                  parameters: Seq[CoreExpr[C, T]] = parameters,
-                 window: Option[WindowFunctionInfo[C, T]]): FunctionCall[C, T] =
+                 window: Option[WindowFunctionInfo[C, T]] = window): FunctionCall[C, T] =
     FunctionCall(function, parameters, window)(position, functionNamePosition)
 }
 
