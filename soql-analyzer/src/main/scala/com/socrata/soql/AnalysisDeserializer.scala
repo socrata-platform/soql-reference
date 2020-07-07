@@ -227,8 +227,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         dictionary.strings(in.readUInt32())
       }
 
-    def readAnaAndFrom(): SoQLAnalysis[C, T] = {
-
+    def readAnalysis(): SoQLAnalysis[C, T] = {
       val ig = readIsGrouped()
       val d = readDistinct()
       val s = readSelection()
@@ -242,10 +241,6 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val search = readSearch()
 
       SoQLAnalysis(ig, d, s, j, w, gb, h, ob, l, o, search)
-    }
-
-    def readAnalysis(): SoQLAnalysis[C, T] = {
-      readAnaAndFrom()
     }
 
     def read(): NonEmptySeq[SoQLAnalysis[C, T]] = {
