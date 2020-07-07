@@ -27,11 +27,9 @@ private trait DeserializationDictionary[C, T] {
 }
 
 object AnalysisDeserializer {
-  val CurrentVersion = 5
-  val CurrentVersionPlusOne = CurrentVersion + 1
+  val CurrentVersion = 6
 
   // This is odd and for smooth deploy transition.
-  val TestVersionV4 = 0
   val TestVersionV5 = -1
 }
 
@@ -98,9 +96,6 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
                              dictionary: DeserializationDictionary[C, T],
                              version: Int)
   {
-    // TODO: remove after release of 2.10.6 or higher (exists for 2.10.5- backwards-compatibility during release process)
-    val isV4 = version == 4 || version == TestVersionV4
-
     def readPosition(): Position =
       in.readRawByte() match {
         case 0 =>
@@ -145,7 +140,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
           val functionNamePosition = readPosition()
           val func = dictionary.functions(in.readUInt32())
           val params = readSeq { readExpr() }
-          val window = if (this.version > 5) readWindowFunctionInfo()
+          val window = if (this.version != 5) readWindowFunctionInfo()
                        else None
           FunctionCall(func, params, window)(pos, functionNamePosition)
       }
@@ -179,16 +174,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     def readJoins(): Seq[Join[C, T]] = {
       readSeq {
         val joinType = JoinType(in.readString())
-        val joinAnalysis =
-          if (isV4) {
-            val tableLikeAndFroms = readWithFrom().seq
-            val from = tableLikeAndFroms.head._2.get // must exist by conventions of v4
-            val tableLike = tableLikeAndFroms.map(_._1)
-            val alias = maybeRead(in.readString)
-            v4JoinToV5Join(from, tableLike, alias)
-          } else {
-            readJoinAnalysis()
-          }
+        val joinAnalysis = readJoinAnalysis()
         Join(joinType, joinAnalysis, readExpr())
       }
     }
@@ -202,35 +188,10 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       }.headOption
     }
 
-    // TODO: remove after release of 2.10.6 or higher (for 2.10.5- backwards-compatibility)
-    def v4JoinToV5Join(from: String, tableLike: Seq[SoQLAnalysis[C, T]], aliasOpt: Option[String]): JoinAnalysis[C, T] = {
-      val subAnaOpt = if (tableLike.size == 1 && tableLike.head.selection.keys.isEmpty) {
-        None
-      } else {
-        val subAnalyses = NonEmptySeq.fromSeq(tableLike)
-        val alias = aliasOpt.getOrElse {
-          throw new RuntimeException(s"alias must be present in a sub-select (join, from: $from)")
-        }
-        subAnalyses.map(SubAnalysis(_, alias))
-      }
-
-      val tableNameAlias = if (subAnaOpt.isEmpty) aliasOpt else None
-
-      JoinAnalysis(TableName(from, tableNameAlias), subAnaOpt)
-    }
 
     def readWhere(): Option[Expr] = maybeRead { readExpr() }
 
     def readHaving(): Option[Expr] = readWhere()
-
-    // backwards compatible (v4) sequence reading (used to be Option[Seq[T]] (v4) instead of Seq[T] (v5))
-    def bcSeq[T](f: => Seq[T]): Seq[T] = {
-      if (isV4) {
-        maybeRead(f).toSeq.flatten
-      } else {
-        f
-      }
-    }
 
     def readGroupBy(): Seq[Expr] = readSeq { readExpr() }
 
@@ -266,61 +227,38 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         dictionary.strings(in.readUInt32())
       }
 
-    def readAnaAndFrom(): (SoQLAnalysis[C, T], Option[String]) = {
-      lazy val fromOptTrigger = if (isV4) maybeRead(in.readString) else None
-
+    def readAnalysis(): SoQLAnalysis[C, T] = {
       val ig = readIsGrouped()
       val d = readDistinct()
       val s = readSelection()
-      val j = {
-        fromOptTrigger; // trigger eval, read "from" string if v4
-        readJoins()
-      }
+      val j = readJoins()
       val w = readWhere()
-      val gb = bcSeq { readGroupBy() }
+      val gb = readGroupBy()
       val h = readHaving()
-      val ob = bcSeq { readOrderBy() }
+      val ob = readOrderBy()
       val l = readLimit()
       val o = readOffset()
       val search = readSearch()
 
-      val ana = SoQLAnalysis(ig, d, s, j, w, gb, h, ob, l, o, search)
-
-      (ana, fromOptTrigger)
-    }
-
-    def readAnalysis(): SoQLAnalysis[C, T] = {
-      readAnaAndFrom()._1
+      SoQLAnalysis(ig, d, s, j, w, gb, h, ob, l, o, search)
     }
 
     def read(): NonEmptySeq[SoQLAnalysis[C, T]] = {
       readNonEmptySeq { readAnalysis() }
-    }
-
-    def readWithFrom(): NonEmptySeq[(SoQLAnalysis[C, T], Option[String])] = {
-      readNonEmptySeq { readAnaAndFrom() }
     }
   }
 
   def apply(in: InputStream): NonEmptySeq[SoQLAnalysis[C, T]] = {
     val cis = CodedInputStream.newInstance(in)
     cis.readInt32() match {
-      case v if v == TestVersionV4 || v == TestVersionV5 => // single select
+      case v if v >= 5 && v <= 6 =>
+        val dictionary = DeserializationDictionaryImpl.fromInput(cis)
+        val deserializer = new Deserializer(cis, dictionary, v)
+        deserializer.read()
+      case v if v == TestVersionV5 => // single select
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
         NonEmptySeq(deserializer.readAnalysis(), Seq.empty)
-      case v if v >= 3 && v <= 4 =>
-        val dictionary = DeserializationDictionaryImpl.fromInput(cis)
-        val deserializer = new Deserializer(cis, dictionary, v)
-        deserializer.read()
-      case v@CurrentVersion  =>
-        val dictionary = DeserializationDictionaryImpl.fromInput(cis)
-        val deserializer = new Deserializer(cis, dictionary, v)
-        deserializer.read()
-      case v@CurrentVersionPlusOne =>
-        val dictionary = DeserializationDictionaryImpl.fromInput(cis)
-        val deserializer = new Deserializer(cis, dictionary, v)
-        deserializer.read()
       case other =>
         throw new UnknownAnalysisSerializationVersion(other)
     }

@@ -81,10 +81,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       Right(nullLiteralExpr(nl.position))
   }
 
-  def typecheckFuncall(fc0: FunctionCall, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = {
-
-    val fc = if (AnalysisDeserializer.CurrentVersion == AnalysisDeserializer.TestVersionV5) fc0.toOldStyleWindowFunctionCall()
-             else fc0
+  def typecheckFuncall(fc: FunctionCall, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = {
 
     val FunctionCall(name, parameters, window) = fc
 
