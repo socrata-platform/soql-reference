@@ -567,4 +567,10 @@ SELECT visits, @x2.zx
     analysis.selection.head._1.name must equal("sum_a1_id")
   }
 
+
+  test("Merge window function with group by aggregate") {
+    val analysis1 = analyzer.analyzeFullQuery("SELECT name_first, name_last, sum(visits) as n2 GROUP BY name_first, name_last |> SELECT name_first, row_number() over(order by n2) as rn")
+    val analysis2 = analyzer.analyzeFullQuery("SELECT name_first, row_number() over(order by sum(visits)) as rn GROUP BY name_first, name_last")
+    SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
+  }
 }
