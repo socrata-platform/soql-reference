@@ -643,7 +643,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   private def hasWindowFunction(a: Analysis): Boolean = {
     a.selection.exists {
       case (_, fc: com.socrata.soql.typed.FunctionCall[_, _]) =>
-        fc.function.name == SpecialFunctions.WindowFunctionOver
+        fc.window.nonEmpty || fc.function.name == SpecialFunctions.WindowFunctionOver
       case _ =>
         false
     }
@@ -688,7 +688,13 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
       case tl: typed.TypedLiteral[T] =>
         tl
       case fc@typed.FunctionCall(f, params, window) =>
-        typed.FunctionCall(f, params.map(replaceRefs(a, _)), window)(fc.position, fc.functionNamePosition)
+        val w = window.map {
+          case typed.WindowFunctionInfo(partitions, orderings, frames) =>
+            typed.WindowFunctionInfo(partitions.map(replaceRefs(a, _)),
+                                     orderings.map(ob => ob.copy(expression = replaceRefs(a, ob.expression))),
+                                     frames)
+        }
+        typed.FunctionCall(f, params.map(replaceRefs(a, _)), w)(fc.position, fc.functionNamePosition)
     }
 }
 

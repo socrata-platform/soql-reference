@@ -46,6 +46,8 @@ object TestFunctions {
                              Seq(WildcardType()),
                              VariableType("a"))
 
+  val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, TestNumber)
+
   val Mul = f("*", SpecialFunctions.Operator("*"), Map("a" -> NumLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"), isAggregate = false)
 
   val And = f("and", SpecialFunctions.Operator("and"), Map.empty, Seq(FixedType(TestBoolean), FixedType(TestBoolean)), Seq.empty, FixedType(TestBoolean), isAggregate = false)

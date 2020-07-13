@@ -83,7 +83,8 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
 
   def typecheckFuncall(fc0: FunctionCall, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = {
 
-    val fc = if (AnalysisDeserializer.CurrentVersion == AnalysisDeserializer.TestVersionV5) fc0.toOldStyleWindowFunctionCall()
+    val fc = if (AnalysisDeserializer.CurrentVersion < AnalysisDeserializer.TestVersionV5 ||
+                 AnalysisDeserializer.CurrentVersion == 5) fc0.toOldStyleWindowFunctionCall()
              else fc0
 
     val FunctionCall(name, parameters, window) = fc
@@ -111,7 +112,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       Left(TypeMismatch(name, typeNameFor(found.head), parameters(idx).position))
     } else {
       val potentials = resolved.flatMap { f =>
-        val skipTypeCheckAfter = typedParameters.size
+        val skipTypeCheckAfter = if (f.name == SpecialFunctions.WindowFunctionOver) f.parameters.size else typedParameters.size
         val selectedParameters = (f.allParameters, typedParameters, Stream.from(0)).zipped.map { (expected, options, idx) =>
           val choices = if (idx < skipTypeCheckAfter) options.filter(_.typ == expected)
                         else options.headOption.toSeq // any type is ok for window functions
