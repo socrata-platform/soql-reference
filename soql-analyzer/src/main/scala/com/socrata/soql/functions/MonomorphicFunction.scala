@@ -3,8 +3,18 @@ package com.socrata.soql.functions
 import com.socrata.soql.environment.FunctionName
 
 case class MonomorphicFunction[Type](function: Function[Type], bindings: Map[String, Type]) {
-  def this(identity: String, name: FunctionName, parameters: Seq[Type], repeated: Seq[Type], result: Type, isAggregate: Boolean = false) =
-    this(Function(identity, name, Map.empty, parameters.map(FixedType(_)), repeated.map(FixedType(_)), FixedType(result), isAggregate), Map.empty)
+  def this(identity: String, name: FunctionName, parameters: Seq[Type], repeated: Seq[Type], result: Type, isAggregate: Boolean = false)(documentation: String, examples: Example*) =
+    this(Function(
+      identity,
+      name,
+      Map.empty,
+      parameters.map(FixedType(_)),
+      repeated.map(FixedType(_)),
+      FixedType(result),
+      isAggregate,
+      documentation,
+      examples
+    ), Map.empty)
 
   val bindingsLessWildcards = bindings.keySet.diff(function.wildcards)
   require(bindingsLessWildcards == function.typeParametersLessWildcards, "bindings do not match")

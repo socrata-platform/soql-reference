@@ -11,6 +11,9 @@ object WildcardType {
   def apply() = new WildcardType()
 }
 
+case class Example(explanation: String, query: String, tryit: String)
+
+
 /**
  * @note This class has identity equality semantics even though it's a case class.  This
  *       is for performance reasons, as there should somewhere be a static list of supported
@@ -24,7 +27,9 @@ case class Function[Type](identity: String,
                           parameters: Seq[TypeLike[Type]],
                           repeated: Seq[TypeLike[Type]],
                           result: TypeLike[Type],
-                          isAggregate: Boolean = false)  {
+                          isAggregate: Boolean,
+                          doc: String,
+                          examples: Seq[Example])  {
 
   val minArity = parameters.length
   def isVariadic = repeated.nonEmpty
