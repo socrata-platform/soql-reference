@@ -1,5 +1,6 @@
 package com.socrata.soql.aggregates
 
+import com.socrata.soql.ast.SpecialFunctions
 import com.socrata.soql.typed._
 import com.socrata.soql.exceptions.{AggregateInUngroupedContext, ColumnNotInGroupBys}
 import com.socrata.soql.environment.ColumnName
@@ -52,8 +53,9 @@ class AggregateChecker[Type] {
 
   def checkPregroupExpression(clause: String, e: Expr) {
     e match {
-      case FunctionCall(function, _, None) if function.isAggregate =>
+      case fc@FunctionCall(function, _, None) if function.isAggregate  =>
         throw AggregateInUngroupedContext(function.name, clause, e.position)
+      case FunctionCall(function, _, _) if function.name == SpecialFunctions.WindowFunctionOver =>
       case FunctionCall(_, params, None) =>
         params.foreach(checkPregroupExpression(clause, _))
       case FunctionCall(_, _, Some(_)) => // ok

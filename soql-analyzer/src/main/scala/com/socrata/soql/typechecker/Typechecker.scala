@@ -83,15 +83,23 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
 
   def typecheckFuncall(fc0: FunctionCall, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = {
 
-    val fc = if (AnalysisDeserializer.CurrentVersion == AnalysisDeserializer.TestVersionV5) fc0.toOldStyleWindowFunctionCall()
+    val fc = if (AnalysisDeserializer.CurrentVersion < AnalysisDeserializer.TestVersionV5 ||
+                 AnalysisDeserializer.CurrentVersion == 5) fc0.toOldStyleWindowFunctionCall()
              else fc0
 
     val FunctionCall(name, parameters, window) = fc
 
-    val typedParameters = parameters.map(typecheck(_, aliases)).map {
+    val typedParameters0 = parameters.map(typecheck(_, aliases)).map {
       case Left(tm) => return Left(tm)
       case Right(es) => es
     }
+
+    val typedParameters = name match {
+        case SpecialFunctions.WindowFunctionOver =>
+          typedParameters0.take(1)
+        case _ =>
+          typedParameters0
+      }
 
     val typedWindow = window.map { w =>
       val typedPartitions = w.partitions.map(apply(_, aliases))
