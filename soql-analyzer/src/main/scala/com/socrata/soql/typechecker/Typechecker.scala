@@ -89,17 +89,10 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
 
     val FunctionCall(name, parameters, window) = fc
 
-    val typedParameters0 = parameters.map(typecheck(_, aliases)).map {
+    val typedParameters = parameters.map(typecheck(_, aliases)).map {
       case Left(tm) => return Left(tm)
       case Right(es) => es
     }
-
-    val typedParameters = name match {
-        case SpecialFunctions.WindowFunctionOver =>
-          typedParameters0.take(1)
-        case _ =>
-          typedParameters0
-      }
 
     val typedWindow = window.map { w =>
       val typedPartitions = w.partitions.map(apply(_, aliases))
@@ -119,7 +112,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       Left(TypeMismatch(name, typeNameFor(found.head), parameters(idx).position))
     } else {
       val potentials = resolved.flatMap { f =>
-        val skipTypeCheckAfter = typedParameters.size
+        val skipTypeCheckAfter = if (f.name == SpecialFunctions.WindowFunctionOver) f.parameters.size else typedParameters.size
         val selectedParameters = (f.allParameters, typedParameters, Stream.from(0)).zipped.map { (expected, options, idx) =>
           val choices = if (idx < skipTypeCheckAfter) options.filter(_.typ == expected)
                         else options.headOption.toSeq // any type is ok for window functions

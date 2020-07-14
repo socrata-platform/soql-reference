@@ -1,5 +1,6 @@
 package com.socrata.soql.typechecker
 
+import com.socrata.soql.ast.SpecialFunctions
 import com.socrata.soql.functions._
 import com.socrata.soql.typed.Typable
 
@@ -60,8 +61,10 @@ class FunctionCallTypechecker[Type](typeInfo: TypeInfo[Type], functionInfo: Func
   def evaluateMonomorphicCandidate(candidate: MFunc, parameters: Seq[Set[Type]]): CandidateEvaluation[Type] = {
     require(goodArity(candidate.function, parameters))
 
-    val checkedParameters = parameters
-    val checkedCandidateAllParameters = candidate.allParameters
+    val checkedParameters = if (candidate.name == SpecialFunctions.WindowFunctionOver) parameters.take(candidate.parameters.size)
+                            else parameters
+    val checkedCandidateAllParameters = if (candidate.name == SpecialFunctions.WindowFunctionOver) candidate.parameters
+                                        else candidate.allParameters
 
     (checkedCandidateAllParameters, checkedParameters, Stream.from(0)).zipped.foreach { (expectedType, availableTypes, idx) =>
       if(!availableTypes(expectedType)) {
