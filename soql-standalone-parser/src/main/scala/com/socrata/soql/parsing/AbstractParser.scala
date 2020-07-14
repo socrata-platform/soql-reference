@@ -355,13 +355,13 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
         WindowFunctionInfo(partition, Seq.empty, optFrame.toSeq.flatten)
       case (lp ~ None ~ Some(_ ~ _ ~ orderings) ~ optFrame ~ rp) =>
         WindowFunctionInfo(Seq.empty, orderings, optFrame.toSeq.flatten)
-      case _ =>
-        WindowFunctionInfo(Seq.empty, Seq.empty, Seq.empty)
+      case (lp ~ None ~ None ~ optFrame ~ rp) =>
+        WindowFunctionInfo(Seq.empty, Seq.empty, optFrame.toSeq.flatten)
     } | failure(errors.missingArg)
   }
 
   def frameClause: Parser[Seq[Expression]] = {
-    RANGE() ~ frameStartEnd  ^^ {
+    (RANGE() | ROWS()) ~ frameStartEnd  ^^ {
       case r ~ f =>
         Seq(tokenToLiteral(r)) ++ f
     } |
