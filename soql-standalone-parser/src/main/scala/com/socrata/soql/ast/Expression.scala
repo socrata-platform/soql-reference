@@ -322,12 +322,6 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
     }
   }
 
-  def toOldStyleWindowFunctionCall(): FunctionCall = {
-    val innerFc = FunctionCall(functionName, parameters, None)(position, functionNamePosition)
-    val wfParams = window.get.toOldStyleParams()
-    FunctionCall(SpecialFunctions.WindowFunctionOver, innerFc +: wfParams, None)(position, functionNamePosition)
-  }
-
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
 }
 
@@ -346,10 +340,5 @@ case class WindowFunctionInfo(partitions: Seq[Expression], orderings: Seq[OrderB
     }
     sb.append(")")
     Some(sb)
-  }
-
-  def toOldStyleParams(): Seq[Expression] = {
-    if (partitions.nonEmpty) Seq(com.socrata.soql.ast.StringLiteral("partition_by")(NoPosition)) ++ partitions  else Seq.empty
-    if (orderings.nonEmpty) Seq(com.socrata.soql.ast.StringLiteral("order_by")(NoPosition)) ++ orderings.map(_.expression) else Seq.empty
   }
 }
