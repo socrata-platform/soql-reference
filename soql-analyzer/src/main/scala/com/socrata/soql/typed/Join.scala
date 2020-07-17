@@ -23,6 +23,10 @@ sealed trait Join[ColumnId, Type] {
     typed.Join(typ, JoinAnalysis(from.fromTable, mappedSub), on.mapColumnIds(f))
   }
 
+  def copy(from: JoinAnalysis[ColumnId, Type] = from, on: CoreExpr[ColumnId, Type] = on): typed.Join[ColumnId, Type] = {
+    typed.Join(this.typ, from, on)
+  }
+
   override def toString: String = {
     s"$typ $from ON $on"
   }
