@@ -113,6 +113,12 @@ object TestFunctions {
     Seq(FixedType(TestBoolean), VariableType("a")),
     VariableType("a"))
 
+  val Coalesce = f("coalesce", FunctionName("coalesce"),
+    Map.empty,
+    Seq(VariableType("a")),
+    Seq(VariableType("a")),
+    VariableType("a"))
+
   def potentialAccessors = for {
     method <- getClass.getMethods
     if Modifier.isPublic(method.getModifiers) && method.getParameterTypes.length == 0

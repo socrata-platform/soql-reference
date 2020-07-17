@@ -262,6 +262,13 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     merged must equal (analysis2)
   }
 
+  test("Merging join with column alias of the main line") {
+    val analysis1 = analyzer.analyzeFullQuery("select coalesce(name_last, name_first) as nl, visits where visits > 1 |> select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = nl where @aaaa-aaaa.name_last='Almond'")
+    val analysis2 = analyzer.analyzeFullQuery("select visits, @aaaa-aaaa.name_last join @aaaa-aaaa on @aaaa-aaaa.name_last = coalesce(name_last, name_first) where visits > 1 and @aaaa-aaaa.name_last='Almond'")
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1)
+    merged must equal (analysis2)
+  }
+
   test("Merging join with table alias") {
     val analysis1 = analyzer.analyzeFullQuery("select name_last, name_first, visits where visits > 1 |> select visits as vis, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first where @a1.name_first='John'")
     val analysis2 = analyzer.analyzeFullQuery("select visits as vis, @a1.name_first join @aaaa-aaab as a1 on @a1.name_first = name_first where visits > 1 and @a1.name_first='John'")
