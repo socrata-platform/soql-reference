@@ -223,47 +223,86 @@ object SoQLFunctions {
   )
 
   val Between = f("between", SpecialFunctions.Between, Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))(
-    "Returns TRUE for values in a given range"
-    // EN-41182
-    // This is an example from dev.socrata.com
-    // But it points at the wrong place. Solving the jira ticket
-    // above will allow us to surface query examples that don't
-    // have so many problems.
-    // Once that is dealt with, we can write examples like below,
-    // and they'll be rendered in the SoQLDocs component
-    // Example(
-    //   "Get the rows where annual salary is between 40,000 and 60,000",
-    //   "select * where annual_salary between '40000' and '60000'",
-    //   "https://data.cityofchicago.org/resource/tt4n-kn4t.json"
-    // )
+    "Returns TRUE for values in a given range",
+    Example(
+      "Get the rows where permit value is between 10,000 and 20,000",
+      "select * where value between '10000' and '20000'",
+      "https://edu3.demo.socrata.com/api/resource/4sp6-t5xn.json"
+    )
   )
   val NotBetween = f("not between", SpecialFunctions.NotBetween, Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))(
-    NoDocs
+    NoDocs,
+    Example(
+      "Get the rows where permit value is not between 10,000 and 20,000",
+      "select * where value between '10000' and '20000'",
+      "https://edu3.demo.socrata.com/api/resource/4sp6-t5xn.json"
+    )
+
   )
 
   val Min = f("min", FunctionName("min"), Map("a" -> Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
-    NoDocs
+    NoDocs,
+    Example(
+      "Get the minimum value permit in the COMMERCIAL category",
+      "select min(value) where category = 'COMMERCIAL'",
+      "https://edu3.demo.socrata.com/api/resource/4sp6-t5xn.json"
+    )
   )
   val Max = f("max", FunctionName("max"), Map("a" -> Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
-    NoDocs
+    NoDocs,
+    Example(
+      "Get the maximum value permit in the COMMERCIAL category",
+      "select max(value) where category = 'COMMERCIAL'",
+      "https://edu3.demo.socrata.com/api/resource/4sp6-t5xn.json"
+    )
   )
   val CountStar = mf("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, SoQLNumber, isAggregate = true)(
-    NoDocs
+    NoDocs,
+    Example(
+      "Get the number of permits in the COMMERCIAL category",
+      "select count(*) where category = 'COMMERCIAL'",
+      "https://edu3.demo.socrata.com/api/resource/4sp6-t5xn.json"
+    )
   )
   val Count = f("count", FunctionName("count"), Map.empty, Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), isAggregate = true)(
-    NoDocs
+    NoDocs,
+    Example(
+      "Get the number of permits in the COMMERCIAL category",
+      "select count(category) where category = 'COMMERCIAL'",
+      "https://edu3.demo.socrata.com/api/resource/4sp6-t5xn.json"
+    )
   )
   val CountDistinct = f("count_distinct", FunctionName("count_distinct"), Map.empty, Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), isAggregate = true)(
-    NoDocs
+    NoDocs,
+    Example(
+      "Get the number of different categories for permits",
+      "select count_distinct(category)",
+      "https://edu3.demo.socrata.com/api/resource/4sp6-t5xn.json"
+    )
   )
   val Sum = f("sum", FunctionName("sum"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
-    NoDocs
+    NoDocs,
+    Example(
+      "Get the sum of the values of all commercial permits",
+      "select sum(value) where category = 'COMMERCIAL'",
+      "https://edu3.demo.socrata.com/api/resource/4sp6-t5xn.json"
+    )
   )
   val Avg = f("avg", FunctionName("avg"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
-    "Returns the average of a given set of numbers"
+    "Returns the average of a given set of numbers",
+    Example(
+      "Get the average value of commercial permits",
+      "select avg(value) where category = 'COMMERCIAL'",
+      "https://edu3.demo.socrata.com/api/resource/4sp6-t5xn.json"
+    )
   )
   val Median = f("median", FunctionName("median"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
-    NoDocs
+    NoDocs,
+    Example(
+      "Get the median value of commercial permits",
+      "select median(value) where category = 'COMMERCIAL'",
+      "https://edu3.demo.socrata.com/api/resource/4sp6-t5xn.json"
+    )
   )
   val MedianDisc = f("median_disc", FunctionName("median"), Map("a" -> (Ordered -- NumLike)), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
     NoDocs
