@@ -453,6 +453,9 @@ object SoQLFunctions {
   val FloatingTimeStampExtractWoy = mf("floating timestamp extract week of year", FunctionName("date_extract_woy"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)(
     NoDocs
   )
+  val FloatingTimestampExtractIsoY = mf("floating timestamp extract isoyear", FunctionName("date_extract_iso_y"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)(
+    NoDocs
+  )
 
   // This set of date_trunc functions for fixed_timestamp are for obe compatibility purpose.
   // The truncated boundary does not aligned with the client time zone unless it happens to have the same time zone as the server.
