@@ -450,7 +450,16 @@ object SoQLFunctions {
   val FloatingTimeStampExtractDow = mf("floating timestamp extract day of week", FunctionName("date_extract_dow"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)(
     NoDocs
   )
+  // Extracting the week from a floating timestamp extracts the iso week (1-53).
+  // Sometimes the last few days of December may be considered the first week of
+  // next year. See https://en.wikipedia.org/wiki/ISO_week_date for more info.
   val FloatingTimeStampExtractWoy = mf("floating timestamp extract week of year", FunctionName("date_extract_woy"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)(
+    NoDocs
+  )
+  // This is useful when you are also extracting the week (iso week). This is
+  // because the iso year will give the year associated with the iso week whereas
+  // the year will give the year associated with the iso date.
+  val FloatingTimestampExtractIsoY = mf("floating timestamp extract isoyear", FunctionName("date_extract_iso_y"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)(
     NoDocs
   )
 
