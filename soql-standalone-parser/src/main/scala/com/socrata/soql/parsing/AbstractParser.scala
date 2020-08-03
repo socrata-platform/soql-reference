@@ -121,6 +121,19 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     }
   }
 
+  def keyword(name: String) =
+    acceptIf {
+      case tokens.Identifier(s, false) => name.equalsIgnoreCase(s)
+      case _ => false
+    }(_ => errors.missingKeywords(tokens.Identifier(name, false))) ^^ {
+      case t@tokens.Identifier(_, false) =>
+        val r = tokens.Identifier(name, false)
+        r.setPosition(t.position)
+        r
+      case other =>
+        sys.error("Cannot happen, we only accept unquoted identifiers in this rule")
+    }
+
   val tableIdentifier: Parser[(String, Position)] =
     accept[tokens.TableIdentifier] ^^ { t =>
       (TableName.SodaFountainPrefix + t.value.substring(1) /* remove prefix @ */, t.position)
@@ -204,9 +217,9 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     }
 
   def whereClause = WHERE() ~> expr
-  def groupByClause = GROUP() ~ BY() ~> groupByList
+  def groupByClause = GROUP() ~ keyword("BY") ~> groupByList
   def havingClause = HAVING() ~> expr
-  def orderByClause = ORDER() ~ BY() ~> orderingList
+  def orderByClause = ORDER() ~ keyword("BY") ~> orderingList
   def limitClause = LIMIT() ~> integer
   def offsetClause = OFFSET() ~> integer
   def searchClause = SEARCH() ~> stringLiteral
@@ -280,13 +293,17 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def ordering = expr ~ opt(ascDesc) ~ opt(nullPlacement) ^^ {
     case e ~ None ~ None => OrderBy(e, true, true)
     case e ~ Some(order) ~ None => OrderBy(e, order == ASC(), order == ASC())
-    case e ~ None ~ Some(firstLast) => OrderBy(e, true, firstLast == LAST())
-    case e ~ Some(order) ~ Some(firstLast) => OrderBy(e, order == ASC(), firstLast == LAST())
+    case e ~ None ~ Some(firstLast) => OrderBy(e, true, firstLast == Last)
+    case e ~ Some(order) ~ Some(firstLast) => OrderBy(e, order == ASC(), firstLast == Last)
   }
 
   def ascDesc = accept[ASC] | accept[DESC]
 
-  def nullPlacement = NULL() ~> (accept[FIRST] | accept[LAST] | failure(errors.missingKeywords(FIRST(), LAST())))
+  sealed abstract class NullPlacement
+  case object First extends NullPlacement
+  case object Last extends NullPlacement
+
+  def nullPlacement = (NULL() | keyword("NULLS")) ~> ((keyword("FIRST") ^^ { _ => First }) | (keyword("LAST") ^^ { _ => Last }) | failure(errors.missingKeywords(tokens.Identifier("FIRST", false), tokens.Identifier("LAST", false))))
 
   /*
    *               *************
@@ -348,7 +365,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     rep1sep(expr, COMMA()) ^^ (Right(_))
 
   def windowFunctionParams: Parser[WindowFunctionInfo] = {
-    LPAREN() ~ opt(PARTITION() ~ BY() ~ windowFunctionParamList) ~ opt(ORDER() ~ BY() ~ orderingList) ~ opt(frameClause) ~ RPAREN() ^^ {
+    LPAREN() ~ opt(keyword("PARTITION") ~ keyword("BY") ~ windowFunctionParamList) ~ opt(ORDER() ~ keyword("BY") ~ orderingList) ~ opt(frameClause) ~ RPAREN() ^^ {
       case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ Some(_ ~ _ ~ orderings) ~ optFrame ~ rp) =>
         WindowFunctionInfo(partition, orderings, optFrame.toSeq.flatten)
       case (lp ~ Some(_ ~ _ ~ Right(partition)) ~ None ~ optFrame ~ rp) =>
@@ -361,23 +378,23 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   }
 
   def frameClause: Parser[Seq[Expression]] = {
-    (RANGE() | ROWS()) ~ frameStartEnd  ^^ {
+    (keyword("RANGE") | keyword("ROWS")) ~ frameStartEnd  ^^ {
       case r ~ f =>
         Seq(tokenToLiteral(r)) ++ f
     } |
-      (RANGE() | ROWS()) ~ BETWEEN() ~ frameStartEnd ~ AND() ~ frameStartEnd ^^ {
+      (keyword("RANGE") | keyword("ROWS")) ~ BETWEEN() ~ frameStartEnd ~ AND() ~ frameStartEnd ^^ {
         case r ~ b ~ fa ~ a ~ fb => (Seq(tokenToLiteral(r), tokenToLiteral(b)) ++ fa :+ tokenToLiteral(a)) ++ fb
       }
   }
 
   def frameStartEnd: Parser[Seq[Expression]] = {
-    UNBOUNDED() ~ PRECEDING() ^^ {
+    keyword("UNBOUNDED") ~ keyword("PRECEDING") ^^ {
       case a ~ b =>
         Seq(tokenToLiteral(a), tokenToLiteral(b))
-    } | CURRENT() ~ ROW() ^^ {
+    } | keyword("CURRENT") ~ keyword("ROW") ^^ {
       case a ~ b => Seq(tokenToLiteral(a), tokenToLiteral(b))
     } |
-    integer ~ (PRECEDING() | FOLLOWING()) ^^ {
+    integer ~ (keyword("PRECEDING") | keyword("FOLLOWING")) ^^ {
       case a ~ b =>
         Seq(com.socrata.soql.ast.NumberLiteral(BigDecimal(a.bigInteger))(b.position), tokenToLiteral(b))
     }
@@ -396,7 +413,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       case ((_, ident, identPos)) ~ param =>
         functionWithParams(s"${ident.toLowerCase}_distinct", Right(Seq(param)), identPos)
     } |
-    identifier ~ opt(params ~ opt(OVER() ~ windowFunctionParams)) ^^ {
+    identifier ~ opt(params ~ opt(keyword("OVER") ~ windowFunctionParams)) ^^ {
       case ((qual, ident, identPos)) ~ None =>
         ColumnOrAliasRef(qual, ColumnName(ident))(identPos)
       case ((_, ident, identPos)) ~ Some(params ~ None) =>

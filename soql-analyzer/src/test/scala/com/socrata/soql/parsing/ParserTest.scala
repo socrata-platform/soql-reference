@@ -91,6 +91,12 @@ class ParserTest extends WordSpec with MustMatchers {
                 ident("b")), None)), None))
     }
 
+    "accept unreserved keywords as identifiers" in {
+      parseExpression("last") must equal (
+        ident("last")
+      )
+    }
+
     "reject expr[expr]." in {
       expectFailure("Identifier expected", "a[2 * b].")
     }
