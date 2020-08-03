@@ -24,7 +24,7 @@ case class EXCEPT() extends Token
 case class AS() extends Token
 case class WHERE() extends Token
 case class GROUP() extends Token
-case class BY() extends Token
+// case class BY() extends Token
 case class HAVING() extends Token
 case class ORDER() extends Token
 case class LIMIT() extends Token
@@ -46,8 +46,8 @@ case class ASC() extends Token with OrderDirection
 case class DESC() extends Token with OrderDirection
 
 sealed trait NullPlacement
-case class FIRST() extends Token with NullPlacement
-case class LAST() extends Token with NullPlacement
+// case class FIRST() extends Token with NullPlacement
+// case class LAST() extends Token with NullPlacement
 
 // Query chaining
 case class QUERYPIPE() extends Token
@@ -98,15 +98,15 @@ case class NOT() extends Token
 case class BANG() extends FormattedToken("!")
 
 // Window functions
-case class OVER() extends Token
-case class PARTITION() extends Token
-case class RANGE() extends Token
-case class ROWS() extends Token
-case class UNBOUNDED() extends Token
-case class PRECEDING() extends Token
-case class FOLLOWING() extends Token
-case class CURRENT() extends Token
-case class ROW() extends Token
+// case class OVER() extends Token
+//case class PARTITION() extends Token
+//case class RANGE() extends Token
+//case class ROWS() extends Token
+//case class UNBOUNDED() extends Token
+//case class PRECEDING() extends Token
+//case class FOLLOWING() extends Token
+//case class CURRENT() extends Token
+//case class ROW() extends Token
 
 // Literals
 

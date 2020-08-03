@@ -61,7 +61,6 @@ object LexerReader {
     AS,
     WHERE,
     GROUP,
-    BY,
     HAVING,
     ORDER,
     LIMIT,
@@ -69,8 +68,6 @@ object LexerReader {
     SEARCH,
     ASC,
     DESC,
-    FIRST,
-    LAST,
 
     // Presently unused keywords
     FROM,
@@ -93,17 +90,6 @@ object LexerReader {
     IS,
     BETWEEN,
     LIKE,
-
-    // Window functions
-    OVER,
-    PARTITION,
-    RANGE,
-    ROWS,
-    UNBOUNDED,
-    PRECEDING,
-    FOLLOWING,
-    CURRENT,
-    ROW,
 
   // Literals
     () => BooleanLiteral(true),
