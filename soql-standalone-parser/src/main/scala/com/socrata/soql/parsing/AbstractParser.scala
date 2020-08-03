@@ -125,7 +125,14 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     acceptIf {
       case tokens.Identifier(s, false) => name.equalsIgnoreCase(s)
       case _ => false
-    }(_ => errors.missingKeywords(tokens.Identifier(name, false)))
+    }(_ => errors.missingKeywords(tokens.Identifier(name, false))) ^^ {
+      case t@tokens.Identifier(_, false) =>
+        val r = tokens.Identifier(name, false)
+        r.setPosition(t.position)
+        r
+      case other =>
+        sys.error("Cannot happen, we only accept unquoted identifiers in this rule")
+    }
 
   val tableIdentifier: Parser[(String, Position)] =
     accept[tokens.TableIdentifier] ^^ { t =>
