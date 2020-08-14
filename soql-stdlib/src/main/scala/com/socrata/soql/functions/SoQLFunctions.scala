@@ -241,6 +241,13 @@ object SoQLFunctions {
     NoDocs
   )
 
+  val Least = f("least", FunctionName("least"), Map("a" -> Ordered), Seq(VariableType("a")), Seq(VariableType("a")), VariableType("a"))(
+    "Returns the smallest of its arguments, ignoring nulls"
+  )
+  val Greatest = f("greatest", FunctionName("greatest"), Map("a" -> Ordered), Seq(VariableType("a")), Seq(VariableType("a")), VariableType("a"))(
+    "Returns the largest of its arguments, ignoring nulls"
+  )
+
   val Min = f("min", FunctionName("min"), Map("a" -> Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
     NoDocs
   )
