@@ -5,6 +5,7 @@ import com.socrata.soql.exceptions.SoQLException
 import com.socrata.soql.types._
 import environment.{ColumnName, DatasetContext, TableName}
 import com.socrata.soql.functions.{SoQLFunctionInfo, SoQLTypeInfo}
+import com.rojoma.json.v3.util.JsonUtil
 
 object SoqlToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -48,6 +49,8 @@ object SoqlToy extends (Array[String] => Unit) {
       if(selection == null) return;
       if(selection == "?") {
         menu()
+      } else if(selection == "exit" || selection == "quit") {
+        return
       } else {
         try {
           val analyses = analyzer.analyzeFullQuery(selection)
@@ -70,7 +73,10 @@ object SoqlToy extends (Array[String] => Unit) {
             println("has aggregates: " + analysis.isGrouped)
           }
         } catch {
-          case e: SoQLException => println(e.getMessage)
+          case e: SoQLException =>
+            println(e.getMessage)
+            println(JsonUtil.renderJson(e, pretty = true))
+            println(JsonUtil.parseJson[SoQLException](JsonUtil.renderJson(e)))
         }
       }
     }

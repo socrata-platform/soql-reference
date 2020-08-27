@@ -105,7 +105,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
     }
     if(resolved.isEmpty) {
       val TypeMismatchFailure(expected, found, idx) = failed.maxBy(_.idx)
-      Left(TypeMismatch(name, typeNameFor(found.head), parameters(idx).position))
+      Left(TypeMismatch(name, typeNameFor(typeInfo.typeParameterUniverse.find(found).get), parameters(idx).position))
     } else {
       val potentials = resolved.flatMap { f =>
         val skipTypeCheckAfter = typedParameters.size
