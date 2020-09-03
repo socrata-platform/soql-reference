@@ -575,7 +575,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   // for a query that contains a search.
   private def tryMerge(a: Analysis, b: Analysis): Option[Analysis] = (a, b) match {
     case (a, _) if (hasWindowFunction(a)) => None
-    case (SoQLAnalysis(aIsGroup, false, aSelect, Nil, aWhere, aGroup, aHaving, aOrder, aLim, aOff, aSearch),
+    case (SoQLAnalysis(aIsGroup, false, aSelect, Nil, aWhere, aGroup, aHaving, aOrder, aLim, aOff, None),
           SoQLAnalysis(false,    false, bSelect, bJoins, None,   Nil,   None,    Nil,   bLim, bOff, None)) if
           // Do not merge when the previous soql is grouped and the next soql has joins
           // select g, count(x) as cx group by g |> select g, cx, @b.a join @b on @b.g=g
@@ -593,7 +593,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         orderBys = aOrder,
                         limit = newLim,
                         offset = newOff,
-                        search = aSearch))
+                        search = None))
     case (SoQLAnalysis(false, false, aSelect, Nil, aWhere, Nil, None, aOrder, None, None, aSearch),
           SoQLAnalysis(false, false, bSelect, bJoins, bWhere, Nil, None, bOrder, bLim, bOff, None)) =>
       // Can merge a change of filter or order only if no window was specified on the left
@@ -608,7 +608,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         limit = bLim,
                         offset = bOff,
                         search = aSearch))
-    case (SoQLAnalysis(false, false, aSelect, Nil, aWhere, Nil,     None,    _,      None, None, aSearch),
+    case (SoQLAnalysis(false, false, aSelect, Nil, aWhere, Nil,     None,    _,      None, None, None),
           SoQLAnalysis(true, false, bSelect, bJoins, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None)) =>
       // an aggregate on a non-aggregate
       Some(SoQLAnalysis(isGrouped = true,
@@ -621,8 +621,8 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         orderBys = mergeOrderBy(aSelect, Nil, bOrder),
                         limit = bLim,
                         offset = bOff,
-                        search = aSearch))
-    case (SoQLAnalysis(true,  false, aSelect, Nil, aWhere, aGroup, aHaving, aOrder, None, None, aSearch),
+                        search = None))
+    case (SoQLAnalysis(true,  false, aSelect, Nil, aWhere, aGroup, aHaving, aOrder, None, None, None),
           SoQLAnalysis(false, false, bSelect, Nil, bWhere, Nil,      None,    bOrder, bLim, bOff, None)) =>
       // a non-aggregate on an aggregate -- merge the WHERE of the second with the HAVING of the first
       Some(SoQLAnalysis(isGrouped = true,
@@ -635,7 +635,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         orderBys = mergeOrderBy(aSelect, aOrder, bOrder),
                         limit = bLim,
                         offset = bOff,
-                        search = aSearch))
+                        search = None))
     case (_, _) =>
       None
   }
