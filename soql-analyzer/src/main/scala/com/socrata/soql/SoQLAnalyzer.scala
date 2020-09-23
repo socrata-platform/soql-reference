@@ -85,7 +85,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
     val selections = ctx.map { case (qual, dsCtx) =>
       val q = if (qual == TableName.PrimaryTable.qualifier) None else Some(qual)
-      dsCtx.schema.transform { (k, v) => SelectedColumn(typed.ColumnRef(q, k, v)(NoPosition), None) }
+      dsCtx.schema.transform { (k, v) => SelectedColumn(typed.ColumnRef(q, k, v)(NoPosition), JObject.canonicalEmpty) }
     }
     // TODO: Enhance resolution of column name conflict from different tables in chained SoQLs
     val mergedSelection = selections.reduce(_ ++ _)
@@ -233,7 +233,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       val beforeAliasAnalysis = System.nanoTime()
       val count_* = FunctionCall(SpecialFunctions.StarFunc("count"), Nil, None)(NoPosition, NoPosition)
       val untypedSelectedExpressions = groupBys :+ count_*
-      val names = AliasAnalysis(Selection(None, Seq.empty, untypedSelectedExpressions.map(SelectedExpression(_, None, None)))).expressions.keys.toSeq
+      val names = AliasAnalysis(Selection(None, Seq.empty, untypedSelectedExpressions.map(SelectedExpression(_, None, JObject.canonicalEmpty)))).expressions.keys.toSeq
       val afterAliasAnalysis = System.nanoTime()
 
       log.trace("alias analysis took {}ms", ns2ms(afterAliasAnalysis - beforeAliasAnalysis))
@@ -265,7 +265,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     finishAnalysis(
       isGrouped,
       distinct,
-      OrderedMap(names.zip(typedSelectedExpressions.map(SelectedColumn(_, None))): _*),
+      OrderedMap(names.zip(typedSelectedExpressions.map(SelectedColumn(_, JObject.canonicalEmpty))): _*),
       checkedJoin,
       checkedWhere,
       checkedGroupBy,
@@ -466,7 +466,7 @@ case class JoinAnalysis[ColumnId, Type](fromTable: TableName, subAnalysis: Optio
 
 case class SelectedColumn[ColumnId, Type](
   expr: typed.CoreExpr[ColumnId, Type],
-  annotation: Option[JObject]
+  annotation: JObject
 ) {
   def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId) =
     copy(expr = expr.mapColumnIds(f))
@@ -572,6 +572,21 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   type Expr = typed.CoreExpr[ColumnName, T]
   type Col = SelectedColumn[ColumnName, T]
 
+  trait ExprLike[T] {
+    def asExpr(t: T): Expr
+    def withExpr(t: T, e: Expr): T
+  }
+  object ExprLike {
+    implicit object col extends ExprLike[Col] {
+      def asExpr(col: Col) = col.expr
+      def withExpr(col: Col, expr: Expr) = col.copy(expr = expr)
+    }
+    implicit object expr extends ExprLike[Expr] {
+      def asExpr(expr: Expr) = expr
+      def withExpr(oldExpr : Expr, expr: Expr) = expr
+    }
+  }
+
   def merge(stages: NonEmptySeq[Analysis]): NonEmptySeq[Analysis] = {
     stages.foldLeft1(NonEmptySeq(_)) { case (acc, nextStage) =>
       tryMerge(acc.head , nextStage) match {
@@ -598,7 +613,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
       Some(SoQLAnalysis(isGrouped = aIsGroup,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, SelectedColumn(join.on, None)).expr)),
+                        joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on))),
                         where = aWhere,
                         groupBys = aGroup,
                         having = aHaving,
@@ -612,8 +627,8 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
       Some(SoQLAnalysis(isGrouped = false,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, SelectedColumn(join.on, None)).expr)),
-                        where = mergeWhereLike(aSelect.mapValues(_.expr), aWhere, bWhere),
+                        joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on))),
+                        where = mergeWhereLike(aSelect, aWhere, bWhere),
                         groupBys = Nil,
                         having = None,
                         orderBys = mergeOrderBy(aSelect, aOrder, bOrder),
@@ -626,10 +641,10 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
       Some(SoQLAnalysis(isGrouped = true,
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
-                        joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, SelectedColumn(join.on, None)). expr)),
-                        where = mergeWhereLike(aSelect.mapValues(_.expr), aWhere, bWhere),
+                        joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on))),
+                        where = mergeWhereLike(aSelect, aWhere, bWhere),
                         groupBys = mergeGroupBy(aSelect, bGroup),
-                        having = mergeWhereLike(aSelect.mapValues(_.expr), None, bHaving),
+                        having = mergeWhereLike(aSelect, None, bHaving),
                         orderBys = mergeOrderBy(aSelect, Nil, bOrder),
                         limit = bLim,
                         offset = bOff,
@@ -643,7 +658,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         joins = Nil,
                         where = aWhere,
                         groupBys = aGroup,
-                        having = mergeWhereLike(aSelect.mapValues(_.expr), aHaving, bWhere),
+                        having = mergeWhereLike(aSelect, aHaving, bWhere),
                         orderBys = mergeOrderBy(aSelect, aOrder, bOrder),
                         limit = bLim,
                         offset = bOff,
@@ -672,41 +687,40 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
     (obA, obB) match {
       case (Nil, Nil) => Seq.empty
       case (a, Nil) => a
-      case (Nil, b) => b.map { ob => ob.copy(expression = replaceRefs(aliases, SelectedColumn(ob.expression, None)).expr) }
-      case (a, b) => b.map { ob => ob.copy(expression = replaceRefs(aliases, SelectedColumn(ob.expression, None)).expr) } ++ a
+      case (Nil, b) => b.map { ob => ob.copy(expression = replaceRefs(aliases, ob.expression)) }
+      case (a, b) => b.map { ob => ob.copy(expression = replaceRefs(aliases, ob.expression)) } ++ a
     }
 
-  private def mergeWhereLike(aliases: OrderedMap[ColumnName, Expr],
+  private def mergeWhereLike(aliases: OrderedMap[ColumnName, Col],
                              a: Option[Expr],
                              b: Option[Expr]): Option[Expr] =
     (a, b) match {
       case (None, None) => None
       case (Some(a), None) => Some(a)
-      case (None, Some(b)) => Some(replaceRefs(aliases.mapValues(SelectedColumn(_, None)), SelectedColumn(b, None)).expr)
-      case (Some(a), Some(b)) => Some(typed.FunctionCall(andFunction, List(a, replaceRefs(aliases.mapValues(SelectedColumn(_, None)), SelectedColumn(b, None)).expr), None)(NoPosition, NoPosition))
+      case (None, Some(b)) => Some(replaceRefs(aliases, b))
+      case (Some(a), Some(b)) => Some(typed.FunctionCall(andFunction, List(a, replaceRefs(aliases, b)), None)(NoPosition, NoPosition))
     }
 
   private def mergeGroupBy(aliases: OrderedMap[ColumnName, Col], gbs: Seq[Expr]): Seq[Expr] = {
-    gbs.map { gb => replaceRefs(aliases, SelectedColumn(gb, None)).expr }
+    gbs.map(replaceRefs(aliases, _))
   }
 
-  private def replaceRefs(a: OrderedMap[ColumnName, Col],
-                             b: Col): Col =
-    b.expr match {
+  private def replaceRefs[T](a: OrderedMap[ColumnName, Col], b: T)(implicit exprLike: ExprLike[T]): T =
+    exprLike.asExpr(b) match {
       case cr@typed.ColumnRef(Some(q), c, t) =>
-        b.copy(expr = cr)
+        exprLike.withExpr(b, cr)
       case cr@typed.ColumnRef(None, c, t) =>
-        a.getOrElse(c, b.copy(expr = cr)) // is this correct, or should it preserve the annotation from b?
-      case tl: typed.TypedLiteral[T] =>
+        exprLike.withExpr(b, a.get(c).map(_.expr).getOrElse(cr))
+      case tl: typed.TypedLiteral[_] =>
         b
       case fc@typed.FunctionCall(f, params, window) =>
         val w = window.map {
           case typed.WindowFunctionInfo(partitions, orderings, frames) =>
-            typed.WindowFunctionInfo(partitions.map { partition => replaceRefs(a, SelectedColumn(partition, None)).expr },
-                                     orderings.map(ob => ob.copy(expression = replaceRefs(a, SelectedColumn(ob.expression, None)).expr)),
+            typed.WindowFunctionInfo(partitions.map { partition => replaceRefs(a, partition) },
+                                     orderings.map(ob => ob.copy(expression = replaceRefs(a, ob.expression))),
                                      frames)
         }
-        b.copy(expr = typed.FunctionCall(f, params.map { param => replaceRefs(a, SelectedColumn(param, None)).expr }, w)(fc.position, fc.functionNamePosition))
+        exprLike.withExpr(b, typed.FunctionCall(f, params.map(replaceRefs(a, _)), w)(fc.position, fc.functionNamePosition))
     }
 }
 

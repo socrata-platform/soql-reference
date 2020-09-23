@@ -29,10 +29,10 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
   }
 
   def se(e: String): SelectedExpression =
-    SelectedExpression(expr(e), None, None)
+    SelectedExpression(expr(e), None, JObject.canonicalEmpty)
 
   def se(e: String, name: String, position: Position): SelectedExpression =
-    SelectedExpression(expr(e), Some((ColumnName(name), position)), None)
+    SelectedExpression(expr(e), Some((ColumnName(name), position)), JObject.canonicalEmpty)
 
   implicit def selections(e: String): Selection = {
     new Parser().selection(e)
@@ -41,8 +41,8 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
   def expr(e: String): Expression = {
     new Parser().expression(e)
   }
-  def selection(e: String): (Expression, Option[JObject]) = {
-    (expr(e), None)
+  def selection(e: String): (Expression, JObject) = {
+    (expr(e), JObject.canonicalEmpty)
   }
   def ident(e: String): ColumnName = {
     val p = new Parser()
@@ -51,7 +51,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
       case failure => fail("Unable to parse expression fixture " + e + ": " + failure)
     }
   }
-  def unaliased(names: String*)(pos: Position) = names.map { i => SelectedExpression(ColumnOrAliasRef(None, ColumnName(i))(pos), None, None) }
+  def unaliased(names: String*)(pos: Position) = names.map { i => SelectedExpression(ColumnOrAliasRef(None, ColumnName(i))(pos), None, JObject.canonicalEmpty) }
 
   "processing a star" should {
     implicit val ctx = fixtureContext()

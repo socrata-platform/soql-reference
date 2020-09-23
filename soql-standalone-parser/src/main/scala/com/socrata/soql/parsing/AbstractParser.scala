@@ -273,11 +273,11 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     }
 
   def namedSelection = expr ~ opt(AS() ~> simpleIdentifier) ~ opt(jobject) ^^ {
-    case e ~ None ~ annotation => SelectedExpression(e, None, annotation)
+    case e ~ None ~ annotation => SelectedExpression(e, None, annotation.getOrElse(JObject.canonicalEmpty))
     case e ~ Some((name, pos)) ~ annotation =>
       val columnName = ColumnName(name)
       if (!name.startsWith(":") || parameters.systemColumnAliasesAllowed.contains(columnName)) {
-        SelectedExpression(e, Some(columnName, pos), annotation)
+        SelectedExpression(e, Some(columnName, pos), annotation.getOrElse(JObject.canonicalEmpty))
       } else {
         badParse(s"column alias cannot start with colon - $name", pos)
       }

@@ -219,9 +219,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       writeSeq(selection) { case (col, SelectedColumn(expr, annotation)) =>
         out.writeUInt32NoTag(dictionary.registerLabel(col))
         writeExpr(expr)
-        maybeWrite(annotation) { a =>
-          writeAnnotation(a)
-        }
+        writeAnnotation(annotation)
       }
     }
 

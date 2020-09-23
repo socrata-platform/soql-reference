@@ -12,7 +12,7 @@ trait AliasAnalysis {
   type Qualifier = String
   type AnalysisContext = Map[Qualifier, UntypedDatasetContext]
 
-  case class Analysis(expressions: OrderedMap[ColumnName, (Expression, Option[JObject])], evaluationOrder: Seq[ColumnName])
+  case class Analysis(expressions: OrderedMap[ColumnName, (Expression, JObject)], evaluationOrder: Seq[ColumnName])
   def apply(selection: Selection)(implicit ctx: AnalysisContext): Analysis
 }
 
@@ -89,7 +89,7 @@ object AliasAnalysis extends AliasAnalysis {
     for {
       col <- columns.toIndexedSeq
       if !exceptedColumnNames(col)
-    } yield SelectedExpression(ColumnOrAliasRef(starSelection.qualifier, col)(starSelection.starPosition), None, None)
+    } yield SelectedExpression(ColumnOrAliasRef(starSelection.qualifier, col)(starSelection.starPosition), None, JObject.canonicalEmpty)
   }
 
   /**
@@ -108,7 +108,7 @@ object AliasAnalysis extends AliasAnalysis {
     val (_, semiExplicit, newSelected) = selections.foldLeft((Set.empty[ColumnName], Set.empty[ColumnName], Vector.empty[SelectedExpression])) { (results, selection) =>
       val (assigned, semiExplicit, mapped) = results
 
-      def register(alias: ColumnName, position: Position, expr: Expression, annotation: Option[JObject], isExplicit: Boolean) = {
+      def register(alias: ColumnName, position: Position, expr: Expression, annotation: JObject, isExplicit: Boolean) = {
         if(assigned.contains(alias)) throw DuplicateAlias(alias, position)
         val newSemiExplicit = if(isExplicit) semiExplicit else semiExplicit + alias
         (assigned + alias, newSemiExplicit, mapped :+ SelectedExpression(expr, Some((alias, position)), annotation))
@@ -132,11 +132,11 @@ object AliasAnalysis extends AliasAnalysis {
    * @param selections The selection-list, with semi-explicit and explicit aliases already assigned
    * @return The fully-aliased selections, in the same order as they arrived
    */
-  def assignImplicit(selections: Seq[SelectedExpression])(implicit ctx: AnalysisContext): OrderedMap[ColumnName, (Expression, Option[JObject])] = {
+  def assignImplicit(selections: Seq[SelectedExpression])(implicit ctx: AnalysisContext): OrderedMap[ColumnName, (Expression, JObject)] = {
     val assignedAliases: Set[ColumnName] = selections.collect {
       case SelectedExpression(_, Some((alias, _)), _) => alias
     } (scala.collection.breakOut)
-    selections.foldLeft((assignedAliases, OrderedMap.empty[ColumnName, (Expression, Option[JObject])])) { (acc, selection) =>
+    selections.foldLeft((assignedAliases, OrderedMap.empty[ColumnName, (Expression, JObject)])) { (acc, selection) =>
       val (assignedSoFar, mapped) = acc
       selection match {
         case SelectedExpression(expr, Some((name, _)), annotation) => // already has an alias

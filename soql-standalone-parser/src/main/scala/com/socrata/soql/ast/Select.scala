@@ -167,7 +167,7 @@ case class StarSelection(qualifier: Option[String], exceptions: Seq[(ColumnName,
   }
 }
 
-case class SelectedExpression(expression: Expression, name: Option[(ColumnName, Position)], annotation: Option[JObject]) {
+case class SelectedExpression(expression: Expression, name: Option[(ColumnName, Position)], annotation: JObject) {
   override def toString =
     if(AST.pretty) {
       val sw = new StringWriter
@@ -176,9 +176,9 @@ case class SelectedExpression(expression: Expression, name: Option[(ColumnName, 
         sw.write(" AS ")
         sw.write(n.toString)
       }
-      for(a <- annotation) {
+      if(!annotation.isEmpty) {
         sw.write(' ')
-        CompactJsonWriter.toWriter(sw, a)
+        CompactJsonWriter.toWriter(sw, annotation)
       }
       sw.toString
     } else {

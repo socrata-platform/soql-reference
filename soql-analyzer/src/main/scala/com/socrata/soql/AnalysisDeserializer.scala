@@ -166,21 +166,17 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     def readNonEmptySeq[A](f: => A): NonEmptySeq[A] = NonEmptySeq.fromSeqUnsafe(readSeq(f))
 
     def readAnnotation(): JObject = {
-      val n = in.readUInt32()
-      val fields =
-        (0 until n).foldLeft(Map.empty[String, JValue]) { (acc, _) =>
-          val k = in.readString()
-          val v = JsonReader.fromString(in.readString())
-          acc + (k -> v)
-        }
-      JObject(fields)
-    }
-
-    def readAnnotationOpt(): Option[JObject] = {
       if(version >= 7) {
-        maybeRead(readAnnotation())
+        val n = in.readUInt32()
+        val fields =
+          (0 until n).foldLeft(Map.empty[String, JValue]) { (acc, _) =>
+            val k = in.readString()
+            val v = JsonReader.fromString(in.readString())
+            acc + (k -> v)
+          }
+        JObject(fields)
       } else {
-        None
+        JObject.canonicalEmpty
       }
     }
 
@@ -188,7 +184,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val elems = readSeq {
         val name =  dictionary.labels(in.readUInt32())
         val expr = readExpr()
-        val annotation = readAnnotationOpt()
+        val annotation = readAnnotation()
         name -> SelectedColumn(expr, annotation)
       }
       OrderedMap(elems: _*)
