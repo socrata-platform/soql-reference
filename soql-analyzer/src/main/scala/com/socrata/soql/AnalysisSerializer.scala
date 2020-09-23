@@ -12,6 +12,8 @@ import com.socrata.soql.typed._
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ColumnName, TableName}
+import com.rojoma.json.v3.ast.JObject
+import com.rojoma.json.v3.io.CompactJsonWriter
 
 private trait SerializationDictionary[C,T] {
   def registerType(typ: T): Int
@@ -21,13 +23,10 @@ private trait SerializationDictionary[C,T] {
   def registerFunction(func: MonomorphicFunction[T]): Int
 }
 
-trait UnchainedAnalysisSerializerProvider[C, T] {
-  def unchainedSerializer: (OutputStream, SoQLAnalysis[C, T]) => Unit
-}
-
-class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => String) extends ((OutputStream, NonEmptySeq[SoQLAnalysis[C, T]]) => Unit) with UnchainedAnalysisSerializerProvider[C, T] {
+class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => String) extends ((OutputStream, NonEmptySeq[SoQLAnalysis[C, T]]) => Unit) {
   type Expr = CoreExpr[C, T]
   type Order = OrderBy[C, T]
+  type Col = SelectedColumn[C, T]
 
   private class SerializationDictionaryImpl extends SerializationDictionary[C, T] {
     private def makeMap[A] = new TObjectIntHashMap[A](Constants.DEFAULT_CAPACITY, Constants.DEFAULT_LOAD_FACTOR, -1)
@@ -208,10 +207,21 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     private def writeDistinct(distinct: Boolean) =
       out.writeBoolNoTag(distinct)
 
-    private def writeSelection(selection: OrderedMap[ColumnName, Expr]) {
-      writeSeq(selection) { case (col, expr) =>
+    private def writeAnnotation(v: JObject) = {
+      out.writeUInt32NoTag(v.size)
+      for((k, v) <- v.fields) {
+        out.writeStringNoTag(k)
+        out.writeStringNoTag(CompactJsonWriter.toString(v))
+      }
+    }
+
+    private def writeSelection(selection: OrderedMap[ColumnName, Col]) {
+      writeSeq(selection) { case (col, SelectedColumn(expr, annotation)) =>
         out.writeUInt32NoTag(dictionary.registerLabel(col))
         writeExpr(expr)
+        maybeWrite(annotation) { a =>
+          writeAnnotation(a)
+        }
       }
     }
 
@@ -329,29 +339,6 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
 
     val codedOutputStream = CodedOutputStream.newInstance(outputStream)
     codedOutputStream.writeInt32NoTag(AnalysisDeserializer.CurrentVersion) // version number
-    dictionary.save(codedOutputStream)
-    codedOutputStream.flush()
-    postDictionaryData.writeTo(outputStream)
-  }
-
-  // For migration: exposes a serializer that will serialize a singleton
-  // analysis.  There doesn't need to be a special deserializer for it;
-  // the chained deserializer understands this format.
-  //
-  // This is different from apply(out, Seq(a)) in that this generates
-  // a version 0 serialization but that generates a version 1.  It lets
-  // us decouple (a bit) the upgrade paths of the various parts which
-  // use this library.
-  def unchainedSerializer: (OutputStream, SoQLAnalysis[C, T]) => Unit = { (outputStream, analyses) =>
-    val dictionary = new SerializationDictionaryImpl
-    val postDictionaryData = new ByteArrayOutputStream
-    val out = CodedOutputStream.newInstance(postDictionaryData)
-    val serializer = new Serializer(out, dictionary)
-    serializer.writeAnalysis(analyses)
-    out.flush()
-
-    val codedOutputStream = CodedOutputStream.newInstance(outputStream)
-    codedOutputStream.writeInt32NoTag(AnalysisDeserializer.TestVersionV5) // version number
     dictionary.save(codedOutputStream)
     codedOutputStream.flush()
     postDictionaryData.writeTo(outputStream)

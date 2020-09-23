@@ -52,6 +52,10 @@ case class QUERYPIPE() extends Token
 case class LBRACKET() extends FormattedToken("[")
 case class RBRACKET() extends FormattedToken("]")
 
+// Column attributes
+case class LBRACE() extends FormattedToken("{")
+case class RBRACE() extends FormattedToken("}")
+
 // Qualifying
 case class DOT() extends FormattedToken(".")
 
@@ -67,6 +71,7 @@ case class PERCENT() extends FormattedToken("%")
 // Misc expression-y stuff
 case class PIPEPIPE() extends FormattedToken("||")
 case class COLONCOLON() extends FormattedToken("::")
+case class COLON() extends FormattedToken(":")
 case class LPAREN() extends FormattedToken("(")
 case class RPAREN() extends FormattedToken(")")
 

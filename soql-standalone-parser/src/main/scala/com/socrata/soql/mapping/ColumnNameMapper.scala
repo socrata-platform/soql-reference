@@ -84,7 +84,8 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
   def mapSelectedExpression(s: SelectedExpression): SelectedExpression = {
       // name isn't a column name, but a column alias so no mapping
       SelectedExpression(mapExpression(s.expression),
-        s.name.map { case (aliasName, pos) => (aliasName, NoPosition) })
+        s.name.map { case (aliasName, pos) => (aliasName, NoPosition) },
+        s.annotation)
   }
 
   def mapSelection(s: Selection) = Selection(

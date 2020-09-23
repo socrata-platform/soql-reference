@@ -11,6 +11,8 @@ import com.socrata.soql.functions.{Function, MonomorphicFunction}
 import com.socrata.soql.parsing.SoQLPosition
 import com.socrata.soql.typed._
 import gnu.trove.map.hash.TIntObjectHashMap
+import com.rojoma.json.v3.ast.{JObject, JValue}
+import com.rojoma.json.v3.io.JsonReader
 
 import scala.util.parsing.input.{NoPosition, Position}
 
@@ -27,7 +29,7 @@ private trait DeserializationDictionary[C, T] {
 }
 
 object AnalysisDeserializer {
-  val CurrentVersion = 6
+  val CurrentVersion = 7
 
   // This is odd and for smooth deploy transition.
   val TestVersionV5 = -1
@@ -38,6 +40,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
   type Expr = CoreExpr[C, T]
   type Order = OrderBy[C, T]
+  type Col = SelectedColumn[C, T]
 
   private class DeserializationDictionaryImpl(typesRegistry: TIntObjectHashMap[T],
                                       stringsRegistry: TIntObjectHashMap[String],
@@ -162,11 +165,31 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
     def readNonEmptySeq[A](f: => A): NonEmptySeq[A] = NonEmptySeq.fromSeqUnsafe(readSeq(f))
 
-    def readSelection(): OrderedMap[ColumnName, Expr] = {
+    def readAnnotation(): JObject = {
+      val n = in.readUInt32()
+      val fields =
+        (0 until n).foldLeft(Map.empty[String, JValue]) { (acc, _) =>
+          val k = in.readString()
+          val v = JsonReader.fromString(in.readString())
+          acc + (k -> v)
+        }
+      JObject(fields)
+    }
+
+    def readAnnotationOpt(): Option[JObject] = {
+      if(version >= 7) {
+        maybeRead(readAnnotation())
+      } else {
+        None
+      }
+    }
+
+    def readSelection(): OrderedMap[ColumnName, Col] = {
       val elems = readSeq {
         val name =  dictionary.labels(in.readUInt32())
         val expr = readExpr()
-        name -> expr
+        val annotation = readAnnotationOpt()
+        name -> SelectedColumn(expr, annotation)
       }
       OrderedMap(elems: _*)
     }
@@ -251,7 +274,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
   def apply(in: InputStream): NonEmptySeq[SoQLAnalysis[C, T]] = {
     val cis = CodedInputStream.newInstance(in)
     cis.readInt32() match {
-      case v if v >= 5 && v <= 6 =>
+      case v if v >= 5 && v <= 7 =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
         deserializer.read()

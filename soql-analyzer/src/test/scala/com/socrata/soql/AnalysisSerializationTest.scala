@@ -55,21 +55,7 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
 
   val b64Decoder: Base64.Decoder = Base64.getDecoder
 
-  def analyzeUnchained(query: String) = analyzer.analyzeUnchainedQuery(query)
   def analyzeFull(query: String) = analyzer.analyzeFullQuery(query)
-
-  def testV5Unchained(query: String) = {
-    val analysis = analyzeUnchained(query)
-    val baos = new ByteArrayOutputStream
-    serializer.unchainedSerializer(baos, analysis)
-    deserializer(new ByteArrayInputStream(baos.toByteArray)) must equal(NonEmptySeq(analysis))
-  }
-
-  def testCompatibilityUnchained(query: String, v4Serializedb64: String) = {
-    val analysis = analyzeUnchained(query)
-    val baos = b64Decoder.decode(v4Serializedb64)
-    deserializer(new ByteArrayInputStream(baos)) must equal(NonEmptySeq(analysis))
-  }
 
   def testV5Full(query: String) = {
     val analysis = analyzeFull(query)
@@ -82,41 +68,6 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
     val analysis = analyzeFull(query)
     val baos = b64Decoder.decode(v4Serializedb64)
     deserializer(new ByteArrayInputStream(baos)) must equal(analysis)
-  }
-
-  describe("simple unchained") {
-    val query = "select :id"
-    val v4Serialized = "AAMKc2VsZWN0IDppZAEGbnVtYmVyAgM6aWQAAQAAAQICAQAAAAAAAQAAAQgBBwEAAAIAAAAAAAAAAAA="
-
-    it("serialize / deserialize equals analysis (v5)") {
-      testV5Unchained(query)
-    }
-
-    ignore("v4 deserializes to v5 analysis") {
-      testCompatibilityUnchained(query, v4Serialized)
-    }
-  }
-
-  describe("complex unchained") {
-    val query =
-      """select :id as i, sum(balance)
-        |   where visits > 0
-        |   group by i, visits
-        |   having sum_balance < 5
-        |   order by i desc,
-        |            sum(balance) null first
-        |   search 'gnu'
-        |   limit 5
-        |   offset 10""".stripMargin
-    val v4Serialized = "ABEHYmFsYW5jZQgGbnVtYmVyAwNzdW0FBW1vbmV5BwZ2aXNpdHMKD251bWJlciB0byBtb25leQ0CMTAPAT4JAzppZAIBPAwLc3VtX2JhbGFuY2UEAWkAATUOwQFzZWxlY3QgOmlkIGFzIGksIHN1bShiYWxhbmNlKQogICB3aGVyZSB2aXNpdHMgPiAwCiAgIGdyb3VwIGJ5IGksIHZpc2l0cwogICBoYXZpbmcgc3VtX2JhbGFuY2UgPCA1CiAgIG9yZGVyIGJ5IGkgZGVzYywKICAgICAgICAgICAgc3VtKGJhbGFuY2UpIG51bGwgZmlyc3QKICAgc2VhcmNoICdnbnUnCiAgIGxpbWl0IDUKICAgb2Zmc2V0IDEwAQFhBgNnbnUQATALAgAABAECBwcDAwMICAICCgoEDAEGBwIFAQYHAA0AAwkBBgMBAQACAAABCAEHAQACAwEAARIBEQYAARIBEQABAAEWARUBAAgHAAABAAIKAScGAAIRAS4BAgACCgEnAQAKAwACEwEwAwsDAQIAAQgBBwEAAgMAAxABQQEACgMBAAQLAVIGAAQXAV4CAgABEgERBgABEgERAAEAARYBFQEACAcABBkBYAYABBkBYAMBAAQZAWADDgMBAgABCAEHAQACAwAAAAYNAYIBBgAGDQGCAQABAAYRAYYBAQAIBwEAAQ4BDwEQ"
-
-    it("serialize / deserialize equals analysis (v5)") {
-      testV5Unchained(query)
-    }
-
-    ignore("v4 deserializes to v5 analysis") {
-      testCompatibilityUnchained(query, v4Serialized)
-    }
   }
 
   describe("simple full") {

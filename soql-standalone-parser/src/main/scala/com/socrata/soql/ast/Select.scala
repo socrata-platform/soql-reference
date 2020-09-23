@@ -1,9 +1,12 @@
 package com.socrata.soql.ast
 
 import scala.util.parsing.input.{NoPosition, Position}
+import java.io.StringWriter
 import com.socrata.soql.environment._
 import Select._
 import com.socrata.NonEmptySeq
+import com.rojoma.json.v3.ast.JObject
+import com.rojoma.json.v3.io.CompactJsonWriter
 
 /**
   * A SubSelect represents (potentially chained) soql that is required to have an alias
@@ -164,13 +167,20 @@ case class StarSelection(qualifier: Option[String], exceptions: Seq[(ColumnName,
   }
 }
 
-case class SelectedExpression(expression: Expression, name: Option[(ColumnName, Position)]) {
+case class SelectedExpression(expression: Expression, name: Option[(ColumnName, Position)], annotation: Option[JObject]) {
   override def toString =
     if(AST.pretty) {
-      name match {
-        case Some(name) => expression + " AS " + name._1
-        case None => expression.toString
+      val sw = new StringWriter
+      sw.write(expression.toString)
+      for((n, _) <- name) {
+        sw.write(" AS ")
+        sw.write(n.toString)
       }
+      for(a <- annotation) {
+        sw.write(' ')
+        CompactJsonWriter.toWriter(sw, a)
+      }
+      sw.toString
     } else {
       AST.unpretty(this)
     }

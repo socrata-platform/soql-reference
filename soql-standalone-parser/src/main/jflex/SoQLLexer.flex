@@ -87,6 +87,10 @@ TableIdentifier = "@" ("-" | [:jletterdigit:])+
   "["   { return token(new LBRACKET()); }
   "]"   { return token(new RBRACKET()); }
 
+  // Column attributes
+  "{"   { return token(new LBRACE()); }
+  "}"   { return token(new RBRACE()); }
+
   // Qualifying
   "."   { return token(new DOT()); }
 
@@ -102,6 +106,7 @@ TableIdentifier = "@" ("-" | [:jletterdigit:])+
   // Misc expression-y stuf
   "||"  { return token(new PIPEPIPE()); }
   "::"  { return token(new COLONCOLON()); }
+  ":"   { return token(new COLON()); }
   "("   { return token(new LPAREN()); }
   ")"   { return token(new RPAREN()); }
 

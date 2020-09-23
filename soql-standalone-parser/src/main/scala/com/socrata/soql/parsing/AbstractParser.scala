@@ -9,6 +9,7 @@ import com.socrata.soql.{ast, tokens}
 import com.socrata.soql.tokens._
 import com.socrata.soql.ast._
 import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
+import com.rojoma.json.v3.ast._
 
 object AbstractParser {
   class Parameters(val allowJoins: Boolean = true, val systemColumnAliasesAllowed: Set[ColumnName] = Set.empty)
@@ -271,16 +272,35 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       }
     }
 
-  def namedSelection = expr ~ opt(AS() ~> simpleIdentifier) ^^ {
-    case e ~ None => SelectedExpression(e, None)
-    case e ~ Some((name, pos)) =>
+  def namedSelection = expr ~ opt(AS() ~> simpleIdentifier) ~ opt(jobject) ^^ {
+    case e ~ None ~ annotation => SelectedExpression(e, None, annotation)
+    case e ~ Some((name, pos)) ~ annotation =>
       val columnName = ColumnName(name)
       if (!name.startsWith(":") || parameters.systemColumnAliasesAllowed.contains(columnName)) {
-        SelectedExpression(e, Some(columnName, pos))
+        SelectedExpression(e, Some(columnName, pos), annotation)
       } else {
         badParse(s"column alias cannot start with colon - $name", pos)
       }
   }
+
+  def jobject: Parser[JObject] =
+    LBRACE() ~> repsep(keyValue, COMMA()) <~ RBRACE() ^^ { kvs => JObject(kvs.toMap) }
+
+  def keyValue: Parser[(String, JValue)] =
+    stringLiteral ~ COLON() ~ jvalue ^^ { case k ~ _ ~ v => (k, v) }
+
+  def jvalue: Parser[JValue] =
+    jobject  |
+      jarray |
+      literal ^^ {
+        case ast.NumberLiteral(n) => JNumber(n)
+        case ast.StringLiteral(s) => JString(s)
+        case ast.BooleanLiteral(b) => JBoolean(b)
+        case NullLiteral() => JNull
+      }
+
+  def jarray: Parser[JArray] =
+    LBRACE() ~> repsep(jvalue, COMMA()) <~ RBRACE() ^^ JArray
 
   /*
    *               *************
