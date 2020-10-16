@@ -24,6 +24,8 @@ class ParserTest extends WordSpec with MustMatchers {
   def functionCall(name: FunctionName, args: Seq[Expression], window: Option[WindowFunctionInfo]) = FunctionCall(name, args, window)(NoPosition, NoPosition)
   def stringLiteral(s: String) = StringLiteral(s)(NoPosition)
   def numberLiteral(num: BigDecimal) = NumberLiteral(num)(NoPosition)
+  def booleanLiteral(bool: Boolean) = BooleanLiteral(bool)(NoPosition)
+  def nullLiteral = NullLiteral()(NoPosition)
 
   "Parsing" should {
     "require a full `between' clause" in {
@@ -40,6 +42,15 @@ class ParserTest extends WordSpec with MustMatchers {
       expectFailure("`NULL' expected", "x is not")
       expectFailure("`NULL' expected", "x is not 5")
       expectFailure("`NOT' or `NULL' expected", "x is 5")
+    }
+
+    "accept both the 'case' sugar and the 'case' function" in {
+      parseExpression("case when x then y end") must equal (functionCall(SpecialFunctions.Case, Seq(ident("x"), ident("y"), booleanLiteral(false), nullLiteral), None))
+      parseExpression("case(x, y)") must equal (functionCall(FunctionName("case"), Seq(ident("x"), ident("y")), None))
+    }
+
+    "accept 'case' sugar with multiple clauses and an else" in {
+      parseExpression("case when a then b when c then d else e end") must equal (functionCall(SpecialFunctions.Case, Seq(ident("a"), ident("b"), ident("c"), ident("d"), booleanLiteral(true), ident("e")), None))
     }
 
     "require an expression after `not'" in {

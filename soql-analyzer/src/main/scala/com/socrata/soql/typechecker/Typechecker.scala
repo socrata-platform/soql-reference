@@ -44,6 +44,14 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       assert(params.length == 1, "Parens with more than one parameter?!")
       assert(window.isEmpty, "Window clause exists?!")
       typecheck(params(0), aliases)
+    case fc@FunctionCall(SpecialFunctions.Case, params, None) =>
+      val actualParams =
+        if(params.takeRight(2).headOption == Some(BooleanLiteral(true)(fc.position))) {
+          params
+        } else {
+          params.dropRight(2)
+        }
+      typecheck(fc.copy(functionName = SpecialFunctions.CasePostTypecheck, parameters=actualParams)(position = fc.position, functionNamePosition = fc.functionNamePosition), aliases)
     case fc@FunctionCall(SpecialFunctions.Subscript, Seq(base, StringLiteral(prop)), window) =>
       assert(window.isEmpty, "Window clause exists?!")
       // Subscripting special case.  Some types have "subfields" that

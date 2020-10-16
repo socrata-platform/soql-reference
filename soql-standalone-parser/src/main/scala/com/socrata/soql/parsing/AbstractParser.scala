@@ -428,8 +428,21 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def paren: Parser[Expression] =
     LPAREN() ~> expr <~ RPAREN() ^^ { e => FunctionCall(SpecialFunctions.Parens, Seq(e), None)(e.position, e.position) }
 
+
+  lazy val conditional: PackratParser[Expression] =
+    keyword("CASE") ~ rep1((keyword("WHEN") ~> expr <~ keyword("THEN")) ~ expr) ~ opt(keyword("ELSE") ~ expr) <~ keyword("END") ^^ {
+      case caseword ~ exprs ~ None  =>
+        FunctionCall(SpecialFunctions.Case,
+                     exprs.flatMap { case a ~ b => Seq(a, b) } ++ Seq(ast.BooleanLiteral(false)(caseword.position), ast.NullLiteral()(caseword.position)),
+                     None)(caseword.position, caseword.position)
+      case caseword ~ exprs ~ Some(sinon ~ sinonExpr)  =>
+        FunctionCall(SpecialFunctions.Case,
+                     exprs.flatMap { case a ~ b => Seq(a, b) } ++ Seq(ast.BooleanLiteral(true)(caseword.position), sinonExpr),
+                     None)(caseword.position, caseword.position)
+    }
+
   def atom =
-    literal | identifier_or_funcall | paren | failure(errors.missingExpr)
+    conditional | literal | identifier_or_funcall | paren | failure(errors.missingExpr)
 
   lazy val dereference: PackratParser[Expression] =
     dereference ~ DOT() ~ simpleIdentifier ^^ {
