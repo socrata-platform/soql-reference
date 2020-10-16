@@ -57,6 +57,14 @@ object Expression {
           findIdentsAndLiterals(a) ++ Vector("between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
         case FunctionCall(SpecialFunctions.NotBetween, Seq(a,b,c), _) =>
           findIdentsAndLiterals(a) ++ Vector("not", "between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
+        case FunctionCall(SpecialFunctions.Case, args, _) =>
+          val whens = args.dropRight(2).grouped(2)
+          val start = Vector("case") ++ args.dropRight(2).grouped(2).flatMap { case Seq(cond, expr) => Vector("when") ++ findIdentsAndLiterals(cond) ++ Vector("then") ++ findIdentsAndLiterals(expr) }
+          val sinon = args.takeRight(2) match {
+            case Seq(BooleanLiteral(false), _) => Vector.empty
+            case Seq(BooleanLiteral(true), e) => Vector("else") ++ findIdentsAndLiterals(e)
+          }
+          start ++ sinon ++ Vector("end")
         case FunctionCall(other, args, window) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals) ++ findIdentsAndLiterals(window)
       }
   }
@@ -86,6 +94,15 @@ object SpecialFunctions {
   val IsNull = FunctionName("#IS_NULL")
   val Between = FunctionName("#BETWEEN")
   val Like = FunctionName("#LIKE")
+
+  // Case is a little weird -- there's a pre-typecheck verion and a
+  // post-typecheck version where it's been resolved to the old "case"
+  // function, which is just a normal function.  Bit of a hack, it'd
+  // be nice to not need this code to know about the old case
+  // function.  Later if we teach soql-pg-adapter about the special
+  // function it can just go away...
+  val Case = FunctionName("#CASE")
+  val CasePostTypecheck = FunctionName("case") // Not actually special in any way!
 
   // both of these are redundant but needed for synthetic identifiers because we need to
   // distinguish between "not (x is null)" and "x is not null" when generating them.
@@ -291,6 +308,23 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
           sb <- parameters(0).format(d, sb, limit)
           _ = sb.append(")")
         } yield sb
+      case SpecialFunctions.Case =>
+        sb.append("CASE")
+        for(Seq(a, b) <- parameters.dropRight(2).grouped(2)) {
+          sb.append('\n').append(indent(d+2)).append("WHEN ")
+          a.format(d+1, sb, None)
+          sb.append('\n').append(indent(d+4)).append("THEN ")
+          b.format(d+2, sb, None)
+        }
+        parameters.takeRight(2) match {
+          case Seq(BooleanLiteral(true), e) =>
+            sb.append('\n').append(indent(d+2)).append("ELSE ")
+            e.format(d+1, sb, None)
+          case Seq(BooleanLiteral(false), _) =>
+            // no else
+        }
+        sb.append('\n').append(indent(d)).append("END")
+        Some(sb)
       case other => {
         formatBase(sb, d, limit, other, parameters)
         window.foreach(_.format(d, sb, limit))

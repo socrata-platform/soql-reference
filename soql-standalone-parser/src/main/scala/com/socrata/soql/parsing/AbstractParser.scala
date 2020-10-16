@@ -495,6 +495,18 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       case Some(a ~ op) ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(a, b), None)(a.position, op.position)
     }
 
+  lazy val conditional: PackratParser[Expression] =
+    keyword("CASE") ~ rep1((keyword("WHEN") ~> expr <~ keyword("THEN")) ~ expr) ~ opt(keyword("ELSE") ~ expr) <~ keyword("END") ^^ {
+      case caseword ~ exprs ~ None  =>
+        FunctionCall(SpecialFunctions.Case,
+                     exprs.flatMap { case a ~ b => Seq(a, b) } ++ Seq(ast.BooleanLiteral(false)(caseword.position), ast.NullLiteral()(caseword.position)),
+                     None)(caseword.position, caseword.position)
+      case caseword ~ exprs ~ Some(sinon ~ sinonExpr)  =>
+        FunctionCall(SpecialFunctions.Case,
+                     exprs.flatMap { case a ~ b => Seq(a, b) } ++ Seq(ast.BooleanLiteral(true)(caseword.position), sinonExpr),
+                     None)(caseword.position, caseword.position)
+    } | order
+
   lazy val isLikeBetweenIn: PackratParser[Expression] =
     isLikeBetweenIn ~ IS() ~ NULL() ^^ {
       case a ~ is ~ _ => FunctionCall(SpecialFunctions.IsNull, Seq(a), None)(a.position, is.position)
@@ -525,7 +537,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     isLikeBetweenIn ~ (IN() | failure(errors.missingKeywords(NOT(), BETWEEN(), IN(), LIKE()))) ~ LPAREN() ~ rep1sep(expr, COMMA()) ~ RPAREN() ^^  {
       case a ~ in ~ _ ~ es ~ _ => FunctionCall(SpecialFunctions.In, a +: es, None)(a.position, in.position)
     } |
-    order
+    conditional
 
   lazy val negation: PackratParser[Expression] =
     NOT() ~ negation ^^ { case op ~ b => FunctionCall(SpecialFunctions.Operator(op.printable), Seq(b), None)(op.position, op.position) } |
