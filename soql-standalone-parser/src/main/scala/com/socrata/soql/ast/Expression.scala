@@ -247,9 +247,11 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
           sb <- parameters(1).format(d, sb, limit)
         } yield sb.append("]")
       case SpecialFunctions.StarFunc(f) =>
-        sb.append(f).append("(*)")
-        window.foreach(_.format(d, sb, limit))
-        Some(sb)
+       sb.append(f).append("(*)")
+       for {
+         w <- window
+         sb <- w.format(d, sb, limit)
+       } yield sb
       case SpecialFunctions.Operator(op) if parameters.size == 1 =>
         op match {
           case "NOT" =>
