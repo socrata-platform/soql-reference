@@ -197,6 +197,22 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     "reject assigning to a straight identifier" in {
       an [AssertionError] must be thrownBy { AliasAnalysis.assignImplicit(Seq(se("q"))) }
     }
+
+    "count(*) is count" in {
+      AliasAnalysis.assignImplicit(Seq(se("count(*)"))) must equal (
+        Map(
+          ColumnName("count") -> expr("count(*)")
+        )
+      )
+    }
+
+    "count(*) includes window options" in {
+      AliasAnalysis.assignImplicit(Seq(se("count(*) over(partition by col)"))) must equal (
+        Map(
+          ColumnName("count_over_partition_by_col") -> expr("count(*) over(partition by col)")
+        )
+      )
+    }
   }
 
   "ordering aliases for evaluation" should {

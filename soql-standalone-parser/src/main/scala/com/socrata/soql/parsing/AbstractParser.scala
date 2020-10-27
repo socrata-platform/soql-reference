@@ -420,8 +420,8 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
         functionWithParams(ident, params, identPos)
       case ((_, ident, identPos)) ~ Some(params ~ Some(_ ~ wfParams)) =>
         val innerFc = functionWithParams(ident, params, identPos)
-        val rightParams = params.right.get
-        FunctionCall(FunctionName(ident), rightParams, Some(wfParams))(identPos, identPos)
+        val rightParams = params.right.getOrElse(Seq.empty[Expression])
+        FunctionCall(innerFc.functionName, rightParams, Some(wfParams))(identPos, identPos)
     }
   }
 

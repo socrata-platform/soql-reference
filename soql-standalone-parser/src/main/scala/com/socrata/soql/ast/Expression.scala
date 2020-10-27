@@ -44,7 +44,6 @@ object Expression {
     case ColumnOrAliasRef(aliasOpt, name) => aliasOpt ++: Vector(name.name)
     case fc: FunctionCall =>
       fc match {
-        case FunctionCall(SpecialFunctions.StarFunc(base), Seq(), _) => Vector(base)
         case FunctionCall(SpecialFunctions.Operator("-"), args, _) => args.flatMap(findIdentsAndLiterals) // otherwise minus looks like a non-synthetic underscore
         case FunctionCall(SpecialFunctions.Operator(op), Seq(arg), _) => op +: findIdentsAndLiterals(arg)
         case FunctionCall(SpecialFunctions.Operator(op), Seq(arg1, arg2), _) => findIdentsAndLiterals(arg1) ++ Vector(op) ++ findIdentsAndLiterals(arg2)
@@ -248,7 +247,8 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
           sb <- parameters(1).format(d, sb, limit)
         } yield sb.append("]")
       case SpecialFunctions.StarFunc(f) =>
-        Some(sb.append(f).append("(*)"))
+       sb.append(f).append("(*)")
+       window.flatMap(_.format(d, sb, limit)).orElse(Some(sb))
       case SpecialFunctions.Operator(op) if parameters.size == 1 =>
         op match {
           case "NOT" =>
@@ -327,8 +327,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
         Some(sb)
       case other => {
         formatBase(sb, d, limit, other, parameters)
-        window.foreach(_.format(d, sb, limit))
-        Some(sb)
+        window.flatMap(_.format(d, sb, limit)).orElse(Some(sb))
       }
     }
   }
