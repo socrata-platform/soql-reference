@@ -248,10 +248,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
         } yield sb.append("]")
       case SpecialFunctions.StarFunc(f) =>
        sb.append(f).append("(*)")
-       for {
-         w <- window
-         sb <- w.format(d, sb, limit)
-       } yield sb
+       window.flatMap(_.format(d, sb, limit)).orElse(Some(sb))
       case SpecialFunctions.Operator(op) if parameters.size == 1 =>
         op match {
           case "NOT" =>
@@ -330,8 +327,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
         Some(sb)
       case other => {
         formatBase(sb, d, limit, other, parameters)
-        window.foreach(_.format(d, sb, limit))
-        Some(sb)
+        window.flatMap(_.format(d, sb, limit)).orElse(Some(sb))
       }
     }
   }
