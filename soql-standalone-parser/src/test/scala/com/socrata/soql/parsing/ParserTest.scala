@@ -229,6 +229,11 @@ class ParserTest extends WordSpec with MustMatchers {
       x.selection.expressions.head.expression.toString must be ("count(*)")
     }
 
+    "count(*) window" in {
+      val x = parseFull("select count(*) over (partition by column)")
+      x.toString must be("SELECT count(*) OVER ( PARTITION BY `column`)")
+    }
+
     "window function over partition order round trip" in {
       val x = parseFull("select row_number() over(partition by x, y order by m, n)")
       x.selection.expressions.head.expression.toString must be ("row_number() OVER ( PARTITION BY `x`, `y` ORDER BY `m` ASC NULL LAST, `n` ASC NULL LAST)")
