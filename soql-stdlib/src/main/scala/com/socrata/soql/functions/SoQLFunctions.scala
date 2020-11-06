@@ -119,17 +119,17 @@ object SoQLFunctions {
   // arguments: lat, lon, distance in meter
   val WithinCircle = f("within_circle", FunctionName("within_circle"), Map("a" -> GeospatialLike, "b" -> RealNumLike),
     Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))
-                      ("Returns the rows that have locations within a specified circle, measured in meters")
+                      ("Return the rows that have locations within a specified circle, measured in meters")
   // arguments: nwLat, nwLon, seLat, seLon (yMax,  xMin , yMin,  xMax)
   val WithinBox = f("within_box", FunctionName("within_box"), Map("a" -> GeospatialLike, "b" -> RealNumLike),
     Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))
-                   ("Returns the rows that have geodata within the specified box, defined by latitude, longitude corners")
+                   ("Return the rows that have geodata within the specified box, defined by latitude, longitude corners")
   val WithinPolygon = f("within_polygon", FunctionName("within_polygon"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))
-                       ("Returns the rows that have locations within the specified box, defined by latitude, longitude corners")
+                       ("Return the rows that have locations within the specified box, defined by latitude, longitude corners")
   val Extent = f("extent", FunctionName("extent"), Map("a" -> GeospatialLike),
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiPolygon), isAggregate = true)
-                ("Returns a bounding box that encloses a set of geometries")
+                ("Return a bounding box that encloses a set of geometries")
   val ConcaveHull = f("concave_hull", FunctionName("concave_hull"), Map("a" -> GeospatialLike, "b" -> RealNumLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon), isAggregate = true)(NoDocs)
   val ConvexHull = Function(
@@ -141,7 +141,7 @@ object SoQLFunctions {
     FixedType(SoQLMultiPolygon),
     isAggregate = true,
     """
-    Returns the minimum convex geometry that encloses all of the geometries within a set
+    Return the minimum convex geometry that encloses all of the geometries within a set
 
     The convex_hull(...) generates a polygon that represents the minimum convex geometry that
     can encompass a set of points or geometries. All of the points in the set will either
@@ -152,7 +152,7 @@ object SoQLFunctions {
   )
   val Intersects = f("intersects", FunctionName("intersects"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))
-                    ("Allows you to compare two geospatial types to see if they intersect or overlap each other")
+                    ("Allow you to compare two geospatial types to see if they intersect or overlap each other")
   val DistanceInMeters = f("distance_in_meters", FunctionName("distance_in_meters"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLNumber))(NoDocs)
   val GeoMakeValid = f("geo_make_valid", FunctionName("geo_make_valid"), Map("a" -> GeospatialLike),
@@ -193,16 +193,16 @@ object SoQLFunctions {
 
   val NumberOfPoints = f("num_points", FunctionName("num_points"), Map("a" -> GeospatialLike),
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber))
-                        ("Returns the number of vertices in a geospatial data record")
+                        ("Return the number of vertices in a geospatial data record")
   val Simplify = f("simplify", FunctionName("simplify"), Map("a" -> GeospatialLike, "b" -> NumLike),
                           Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
-                  ("Reduces the number of vertices in a line or polygon")
+                  ("Reduce the number of vertices in a line or polygon")
   val SimplifyPreserveTopology =
     f("simplify_preserve_topology",
              FunctionName("simplify_preserve_topology"),
              Map("a" -> GeospatialLike, "b" -> NumLike),
              Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
-     ("Reduces the number of vertices in a line or polygon, preserving topology")
+     ("Reduce the number of vertices in a line or polygon, preserving topology")
   val SnapToGrid = f("snap_to_grid",
                      FunctionName("snap_to_grid"),
                      Map("a" -> GeospatialLike, "b" -> NumLike),
@@ -231,7 +231,7 @@ object SoQLFunctions {
   )
 
   val Between = f("between", SpecialFunctions.Between, Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))(
-    "Returns TRUE for values in a given range"
+    "Return TRUE for values in a given range"
     // EN-41182
     // This is an example from dev.socrata.com
     // But it points at the wrong place. Solving the jira ticket
@@ -246,48 +246,48 @@ object SoQLFunctions {
     // )
   )
   val NotBetween = f("not between", SpecialFunctions.NotBetween, Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))(
-    "Returns TRUE for values not in a given range"
+    "Return TRUE for values not in a given range"
   )
 
   val Least = f("least", FunctionName("least"), Map("a" -> Ordered), Seq(VariableType("a")), Seq(VariableType("a")), VariableType("a"))(
-    "Returns the smallest of its arguments, ignoring nulls"
+    "Return the smallest of its arguments, ignoring nulls"
   )
   val Greatest = f("greatest", FunctionName("greatest"), Map("a" -> Ordered), Seq(VariableType("a")), Seq(VariableType("a")), VariableType("a"))(
-    "Returns the largest of its arguments, ignoring nulls"
+    "Return the largest of its arguments, ignoring nulls"
   )
 
   val Min = f("min", FunctionName("min"), Map("a" -> Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
-    "Returns the minimum of a given set of values"
+    "Return the minimum of a given set of values"
   )
   val Max = f("max", FunctionName("max"), Map("a" -> Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
-    "Returns the maximum of a given set of values"
+    "Return the maximum of a given set of values"
   )
   val CountStar = mf("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, SoQLNumber, isAggregate = true)(
-    "Returns a count of a given set of records"
+    "Return a count of a given set of records"
   )
   val Count = f("count", FunctionName("count"), Map.empty, Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), isAggregate = true)(
-    "Returns a count of a given set of records"
+    "Return a count of a given set of records"
   )
   val CountDistinct = f("count_distinct", FunctionName("count_distinct"), Map.empty, Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), isAggregate = true)(
-    "Returns a distinct count of a given set of records"
+    "Return a distinct count of a given set of records"
   )
   val Sum = f("sum", FunctionName("sum"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
-    "Returns the sum of a given set of numbers"
+    "Return the sum of a given set of numbers"
   )
   val Avg = f("avg", FunctionName("avg"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
-    "Returns the average of a given set of numbers"
+    "Return the average of a given set of numbers"
   )
   val Median = f("median", FunctionName("median"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
-    "Returns a median of a given set of numbers"
+    "Return a median of a given set of numbers"
   )
   val MedianDisc = f("median_disc", FunctionName("median"), Map("a" -> (Ordered -- NumLike)), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
-    "Returns a discrete median of a given set of numbers"
+    "Return a discrete median of a given set of numbers"
   )
   val StddevPop = f("stddev_pop", FunctionName("stddev_pop"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
-    "Returns the population standard deviation of a given set of numbers"
+    "Return the population standard deviation of a given set of numbers"
   )
   val StddevSamp = f("stddev_samp", FunctionName("stddev_samp"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
-    "Returns a sampled standard deviation of a given set of numbers"
+    "Return a sampled standard deviation of a given set of numbers"
   )
 
   val WindowFunctionOver = f("wf_over",
@@ -392,30 +392,30 @@ object SoQLFunctions {
   )
 
   val In = f("in", SpecialFunctions.In, Map.empty, Seq(VariableType("a")), Seq(VariableType("a")), FixedType(SoQLBoolean))(
-    "Matches values in a given set of options"
+    "Match values in a given set of options"
   )
   val NotIn = f("not in", SpecialFunctions.NotIn, Map.empty, Seq(VariableType("a")), Seq(VariableType("a")), FixedType(SoQLBoolean))(
-    "Matches values not in a given set of options"
+    "Match values not in a given set of options"
   )
 
   val Like = mf("like", SpecialFunctions.Like, Seq(SoQLText, SoQLText), Seq.empty, SoQLBoolean)(
-    "Allows for substring searches in text strings"
+    "Allow for substring searches in text strings"
   )
   val NotLike = mf("not like", SpecialFunctions.NotLike, Seq(SoQLText, SoQLText), Seq.empty, SoQLBoolean)(
-    "Allows for matching text fields that do not contain a substring"
+    "Allow for matching text fields that do not contain a substring"
   )
 
   val Contains = mf("contains", FunctionName("contains"), Seq(SoQLText, SoQLText), Seq.empty, SoQLBoolean)(
-    "Matches on text strings that contain a given substring"
+    "Match on text strings that contain a given substring"
   )
   val StartsWith = mf("starts_with", FunctionName("starts_with"), Seq(SoQLText, SoQLText), Seq.empty, SoQLBoolean)(
-    "Matches on text strings that start with a given substring"
+    "Match on text strings that start with a given substring"
   )
   val Lower = mf("lower", FunctionName("lower"), Seq(SoQLText), Seq.empty, SoQLText)(
-    "Returns the lowercase equivalent of a string of text"
+    "Return the lowercase equivalent of a string of text"
   )
   val Upper = mf("upper", FunctionName("upper"), Seq(SoQLText), Seq.empty, SoQLText)(
-    "Returns the uppercase equivalent of a string of text"
+    "Return the uppercase equivalent of a string of text"
   )
 
   val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, SoQLNumber)(
@@ -435,13 +435,13 @@ object SoQLFunctions {
   )
 
   val FloatingTimeStampTruncYmd = mf("floating timestamp trunc day", FunctionName("date_trunc_ymd"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)(
-    "Truncates a date at the year/month/day threshold"
+    "Truncate a date at the year/month/day threshold"
   )
   val FloatingTimeStampTruncYm = mf("floating timestamp trunc month", FunctionName("date_trunc_ym"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)(
-    "Truncates a date at the year/month threshold"
+    "Truncate a date at the year/month threshold"
   )
   val FloatingTimeStampTruncY = mf("floating timestamp trunc year", FunctionName("date_trunc_y"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)(
-    "Truncates a date at the year threshold"
+    "Truncate a date at the year threshold"
   )
 
   val FloatingTimeStampExtractY = mf("floating timestamp extract year", FunctionName("date_extract_y"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)(
@@ -463,13 +463,13 @@ object SoQLFunctions {
     "Extract the second from the date as an integer"
   )
   val FloatingTimeStampExtractDow = mf("floating timestamp extract day of week", FunctionName("date_extract_dow"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)(
-    "Extracts the day of the week as an integer between 0 and 6"
+    "Extract the day of the week as an integer between 0 and 6"
   )
   // Extracting the week from a floating timestamp extracts the iso week (1-53).
   // Sometimes the last few days of December may be considered the first week of
   // next year. See https://en.wikipedia.org/wiki/ISO_week_date for more info.
   val FloatingTimeStampExtractWoy = mf("floating timestamp extract week of year", FunctionName("date_extract_woy"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)(
-    "Extracts the week of the year as an integer between 0 and 51"
+    "Extract the week of the year as an integer between 0 and 51"
   )
   // This is useful when you are also extracting the week (iso week). This is
   // because the iso year will give the year associated with the iso week whereas
@@ -482,13 +482,13 @@ object SoQLFunctions {
   // The truncated boundary does not aligned with the client time zone unless it happens to have the same time zone as the server.
   // The FixedTimeStampTrunc*AtTimeZone set give the client more control to align at particular time zone.
   val FixedTimeStampZTruncYmd = mf("fixed timestamp z trunc day", FunctionName("datez_trunc_ymd"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)(
-    "Truncates a date at the year/month/day threshold"
+    "Truncate a date at the year/month/day threshold"
   )
   val FixedTimeStampZTruncYm = mf("fixed timestamp z trunc month", FunctionName("datez_trunc_ym"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)(
-    "Truncates a date at the year/month threshold"
+    "Truncate a date at the year/month threshold"
   )
   val FixedTimeStampZTruncY = mf("fixed timestamp z trunc year", FunctionName("datez_trunc_y"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLFixedTimestamp)(
-    "Truncates a date at the year threshold"
+    "Truncate a date at the year threshold"
   )
 
   val FixedTimeStampTruncYmdAtTimeZone = mf("fixed timestamp trunc day at time zone", FunctionName("date_trunc_ymd"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)(
@@ -646,7 +646,7 @@ object SoQLFunctions {
     Seq(FixedType(SoQLBoolean), VariableType("a")),
     VariableType("a"))(
     """
-    Returns different values based on the evaluation of boolean comparisons
+    Return different values based on the evaluation of boolean comparisons
 
     The case(...) function is a special boolean function that can be used to return
     different values based on the result of boolean comparisons, similar to if/then/else
