@@ -118,18 +118,18 @@ object SoQLFunctions {
 
   // arguments: lat, lon, distance in meter
   val WithinCircle = f("within_circle", FunctionName("within_circle"), Map("a" -> GeospatialLike, "b" -> RealNumLike),
-    Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))
-                      ("Return the rows that have locations within a specified circle, measured in meters")
+    Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
+    "Return the rows that have locations within a specified circle, measured in meters")
   // arguments: nwLat, nwLon, seLat, seLon (yMax,  xMin , yMin,  xMax)
   val WithinBox = f("within_box", FunctionName("within_box"), Map("a" -> GeospatialLike, "b" -> RealNumLike),
-    Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))
-                   ("Return the rows that have geodata within the specified box, defined by latitude, longitude corners")
+    Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
+    "Return the rows that have geodata within the specified box, defined by latitude, longitude corners")
   val WithinPolygon = f("within_polygon", FunctionName("within_polygon"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
-    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))
-                       ("Return the rows that have locations within the specified box, defined by latitude, longitude corners")
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
+    "Return the rows that have locations within the specified box, defined by latitude, longitude corners")
   val Extent = f("extent", FunctionName("extent"), Map("a" -> GeospatialLike),
-    Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiPolygon), isAggregate = true)
-                ("Return a bounding box that encloses a set of geometries")
+    Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiPolygon), isAggregate = true)(
+    "Return a bounding box that encloses a set of geometries")
   val ConcaveHull = f("concave_hull", FunctionName("concave_hull"), Map("a" -> GeospatialLike, "b" -> RealNumLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon), isAggregate = true)(NoDocs)
   val ConvexHull = Function(
@@ -151,8 +151,8 @@ object SoQLFunctions {
     Seq()
   )
   val Intersects = f("intersects", FunctionName("intersects"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
-    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))
-                    ("Allow you to compare two geospatial types to see if they intersect or overlap each other")
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
+    "Allow you to compare two geospatial types to see if they intersect or overlap each other")
   val DistanceInMeters = f("distance_in_meters", FunctionName("distance_in_meters"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLNumber))(NoDocs)
   val GeoMakeValid = f("geo_make_valid", FunctionName("geo_make_valid"), Map("a" -> GeospatialLike),
@@ -192,17 +192,17 @@ object SoQLFunctions {
   )
 
   val NumberOfPoints = f("num_points", FunctionName("num_points"), Map("a" -> GeospatialLike),
-    Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber))
-                        ("Return the number of vertices in a geospatial data record")
+    Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber))(
+    "Return the number of vertices in a geospatial data record")
   val Simplify = f("simplify", FunctionName("simplify"), Map("a" -> GeospatialLike, "b" -> NumLike),
-                          Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
-                  ("Reduce the number of vertices in a line or polygon")
+                          Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
+    "Reduce the number of vertices in a line or polygon")
   val SimplifyPreserveTopology =
     f("simplify_preserve_topology",
              FunctionName("simplify_preserve_topology"),
              Map("a" -> GeospatialLike, "b" -> NumLike),
-             Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))
-     ("Reduce the number of vertices in a line or polygon, preserving topology")
+             Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
+      "Reduce the number of vertices in a line or polygon, preserving topology")
   val SnapToGrid = f("snap_to_grid",
                      FunctionName("snap_to_grid"),
                      Map("a" -> GeospatialLike, "b" -> NumLike),
@@ -221,7 +221,6 @@ object SoQLFunctions {
                          FunctionName("is_empty"),
                          Map("a" -> GeospatialLike),
                          Seq(VariableType("a")), Seq.empty, FixedType(SoQLBoolean))(NoDocs)
-
 
   val IsNull = f("is null", SpecialFunctions.IsNull, Map.empty, Seq(VariableType("a")), Seq.empty, FixedType(SoQLBoolean))(
     "Return TRUE for values that are NULL"
