@@ -3,7 +3,9 @@ package com.socrata.soql.types
 import com.google.common.collect.{Interner, Interners}
 import com.rojoma.json.v3.io.{CompactJsonWriter, JsonReader}
 import com.socrata.thirdparty.geojson.JtsCodecs
-import com.vividsolutions.jts.geom.{Geometry, GeometryFactory}
+import org.postgis.{Geometry}
+//import com.vividsolutions.jts.geom.{Geometry, GeometryFactory}
+import com.vividsolutions.jts.geom.GeometryFactory
 import com.vividsolutions.jts.io.{WKBWriter, WKBReader, WKTReader}
 import javax.xml.bind.DatatypeConverter.{parseBase64Binary, printBase64Binary}
 
@@ -92,6 +94,30 @@ trait SoQLGeometryLike[T <: Geometry] {
 
     def apply(geom: T, srid: Int): String = {
       s"$SRIDPrefix$srid$separator${WktRep(geom)}"
+    }
+  }
+
+  /**
+   * postgis.net 4.4.2. Java Clients (JDBC)
+   * https://postgis.net/docs/postgis_usage.html#idm2768
+   */
+  object GeometryRep {
+    val gf = threadLocal { new GeometryFactory }
+    val reader = threadLocal { new WKBReader(gf.get) }
+    val writer = threadLocal { new WKBWriter }
+
+    def unapply(bytes: Object): Option[T] = {
+      try {
+        val gg: Geometry = null
+        val geom = interner.intern(reader.get.read(bytes))
+        Some(Treified.cast(geom))
+      } catch {
+        case _: Exception => None
+      }
+    }
+
+    def apply(geom: T): Array[Byte] = {
+      writer.get.write(geom)
     }
   }
 }

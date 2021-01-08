@@ -12,6 +12,7 @@ object SoqlTypes {
         "com.rojoma"         %% "rojoma-json-v3"           % "[3.9.1,4.0.0)",
         "com.socrata"        %% "socrata-thirdparty-utils" % "5.0.0",
         "com.vividsolutions"  % "jts"                      % "1.13",
+        "org.postgis"         % "postgis-jdbc"             % "1.3.3" exclude("org.postgis", "postgis-stubs") exclude("org.postgresql", "postgresql"),
         "commons-io"          % "commons-io"               % "2.5",
         "joda-time"           % "joda-time"                % "2.1",
         "org.bouncycastle"    % "bcprov-jdk15on"           % "1.48",

@@ -9,7 +9,8 @@ import com.rojoma.json.v3.io.JsonReaderException
 import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, JsonKey, JsonUtil}
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.types.obfuscation.{CryptProvider, Obfuscator}
-import com.vividsolutions.jts.geom.{LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon}
+import org.postgis.{LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon}
+//import com.vividsolutions.jts.geom.{LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon}
 import org.joda.time.{DateTime, LocalDate, LocalDateTime, LocalTime}
 import org.joda.time.format.ISODateTimeFormat
 
