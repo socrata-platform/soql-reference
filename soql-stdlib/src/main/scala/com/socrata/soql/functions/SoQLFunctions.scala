@@ -666,6 +666,16 @@ object SoQLFunctions {
     "Take the leftmost non-null value"
   )
 
+  val GetContext = f("get_context", FunctionName("get_context"),
+    Map.empty,
+    Seq(FixedType(SoQLText)),
+    Seq.empty,
+    FixedType(SoQLText))(
+    """
+    Return the value of the named context variable, or NULL if no such variable exists.
+    """
+  )
+
   def potentialAccessors = for {
     method <- getClass.getMethods
     if Modifier.isPublic(method.getModifiers) && method.getParameterTypes.length == 0
