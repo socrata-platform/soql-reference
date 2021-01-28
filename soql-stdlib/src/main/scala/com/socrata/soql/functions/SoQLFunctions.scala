@@ -639,6 +639,12 @@ object SoQLFunctions {
     NoDocs
   )
 
+  val Iif = f("iif", FunctionName("iif"), Map.empty,
+    Seq(FixedType(SoQLBoolean), VariableType("a"), VariableType("a")),
+    Seq.empty,
+    VariableType("a"))(
+    "Return the second argument when the first argument is true.  Otherwise, return the third argument.")
+
   val Case = f("case", FunctionName("case"),
     Map("a" -> AllTypes),
     Seq(FixedType(SoQLBoolean), VariableType("a")),
