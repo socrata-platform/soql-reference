@@ -9,14 +9,14 @@ class BinaryTreeSelectTest extends FunSpec with MustMatchers {
     it("of pipe is the right query") {
       val soql = "SELECT 1 as a |> SELECT 2 as b"
       val selects = parser.binaryTreeSelect(soql)
-      val columnName = selects.previous.asLeaf.selection.expressions.head.name.get._1.name
+      val columnName = selects.outputSchemaLeaf.asLeaf.get.selection.expressions.head.name.get._1.name
       columnName must be("b")
     }
 
     it("of union is the left query") {
       val soql = "SELECT 1 as a UNION SELECT 2 as b"
       val selects = parser.binaryTreeSelect(soql)
-      val columnName = selects.previous.asLeaf.selection.expressions.head.name.get._1.name
+      val columnName = selects.outputSchemaLeaf.asLeaf.get.selection.expressions.head.name.get._1.name
       columnName must be("a")
     }
   }

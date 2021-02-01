@@ -40,10 +40,10 @@ class SoQLAnalyzerQueryOperatorTest extends FunSuite with MustMatchers with Prop
 
   implicit val datasetCtxMap =
     Map(TableName.PrimaryTable.qualifier -> catCtx,
-      TableName("_cat", None).qualifier -> catCtx,
-      TableName("_dog", None).qualifier -> dogCtx,
-      TableName("_bird", None).qualifier -> birdCtx,
-      TableName("_fish", None).qualifier -> fishCtx)
+        TableName("_cat", None).qualifier -> catCtx,
+        TableName("_dog", None).qualifier -> dogCtx,
+        TableName("_bird", None).qualifier -> birdCtx,
+        TableName("_fish", None).qualifier -> fishCtx)
 
   val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo)
 

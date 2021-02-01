@@ -85,7 +85,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
         }
         val ra = rs match {
           case s: Select =>
-            val prev = la.previous
+            val prev = la.outputSchemaLeaf
             analyzeInOuterSelectionContext(ctx)(prev, s)
           case _ =>
             analyzeBinary(ls)
@@ -214,7 +214,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       join.from match {
         case JoinSelect(Right(SubSelect(selects, alias))) =>
           val analyses = analyzeBinary(selects)(ctx)
-          acc + contextFromAnalysis(alias, analyses.previous)
+          acc + contextFromAnalysis(alias, analyses.outputSchemaLeaf)
         case JoinSelect(Left(tn@TableName(name, Some(alias)))) =>
           acc ++ aliasContext(tn, ctx)
         case _ =>
@@ -488,10 +488,10 @@ case class JoinAnalysis[ColumnId, Type](subAnalysis: Either[TableName, SubAnalys
 
   private def collectFromTables(analysis: BinaryTree[SoQLAnalysis[ColumnId, Type]]): Seq[TableName] = {
     analysis match {
-      case Compound(op, l, r) =>
+      case Compound(_p, l, r) =>
         collectFromTables(l) ++ collectFromTables(r)
       case x =>
-        x.asLeaf.from.toSeq
+        x.asLeaf.toSeq.flatMap(a => a.from.toSeq)
     }
   }
 
@@ -615,7 +615,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
             ((columnId, a), newColumnId)
           }
         case Right(SubAnalysis(ana, alias)) =>
-          ana.previous.selection.map { case (columnName, _) =>
+          ana.outputSchemaLeaf.selection.map { case (columnName, _) =>
             qColumnNameToQColumnId(j.from.alias, columnName) -> columnNameToNewColumnId(columnName)
           }.toSeq
       }
@@ -674,8 +674,8 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
     stages match {
       case PipeQuery(l, r) =>
         val ml = merge(l)
-        val mlp = ml.previous
-        val ra = r.asLeaf
+        val mlp = ml.outputSchemaLeaf
+        val ra = r.asLeaf.getOrElse(throw RightSideOfChainQueryMustBeLeaf(NoPosition))
         tryMerge(mlp, ra) match {
           case Some(merged) =>
             merged

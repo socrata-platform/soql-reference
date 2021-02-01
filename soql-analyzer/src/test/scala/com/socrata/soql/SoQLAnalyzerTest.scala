@@ -207,8 +207,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
 
   test("a subselect makes the output of the inner select available to the outer") {
     val PipeQuery(inner, outer) = analyzer.analyzeFullQueryBinary("select 5 :: money as x |> select max(x)")
-    outer.asLeaf.selection(ColumnName("max_x")) must equal (typed.FunctionCall(MonomorphicFunction(TestFunctions.Max, Map("a" -> TestMoney)), Seq(typed.ColumnRef(None, ColumnName("x"), TestMoney : TestType)(NoPosition)), None)(NoPosition, NoPosition))
-    inner.asLeaf.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
+    outer.asLeaf.get.selection(ColumnName("max_x")) must equal (typed.FunctionCall(MonomorphicFunction(TestFunctions.Max, Map("a" -> TestMoney)), Seq(typed.ColumnRef(None, ColumnName("x"), TestMoney : TestType)(NoPosition)), None)(NoPosition, NoPosition))
+    inner.asLeaf.get.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
       Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber.t)(NoPosition)), None)(NoPosition, NoPosition)), None)(NoPosition, NoPosition))
   }
 
@@ -471,14 +471,14 @@ SELECT visits, @x3.x
        ) as x3 on @x3.x = name_first
       """)
 
-    val innermostJoins = analysis.joins.head.from.subAnalysis.right.get.analyses.asLeaf.joins
-    val innermostAnalysis = innermostJoins.head.from.subAnalysis.right.get.analyses.asLeaf
+    val innermostJoins = analysis.joins.head.from.subAnalysis.right.get.analyses.asLeaf.get.joins
+    val innermostAnalysis = innermostJoins.head.from.subAnalysis.right.get.analyses.asLeaf.get
     innermostAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x1"), ColumnName("x"), TestText)(NoPosition)
     ))
 
     val joins = analysis.joins
-    val joinAnalysis = joins.head.from.subAnalysis.right.get.analyses.asLeaf
+    val joinAnalysis = joins.head.from.subAnalysis.right.get.analyses.asLeaf.get
     joinAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x2"), ColumnName("x"), TestText)(NoPosition),
       ColumnName("name_first") -> ColumnRef(Some("_a1"), ColumnName("name_first"), TestText)(NoPosition)
@@ -498,13 +498,13 @@ SELECT visits, @x2.zx
        ) as x2 on @x2.zx = name_first
       """)
 
-    val innermostLeftOuterJoin = analysis.joins.head.from.analyses.get.asLeaf.joins
-    val innermostAnalysis = innermostLeftOuterJoin.head.from.analyses.get.asLeaf
+    val innermostLeftOuterJoin = analysis.joins.head.from.analyses.get.asLeaf.get.joins
+    val innermostAnalysis = innermostLeftOuterJoin.head.from.analyses.get.asLeaf.get
     innermostAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x1"), ColumnName("x"), TestText)(NoPosition)
     ))
 
-    val rightOuterJoinAnalysis = analysis.joins.head.from.analyses.get.asLeaf
+    val rightOuterJoinAnalysis = analysis.joins.head.from.analyses.get.asLeaf.get
     rightOuterJoinAnalysis.selection.toSeq must equal (Seq(
       ColumnName("zx") -> ColumnRef(Some("_x2"), ColumnName("x"), TestText)(NoPosition)
     ))

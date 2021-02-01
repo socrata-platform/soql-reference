@@ -5,7 +5,7 @@ import com.socrata.NonEmptySeq
 import scala.reflect.ClassTag
 import scala.util.parsing.combinator.{PackratParsers, Parsers}
 import util.parsing.input.Position
-import com.socrata.soql.{BinaryTree, Compound, ast, tokens}
+import com.socrata.soql.{BinaryTree, Compound, PipeQuery, ast, tokens}
 import com.socrata.soql.tokens._
 import com.socrata.soql.ast._
 import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
@@ -80,6 +80,8 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     def missingUserIdentifier = "Non-system identifier expected"
     def missingSystemIdentifier = "System identifier expected"
     def missingInteger = "Integer expected"
+    def missingQuery = "Query expected"
+    def leafQueryOnTheRightExpected = "Leaf query on the right expected"
   }
 
   /*
@@ -151,15 +153,21 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     opt(compoundSelect ~ query_op) ~ atomSelect ^^ {
       case None ~ a =>
         a
+      case Some(a ~ op) ~ b if op == QUERYPIPE() =>
+        b.asLeaf match {
+          case Some(leaf) =>
+            PipeQuery(a, leaf)
+          case None =>
+            badParse(errors.leafQueryOnTheRightExpected, op.position)
+        }
       case Some(a ~ op) ~ b =>
         Compound(op.printable, a, b)
     }
 
-
   def atomSelect =
     select |
       parenSelect |
-      failure(errors.missingExpr)
+      failure(errors.missingQuery)
 
   val tableIdentifier: Parser[(String, Position)] =
     accept[tokens.TableIdentifier] ^^ { t =>

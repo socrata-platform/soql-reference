@@ -1,29 +1,32 @@
 package com.socrata.soql
 
-trait BinaryTree[+T] {
+trait BinaryTree[T] {
 
   def seq: Seq[T] = {
-    Seq(asLeaf)
+    asLeaf.toSeq
   }
 
   /**
-   * output schema
+   * return: the leaf node of the ultimate schema that this subtree will produce
    */
-  def previous: T = {
-    asLeaf
+  def outputSchemaLeaf: T = {
+    asLeaf.get
   }
 
-  def last: T = asLeaf
+  def last: T = asLeaf.get
 
-  def asLeaf: T = {
+  def asLeaf: Option[T] = {
     this match {
-      case _: Compound[T] => ???
-      case t: T @unchecked => t
+      case _: Compound[T] => None
+      case t: T @unchecked => Some(t)
     }
   }
 
   def flatMap[B](transform: T => BinaryTree[B]): BinaryTree[B] = {
-    transform(asLeaf)
+    asLeaf match {
+      case Some(t) => transform(t)
+      case None => ???
+    }
   }
 }
 
@@ -59,12 +62,12 @@ abstract class Compound[T](val op: String) extends BinaryTree[T] {
     Compound(this.op, left = nl, right = nr)
   }
 
-  override def previous: T = {
+  override def outputSchemaLeaf: T = {
     this match {
       case PipeQuery(_, r) =>
-        r.previous
+        r.outputSchemaLeaf
       case Compound(_, l, _) =>
-        l.previous
+        l.outputSchemaLeaf
     }
   }
 
