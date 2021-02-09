@@ -166,7 +166,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     def readBinaryTree[A](f: => A): BinaryTree[A] = {
       in.readUInt32() match {
         case 1 =>
-          f.asInstanceOf[BinaryTree[A]]
+          Leaf(f)
         case 2 =>
           val op = in.readString()
           val l = readBinaryTree(f)

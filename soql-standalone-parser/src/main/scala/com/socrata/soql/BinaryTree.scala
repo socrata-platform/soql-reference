@@ -113,4 +113,6 @@ case class MinusQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Comp
   val op = Compound.Minus
 }
 
-case class Leaf[T](leaf: T) extends BinaryTree[T]
+case class Leaf[T](leaf: T) extends BinaryTree[T] {
+  override def toString: String = leaf.toString
+}

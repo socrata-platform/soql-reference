@@ -3,7 +3,7 @@ package com.socrata.soql.ast
 import scala.util.parsing.input.{NoPosition, Position}
 import com.socrata.soql.environment._
 import Select._
-import com.socrata.soql.{BinaryTree, Compound, PipeQuery}
+import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery}
 
 /**
   * A SubSelect represents (potentially chained) soql that is required to have an alias
@@ -75,7 +75,7 @@ object Select {
         val ls = Select.toString(l)
         val rs = Select.toString(r)
         s"$ls $op $rs"
-      case select: Select =>
+      case Leaf(select) =>
         select.toString
     }
   }
