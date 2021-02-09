@@ -277,6 +277,17 @@ class ParserTest extends WordSpec with MustMatchers {
       expectFailure("Expression expected", "select avg(x) over(order by m nulls last)")
     }
 
+    "reject pipe query where right side is not a leaf." in {
+      val parser = new StandaloneParser()
+      try {
+        parser.binaryTreeSelect("SELECT 1 |> (SELECT 2 UNION SELECT 3 FROM @t2 )")
+        fail("Unexpected success")
+      } catch {
+        case e: BadParse =>
+          e.message must equal (parser.errors.leafQueryOnTheRightExpected)
+      }
+    }
+
     // def show[T](x: => T) {
     //   try {
     //     println(x)

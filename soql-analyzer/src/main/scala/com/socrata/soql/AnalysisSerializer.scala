@@ -232,10 +232,14 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     }
 
     private def writeJoinAnalysis(ja: JoinAnalysis[C, T]): Unit = {
-      writeTableName(ja.fromTable)
-      maybeWrite(ja.subAnalysis) { case SubAnalysis(analyses, alias) =>
-        write(analyses)
-        out.writeStringNoTag(alias)
+      ja.subAnalysis match {
+        case Left(tableName) =>
+          out.writeUInt32NoTag(0)
+          writeTableName(tableName)
+        case Right(SubAnalysis(analyses, alias)) =>
+          out.writeUInt32NoTag(1)
+          writeBinaryTree(analyses)(writeAnalysis)
+          out.writeStringNoTag(alias)
       }
     }
 
@@ -247,6 +251,19 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     def writeSeq[A](list: Iterable[A])(f: A => Unit): Unit = {
       out.writeUInt32NoTag(list.size)
       list.foreach(f)
+    }
+
+    def writeBinaryTree[A](bt: BinaryTree[A])(f: A => Unit): Unit = {
+      bt match {
+        case Compound(op: String, l, r) =>
+          out.writeUInt32NoTag(2)
+          out.writeStringNoTag(op)
+          writeBinaryTree(l)(f)
+          writeBinaryTree(r)(f)
+        case Leaf(a) =>
+          out.writeUInt32NoTag(1)
+          f(a)
+      }
     }
 
     private def maybeWrite[A](x: Option[A])(f: A => Unit): Unit = x match {
@@ -289,10 +306,16 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
         out.writeUInt32NoTag(registerString(s))
       }
 
+    private def writeFrom(from: Option[TableName]) =
+      maybeWrite(from) { tableName =>
+        writeTableName(tableName)
+      }
+
     def writeAnalysis(analysis: SoQLAnalysis[C, T]) {
       val SoQLAnalysis(isGrouped,
                        distinct,
                        selection,
+                       from,
                        join,
                        where,
                        groupBy,
@@ -304,6 +327,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       writeGrouped(isGrouped)
       writeDistinct(analysis.distinct)
       writeSelection(selection)
+      writeFrom(from)
       writeJoins(join)
       writeWhere(where)
       writeGroupBy(groupBy)
@@ -325,6 +349,21 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     val out = CodedOutputStream.newInstance(postDictionaryData)
     val serializer = new Serializer(out, dictionary)
     serializer.write(analyses)
+    out.flush()
+
+    val codedOutputStream = CodedOutputStream.newInstance(outputStream)
+    codedOutputStream.writeInt32NoTag(AnalysisDeserializer.CurrentVersion) // version number
+    dictionary.save(codedOutputStream)
+    codedOutputStream.flush()
+    postDictionaryData.writeTo(outputStream)
+  }
+
+  def applyBinaryTree(outputStream: OutputStream, analyses: BinaryTree[SoQLAnalysis[C, T]]) {
+    val dictionary = new SerializationDictionaryImpl
+    val postDictionaryData = new ByteArrayOutputStream
+    val out = CodedOutputStream.newInstance(postDictionaryData)
+    val serializer = new Serializer(out, dictionary)
+    serializer.writeBinaryTree(analyses)(serializer.writeAnalysis)
     out.flush()
 
     val codedOutputStream = CodedOutputStream.newInstance(outputStream)

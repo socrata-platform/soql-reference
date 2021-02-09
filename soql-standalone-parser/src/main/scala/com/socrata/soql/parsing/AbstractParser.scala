@@ -5,7 +5,7 @@ import com.socrata.NonEmptySeq
 import scala.reflect.ClassTag
 import scala.util.parsing.combinator.{PackratParsers, Parsers}
 import util.parsing.input.Position
-import com.socrata.soql.{ast, tokens}
+import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, ast, tokens}
 import com.socrata.soql.tokens._
 import com.socrata.soql.ast._
 import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
@@ -19,6 +19,8 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   import parameters._
 
   type Elem = Token
+
+  def binaryTreeSelect(soql: String) = parseFull(compoundSelect, soql)
 
   /*
    *               *************
@@ -78,6 +80,8 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     def missingUserIdentifier = "Non-system identifier expected"
     def missingSystemIdentifier = "System identifier expected"
     def missingInteger = "Integer expected"
+    def missingQuery = "Query expected"
+    def leafQueryOnTheRightExpected = "Leaf query on the right expected"
   }
 
   /*
@@ -107,10 +111,14 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def ifCanJoinList[T](p: Parser[List[T]]) = ifCanJoin(p).map(_.getOrElse(Nil))
 
   val select: Parser[Select] = {
-    SELECT() ~> distinct ~ selectList ~ ifCanJoinList(joinList) ~ opt(whereClause) ~
+    SELECT() ~> distinct ~ selectList ~ opt((FROM() ~> tableIdentifier) ~ opt(AS() ~> simpleIdToAlias)) ~ ifCanJoinList(joinList) ~ opt(whereClause) ~
       opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-      case d ~ s ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
-        Select(d, s, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr)
+      case d ~ s ~ optFrom ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
+        val optTableName = optFrom.map {
+          case ((t: String, _) ~ a) =>
+            TableName(t, a)
+        }
+        Select(d, s, optTableName, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr)
     }
   }
 
@@ -133,6 +141,33 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       case other =>
         sys.error("Cannot happen, we only accept unquoted identifiers in this rule")
     }
+
+  val query_op = QUERYPIPE() |
+    QUERYUNION() | QUERYINTERSECT() | QUERYMINUS() |
+    QUERYUNIONALL() | QUERYINTERSECTALL() | QUERYMINUSALL()
+
+  def parenSelect: Parser[BinaryTree[Select]] =
+    LPAREN() ~> compoundSelect <~ RPAREN() ^^ { s => s }
+
+  lazy val compoundSelect: PackratParser[BinaryTree[Select]] =
+    opt(compoundSelect ~ query_op) ~ atomSelect ^^ {
+      case None ~ a =>
+        a
+      case Some(a ~ op) ~ b if op == QUERYPIPE() =>
+        b.asLeaf match {
+          case Some(leaf) =>
+            PipeQuery(a, Leaf(leaf))
+          case None =>
+            badParse(errors.leafQueryOnTheRightExpected, op.position)
+        }
+      case Some(a ~ op) ~ b =>
+        Compound(op.printable, a, b)
+    }
+
+  def atomSelect: Parser[BinaryTree[Select]] =
+    (select ^^ { s => Leaf(s) }) |
+      parenSelect |
+      failure(errors.missingQuery)
 
   val tableIdentifier: Parser[(String, Position)] =
     accept[tokens.TableIdentifier] ^^ { t =>
@@ -167,22 +202,14 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     case (alias, _) => TableName.withSodaFountainPrefix(alias)
   }
 
-  val selectFrom: Parser[(TableName, Select)] = {
-    SELECT() ~> distinct ~ selectList ~ (FROM() ~> tableIdentifier) ~ opt(AS() ~> simpleIdToAlias) ~ ifCanJoinList(joinList) ~ opt(whereClause) ~
-      opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
-      case d ~ s ~ ((t: String, _)) ~ a ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
-        (TableName(t, a), Select(d, s, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr))
-    }
-  }
-
   val joinSelect: Parser[JoinSelect] = {
     tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ {
       case ((tid: String, _)) ~ alias =>
-        JoinSelect(TableName(tid, alias), None)
+        JoinSelect(Left(TableName(tid, alias)))
     } |
-    LPAREN() ~> selectFrom ~ opt(QUERYPIPE() ~> pipedSelect) ~ (RPAREN() ~> AS() ~> simpleIdToAlias) ^^ {
-      case ((tn, s)) ~ chainedQueries ~ alias =>
-        JoinSelect(tn, Some(SubSelect(NonEmptySeq(s, chainedQueries.map(_.seq).getOrElse(Seq.empty)), alias)))
+    atomSelect ~ ( AS() ~> simpleIdToAlias) ^^ {
+      case queries ~ alias =>
+        JoinSelect(Right(SubSelect(queries, alias)))
     }
   }
 

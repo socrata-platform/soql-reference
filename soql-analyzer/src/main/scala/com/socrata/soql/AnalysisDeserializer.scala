@@ -27,7 +27,8 @@ private trait DeserializationDictionary[C, T] {
 }
 
 object AnalysisDeserializer {
-  val CurrentVersion = 6
+  val CurrentVersion = 7
+  val LastVersion = CurrentVersion - 1
 
   // This is odd and for smooth deploy transition.
   val TestVersionV5 = -1
@@ -162,6 +163,18 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
     def readNonEmptySeq[A](f: => A): NonEmptySeq[A] = NonEmptySeq.fromSeqUnsafe(readSeq(f))
 
+    def readBinaryTree[A](f: => A): BinaryTree[A] = {
+      in.readUInt32() match {
+        case 1 =>
+          Leaf(f)
+        case 2 =>
+          val op = in.readString()
+          val l = readBinaryTree(f)
+          val r = readBinaryTree(f)
+          Compound(op, l, r)
+      }
+    }
+
     def readSelection(): OrderedMap[ColumnName, Expr] = {
       val elems = readSeq {
         val name =  dictionary.labels(in.readUInt32())
@@ -215,11 +228,31 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     }
 
     def readSubAnalysis(): SubAnalysis[C, T] = {
-      SubAnalysis(read(), in.readString())
+      if (this.version >= CurrentVersion || this.version == TestVersionV5) {
+        SubAnalysis(readBinaryTree(readAnalysis), in.readString())
+      } else {
+        val neseq = readNonEmptySeq(readAnalysis)
+        val bt = toBinaryTree(neseq.seq)
+        SubAnalysis(bt, in.readString())
+      }
     }
 
     def readJoinAnalysis(): JoinAnalysis[C, T] = {
-      JoinAnalysis(readTableName(), maybeRead(readSubAnalysis()))
+      if (this.version >= CurrentVersion || this.version == TestVersionV5) {
+        in.readUInt32() match {
+          case 0 =>
+            JoinAnalysis(Left(readTableName()))
+          case 1 =>
+            JoinAnalysis(Right(readSubAnalysis()))
+        }
+      } else {
+        val tableName = readTableName()
+        val subAnalysisOpt = maybeRead(readSubAnalysis())
+        subAnalysisOpt match {
+          case Some(subAnalysis) => JoinAnalysis(Right(subAnalysis))
+          case None => JoinAnalysis(Left(tableName))
+        }
+      }
     }
 
     def readSearch(): Option[String] =
@@ -227,10 +260,16 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         dictionary.strings(in.readUInt32())
       }
 
+    def readFrom(): Option[TableName] =
+      maybeRead {
+        readTableName()
+      }
+
     def readAnalysis(): SoQLAnalysis[C, T] = {
       val ig = readIsGrouped()
       val d = readDistinct()
       val s = readSelection()
+      val f = if (this.version >= CurrentVersion || this.version == TestVersionV5) readFrom() else None
       val j = readJoins()
       val w = readWhere()
       val gb = readGroupBy()
@@ -240,7 +279,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val o = readOffset()
       val search = readSearch()
 
-      SoQLAnalysis(ig, d, s, j, w, gb, h, ob, l, o, search)
+      SoQLAnalysis(ig, d, s, f, j, w, gb, h, ob, l, o, search)
     }
 
     def read(): NonEmptySeq[SoQLAnalysis[C, T]] = {
@@ -251,7 +290,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
   def apply(in: InputStream): NonEmptySeq[SoQLAnalysis[C, T]] = {
     val cis = CodedInputStream.newInstance(in)
     cis.readInt32() match {
-      case v if v >= 5 && v <= 6 =>
+      case v if v >= 5 && v <= CurrentVersion =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
         deserializer.read()
@@ -262,5 +301,43 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       case other =>
         throw new UnknownAnalysisSerializationVersion(other)
     }
+  }
+
+  def applyBinaryTree(in: InputStream): BinaryTree[SoQLAnalysis[C, T]] = {
+    val cis = CodedInputStream.newInstance(in)
+    cis.readInt32() match {
+      case v if v >= 5 && v <= LastVersion =>
+        val dictionary = DeserializationDictionaryImpl.fromInput(cis)
+        val deserializer = new Deserializer(cis, dictionary, v)
+        val seq: NonEmptySeq[SoQLAnalysis[C, T]] = deserializer.read()
+        val bt: BinaryTree[SoQLAnalysis[C, T]] = toBinaryTree(seq.seq)
+        bt
+      case v if v >= CurrentVersion =>
+        val dictionary = DeserializationDictionaryImpl.fromInput(cis)
+        val deserializer = new Deserializer(cis, dictionary, v)
+        val bt: BinaryTree[SoQLAnalysis[C, T]] = deserializer.readBinaryTree(deserializer.readAnalysis)
+        bt
+      case v if v == TestVersionV5 => // single select
+        val dictionary = DeserializationDictionaryImpl.fromInput(cis)
+        val deserializer = new Deserializer(cis, dictionary, v)
+        val seq = NonEmptySeq(deserializer.readAnalysis(), Seq.empty)
+        val bt: BinaryTree[SoQLAnalysis[C, T]] = toBinaryTree(seq.seq)
+        bt
+      case other =>
+        throw new UnknownAnalysisSerializationVersion(other)
+    }
+  }
+
+  // Not designed for empty seq
+  def toBinaryTree(seq: Seq[SoQLAnalysis[C, T]]): BinaryTree[SoQLAnalysis[C, T]] = {
+    def buildBinaryTree(seq: Seq[SoQLAnalysis[C, T]]): BinaryTree[SoQLAnalysis[C, T]] = {
+      seq match {
+        case Seq(x) => Leaf(x)
+        case ss =>
+          PipeQuery(buildBinaryTree(ss.dropRight(1)), Leaf(ss.last))
+      }
+    }
+
+    buildBinaryTree(seq)
   }
 }

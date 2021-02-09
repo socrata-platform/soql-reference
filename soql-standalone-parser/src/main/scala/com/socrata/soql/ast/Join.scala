@@ -44,7 +44,7 @@ sealed trait Join {
   val typ: JoinType
 
   // joins are simple if there is no subAnalysis, e.g. "join @aaaa-aaaa[ as a]"
-  def isSimple = from.subSelect.isEmpty
+  def isSimple = from.subSelect.isLeft
 
   override def toString: String = {
     s"$typ $from ON $on"
@@ -54,8 +54,10 @@ sealed trait Join {
 object Join {
   def expandJoins(selects: Seq[Select]): Seq[Join] = {
     def expandJoin(join: Join): Seq[Join] = {
-      if (join.isSimple) Seq(join)
-      else expandJoins(join.from.selects) :+ join
+      join.from.subSelect match {
+        case Left(_) => Seq(join)
+        case Right(s) => expandJoins(s.selects.seq) :+ join
+      }
     }
 
     selects.flatMap(_.joins.flatMap(expandJoin))

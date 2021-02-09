@@ -29,7 +29,7 @@ object AliasToy extends (Array[String] => Unit) {
       val selection = readLine("> ")
       if(selection == null) return;
       try {
-        val analysis = AliasAnalysis(p.selection(selection))
+        val analysis = AliasAnalysis(p.selection(selection), None)
         println("Resulting aliases:")
         Util.printList(analysis.expressions, "  ")
         println(analysis.evaluationOrder.mkString("Typecheck in this order:\n  ", ", ", ""))
