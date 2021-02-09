@@ -386,6 +386,9 @@ object SoQLFunctions {
   val Or = mf("or", SpecialFunctions.Operator("or"), Seq(SoQLBoolean, SoQLBoolean), Seq.empty, SoQLBoolean)(
     "Logical or of two boolean values"
   )
+  val Xor = mf("xor", SpecialFunctions.Operator("xor"), Seq(SoQLBoolean, SoQLBoolean), Seq.empty, SoQLBoolean)(
+    "Logical xor of two boolean values"
+  )
   val Not = mf("not", SpecialFunctions.Operator("not"), Seq(SoQLBoolean), Seq.empty, SoQLBoolean)(
     "Invert a boolean"
   )
