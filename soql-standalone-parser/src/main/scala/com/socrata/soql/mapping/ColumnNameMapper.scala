@@ -2,7 +2,7 @@ package com.socrata.soql.mapping
 
 import com.socrata.soql.ast._
 import com.socrata.soql.environment.ColumnName
-import com.socrata.soql.{BinaryTree, Compound, PipeQuery}
+import com.socrata.soql.{BinaryTree, Compound, PipeQuery, Leaf}
 
 import scala.util.parsing.input.{NoPosition, Position}
 
@@ -27,8 +27,8 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
         val nl = mapSelect(l)
         val nr = mapSelect(r)
         Compound(op, nl, nr)
-      case h: Select =>
-        Select(
+      case Leaf(h) =>
+        Leaf(Select(
           distinct = h.distinct,
           selection = mapSelection(h.selection),
           from = h.from,
@@ -40,7 +40,7 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
           limit = h.limit,
           offset = h.offset,
           search = h.search
-        )
+        ))
     }
   }
 

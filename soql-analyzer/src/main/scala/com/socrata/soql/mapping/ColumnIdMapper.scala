@@ -3,7 +3,7 @@ package com.socrata.soql.mapping
 import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.exceptions.RightSideOfChainQueryMustBeLeaf
 import com.socrata.soql.typed.Qualifier
-import com.socrata.soql.{BinaryTree, Compound, PipeQuery, SoQLAnalysis}
+import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, SoQLAnalysis}
 
 import scala.util.parsing.input.NoPosition
 
@@ -25,15 +25,14 @@ object ColumnIdMapper {
         val newQColumnIdToQColumnIdMap = qColumnIdNewColumnIdMap ++ prevQColumnIdToQColumnIdMap
         val rightLeaf = r.asLeaf.getOrElse(throw RightSideOfChainQueryMustBeLeaf(NoPosition))
         val nr = rightLeaf.mapColumnIds(newQColumnIdToQColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
-        PipeQuery(nl, nr)
+        PipeQuery(nl, Leaf(nr))
       case Compound(op, l, r) =>
         val nl = mapColumnIds(l)(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
         val nr = mapColumnIds(r)(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
         Compound(op, nl, nr)
-      case s =>
-        val ana = s.asLeaf.getOrElse(throw RightSideOfChainQueryMustBeLeaf(NoPosition))
+      case Leaf(ana) =>
         val nana = ana.mapColumnIds(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
-        nana
+        Leaf(nana)
     }
   }
 }

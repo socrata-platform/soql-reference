@@ -14,7 +14,7 @@ sealed trait Join[ColumnId, Type] {
   def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): Join[NewColumnId, Type] = {
     val mappedSub: Either[TableName, SubAnalysis[NewColumnId, Type]] = from.subAnalysis match {
       case Right(SubAnalysis(analyses, alias)) =>
-        val newAnas = analyses.flatMap(_.mapColumnIds(f))
+        val newAnas = analyses.flatMap { analysis => Leaf(analysis.mapColumnIds(f)) }
         Right(SubAnalysis(newAnas, alias))
       case Left(tableName) =>
         Left(tableName)

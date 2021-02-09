@@ -260,7 +260,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
           out.writeStringNoTag(op)
           writeBinaryTree(l)(f)
           writeBinaryTree(r)(f)
-        case a: A =>
+        case Leaf(a) =>
           out.writeUInt32NoTag(1)
           f(a)
       }

@@ -332,9 +332,9 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
   def toBinaryTree(seq: Seq[SoQLAnalysis[C, T]]): BinaryTree[SoQLAnalysis[C, T]] = {
     def buildBinaryTree(seq: Seq[SoQLAnalysis[C, T]]): BinaryTree[SoQLAnalysis[C, T]] = {
       seq match {
-        case Seq(x) => x
+        case Seq(x) => Leaf(x)
         case ss =>
-          PipeQuery(buildBinaryTree(ss.dropRight(1)), ss.last)
+          PipeQuery(buildBinaryTree(ss.dropRight(1)), Leaf(ss.last))
       }
     }
 

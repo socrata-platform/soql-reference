@@ -5,7 +5,7 @@ import com.socrata.NonEmptySeq
 import scala.reflect.ClassTag
 import scala.util.parsing.combinator.{PackratParsers, Parsers}
 import util.parsing.input.Position
-import com.socrata.soql.{BinaryTree, Compound, PipeQuery, ast, tokens}
+import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, ast, tokens}
 import com.socrata.soql.tokens._
 import com.socrata.soql.ast._
 import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
@@ -156,7 +156,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       case Some(a ~ op) ~ b if op == QUERYPIPE() =>
         b.asLeaf match {
           case Some(leaf) =>
-            PipeQuery(a, leaf)
+            PipeQuery(a, Leaf(leaf))
           case None =>
             badParse(errors.leafQueryOnTheRightExpected, op.position)
         }
@@ -164,8 +164,8 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
         Compound(op.printable, a, b)
     }
 
-  def atomSelect =
-    select |
+  def atomSelect: Parser[BinaryTree[Select]] =
+    (select ^^ { s => Leaf(s) }) |
       parenSelect |
       failure(errors.missingQuery)
 

@@ -1,6 +1,6 @@
 package com.socrata.soql
 
-trait BinaryTree[T] {
+sealed trait BinaryTree[T] {
 
   def seq: Seq[T] = {
     asLeaf.toSeq
@@ -18,7 +18,7 @@ trait BinaryTree[T] {
   def asLeaf: Option[T] = {
     this match {
       case _: Compound[T] => None
-      case t: T @unchecked => Some(t)
+      case Leaf(t) => Some(t)
     }
   }
 

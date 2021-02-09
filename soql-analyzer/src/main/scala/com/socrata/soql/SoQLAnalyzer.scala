@@ -76,17 +76,17 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
   def analyzeBinary(bSelect: BinaryTree[Select])(implicit ctx: AnalysisContext): BinaryTree[Analysis] = {
     bSelect match {
-      case s: Select =>
-        analyzeWithSelection(s)(ctx)
+      case Leaf(s) =>
+        Leaf(analyzeWithSelection(s)(ctx))
       case PipeQuery(ls, rs) =>
         val la = ls match {
-          case s: Select => analyzeWithSelection(s)(ctx)
+          case Leaf(s) => Leaf(analyzeWithSelection(s)(ctx))
           case _ => analyzeBinary(ls)
         }
         val ra = rs match {
-          case s: Select =>
+          case Leaf(s) =>
             val prev = la.outputSchemaLeaf
-            analyzeInOuterSelectionContext(ctx)(prev, s)
+            Leaf(analyzeInOuterSelectionContext(ctx)(prev, s))
           case _ =>
             analyzeBinary(ls)
         }
@@ -567,7 +567,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                         orderBys: Seq[typed.OrderBy[ColumnId, Type]],
                                         limit: Option[BigInt],
                                         offset: Option[BigInt],
-                                        search: Option[String]) extends BinaryTree[SoQLAnalysis[ColumnId, Type]] {
+                                        search: Option[String]) {
 
   /**
    * This version of mapColumnsId is incomplete and for rollup/rewrite in soda fountain
@@ -678,7 +678,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
         val ra = r.asLeaf.getOrElse(throw RightSideOfChainQueryMustBeLeaf(NoPosition))
         tryMerge(mlp, ra) match {
           case Some(merged) =>
-            merged
+            Leaf(merged)
           case None =>
             stages
         }

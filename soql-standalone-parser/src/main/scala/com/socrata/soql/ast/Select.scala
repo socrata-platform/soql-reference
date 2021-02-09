@@ -109,7 +109,7 @@ case class Select(
   orderBys: Seq[OrderBy],
   limit: Option[BigInt],
   offset: Option[BigInt],
-  search: Option[String]) extends BinaryTree[Select] {
+  search: Option[String]) {
 
   private def toString(from: Option[TableName]): String = {
     if(AST.pretty) {
