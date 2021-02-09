@@ -31,13 +31,19 @@ trait BinaryTree[T] {
 }
 
 object Compound {
+  val QueryPipe = "QUERYPIPE"
+  val Union = "UNION"
+  val UnionAll = "UNION ALL"
+  val Intersect = "INTERSECT"
+  val Minus = "MINUS"
+
   def apply[T](op: String, left: BinaryTree[T], right: BinaryTree[T]): Compound[T] = {
     op match {
-      case "QUERYPIPE" => PipeQuery(left, right)
-      case "UNION" => UnionQuery(left, right)
-      case "UNION ALL" => UnionAllQuery(left, right)
-      case "INTERSECT" => IntersectQuery(left, right)
-      case "MINUS" => MinusQuery(left, right)
+      case QueryPipe => PipeQuery(left, right)
+      case Union => UnionQuery(left, right)
+      case UnionAll => UnionAllQuery(left, right)
+      case Intersect => IntersectQuery(left, right)
+      case Minus => MinusQuery(left, right)
     }
   }
 
@@ -46,7 +52,9 @@ object Compound {
   }
 }
 
-abstract class Compound[T](val op: String) extends BinaryTree[T] {
+sealed trait Compound[T] extends BinaryTree[T] {
+
+  val op: String
 
   val left: BinaryTree[T]
 
@@ -83,11 +91,26 @@ abstract class Compound[T](val op: String) extends BinaryTree[T] {
   }
 }
 
-case class PipeQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]("QUERYPIPE") {
+case class PipeQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
   override def opString: String = "|>"
+
+  val op = Compound.QueryPipe
 }
 
-case class UnionQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]("UNION")
-case class UnionAllQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]("UNION ALL")
-case class IntersectQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]("INTERSECT")
-case class MinusQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]("MINUS")
+case class UnionQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
+  val op = Compound.Union
+}
+
+case class UnionAllQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
+  val op = Compound.UnionAll
+}
+
+case class IntersectQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
+  val op = Compound.Intersect
+}
+
+case class MinusQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
+  val op = Compound.Minus
+}
+
+case class Leaf[T](leaf: T) extends BinaryTree[T]
