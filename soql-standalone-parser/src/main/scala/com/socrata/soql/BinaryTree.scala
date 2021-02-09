@@ -22,12 +22,7 @@ sealed trait BinaryTree[T] {
     }
   }
 
-  def flatMap[B](transform: T => BinaryTree[B]): BinaryTree[B] = {
-    asLeaf match {
-      case Some(t) => transform(t)
-      case None => ???
-    }
-  }
+  def flatMap[B](transform: T => BinaryTree[B]): BinaryTree[B]
 }
 
 object Compound {
@@ -64,7 +59,7 @@ sealed trait Compound[T] extends BinaryTree[T] {
     left.seq ++ right.seq
   }
 
-  override def flatMap[B](transform: T => BinaryTree[B]): BinaryTree[B] = {
+  def flatMap[B](transform: T => BinaryTree[B]): BinaryTree[B] = {
     val nl = left.flatMap(transform)
     val nr = right.flatMap(transform)
     Compound(this.op, left = nl, right = nr)
@@ -115,4 +110,8 @@ case class MinusQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Comp
 
 case class Leaf[T](leaf: T) extends BinaryTree[T] {
   override def toString: String = leaf.toString
+
+  def flatMap[B](transform: T => BinaryTree[B]): BinaryTree[B] = {
+    transform(leaf)
+  }
 }
