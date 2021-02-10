@@ -237,6 +237,16 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       }
     }
 
+    /**
+     * TODO: For deploy transition only.  To be removed
+     */
+    private def v6JoinSubAnalysisTov7(subAnalysis: SubAnalysis[C, T], tableName: TableName): SubAnalysis[C, T] = {
+      val leftMost = subAnalysis.analyses.leftMost
+      val leftMostWithFrom = Leaf(leftMost.leaf.copy(from = Option(tableName)))
+      val analysesWithFrom = subAnalysis.analyses.replace(leftMost, leftMostWithFrom)
+      subAnalysis.copy(analyses = analysesWithFrom)
+    }
+
     def readJoinAnalysis(): JoinAnalysis[C, T] = {
       if (this.version >= CurrentVersion || this.version == TestVersionV5) {
         in.readUInt32() match {
@@ -249,7 +259,10 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         val tableName = readTableName()
         val subAnalysisOpt = maybeRead(readSubAnalysis())
         subAnalysisOpt match {
-          case Some(subAnalysis) => JoinAnalysis(Right(subAnalysis))
+          case Some(subAnalysis) =>
+            // serialization v7 join.from is replaced with select.from
+            // move v6 join.from to select.from
+            JoinAnalysis(Right(v6JoinSubAnalysisTov7(subAnalysis, tableName)))
           case None => JoinAnalysis(Left(tableName))
         }
       }
