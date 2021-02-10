@@ -36,12 +36,12 @@ class BinaryTreeSelectTest extends FunSpec with MustMatchers {
       val binaryTree = parser.binaryTreeSelect(soql)
       val compound@Compound(_, l@Leaf(_), r@Leaf(_)) = binaryTree
       l.eq(r) must be (false)
-      val leftClone = l.copy()
-      leftClone.eq(l) must be (false)
-      leftClone.equals(l) must be (true)
+      val leftCopy = l.copy()
+      leftCopy.eq(l) must be (false)
+      leftCopy.equals(l) must be (true)
       compound.leftMost.eq(l) must be(true)
-      val Compound(_, nl, lr) = binaryTree.replace(l, leftClone)
-      nl.eq(leftClone) must be (true) // leftmost is updated
+      val Compound(_, nl, lr) = binaryTree.replace(l, leftCopy)
+      nl.eq(leftCopy) must be (true) // leftmost is updated
       lr.eq(r) must be (true) // right is not changed
     }
   }
