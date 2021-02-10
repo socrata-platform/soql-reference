@@ -22,7 +22,21 @@ sealed trait BinaryTree[T] {
     }
   }
 
+  def leftMost: Leaf[T]
+
   def flatMap[B](transform: T => BinaryTree[B]): BinaryTree[B]
+
+  def replace(a: Leaf[T], b: Leaf[T]): BinaryTree[T] = {
+    this match {
+      case Compound(op, l, r) =>
+        val nl = l.replace(a, b)
+        val nr = r.replace(a, b)
+        Compound(op, left = nl, right = nr)
+      case Leaf(_) =>
+        if (this.eq(a)) b
+        else this
+    }
+  }
 }
 
 object Compound {
@@ -78,6 +92,8 @@ sealed trait Compound[T] extends BinaryTree[T] {
     right.last
   }
 
+  def leftMost: Leaf[T] = left.leftMost
+
   def opString: String = op
 
   override def toString: String = {
@@ -114,4 +130,6 @@ case class Leaf[T](leaf: T) extends BinaryTree[T] {
   def flatMap[B](transform: T => BinaryTree[B]): BinaryTree[B] = {
     transform(leaf)
   }
+
+  def leftMost: Leaf[T] = this
 }

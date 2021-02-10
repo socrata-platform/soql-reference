@@ -1,5 +1,6 @@
 package com.socrata.soql.parsing
 
+import com.socrata.soql.{Compound, Leaf}
 import org.scalatest.{FunSpec, MustMatchers}
 
 class BinaryTreeSelectTest extends FunSpec with MustMatchers {
@@ -26,6 +27,22 @@ class BinaryTreeSelectTest extends FunSpec with MustMatchers {
       val soql = "SELECT 1 as a |> SELECT 2 as b |> SELECT 3 as c"
       val selects = parser.binaryTreeSelect(soql)
       selects.seq.map(_.toString) must be (Seq("SELECT 1 AS a", "SELECT 2 AS b", "SELECT 3 AS c"))
+    }
+  }
+
+  describe("General") {
+    it ("leftMost update compare uses reference equality") {
+      val soql = "SELECT 1 as a UNION SELECT 1 as a"
+      val binaryTree = parser.binaryTreeSelect(soql)
+      val compound@Compound(_, l@Leaf(_), r@Leaf(_)) = binaryTree
+      l.eq(r) must be (false)
+      val leftClone = l.copy()
+      leftClone.eq(l) must be (false)
+      leftClone.equals(l) must be (true)
+      compound.leftMost.eq(l) must be(true)
+      val Compound(_, nl, lr) = binaryTree.replace(l, leftClone)
+      nl.eq(leftClone) must be (true) // leftmost is updated
+      lr.eq(r) must be (true) // right is not changed
     }
   }
 }
