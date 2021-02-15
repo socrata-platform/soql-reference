@@ -682,7 +682,11 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
           case None =>
             stages
         }
-      case _ =>
+      case Compound(op, l, r) =>
+        val nl = merge(l)
+        val nr = merge(r)
+        Compound(op, nl, nr)
+      case Leaf(_) =>
         stages
     }
   }
