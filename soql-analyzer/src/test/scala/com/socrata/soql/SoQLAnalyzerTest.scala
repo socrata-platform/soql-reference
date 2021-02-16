@@ -292,6 +292,16 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     merged must equal (expected)
   }
 
+  test("union part is merged") {
+    val soqlCommon = "(SELECT name_first, name_last |> SELECT name_first, name_last WHERE name_first=name_last)"
+    val soql = soqlCommon + " UNION " + soqlCommon
+    val analysis = analyzer.analyzeFullQueryBinary(soql)
+    val soqlMerged = "SELECT name_first, name_last WHERE name_first=name_last UNION SELECT name_first, name_last WHERE name_first=name_last"
+    val expected = analyzer.analyzeFullQueryBinary(soqlMerged)
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    merged must equal (expected)
+  }
+
   test("Limit-combining produces the intersection of the two regions") {
     forAll { (aLim0: Option[BigInt], aOff0: Option[BigInt], bLim0: Option[BigInt], bOff0: Option[BigInt]) =>
       val aLim = aLim0.map(_.abs)
