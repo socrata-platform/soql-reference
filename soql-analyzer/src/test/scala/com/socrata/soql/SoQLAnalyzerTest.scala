@@ -283,6 +283,15 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     notMerged must equal (analysis)
   }
 
+  test("upper non-mergeable does not throw away lower merge") {
+    val soql = "SELECT name_first, name_last |> SELECT name_first, name_last WHERE name_first=name_last |> SELECT name_first SEARCH 'first'"
+    val soql2 = "SELECT name_first, name_last WHERE name_first=name_last |> SELECT name_first SEARCH 'first'"
+    val analysis1 = analyzer.analyzeFullQueryBinary(soql)
+    val analysis2 = analyzer.analyzeFullQueryBinary(soql2)
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1)
+    merged must equal (analysis2)
+  }
+
   test("Limit-combining produces the intersection of the two regions") {
     forAll { (aLim0: Option[BigInt], aOff0: Option[BigInt], bLim0: Option[BigInt], bOff0: Option[BigInt]) =>
       val aLim = aLim0.map(_.abs)
