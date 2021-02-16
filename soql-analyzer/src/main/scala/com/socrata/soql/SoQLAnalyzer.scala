@@ -680,7 +680,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
           case Some(merged) =>
             Leaf(merged)
           case None =>
-            stages
+            PipeQuery(ml, r)
         }
       case Compound(op, l, r) =>
         val nl = merge(l)
