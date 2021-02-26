@@ -28,7 +28,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("address") -> TestLocation,
       ColumnName("balance") -> TestMoney,
       ColumnName("object") -> TestObject,
-      ColumnName("array") -> TestArray
+      ColumnName("array") -> TestArray,
+      ColumnName("json") -> TestJson
     )
   }
 
@@ -415,6 +416,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("balance") -> typedExpression("balance"),
       ColumnName("object") -> typedExpression("object"),
       ColumnName("array") -> typedExpression("array"),
+      ColumnName("json") -> typedExpression("json"),
       ColumnName("x") -> typedExpression("@x1.x"),
       ColumnName("y") -> typedExpression("@x1.y"),
       ColumnName("z") -> typedExpression("@x1.z")

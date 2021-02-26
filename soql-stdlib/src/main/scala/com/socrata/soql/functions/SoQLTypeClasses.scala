@@ -25,7 +25,8 @@ object SoQLTypeClasses {
     SoQLPhone,
     SoQLPhoto,
     SoQLLocation,
-    SoQLUrl
+    SoQLUrl,
+    SoQLJson
   )
 
   val NumLike = Set[SoQLType](SoQLNumber, SoQLDouble, SoQLMoney)

@@ -18,7 +18,8 @@ object TestTypeInfo extends TypeInfo[TestType] {
     TestFloatingTimestamp,
     TestLocation,
     TestObject,
-    TestArray
+    TestArray,
+    TestJson
   )
 
   def booleanLiteralExpr(b: Boolean, pos: Position) = Seq(typed.BooleanLiteral(b, TestBoolean.t)(pos))
@@ -42,6 +43,6 @@ object TestTypeInfo extends TypeInfo[TestType] {
   def typeNameFor(typ: TestType): TypeName = typ.name
 
   def isOrdered(typ: TestType) = typ.isOrdered
-  def isGroupable(typ: TestType) = typ != TestArray
+  def isGroupable(typ: TestType) = typ != TestArray && typ != TestJson
   def isBoolean(typ: TestType) = typ == TestBoolean
 }

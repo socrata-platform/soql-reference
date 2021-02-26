@@ -70,6 +70,7 @@ object TestFunctions {
 
   val JsonToText = mf("json to text", SpecialFunctions.Cast(TestText.name), Seq(TestJson), Seq.empty, TestText)
   val JsonToNumber = mf("json to Number", SpecialFunctions.Cast(TestNumber.name), Seq(TestJson), Seq.empty, TestNumber)
+  val TextToJson = mf("text to json", SpecialFunctions.Cast(TestJson.name), Seq(TestText), Seq.empty, TestJson)
 
   val FloatingTimeStampExtractHh = mf("floating timestamp extract hour", FunctionName("date_extract_hh"), Seq(TestFloatingTimestamp), Seq.empty, TestNumber)
   val FloatingTimeStampExtractDow = mf("floating timestamp extract day of week", FunctionName("date_extract_dow"), Seq(TestFloatingTimestamp), Seq.empty, TestNumber)

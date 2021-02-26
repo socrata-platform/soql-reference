@@ -287,7 +287,20 @@ case object SoQLArray extends SoQLType("array")
 case class SoQLJson(value: JValue) extends SoQLValue {
   def typ = SoQLJson
 }
-case object SoQLJson extends SoQLType("json")
+case object SoQLJson extends SoQLType("json") {
+  object JsonRep {
+    def unapply(text: String): Option[JValue] = {
+      try {
+        JsonUtil.parseJson[JValue](text).right.toOption
+      } catch {
+        case ex: JsonReaderException => None
+      }
+    }
+
+    def apply(jv: JValue): String =
+      JsonUtil.renderJson(jv, pretty = false)
+  }
+}
 
 case class SoQLPoint(value: Point) extends SoQLValue {
   def typ = SoQLPoint

@@ -631,6 +631,10 @@ object SoQLFunctions {
   val JsonToArray = mf("json to array", SpecialFunctions.Cast(SoQLArray.name), Seq(SoQLJson), Seq.empty, SoQLArray)(
     NoDocs
   )
+  val TextToJson = mf("text to json", SpecialFunctions.Cast(SoQLJson.name), Seq(SoQLText), Seq.empty, SoQLJson)(
+    NoDocs
+  )
+
 
   val TextToRowIdentifier = mf("text to rid", SpecialFunctions.Cast(SoQLID.name), Seq(SoQLText), Seq.empty, SoQLID)(
     NoDocs
