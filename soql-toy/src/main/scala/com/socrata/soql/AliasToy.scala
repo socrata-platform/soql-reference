@@ -2,9 +2,10 @@ package com.socrata.soql
 
 import collection.OrderedSet
 import com.socrata.soql.aliases._
+import com.socrata.soql.ast.TableName
 import com.socrata.soql.parsing.Parser
 import com.socrata.soql.exceptions.SoQLException
-import environment.{ColumnName, TableName, UntypedDatasetContext}
+import environment.{ColumnName, UntypedDatasetContext}
 
 object AliasToy extends (Array[String] => Unit) {
   def fail(msg: String) = {

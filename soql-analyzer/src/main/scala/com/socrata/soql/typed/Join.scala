@@ -2,7 +2,6 @@ package com.socrata.soql.typed
 
 import com.socrata.soql._
 import com.socrata.soql.ast._
-import com.socrata.soql.environment.TableName
 
 sealed trait Join[ColumnId, Type] {
   val from: JoinAnalysis[ColumnId, Type]

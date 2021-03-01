@@ -1,9 +1,10 @@
 package com.socrata.soql
 
+import com.socrata.soql.ast.TableName
 import org.scalatest.prop.PropertyChecks
 import org.scalatest.FunSuite
 import org.scalatest.MustMatchers
-import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
+import com.socrata.soql.environment.{ColumnName, DatasetContext}
 import com.socrata.soql.parsing.Parser
 import com.socrata.soql.typechecker.Typechecker
 import com.socrata.soql.types._

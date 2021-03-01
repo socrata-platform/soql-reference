@@ -4,9 +4,9 @@ import java.io.InputStream
 
 import com.google.protobuf.CodedInputStream
 import com.socrata.NonEmptySeq
-import com.socrata.soql.ast.JoinType
+import com.socrata.soql.ast.{JoinType, TableName}
 import com.socrata.soql.collection.OrderedMap
-import com.socrata.soql.environment.{ColumnName, TableName}
+import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.functions.{Function, MonomorphicFunction}
 import com.socrata.soql.parsing.SoQLPosition
 import com.socrata.soql.typed._

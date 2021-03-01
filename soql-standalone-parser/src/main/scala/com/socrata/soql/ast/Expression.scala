@@ -2,7 +2,7 @@ package com.socrata.soql.ast
 
 import scala.util.parsing.input.{NoPosition, Position}
 import scala.runtime.ScalaRunTime
-import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
+import com.socrata.soql.environment.{ColumnName, FunctionName, TypeName}
 
 sealed abstract class Expression extends Product {
   val position: Position
@@ -385,3 +385,6 @@ case class WindowFunctionInfo(partitions: Seq[Expression], orderings: Seq[OrderB
     Some(sb)
   }
 }
+
+case class TableCall(tableName: TableName, parameters: Seq[Expression])(val position: Position, val namePosition: Position)
+

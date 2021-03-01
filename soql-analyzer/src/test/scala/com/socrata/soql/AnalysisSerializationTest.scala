@@ -1,12 +1,13 @@
 package com.socrata.soql
 
 import org.scalatest.{FunSpec, MustMatchers}
-import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, TypeName}
+import com.socrata.soql.environment.{ColumnName, DatasetContext, TypeName}
 import com.socrata.soql.types._
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.util.Base64
 
 import com.socrata.NonEmptySeq
+import com.socrata.soql.ast.TableName
 
 class AnalysisSerializationTest extends FunSpec with MustMatchers {
   implicit val datasetCtx = new DatasetContext[TestType] {

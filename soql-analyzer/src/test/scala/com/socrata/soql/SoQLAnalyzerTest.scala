@@ -1,6 +1,7 @@
 package com.socrata.soql
 
 import com.socrata.NonEmptySeq
+import com.socrata.soql.ast.TableName
 import com.socrata.soql.exceptions._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.PropertyChecks
@@ -8,7 +9,7 @@ import org.scalatest.prop.PropertyChecks
 import scala.util.parsing.input.NoPosition
 import org.scalatest.FunSuite
 import org.scalatest.MustMatchers
-import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
+import com.socrata.soql.environment.{ColumnName, DatasetContext}
 import com.socrata.soql.parsing.{Parser, StandaloneParser}
 import com.socrata.soql.typechecker.Typechecker
 import com.socrata.soql.types._

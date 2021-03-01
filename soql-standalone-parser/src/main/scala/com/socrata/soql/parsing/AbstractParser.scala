@@ -8,7 +8,7 @@ import util.parsing.input.Position
 import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, ast, tokens}
 import com.socrata.soql.tokens._
 import com.socrata.soql.ast._
-import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
+import com.socrata.soql.environment.{ColumnName, FunctionName, TypeName}
 
 object AbstractParser {
   class Parameters(val allowJoins: Boolean = true, val systemColumnAliasesAllowed: Set[ColumnName] = Set.empty)
@@ -111,14 +111,14 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def ifCanJoinList[T](p: Parser[List[T]]) = ifCanJoin(p).map(_.getOrElse(Nil))
 
   val select: Parser[Select] = {
-    SELECT() ~> distinct ~ selectList ~ opt((FROM() ~> tableIdentifier) ~ opt(AS() ~> simpleIdToAlias)) ~ ifCanJoinList(joinList) ~ opt(whereClause) ~
+    SELECT() ~> distinct ~ selectList ~ opt(FROM() ~> tableCall) ~ ifCanJoinList(joinList) ~ opt(whereClause) ~
       opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
       case d ~ s ~ optFrom ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
-        val optTableName = optFrom.map {
-          case ((t: String, _) ~ a) =>
-            TableName(t, a)
-        }
-        Select(d, s, optTableName, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr)
+//        val optTableName = optFrom.map {
+//          case ((t: String, _) ~ a) =>
+//            TableName(t, a)
+//        }
+        Select(d, s, optFrom, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr)
     }
   }
 
@@ -202,11 +202,32 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     case (alias, _) => TableName.withSodaFountainPrefix(alias)
   }
 
+  val tableCall: Parser[TableName] = {
+    tableIdentifier ~ opt(params) ~ opt(AS() ~> simpleIdToAlias) ^^ {
+      case ((tid: String, pos)) ~ Some(Right(ps)) ~ alias =>
+        val tn = TableName(tid, alias)
+        TableName(tid, alias, ps)
+      case ((tid: String, pos)) ~ Some(Left(_)) ~ alias =>
+        TableName(tid, alias, Seq.empty)
+      case ((tid: String, pos)) ~ None ~ alias =>
+        TableName(tid, alias, Seq.empty)
+    }
+  }
+
   val joinSelect: Parser[JoinSelect] = {
-    tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ {
-      case ((tid: String, _)) ~ alias =>
-        JoinSelect(Left(TableName(tid, alias)))
+//    tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ {
+//      case ((tid: String, _)) ~ alias =>
+//        JoinSelect(Left(TableName(tid, alias)))
+//    } |
+    tableCall ^^ {
+      case tn: TableName =>
+        JoinSelect(Left(tn))
     } |
+//    tableIdentifier ~ opt(params) ~ opt(AS() ~> simpleIdToAlias) ^^ {
+//      case ((tid: String, _)) ~ paramsOpt ~ alias =>
+//        val ps = paramsOpt.toSeq.flatten(x => x.toSeq.flatten).map(_.toString)
+//        JoinSelect(Left(TableName(tid, alias, ps)))
+//    } |
     atomSelect ~ ( AS() ~> simpleIdToAlias) ^^ {
       case queries ~ alias =>
         JoinSelect(Right(SubSelect(queries, alias)))

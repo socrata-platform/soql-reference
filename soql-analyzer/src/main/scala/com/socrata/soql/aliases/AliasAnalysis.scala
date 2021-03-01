@@ -4,7 +4,7 @@ import scala.util.parsing.input.Position
 import scala.collection.mutable
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions.{CircularAliasDefinition, DuplicateAlias, NoSuchColumn, RepeatedException}
-import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, UntypedDatasetContext}
+import com.socrata.soql.environment.{ColumnName, DatasetContext, UntypedDatasetContext}
 import com.socrata.soql.collection.{OrderedMap, OrderedSet}
 
 trait AliasAnalysis {

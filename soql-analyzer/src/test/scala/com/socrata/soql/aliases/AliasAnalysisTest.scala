@@ -6,7 +6,7 @@ import org.scalatest.MustMatchers
 import com.socrata.soql.parsing.{Lexer, LexerReader, Parser}
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions._
-import com.socrata.soql.environment.{ColumnName, TableName, UntypedDatasetContext}
+import com.socrata.soql.environment.{ColumnName, UntypedDatasetContext}
 import com.socrata.soql.collection.{OrderedMap, OrderedSet}
 import com.socrata.soql.parsing.AbstractParser.Parameters
 

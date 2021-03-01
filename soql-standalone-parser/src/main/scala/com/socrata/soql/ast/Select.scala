@@ -27,7 +27,7 @@ case class JoinSelect(subSelect: Either[TableName, SubSelect]) {
   // Otherwise, it is the alias for the TableName, if defined.
   val alias: Option[String] = {
     subSelect match {
-      case Left(TableName(_, alias)) => alias
+      case Left(TableName(_, alias, _)) => alias
       case Right(SubSelect(_, alias)) => Option(alias)
     }
   }
@@ -44,7 +44,7 @@ case class JoinSelect(subSelect: Either[TableName, SubSelect]) {
       case Right(SubSelect(select, subAlias)) =>
         val selectStr = Select.toString(select)
         (s"($selectStr)", Some(subAlias))
-      case Left(tn@TableName(name, alias)) =>
+      case Left(tn@TableName(name, alias, _)) =>
         (tn.toString, None)
     }
 

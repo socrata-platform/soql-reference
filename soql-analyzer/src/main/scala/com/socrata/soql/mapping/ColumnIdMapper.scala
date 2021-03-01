@@ -1,6 +1,7 @@
 package com.socrata.soql.mapping
 
-import com.socrata.soql.environment.{ColumnName, TableName}
+import com.socrata.soql.ast.TableName
+import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.exceptions.RightSideOfChainQueryMustBeLeaf
 import com.socrata.soql.typed.Qualifier
 import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, SoQLAnalysis}
@@ -19,7 +20,7 @@ object ColumnIdMapper {
         val nl = mapColumnIds(l)(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
         val prev = nl.outputSchema.leaf
         val prevAlias = r.outputSchema.leaf.from match {
-          case Some(TableName(TableName.This, alias@Some(_))) =>
+          case Some(TableName(TableName.This, alias@Some(_), _)) =>
             alias
           case _ =>
             None

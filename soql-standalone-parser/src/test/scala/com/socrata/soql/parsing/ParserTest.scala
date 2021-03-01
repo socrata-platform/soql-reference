@@ -294,6 +294,20 @@ class ParserTest extends WordSpec with MustMatchers {
       x.joins(1).lateral must be (true)
     }
 
+    "xxx" in {
+      val parser = new StandaloneParser()
+      var soql = "SELECT 3 JOIN @t2(a,b,123) as j ON true"
+      soql = "SELECT 3 FROM @t2(a,b,123) UNION SELECT 4 FROM @t3(1,2,c)"
+      try {
+        val bt = parser.binaryTreeSelect(soql)
+        println(bt)
+      } catch {
+        case ex@BadParse(msg, pos) =>
+          println(msg + ":" + pos)
+          throw ex
+      }
+    }
+
     // def show[T](x: => T) {
     //   try {
     //     println(x)

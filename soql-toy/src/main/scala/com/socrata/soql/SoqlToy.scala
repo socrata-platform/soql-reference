@@ -1,9 +1,9 @@
 package com.socrata.soql
 
-import com.socrata.soql.ast.Select
+import com.socrata.soql.ast.{Select, TableName}
 import com.socrata.soql.exceptions.SoQLException
 import com.socrata.soql.types._
-import environment.{ColumnName, DatasetContext, TableName}
+import environment.{ColumnName, DatasetContext}
 import com.socrata.soql.functions.{SoQLFunctionInfo, SoQLTypeInfo}
 import com.rojoma.json.v3.util.JsonUtil
 
