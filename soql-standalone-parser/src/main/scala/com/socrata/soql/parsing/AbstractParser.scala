@@ -111,14 +111,14 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def ifCanJoinList[T](p: Parser[List[T]]) = ifCanJoin(p).map(_.getOrElse(Nil))
 
   val select: Parser[Select] = {
-    SELECT() ~> distinct ~ selectList ~ opt((FROM() ~> tableIdentifier) ~ opt(AS() ~> simpleIdToAlias)) ~ ifCanJoinList(joinList) ~ opt(whereClause) ~
+    SELECT() ~> distinct ~ selectList ~ opt(FROM() ~> tableCall) ~ ifCanJoinList(joinList) ~ opt(whereClause) ~
       opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
       case d ~ s ~ optFrom ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
-        val optTableName = optFrom.map {
-          case ((t: String, _) ~ a) =>
-            TableName(t, a)
-        }
-        Select(d, s, optTableName, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr)
+//        val optTableName = optFrom.map {
+//          case ((t: String, _) ~ a) =>
+//            TableName(t, a)
+//        }
+        Select(d, s, optFrom, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr)
     }
   }
 
@@ -202,11 +202,28 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     case (alias, _) => TableName.withSodaFountainPrefix(alias)
   }
 
+  val tableCall: Parser[TableName] = {
+    tableIdentifier ~ opt(params) ~ opt(AS() ~> simpleIdToAlias) ^^ {
+      case ((tid: String, _)) ~ paramsOpt ~ alias =>
+        val ps = paramsOpt.toSeq.flatten(x => x.toSeq.flatten).map(_.toString)
+        TableName(tid, alias, ps)
+    }
+  }
+
   val joinSelect: Parser[JoinSelect] = {
-    tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ {
-      case ((tid: String, _)) ~ alias =>
-        JoinSelect(Left(TableName(tid, alias)))
+//    tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ {
+//      case ((tid: String, _)) ~ alias =>
+//        JoinSelect(Left(TableName(tid, alias)))
+//    } |
+    tableCall ^^ {
+      case tn: TableName =>
+        JoinSelect(Left(tn))
     } |
+//    tableIdentifier ~ opt(params) ~ opt(AS() ~> simpleIdToAlias) ^^ {
+//      case ((tid: String, _)) ~ paramsOpt ~ alias =>
+//        val ps = paramsOpt.toSeq.flatten(x => x.toSeq.flatten).map(_.toString)
+//        JoinSelect(Left(TableName(tid, alias, ps)))
+//    } |
     atomSelect ~ ( AS() ~> simpleIdToAlias) ^^ {
       case queries ~ alias =>
         JoinSelect(Right(SubSelect(queries, alias)))

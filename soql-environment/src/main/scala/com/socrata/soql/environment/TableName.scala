@@ -1,8 +1,9 @@
 package com.socrata.soql.environment
 
-case class TableName(name: String, alias: Option[String] = None) {
+case class TableName(name: String, alias: Option[String] = None, params: Seq[String] = Seq.empty) {
   override def toString(): String = {
-    aliasWithoutPrefix.foldLeft(TableName.withSoqlPrefix(name))((n, a) => s"$n AS $a")
+    val paramsStr = if (params.isEmpty) "" else params.mkString("(", ", ", ")")
+    aliasWithoutPrefix.foldLeft(TableName.withSoqlPrefix(name) + paramsStr)((n, a) => s"$n AS $a")
   }
 
   def qualifier: String = alias.getOrElse(name)

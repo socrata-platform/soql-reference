@@ -216,7 +216,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
         case JoinSelect(Right(SubSelect(selects, alias))) =>
           val analyses = analyzeBinary(selects)(jCtx)
           acc + contextFromAnalysis(alias, analyses.outputSchema.leaf)
-        case JoinSelect(Left(tn@TableName(name, Some(alias)))) =>
+        case JoinSelect(Left(tn@TableName(name, Some(alias), _))) =>
           acc ++ aliasContext(tn, jCtx)
         case _ =>
           acc
@@ -349,10 +349,10 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
   private def aliasContext(tableName: Option[TableName], ctx: AnalysisContext): AnalysisContext = {
     tableName match {
-      case Some(TableName(name, Some(alias))) =>
+      case Some(TableName(name, Some(alias), _)) =>
         val name1 = if (name == TableName.This) TableName.PrimaryTable.qualifier else name
         Map(alias -> ctx(name1))
-      case Some(tn@TableName(name, None)) =>
+      case Some(tn@TableName(name, None, _)) =>
         Map(TableName.PrimaryTable.qualifier -> ctx(tn.qualifier))
       case _ =>
         Map.empty
@@ -387,7 +387,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       val accCtx = subAnalysisOpt match {
         case Right(SubAnalysis(analyses, alias)) =>
           jCtx + contextFromAnalysis(alias, analyses.outputSchema.leaf)
-        case Left(tn@TableName(_, _)) =>
+        case Left(tn@TableName(_, _, _)) =>
           jCtx ++ aliasContext(tn, saCtx)
       }
       val typedJoin = typed.Join(j.typ, JoinAnalysis(subAnalysisOpt), typecheck(j.on), j.lateral)
@@ -509,14 +509,14 @@ case class JoinAnalysis[ColumnId, Type](subAnalysis: Either[TableName, SubAnalys
 
   val alias: Option[String] =  {
     subAnalysis match {
-      case Left(TableName(_, alias)) => alias
+      case Left(TableName(_, alias, _)) => alias
       case Right(SubAnalysis(_, alias)) => Option(alias)
     }
   }
 
   def analyses: Option[BinaryTree[SoQLAnalysis[ColumnId, Type]]] = {
     subAnalysis match {
-      case Left(TableName(_, alias)) => None
+      case Left(TableName(_, alias, _)) => None
       case Right(SubAnalysis(analyses, _)) => Some(analyses)
     }
   }
@@ -542,7 +542,7 @@ case class JoinAnalysis[ColumnId, Type](subAnalysis: Either[TableName, SubAnalys
       case Right(SubAnalysis(subAnalysis, subAlias)) =>
         val selectStr = subAnalysis.toString
         (s"($selectStr)", Some(subAlias))
-      case Left(TableName(name, alias)) =>
+      case Left(TableName(name, alias, _)) =>
         (name, alias)
     }
 
@@ -606,25 +606,25 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
 
     val qColumnIdNewColumnIdMapWithFrom = this.from.foldLeft(qColumnIdNewColumnIdMap) { (acc, tableName) =>
       val qual = tableName match {
-        case TableName(TableName.This, alias@Some(_)) =>
+        case TableName(TableName.This, alias@Some(_), _) =>
           alias
         case _ =>
           Some(tableName.name)
       }
       val schema = columnsByQualifier(qual)
       tableName match {
-        case TableName(name, a@Some(_)) =>
+        case TableName(name, a@Some(_), _) =>
           acc ++ schema.map { case ((columnId, _), newColumnId) => ((columnId, a), newColumnId)}
-        case TableName(name, None) =>
+        case TableName(name, None, _) =>
           acc ++ schema.map { case ((columnId, _), newColumnId) => ((columnId, None), newColumnId)}
       }
     }
 
     def columnsFromJoin(j: typed.Join[ColumnId, Type]): Seq[((ColumnId, Qualifier), NewColumnId)] = {
       j.from.subAnalysis match {
-        case Left(TableName(_, None)) =>
+        case Left(TableName(_, None, _)) =>
           Seq.empty // Nothing new added
-        case Left(TableName(name, a@Some(alias))) =>
+        case Left(TableName(name, a@Some(alias), _)) =>
           // we don't previously handle this case - that means join simple table cannot be renamed
           // like in "join @aaaa-aaaa as a1" that as a1 will be ignored.  You still need to refer to columns in @aaaa-aaaa
           // without qualifier which should be wrong.  Hope noone is using that.

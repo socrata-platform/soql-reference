@@ -19,7 +19,7 @@ object ColumnIdMapper {
         val nl = mapColumnIds(l)(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
         val prev = nl.outputSchema.leaf
         val prevAlias = r.outputSchema.leaf.from match {
-          case Some(TableName(TableName.This, alias@Some(_))) =>
+          case Some(TableName(TableName.This, alias@Some(_), _)) =>
             alias
           case _ =>
             None
