@@ -137,7 +137,7 @@ case class Select(
   def format(from: Option[TableName]): String = {
     val distinctStr = if (distinct) "DISTINCT " else ""
     val selectStr = Some(s"SELECT $distinctStr$selection")
-    val fromStr = from.map(t => s"\nFROM $t")
+    val fromStr = this.from.orElse(from).map(t => s"\nFROM $t")
     val joinsStr = itrToString(None, joins.map(j => s"\n${j.toString}"), "\n ")
     val whereStr = itrToString("\nWHERE", where)
     val groupByStr = itrToString("\nGROUP BY", groupBys, ", ")
