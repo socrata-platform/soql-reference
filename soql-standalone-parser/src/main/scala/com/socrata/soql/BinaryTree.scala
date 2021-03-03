@@ -13,6 +13,8 @@ sealed trait BinaryTree[T] {
     asLeaf.get
   }
 
+  def outputSchema: Leaf[T]
+
   def last: T = asLeaf.get
 
   def asLeaf: Option[T] = {
@@ -80,11 +82,15 @@ sealed trait Compound[T] extends BinaryTree[T] {
   }
 
   override def outputSchemaLeaf: T = {
+    outputSchema.leaf
+  }
+
+  override def outputSchema: Leaf[T] = {
     this match {
       case PipeQuery(_, r) =>
-        r.outputSchemaLeaf
+        r.outputSchema
       case Compound(_, l, _) =>
-        l.outputSchemaLeaf
+        l.outputSchema
     }
   }
 
@@ -132,4 +138,6 @@ case class Leaf[T](leaf: T) extends BinaryTree[T] {
   }
 
   def leftMost: Leaf[T] = this
+
+  def outputSchema: Leaf[T] = this
 }

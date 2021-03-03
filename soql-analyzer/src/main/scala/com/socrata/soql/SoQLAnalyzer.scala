@@ -678,7 +678,12 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
         val ra = r.asLeaf.getOrElse(throw RightSideOfChainQueryMustBeLeaf(NoPosition))
         tryMerge(mlp, ra) match {
           case Some(merged) =>
-            Leaf(merged)
+            ml match {
+              case Compound(_, _, _) =>
+                ml.replace(ml.outputSchema, Leaf(merged))
+              case Leaf(_) =>
+                Leaf(merged)
+            }
           case None =>
             PipeQuery(ml, r)
         }
