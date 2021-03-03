@@ -85,7 +85,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
         }
         val ra = rs match {
           case Leaf(s) =>
-            val prev = la.outputSchemaLeaf
+            val prev = la.outputSchema.leaf
             Leaf(analyzeInOuterSelectionContext(ctx)(prev, s))
           case _ =>
             analyzeBinary(ls)
@@ -214,7 +214,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       join.from match {
         case JoinSelect(Right(SubSelect(selects, alias))) =>
           val analyses = analyzeBinary(selects)(ctx)
-          acc + contextFromAnalysis(alias, analyses.outputSchemaLeaf)
+          acc + contextFromAnalysis(alias, analyses.outputSchema.leaf)
         case JoinSelect(Left(tn@TableName(name, Some(alias)))) =>
           acc ++ aliasContext(tn, ctx)
         case _ =>
@@ -615,7 +615,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
             ((columnId, a), newColumnId)
           }
         case Right(SubAnalysis(ana, alias)) =>
-          ana.outputSchemaLeaf.selection.map { case (columnName, _) =>
+          ana.outputSchema.leaf.selection.map { case (columnName, _) =>
             qColumnNameToQColumnId(j.from.alias, columnName) -> columnNameToNewColumnId(columnName)
           }.toSeq
       }

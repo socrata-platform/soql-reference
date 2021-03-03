@@ -17,7 +17,7 @@ object ColumnIdMapper {
     bt match {
       case PipeQuery(l, r) =>
         val nl = mapColumnIds(l)(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
-        val prev = nl.outputSchemaLeaf
+        val prev = nl.outputSchema.leaf
         val prevQColumnIdToQColumnIdMap = prev.selection.foldLeft(qColumnIdNewColumnIdMap) { (acc, selCol) =>
           val (colName, expr) = selCol
           acc + (qColumnNameToQColumnId(None, colName) -> columnNameToNewColumnId(colName))

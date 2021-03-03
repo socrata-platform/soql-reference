@@ -8,11 +8,16 @@ sealed trait BinaryTree[T] {
 
   /**
    * return: the leaf node of the ultimate schema that this subtree will produce
+   * TODO: Retire this in favor of outputSchema
    */
+  @Deprecated
   def outputSchemaLeaf: T = {
     asLeaf.get
   }
 
+  /**
+   * return: the leaf of the ultimate schema that this subtree will produce
+   */
   def outputSchema: Leaf[T]
 
   def last: T = asLeaf.get
