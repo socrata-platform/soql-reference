@@ -283,7 +283,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     notMerged must equal (analysis)
   }
 
-  test("upper non-mergeable does not throw away lower merge") {
+  test("Upper non-mergeable does not throw away lower merge") {
     val soqlMerged = "SELECT name_first, name_last WHERE name_first=name_last |> SELECT name_first SEARCH 'first'"
     val soql = "SELECT name_first, name_last |> " + soqlMerged
     val analysis = analyzer.analyzeFullQueryBinary(soql)
@@ -292,13 +292,74 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     merged must equal (expected)
   }
 
-  test("union part is merged") {
+  test("Union part merges") {
     val soqlCommon = "(SELECT name_first, name_last |> SELECT name_first, name_last WHERE name_first=name_last)"
     val soql = soqlCommon + " UNION " + soqlCommon
     val analysis = analyzer.analyzeFullQueryBinary(soql)
     val soqlMerged = "SELECT name_first, name_last WHERE name_first=name_last UNION SELECT name_first, name_last WHERE name_first=name_last"
     val expected = analyzer.analyzeFullQueryBinary(soqlMerged)
     val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    merged must equal (expected)
+  }
+
+  test("Union parts merge") {
+    val soql = "SELECT name_first |> SELECT name_first UNION (SELECT name_first FROM @aaaa-aaab |> SELECT name_first)"
+    val soqlMerged = "SELECT name_first UNION SELECT name_first FROM @aaaa-aaab"
+    val analysis = analyzer.analyzeFullQueryBinary(soql)
+    val expected = analyzer.analyzeFullQueryBinary(soqlMerged)
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    merged must equal (expected)
+  }
+
+  test("Non consecutives merge") {
+    val soql = "SELECT name_first, :id |> SELECT name_first, :id JOIN @aaaa-aaab as a1 on true |> SELECT name_first, 'one', 'two', :id |> SELECT name_first, `one`, :id"
+    val soqlMerged = "SELECT name_first, :id JOIN @aaaa-aaab as a1 on true |> SELECT name_first, 'one', :id"
+    val analysis = analyzer.analyzeFullQueryBinary(soql)
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    val expected = analyzer.analyzeFullQueryBinary(soqlMerged)
+    merged must equal (expected)
+  }
+
+  test("Union does not merge with chain") {
+    val soql = "SELECT name_first, name_last UNION SELECT 'one', 'two' FROM @aaaa-aaab |> SELECT name_first"
+    val analysis = analyzer.analyzeFullQueryBinary(soql)
+    val notMerged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    notMerged must equal (analysis)
+  }
+
+  test("All merge to a leaf with window function") {
+    val soql = "SELECT name_first, visits, 1 |> SELECT name_first, visits, 2 |> SELECT name_first, visits, 3 |> SELECT name_first, avg(visits) over()"
+    val soqlMerged = "SELECT name_first, avg(visits) over()"
+    val analysis = analyzer.analyzeFullQueryBinary(soql)
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    val expected = analyzer.analyzeFullQueryBinary(soqlMerged)
+    merged must equal (expected)
+  }
+
+  test("All merge to a leaf with search") {
+    val soql = "SELECT name_first SEARCH 'tom' |> SELECT name_first |> SELECT name_first |> SELECT name_first"
+    val soqlMerged = "SELECT name_first SEARCH 'tom'"
+    val analysis = analyzer.analyzeFullQueryBinary(soql)
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    val expected = analyzer.analyzeFullQueryBinary(soqlMerged)
+    merged must equal (expected)
+  }
+
+  test("Consecutives merge except the last") {
+    val soql = "SELECT name_first |> SELECT name_first |> SELECT name_first |> SELECT name_first SEARCH 'tom'"
+    val soqlMerged = "SELECT name_first |> SELECT name_first SEARCH 'tom'"
+    val analysis = analyzer.analyzeFullQueryBinary(soql)
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    val expected = analyzer.analyzeFullQueryBinary(soqlMerged)
+    merged must equal (expected)
+  }
+
+  test("Consecutives merge except the first") {
+    val soql = "SELECT name_first JOIN @aaaa-aaab as a1 on true SEARCH 'tom' |> SELECT name_first |> SELECT name_first |> SELECT name_first"
+    val soqlMerged = "SELECT name_first JOIN @aaaa-aaab as a1 on true SEARCH 'tom' |> SELECT name_first"
+    val analysis = analyzer.analyzeFullQueryBinary(soql)
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    val expected = analyzer.analyzeFullQueryBinary(soqlMerged)
     merged must equal (expected)
   }
 
