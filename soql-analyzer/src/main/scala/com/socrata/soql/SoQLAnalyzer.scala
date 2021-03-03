@@ -674,15 +674,15 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
     stages match {
       case PipeQuery(l, r) =>
         val ml = merge(l)
-        val mlp = ml.outputSchemaLeaf
-        val ra = r.asLeaf.getOrElse(throw RightSideOfChainQueryMustBeLeaf(NoPosition))
-        tryMerge(mlp, ra) match {
-          case Some(merged) =>
-            ml match {
-              case Compound(_, _, _) =>
-                ml.replace(ml.outputSchema, Leaf(merged))
-              case Leaf(_) =>
-                Leaf(merged)
+        leftMergeCandidate(ml) match {
+          case Some(mlCandidate) =>
+            val ra = r.asLeaf.getOrElse(throw RightSideOfChainQueryMustBeLeaf(NoPosition))
+            tryMerge(mlCandidate.leaf, ra) match {
+              case Some(merged) =>
+                if (ml.asLeaf.isDefined) Leaf(merged)
+                else ml.replace(mlCandidate, Leaf(merged))
+              case None =>
+                PipeQuery(ml, r)
             }
           case None =>
             PipeQuery(ml, r)
@@ -693,6 +693,14 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
         Compound(op, nl, nr)
       case Leaf(_) =>
         stages
+    }
+  }
+
+  private def leftMergeCandidate(left: BinaryTree[Analysis]): Option[Leaf[Analysis]] = {
+    left match {
+      case leaf@Leaf(_) => Some(leaf)
+      case PipeQuery(_, _) => Some(left.outputSchema)
+      case Compound(_, _, _) => None // UNIONs etc are not mergeable
     }
   }
 
