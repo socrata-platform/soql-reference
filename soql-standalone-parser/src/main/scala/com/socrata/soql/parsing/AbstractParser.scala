@@ -280,7 +280,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     } |
     expressionSelectList
 
-  def expressionSelectList = rep1sep(namedSelection, COMMA()) ^^ (Selection(None, Seq.empty, _))
+  def expressionSelectList = repsep(namedSelection, COMMA()) ^^ (Selection(None, Seq.empty, _))
 
   def allSystemSelection =
     opt(tableIdentifier ~ DOT()) ~ COLONSTAR() ~ opt(selectExceptions(systemIdentifier)) ^^ {
