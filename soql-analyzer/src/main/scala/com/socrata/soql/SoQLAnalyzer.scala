@@ -297,7 +297,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
     val checkedJoin = joins.map { j: Join =>
       val subAnalysisOpt = subAnalysis(j)(ctx)
-      typed.Join(j.typ, JoinAnalysis(subAnalysisOpt), typecheck(j.on))
+      typed.Join(j.typ, JoinAnalysis(subAnalysisOpt), typecheck(j.on), j.lateral)
     }
 
     finishAnalysis(
@@ -386,7 +386,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
         case Left(tn@TableName(_, _)) =>
           jCtx ++ aliasContext(tn, ctx ++ jCtx)
       }
-      val typedJoin = typed.Join(j.typ, JoinAnalysis(subAnalysisOpt), typecheck(j.on))
+      val typedJoin = typed.Join(j.typ, JoinAnalysis(subAnalysisOpt), typecheck(j.on), j.lateral)
       (accCtx, typedJoins :+ typedJoin)
     }
 
@@ -638,7 +638,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
       val accQColumnIdNewColumnIdMapWithJoin = accQColumnIdNewColumnIdMap ++ columnsFromJoin(join)
       val mappedAnalysis = join.from.mapColumnIds(accQColumnIdNewColumnIdMapWithJoin, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
       val mappedOn = join.on.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))
-      val mappedJoin = typed.Join(join.typ, mappedAnalysis, mappedOn)
+      val mappedJoin = typed.Join(join.typ, mappedAnalysis, mappedOn, join.lateral)
       (accQColumnIdNewColumnIdMapWithJoin, accJoins :+ mappedJoin)
     }
 
@@ -735,7 +735,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
                         from = aFrom,
-                        joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on))),
+                        joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on), lateral = join.lateral)),
                         where = aWhere,
                         groupBys = aGroup,
                         having = aHaving,
@@ -750,7 +750,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
                         from = aFrom,
-                        joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on))),
+                        joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on), lateral = join.lateral)),
                         where = mergeWhereLike(aSelect, aWhere, bWhere),
                         groupBys = Nil,
                         having = None,
@@ -765,7 +765,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         distinct = false,
                         selection = mergeSelection(aSelect, bSelect),
                         from = aFrom,
-                        joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on))),
+                        joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on), lateral = join.lateral)),
                         where = mergeWhereLike(aSelect, aWhere, bWhere),
                         groupBys = mergeGroupBy(aSelect, bGroup),
                         having = mergeWhereLike(aSelect, None, bHaving),

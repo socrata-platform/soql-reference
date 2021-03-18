@@ -220,6 +220,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
         out.writeStringNoTag(join.typ.toString)
         writeJoinAnalysis(join.from)
         writeExpr(join.on)
+        out.writeBoolNoTag(join.lateral)
       }
     }
 

@@ -27,8 +27,8 @@ private trait DeserializationDictionary[C, T] {
 }
 
 object AnalysisDeserializer {
-  val CurrentVersion = 7
-  val LastVersion = CurrentVersion - 1
+  val CurrentVersion = 8
+  val LastVersion = 6 // The version that uses NonEmptySeq for chained queries instead of binary tree.
 
   // This is odd and for smooth deploy transition.
   val TestVersionV5 = -1
@@ -188,7 +188,8 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       readSeq {
         val joinType = JoinType(in.readString())
         val joinAnalysis = readJoinAnalysis()
-        Join(joinType, joinAnalysis, readExpr())
+        val lateral = if (version >= CurrentVersion) in.readBool() else false
+        Join(joinType, joinAnalysis, readExpr(), lateral)
       }
     }
 
