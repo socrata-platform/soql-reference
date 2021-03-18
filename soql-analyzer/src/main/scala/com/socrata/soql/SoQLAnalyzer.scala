@@ -213,10 +213,10 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     joins.foldLeft(Map.empty[Qualifier, DatasetContext[Type]]) { (acc, join) =>
       join.from match {
         case JoinSelect(Right(SubSelect(selects, alias))) =>
-          val analyses = analyzeBinary(selects)(ctx)
+          val analyses = analyzeBinary(selects)(ctx ++ acc)
           acc + contextFromAnalysis(alias, analyses.outputSchema.leaf)
         case JoinSelect(Left(tn@TableName(name, Some(alias)))) =>
-          acc ++ aliasContext(tn, ctx)
+          acc ++ aliasContext(tn, ctx ++ acc)
         case _ =>
           acc
       }
@@ -377,9 +377,17 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
     val typecheck = typechecker(_ : Expression, typedAliases)
 
-    val checkedJoin = query.joins.map { j: Join =>
-      val subAnalysisOpt = subAnalysis(j)(ctx)
-      typed.Join(j.typ, JoinAnalysis(subAnalysisOpt), typecheck(j.on))
+    val (_, checkedJoin) = query.joins.foldLeft((Map.empty[Qualifier, DatasetContext[Type]], Seq.empty[typed.Join[ColumnName, Type]])) { (acc, j) =>
+      val (jCtx, typedJoins) = acc
+      val subAnalysisOpt = subAnalysis(j)(ctx ++ jCtx)
+      val accCtx = subAnalysisOpt match {
+        case Right(SubAnalysis(analyses, alias)) =>
+          jCtx + contextFromAnalysis(alias, analyses.outputSchema.leaf)
+        case Left(tn@TableName(_, _)) =>
+          jCtx ++ aliasContext(tn, ctx ++ jCtx)
+      }
+      val typedJoin = typed.Join(j.typ, JoinAnalysis(subAnalysisOpt), typecheck(j.on))
+      (accCtx, typedJoins :+ typedJoin)
     }
 
     val outputs = OrderedMap(aliasAnalysis.expressions.keys.map { k => k -> typedAliases(k) }.toList : _*)
@@ -602,10 +610,10 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
       }
     }
 
-    val newColumnsFromJoin = joins.flatMap { j =>
+    def columnsFromJoin(j: typed.Join[ColumnId, Type]): Seq[((ColumnId, Qualifier), NewColumnId)] = {
       j.from.subAnalysis match {
         case Left(TableName(_, None)) =>
-          OrderedMap.empty.toSeq // Nothing new added
+          Seq.empty // Nothing new added
         case Left(TableName(name, a@Some(alias))) =>
           // we don't previously handle this case - that means join simple table cannot be renamed
           // like in "join @aaaa-aaaa as a1" that as a1 will be ignored.  You still need to refer to columns in @aaaa-aaaa
@@ -613,25 +621,30 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
           val schema = columnsByQualifier(Some(name))
           schema.map { case ((columnId, _), newColumnId) =>
             ((columnId, a), newColumnId)
-          }
+          }.toSeq
         case Right(SubAnalysis(ana, alias)) =>
           ana.outputSchema.leaf.selection.map { case (columnName, _) =>
             qColumnNameToQColumnId(j.from.alias, columnName) -> columnNameToNewColumnId(columnName)
           }.toSeq
       }
-    }.toMap
+    }
+
+    val newColumnsFromJoin = joins.flatMap(j => columnsFromJoin(j)).toMap
 
     val qColumnIdNewColumnIdWithJoinsMap = qColumnIdNewColumnIdMapWithFrom ++ newColumnsFromJoin
 
-    def mapJoin(j: typed.Join[ColumnId, Type]): typed.Join[NewColumnId, Type] = {
-      val mappedAnalysis = j.from.mapColumnIds(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
-      val mappedOn = j.on.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))
-      typed.Join(j.typ, mappedAnalysis, mappedOn)
+    val (_, mappedJoins) = joins.foldLeft((qColumnIdNewColumnIdMap, Seq.empty[typed.Join[NewColumnId, Type]])) { (acc, join) =>
+      val (accQColumnIdNewColumnIdMap, accJoins) = acc
+      val accQColumnIdNewColumnIdMapWithJoin = accQColumnIdNewColumnIdMap ++ columnsFromJoin(join)
+      val mappedAnalysis = join.from.mapColumnIds(accQColumnIdNewColumnIdMapWithJoin, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
+      val mappedOn = join.on.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))
+      val mappedJoin = typed.Join(join.typ, mappedAnalysis, mappedOn)
+      (accQColumnIdNewColumnIdMapWithJoin, accJoins :+ mappedJoin)
     }
 
     copy(
       selection = selection.mapValues(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
-      joins = joins.map(mapJoin),
+      joins = mappedJoins,
       where = where.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
       groupBys = groupBys.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
       having = having.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),

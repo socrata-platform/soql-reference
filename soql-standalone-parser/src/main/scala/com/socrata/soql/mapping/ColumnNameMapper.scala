@@ -56,7 +56,7 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
     val mappedOn = mapExpression(join.on)
     join match {
       case j: InnerJoin =>
-        InnerJoin(mappedFrom, mappedOn)
+        InnerJoin(mappedFrom, mappedOn, j.lateral)
       case j: LeftOuterJoin =>
         j.copy(from = mappedFrom, on = mappedOn)
       case j: RightOuterJoin =>
