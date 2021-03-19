@@ -80,6 +80,7 @@ object LexerReader {
     ON,
     OUTER,
     INNER,
+    LATERAL,
 
     // Boolean operators
     AND,

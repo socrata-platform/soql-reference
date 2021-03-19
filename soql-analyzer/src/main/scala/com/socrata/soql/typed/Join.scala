@@ -8,6 +8,7 @@ sealed trait Join[ColumnId, Type] {
   val from: JoinAnalysis[ColumnId, Type]
   val on: CoreExpr[ColumnId, Type]
   val typ: JoinType
+  val lateral: Boolean
 
   def useTableQualifier[ColumnId](id: ColumnId, qual: Qualifier) = (id, qual.orElse(from.subAnalysis.left.toOption.map(_.name)))
 
@@ -21,11 +22,11 @@ sealed trait Join[ColumnId, Type] {
 
     }
 
-    typed.Join(typ, JoinAnalysis(mappedSub), on.mapColumnIds(f))
+    typed.Join(typ, JoinAnalysis(mappedSub), on.mapColumnIds(f), lateral)
   }
 
-  def copy(from: JoinAnalysis[ColumnId, Type] = from, on: CoreExpr[ColumnId, Type] = on): typed.Join[ColumnId, Type] = {
-    typed.Join(this.typ, from, on)
+  def copy(from: JoinAnalysis[ColumnId, Type] = from, on: CoreExpr[ColumnId, Type] = on, lateral: Boolean): typed.Join[ColumnId, Type] = {
+    typed.Join(this.typ, from, on, lateral)
   }
 
   override def toString: String = {
@@ -37,30 +38,30 @@ sealed trait Join[ColumnId, Type] {
 
 }
 
-case class InnerJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
+case class InnerJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type], lateral: Boolean) extends Join[ColumnId, Type] {
   val typ: JoinType = InnerJoinType
 }
 
-case class LeftOuterJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
+case class LeftOuterJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type], lateral: Boolean) extends Join[ColumnId, Type] {
   val typ: JoinType = LeftOuterJoinType
 }
 
-case class RightOuterJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
+case class RightOuterJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type], lateral: Boolean) extends Join[ColumnId, Type] {
   val typ: JoinType = RightOuterJoinType
 }
 
-case class FullOuterJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]) extends Join[ColumnId, Type] {
+case class FullOuterJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type], lateral: Boolean) extends Join[ColumnId, Type] {
   val typ: JoinType = FullOuterJoinType
 }
 
 object Join {
 
-  def apply[ColumnId, Type](joinType: JoinType, from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type]): Join[ColumnId, Type] = {
+  def apply[ColumnId, Type](joinType: JoinType, from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type], lateral: Boolean): Join[ColumnId, Type] = {
     joinType match {
-      case InnerJoinType => typed.InnerJoin(from, on)
-      case LeftOuterJoinType => typed.LeftOuterJoin(from, on)
-      case RightOuterJoinType => typed.RightOuterJoin(from, on)
-      case FullOuterJoinType => typed.FullOuterJoin(from, on)
+      case InnerJoinType => typed.InnerJoin(from, on, lateral)
+      case LeftOuterJoinType => typed.LeftOuterJoin(from, on, lateral)
+      case RightOuterJoinType => typed.RightOuterJoin(from, on, lateral)
+      case FullOuterJoinType => typed.FullOuterJoin(from, on, lateral)
     }
   }
 

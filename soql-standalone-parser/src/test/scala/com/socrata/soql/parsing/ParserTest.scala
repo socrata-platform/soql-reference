@@ -288,6 +288,12 @@ class ParserTest extends WordSpec with MustMatchers {
       }
     }
 
+    "lateral join" in {
+      val x = parseFull("select c1 join (select c11 from @t1) as j1 on true join lateral (select c21 from @t2 where c21=@j1.c11) as j2 on true")
+      x.joins(0).lateral must be (false)
+      x.joins(1).lateral must be (true)
+    }
+
     // def show[T](x: => T) {
     //   try {
     //     println(x)

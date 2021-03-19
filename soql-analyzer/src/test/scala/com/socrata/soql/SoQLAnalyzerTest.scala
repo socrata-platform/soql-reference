@@ -436,7 +436,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> visit,
       ColumnName("name_last") -> lastName
     ))
-    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(Left(TableName("_aaaa-aaaa"))), typedExpression("name_last = @aaaa-aaaa.name_last"))))
+    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(Left(TableName("_aaaa-aaaa"))), typedExpression("name_last = @aaaa-aaaa.name_last"), false)))
   }
 
   test("join with table alias") {
@@ -445,7 +445,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(Left(TableName("_aaaa-aaab", Some("_a1")))), typedExpression("visits > 10"))))
+    analysis.joins must equal (List(typed.InnerJoin(JoinAnalysis(Left(TableName("_aaaa-aaab", Some("_a1")))), typedExpression("visits > 10"), false)))
   }
 
   test("join toString") {
@@ -526,7 +526,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    val expected = List(typed.InnerJoin(JoinAnalysis(Right(SubAnalysis(subAnalyses, "_a1"))), typedExpression("name_first = @a1.name_first")))
+    val expected = List(typed.InnerJoin(JoinAnalysis(Right(SubAnalysis(subAnalyses, "_a1"))), typedExpression("name_first = @a1.name_first"), false))
     analysis.joins must equal (expected)
   }
 
@@ -539,7 +539,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
       ColumnName("visits") -> typedExpression("visits"),
       ColumnName("name_first") -> typedExpression("@a1.name_first")
     ))
-    val expected = List(typed.InnerJoin(JoinAnalysis(Right(SubAnalysis(subAnalyses, "_a1"))), typedExpression("name_first = @a1.name_first")))
+    val expected = List(typed.InnerJoin(JoinAnalysis(Right(SubAnalysis(subAnalyses, "_a1"))), typedExpression("name_first = @a1.name_first"), false))
     analysis.joins must equal (expected)
   }
 

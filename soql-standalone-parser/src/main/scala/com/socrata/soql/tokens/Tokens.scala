@@ -39,6 +39,7 @@ case class OUTER() extends Token
 case class LEFT() extends Token
 case class RIGHT() extends Token
 case class FULL() extends Token
+case class LATERAL() extends Token
 
 sealed trait OrderDirection
 case class ASC() extends Token with OrderDirection

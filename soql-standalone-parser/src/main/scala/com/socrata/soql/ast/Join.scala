@@ -42,6 +42,7 @@ sealed trait Join {
   val from: JoinSelect
   val on: Expression
   val typ: JoinType
+  val lateral: Boolean
 
   // joins are simple if there is no subAnalysis, e.g. "join @aaaa-aaaa[ as a]"
   def isSimple = from.subSelect.isLeft
@@ -63,29 +64,29 @@ object Join {
     selects.flatMap(_.joins.flatMap(expandJoin))
   }
 
-  def apply(joinType: JoinType, from: JoinSelect, on: Expression): Join = {
+  def apply(joinType: JoinType, from: JoinSelect, on: Expression, lateral: Boolean): Join = {
     joinType match {
-      case InnerJoinType => InnerJoin(from, on)
-      case LeftOuterJoinType => LeftOuterJoin(from, on)
-      case RightOuterJoinType => RightOuterJoin(from, on)
-      case FullOuterJoinType => FullOuterJoin(from, on)
+      case InnerJoinType => InnerJoin(from, on, lateral)
+      case LeftOuterJoinType => LeftOuterJoin(from, on, lateral)
+      case RightOuterJoinType => RightOuterJoin(from, on, lateral)
+      case FullOuterJoinType => FullOuterJoin(from, on, lateral)
     }
   }
 }
 
-case class InnerJoin(from: JoinSelect, on: Expression) extends Join {
+case class InnerJoin(from: JoinSelect, on: Expression, lateral: Boolean) extends Join {
   val typ: JoinType = InnerJoinType
 }
 
-case class LeftOuterJoin(from: JoinSelect, on: Expression) extends Join {
+case class LeftOuterJoin(from: JoinSelect, on: Expression, lateral: Boolean) extends Join {
   val typ: JoinType = LeftOuterJoinType
 }
 
-case class RightOuterJoin(from: JoinSelect, on: Expression) extends Join {
+case class RightOuterJoin(from: JoinSelect, on: Expression, lateral: Boolean) extends Join {
   val typ: JoinType = RightOuterJoinType
 }
 
-case class FullOuterJoin(from: JoinSelect, on: Expression) extends Join {
+case class FullOuterJoin(from: JoinSelect, on: Expression, lateral: Boolean) extends Join {
   val typ: JoinType = FullOuterJoinType
 }
 
@@ -96,9 +97,9 @@ object OuterJoin {
     FULL() -> FullOuterJoinType
   )
 
-  def apply(direction: Token, from: JoinSelect, on: Expression): Join = {
+  def apply(direction: Token, from: JoinSelect, on: Expression, lateral: Boolean): Join = {
     dirToJoinType.get(direction).map { joinType =>
-      Join(joinType, from, on)
+      Join(joinType, from, on, lateral)
     }.getOrElse {
       throw new IllegalArgumentException(s"invalid outer join token ${direction.printable}")
     }

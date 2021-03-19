@@ -214,11 +214,11 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   }
 
   def joinClause: PackratParser[Join] =
-    opt((LEFT() | RIGHT() | FULL()) ~ OUTER()) ~ (JOIN() ~> joinSelect) ~ (ON() ~> expr) ^^ {
-      case None ~ f ~ e =>
-        InnerJoin(f, e)
-      case Some(jd) ~ f ~ e =>
-        OuterJoin(jd._1, f, e)
+    opt((LEFT() | RIGHT() | FULL()) ~ OUTER()) ~ (JOIN() ~> opt(LATERAL())) ~ joinSelect ~ (ON() ~> expr) ^^ {
+      case None ~ l ~ f ~ e =>
+        InnerJoin(f, e, l.isDefined)
+      case Some(jd) ~ l ~ f ~ e =>
+        OuterJoin(jd._1, f, e, l.isDefined)
     }
 
   def joinList = rep1(joinClause)
