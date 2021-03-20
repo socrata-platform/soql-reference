@@ -28,6 +28,7 @@ object TableName {
   val SodaFountainPrefix = "_"
   val SoqlPrefix = "@"
   val PrimaryTable = TableName(SodaFountainPrefix)
+  val This = SodaFountainPrefix + "this"
   val Field = "."
   val PrefixIndex = 1
 
