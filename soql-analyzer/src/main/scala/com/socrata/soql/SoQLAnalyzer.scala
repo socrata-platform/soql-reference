@@ -350,7 +350,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   private def aliasContext(tableName: Option[TableName], ctx: AnalysisContext): AnalysisContext = {
     tableName match {
       case Some(TableName(name, Some(alias))) =>
-        Map(alias -> ctx(name))
+        val name1 = if (name == TableName.This) TableName.PrimaryTable.qualifier else name
+        Map(alias -> ctx(name1))
       case Some(tn@TableName(name, None)) =>
         Map(TableName.PrimaryTable.qualifier -> ctx(tn.qualifier))
       case _ =>
