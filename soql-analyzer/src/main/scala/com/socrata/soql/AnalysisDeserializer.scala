@@ -28,7 +28,8 @@ private trait DeserializationDictionary[C, T] {
 
 object AnalysisDeserializer {
   val CurrentVersion = 8
-  val LastVersion = 6 // The version that uses NonEmptySeq for chained queries instead of binary tree.
+  val LastVersion = 7
+  val NonEmptySeqVersion = 6
 
   // This is odd and for smooth deploy transition.
   val TestVersionV5 = -1
@@ -229,7 +230,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     }
 
     def readSubAnalysis(): SubAnalysis[C, T] = {
-      if (this.version >= CurrentVersion || this.version == TestVersionV5) {
+      if (this.version >= NonEmptySeqVersion || this.version == TestVersionV5) {
         SubAnalysis(readBinaryTree(readAnalysis), in.readString())
       } else {
         val neseq = readNonEmptySeq(readAnalysis)
@@ -249,7 +250,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     }
 
     def readJoinAnalysis(): JoinAnalysis[C, T] = {
-      if (this.version >= CurrentVersion || this.version == TestVersionV5) {
+      if (this.version >= NonEmptySeqVersion || this.version == TestVersionV5) {
         in.readUInt32() match {
           case 0 =>
             JoinAnalysis(Left(readTableName()))
@@ -283,7 +284,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val ig = readIsGrouped()
       val d = readDistinct()
       val s = readSelection()
-      val f = if (this.version >= CurrentVersion || this.version == TestVersionV5) readFrom() else None
+      val f = if (this.version >= NonEmptySeqVersion || this.version == TestVersionV5) readFrom() else None
       val j = readJoins()
       val w = readWhere()
       val gb = readGroupBy()
@@ -320,13 +321,13 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
   def applyBinaryTree(in: InputStream): BinaryTree[SoQLAnalysis[C, T]] = {
     val cis = CodedInputStream.newInstance(in)
     cis.readInt32() match {
-      case v if v >= 5 && v <= LastVersion =>
+      case v if v >= 5 && v <= (NonEmptySeqVersion) =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
         val seq: NonEmptySeq[SoQLAnalysis[C, T]] = deserializer.read()
         val bt: BinaryTree[SoQLAnalysis[C, T]] = toBinaryTree(seq.seq)
         bt
-      case v if v >= CurrentVersion =>
+      case v if v >= LastVersion =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
         val bt: BinaryTree[SoQLAnalysis[C, T]] = deserializer.readBinaryTree(deserializer.readAnalysis)
