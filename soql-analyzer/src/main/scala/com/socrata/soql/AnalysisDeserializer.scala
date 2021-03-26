@@ -230,7 +230,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     }
 
     def readSubAnalysis(): SubAnalysis[C, T] = {
-      if (this.version >= NonEmptySeqVersion || this.version == TestVersionV5) {
+      if (this.version > NonEmptySeqVersion || this.version == TestVersionV5) {
         SubAnalysis(readBinaryTree(readAnalysis), in.readString())
       } else {
         val neseq = readNonEmptySeq(readAnalysis)
@@ -250,7 +250,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     }
 
     def readJoinAnalysis(): JoinAnalysis[C, T] = {
-      if (this.version >= NonEmptySeqVersion || this.version == TestVersionV5) {
+      if (this.version > NonEmptySeqVersion || this.version == TestVersionV5) {
         in.readUInt32() match {
           case 0 =>
             JoinAnalysis(Left(readTableName()))
@@ -284,7 +284,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val ig = readIsGrouped()
       val d = readDistinct()
       val s = readSelection()
-      val f = if (this.version >= NonEmptySeqVersion || this.version == TestVersionV5) readFrom() else None
+      val f = if (this.version > NonEmptySeqVersion || this.version == TestVersionV5) readFrom() else None
       val j = readJoins()
       val w = readWhere()
       val gb = readGroupBy()
