@@ -209,8 +209,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     analyzeNoSelection(distinct, joins, where, groupBys, having, orderBys, limit, offset, search)
   }
 
-  private def joinCtx(joins: Seq[Join])(implicit ctx: AnalysisContext): AnalysisContext = {
-    joins.foldLeft(Map.empty[Qualifier, DatasetContext[Type]]) { (acc, join) =>
+  private def joinCtx(joins: Seq[Join], parentFromContext: Map[Qualifier, DatasetContext[Type]])(implicit ctx: AnalysisContext): AnalysisContext = {
+    joins.foldLeft(parentFromContext) { (acc, join) =>
       val jCtx = if (join.lateral) ctx ++ acc else ctx
       join.from match {
         case JoinSelect(Right(SubSelect(selects, alias))) =>
@@ -236,7 +236,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                          search: Option[String])(implicit ctx: AnalysisContext): Analysis = {
     log.debug("No selection; doing typechecking of the other parts then deciding what to make the selection")
 
-    val ctxFromJoins = joinCtx(joins)
+    val ctxFromJoins = joinCtx(joins, Map.empty)
     val ctxWithJoins = ctx ++ ctxFromJoins
     // ok, so the only tricky thing here is the selection itself.  Since it isn't provided, there are two cases:
     //   1. If there are groupBys, having, or aggregates in orderBy, then selection should be the equivalent of
@@ -365,8 +365,9 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
   def analyzeWithSelection(query: Select)(implicit ctx: AnalysisContext): Analysis = {
     log.debug("There is a selection; typechecking all parts")
-    val ctxWithFrom = ctx ++ aliasContext(query.from, ctx)
-    val ctxFromJoins = ctxWithFrom ++ joinCtx(query.joins)
+    val fromCtx = aliasContext(query.from, ctx)
+    val ctxWithFrom = ctx ++ fromCtx
+    val ctxFromJoins = ctxWithFrom ++ joinCtx(query.joins, fromCtx)
     val ctxWithJoins = ctx ++ ctxFromJoins
     val typechecker = new Typechecker(typeInfo, functionInfo)(ctxWithJoins)
 
@@ -381,7 +382,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
     val (_, checkedJoin) = query.joins.foldLeft((Map.empty[Qualifier, DatasetContext[Type]], Seq.empty[typed.Join[ColumnName, Type]])) { (acc, j) =>
       val (jCtx, typedJoins) = acc
-      val saCtx = if (j.lateral) ctx ++ jCtx else ctx
+      val saCtx = if (j.lateral) ctxWithFrom ++ jCtx else ctx
       val subAnalysisOpt = subAnalysis(j)(saCtx)
       val accCtx = subAnalysisOpt match {
         case Right(SubAnalysis(analyses, alias)) =>
@@ -604,7 +605,13 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
     lazy val columnsByQualifier = qColumnIdNewColumnIdMap.groupBy(_._1._2)
 
     val qColumnIdNewColumnIdMapWithFrom = this.from.foldLeft(qColumnIdNewColumnIdMap) { (acc, tableName) =>
-      val schema = columnsByQualifier(Some(tableName.name))
+      val qual = tableName match {
+        case TableName(TableName.This, alias@Some(_)) =>
+          alias
+        case _ =>
+          Some(tableName.name)
+      }
+      val schema = columnsByQualifier(qual)
       tableName match {
         case TableName(name, a@Some(_)) =>
           acc ++ schema.map { case ((columnId, _), newColumnId) => ((columnId, a), newColumnId)}
