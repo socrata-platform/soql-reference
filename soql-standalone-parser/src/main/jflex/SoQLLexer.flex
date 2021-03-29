@@ -75,6 +75,7 @@ TableIdentifier = "@" ("-" | [:jletterdigit:])+
 %state ESCAPEDUNICODE
 %state ESCAPEDUNICODE6
 %state PARTIALESCAPEDUNICODE
+%state BLOCKCOMMENT
 
 %%
 
@@ -149,7 +150,16 @@ TableIdentifier = "@" ("-" | [:jletterdigit:])+
 
   "--" .* { /* comment */ }
 
+  "/*" { yybegin(BLOCKCOMMENT); }
+
   <<EOF>> { return token(new EOF()); }
+}
+
+<BLOCKCOMMENT> {
+  "*/" { yybegin(YYINITIAL); }
+  <<EOF>> { throw unexpectedEOF(pos()); }
+  . {}
+  [\r\n] {}
 }
 
 <QUOTEDIDENTIFIER> {
