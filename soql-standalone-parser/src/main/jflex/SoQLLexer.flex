@@ -159,6 +159,7 @@ TableIdentifier = "@" ("-" | [:jletterdigit:])+
   "*/" { yybegin(YYINITIAL); }
   <<EOF>> { throw unexpectedEOF(pos()); }
   . {}
+  [\r\n] {}
 }
 
 <QUOTEDIDENTIFIER> {
