@@ -660,4 +660,21 @@ SELECT visits, @x2.zx
     val analysis2 = analyzer.analyzeFullQueryBinary("SELECT name_first, row_number() over(order by sum(visits)) as rn GROUP BY name_first, name_last")
     SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1) must equal (analysis2)
   }
+
+  test("lateral join with this alias") {
+    val soql = "SELECT @t1.name_first, @j.x FROM @this as t1 JOIN LATERAL (SELECT @t2.x, @t2.y FROM @aaaa-aaax as t2 WHERE @t2.x=@t1.name_last) as j ON TRUE"
+    val parsed = new Parser().unchainedSelectStatement(soql)
+    parsed.toString must equal ("SELECT @t1.`name_first`, @j.`x` FROM @this AS t1 JOIN (SELECT @t2.`x`, @t2.`y` FROM @aaaa-aaax AS t2 WHERE @t2.`x` = @t1.`name_last`) AS j ON TRUE")
+    val analysis = analyzer.analyzeFullQueryBinary(soql)
+    analysis.outputSchema.leaf.selection.toSeq must equal (Seq(
+      ColumnName("name_first") -> ColumnRef(Some("_t1"), ColumnName("name_first"), TestText)(NoPosition),
+      ColumnName("x") -> ColumnRef(Some("_j"), ColumnName("x"), TestText)(NoPosition)
+    ))
+
+    val noSuchTable = intercept[NoSuchTable] {
+      analyzer.analyzeFullQueryBinary(soql.replace("LATERAL", ""))
+    }
+
+    noSuchTable.getMessage must startWith("No such table `_t1'")
+  }
 }
