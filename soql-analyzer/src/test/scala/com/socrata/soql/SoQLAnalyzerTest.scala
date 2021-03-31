@@ -666,10 +666,17 @@ SELECT visits, @x2.zx
     val parsed = new Parser().unchainedSelectStatement(soql)
     parsed.toString must equal ("SELECT @t1.`name_first`, @j.`x` FROM @this AS t1 JOIN (SELECT @t2.`x`, @t2.`y` FROM @aaaa-aaax AS t2 WHERE @t2.`x` = @t1.`name_last`) AS j ON TRUE")
     val analysis = analyzer.analyzeFullQueryBinary(soql)
-    analysis.outputSchema.leaf.selection.toSeq must equal (Seq(
-      ColumnName("name_first") -> ColumnRef(Some("_t1"), ColumnName("name_first"), TestText)(NoPosition),
-      ColumnName("x") -> ColumnRef(Some("_j"), ColumnName("x"), TestText)(NoPosition)
-    ))
+
+    // And with chained soql
+    val chainedAnalysis = analyzer.analyzeFullQueryBinary(soql)
+
+    val analyses = Seq(analysis, chainedAnalysis).map(_.outputSchema.leaf.selection.toSeq)
+    analyses.foreach { analysis =>
+      analysis must equal(Seq(
+        ColumnName("name_first") -> ColumnRef(Some("_t1"), ColumnName("name_first"), TestText)(NoPosition),
+        ColumnName("x") -> ColumnRef(Some("_j"), ColumnName("x"), TestText)(NoPosition)
+      ))
+    }
 
     // Analyze again with "lateral" removed and t1 is no longer in the join scope.
     val noSuchTable = intercept[NoSuchTable] {
