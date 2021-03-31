@@ -1,6 +1,6 @@
 package com.socrata.soql.mapping
 
-import com.socrata.soql.environment.ColumnName
+import com.socrata.soql.environment.{ColumnName, TableName}
 import com.socrata.soql.exceptions.RightSideOfChainQueryMustBeLeaf
 import com.socrata.soql.typed.Qualifier
 import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, SoQLAnalysis}
@@ -18,9 +18,15 @@ object ColumnIdMapper {
       case PipeQuery(l, r) =>
         val nl = mapColumnIds(l)(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
         val prev = nl.outputSchema.leaf
+        val prevAlias = r.outputSchema.leaf.from match {
+          case Some(TableName(TableName.This, alias@Some(_))) =>
+            alias
+          case _ =>
+            None
+        }
         val prevQColumnIdToQColumnIdMap = prev.selection.foldLeft(qColumnIdNewColumnIdMap) { (acc, selCol) =>
           val (colName, expr) = selCol
-          acc + (qColumnNameToQColumnId(None, colName) -> columnNameToNewColumnId(colName))
+          acc + (qColumnNameToQColumnId(prevAlias, colName) -> columnNameToNewColumnId(colName))
         }
         val newQColumnIdToQColumnIdMap = qColumnIdNewColumnIdMap ++ prevQColumnIdToQColumnIdMap
         val rightLeaf = r.asLeaf.getOrElse(throw RightSideOfChainQueryMustBeLeaf(NoPosition))
