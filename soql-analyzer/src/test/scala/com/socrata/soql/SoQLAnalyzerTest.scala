@@ -671,10 +671,10 @@ SELECT visits, @x2.zx
       ColumnName("x") -> ColumnRef(Some("_j"), ColumnName("x"), TestText)(NoPosition)
     ))
 
+    // Analyze again with "lateral" removed and t1 is no longer in the join scope.
     val noSuchTable = intercept[NoSuchTable] {
       analyzer.analyzeFullQueryBinary(soql.replace("LATERAL", ""))
     }
-
     noSuchTable.getMessage must startWith("No such table `_t1'")
   }
 }
