@@ -521,6 +521,11 @@ object SoQLFunctions {
   val TextToNumber = mf("text to number", SpecialFunctions.Cast(SoQLNumber.name), Seq(SoQLText), Seq.empty, SoQLNumber)(
     NoDocs
   )
+
+  val TextToJson = mf("text to json", SpecialFunctions.Cast(SoQLJson.name), Seq(SoQLText), Seq.empty, SoQLJson)(
+    NoDocs
+  )
+
   val TextToMoney = mf("text to money", SpecialFunctions.Cast(SoQLMoney.name), Seq(SoQLText), Seq.empty, SoQLMoney)(
     NoDocs
   )
