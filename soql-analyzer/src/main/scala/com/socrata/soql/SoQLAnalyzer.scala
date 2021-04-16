@@ -91,6 +91,17 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
             analyzeBinary(ls)
         }
         PipeQuery(la, ra)
+      case PivotQuery(ls, rs) =>
+        val la = analyzeBinary(ls)
+        val ra = rs match {
+          case Leaf(s) =>
+            val prev = la.outputSchema.leaf
+            val pivotCtx = Map(TableName.PrimaryTable.qualifier -> pivotContext(prev, s))
+            Leaf(analyzeWithSelection(s)(pivotCtx))
+          case _ =>
+            throw RightSideOfPivotQueryMustSelectColumns(rs.outputSchema.leaf.selection.expressions.headOption.map(_.expression.position).getOrElse(NoPosition))
+        }
+        PivotQuery(la, ra)
       case Compound(op, ls, rs) =>
         val la = analyzeBinary(ls)
         val ra = analyzeBinary(rs)
@@ -114,6 +125,27 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                                       ra.selection.keys.drop(idx).head.name + ":" + r.typ.toString,
                                       pos)
         }
+    }
+  }
+
+  private def pivotContext(leftAnalysis: Analysis, rightSelect: Select): DatasetContext[Type] = {
+    val types = leftAnalysis.selection.values.map { coreExpr => coreExpr.typ }
+    val kvs = types match {
+      case Seq(rowLabelType, _, valueType) =>
+        val column2Type = rightSelect.selection.expressions.map {
+          case SelectedExpression(ColumnOrAliasRef(_, name), None) =>
+            (name -> valueType)
+          case _ =>
+            throw RightSideOfPivotQueryMustSelectColumns(rightSelect.selection.expressions.headOption.map(_.expression.position).getOrElse(NoPosition))
+        }
+        // Update first column to have rowLabelType
+        val first = column2Type.head
+        (first._1, rowLabelType) +: column2Type.tail
+      case _ =>
+        throw DataQueryOfPivotMustProduceThreeColumns(rightSelect.selection.expressions.headOption.map(_.expression.position).getOrElse(NoPosition))
+    }
+    new DatasetContext[Type] {
+      override val schema: OrderedMap[ColumnName, Type] = OrderedMap(kvs: _*)
     }
   }
 

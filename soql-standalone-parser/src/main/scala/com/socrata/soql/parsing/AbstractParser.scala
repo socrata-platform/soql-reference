@@ -152,7 +152,8 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
 
   val query_op = QUERYPIPE() |
     QUERYUNION() | QUERYINTERSECT() | QUERYMINUS() |
-    QUERYUNIONALL() | QUERYINTERSECTALL() | QUERYMINUSALL()
+    QUERYUNIONALL() | QUERYINTERSECTALL() | QUERYMINUSALL() |
+    QUERYPIVOT()
 
   def parenSelect: Parser[BinaryTree[Select]] =
     LPAREN() ~> compoundSelect <~ RPAREN() ^^ { s => s }
