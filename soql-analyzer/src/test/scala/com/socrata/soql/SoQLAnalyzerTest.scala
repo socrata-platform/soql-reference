@@ -327,6 +327,18 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
     merged must equal (expected)
   }
 
+  test("Pivot") {
+    val soql = "(SELECT name_first, name_last, visits ORDER BY name_first, name_last PIVOT SELECT name, visits1, visits2, visits3, visits4, visits5)"
+    val analysis = analyzer.analyzeFullQueryBinary(soql)
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    val PivotQuery(Leaf(l), Leaf(r)) = merged
+    val categoryType = l.selection.values.drop(1).head.typ
+    val aggregateType = l.selection.values.drop(2).head.typ
+    r.selection.keys.map(_.name).toSeq must equal (Seq("name", "visits1", "visits2", "visits3", "visits4", "visits5"))
+    r.selection.values.map(_.typ).toSeq must equal (Seq(categoryType, aggregateType, aggregateType, aggregateType, aggregateType, aggregateType))
+    merged.outputSchema.leaf must equal (r)
+  }
+
   test("Union part merges") {
     val soqlCommon = "(SELECT name_first, name_last |> SELECT name_first, name_last WHERE name_first=name_last)"
     val soql = soqlCommon + " UNION " + soqlCommon

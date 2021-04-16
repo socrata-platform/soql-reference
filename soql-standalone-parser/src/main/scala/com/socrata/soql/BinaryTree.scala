@@ -75,6 +75,7 @@ object Compound {
   val IntersectAll = "INTERSECT ALL"
   val Minus = "MINUS"
   val MinusAll = "MINUS ALL"
+  val Pivot = "PIVOT"
 
   def apply[T](op: String, left: BinaryTree[T], right: BinaryTree[T]): Compound[T] = {
     op match {
@@ -85,6 +86,7 @@ object Compound {
       case IntersectAll => IntersectAllQuery(left, right)
       case Minus => MinusQuery(left, right)
       case MinusAll => MinusAllQuery(left, right)
+      case Pivot => PivotQuery(left, right)
     }
   }
 
@@ -118,6 +120,8 @@ sealed trait Compound[T] extends BinaryTree[T] {
   override def outputSchema: Leaf[T] = {
     this match {
       case PipeQuery(_, r) =>
+        r.outputSchema
+      case PivotQuery(_, r) =>
         r.outputSchema
       case Compound(_, l, _) =>
         l.outputSchema
@@ -168,6 +172,26 @@ case class MinusQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends True
 
 case class MinusAllQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends TrueOp[T]() {
   val op = Compound.MinusAll
+}
+
+/**
+ * SELECT row, category, agg(value) as agg_value GROUP BY row, category ORDER BY row, category
+ *  PIVOT SELECT row_column, category_1_value_column, category_2_value_column ...
+ *
+ *  Left side of PIVOT
+ *  row(::type_of_row), category, agg_value(::type_of_agg_value)
+ *  a, cat1, 10
+ *  a, cat2, 20
+ *  b, cat1, 30
+ *  b, cat2, 40
+ *
+ *  Output of PIVOT
+ *  row_column(::type_of_row), category_1_value_column(::type_of_agg_value), category_2_value_column(::type_of_agg_value)
+ *  a, 10, 20
+ *  b, 30, 40
+ */
+case class PivotQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
+  val op = Compound.Pivot
 }
 
 case class Leaf[T](leaf: T) extends BinaryTree[T] {

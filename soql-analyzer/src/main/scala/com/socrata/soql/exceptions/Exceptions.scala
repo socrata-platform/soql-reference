@@ -234,3 +234,6 @@ case class RightSideOfChainQueryMustBeLeaf(position: Position) extends SoQLExcep
 sealed abstract class SoQLLogicException(message: String) extends Exception(message)
 case class UnexpectedJoinFunc() extends SoQLLogicException("Unexpected join function")
 case class UnexpectedHole() extends SoQLLogicException("Unexpected hole")
+
+case class RightSideOfPivotQueryMustSelectColumns(position: Position) extends SoQLException("Right side of a pivot query must only SELECT columns.", position) with QueryOperationException
+case class DataQueryOfPivotMustProduceThreeColumns(position: Position) extends SoQLException("Data query of pivot must produce three columns - row label, category, value.", position) with QueryOperationException

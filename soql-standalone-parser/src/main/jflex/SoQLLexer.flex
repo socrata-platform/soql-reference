@@ -87,6 +87,7 @@ TableIdentifier = "@" ("-" | [:jletterdigit:])+
   "UNION" { return token(new QUERYUNION()); }
   "INTERSECT"  { return token(new QUERYINTERSECT()); }
   "MINUS"  { return token(new QUERYMINUS()); }
+  "PIVOT" { return token(new QUERYPIVOT()); }
 
   "UNION" {WhiteSpace}+ "ALL" { return token(new QUERYUNIONALL()); }
   "INTERSECT" {WhiteSpace}+ "ALL" { return token(new QUERYINTERSECTALL()); }
