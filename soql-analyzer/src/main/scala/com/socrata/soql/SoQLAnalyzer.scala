@@ -91,6 +91,19 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
             analyzeBinary(ls)
         }
         PipeQuery(la, ra)
+      case PivotQuery(ls, rs) =>
+        val la = ls match {
+          case Leaf(s) => Leaf(analyzeWithSelection(s)(ctx))
+          case _ => analyzeBinary(ls)
+        }
+        val ra = rs match {
+          case Leaf(s) =>
+            val prev = la.outputSchema.leaf
+            Leaf(analyzeWithSelection(s)(ctx))
+          case _ =>
+            analyzeBinary(ls)
+        }
+        PivotQuery(la, ra)
       case Compound(op, ls, rs) =>
         // TODO: check previous left schema matches the ones in the right
         val la = analyzeBinary(ls)
@@ -98,6 +111,16 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
         Compound(op, la, ra)
     }
   }
+
+//  private def pivotContext(select: Select): Unit = {
+//
+//      val map = Map[ColumnName, SoQLType] = {
+//        select.selection.expressions.map {
+//          case SelectedExpression(fn@FunctionCall(fname, Seq(ColumnOrAliasRef(_, name)), _), None) =>
+//            (name -> fn)
+//        }.toMap
+//      }
+//  }
 
   /** Turn a simple SoQL SELECT statement into an `Analysis` object.
     *

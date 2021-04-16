@@ -1,5 +1,7 @@
 package com.socrata.soql
 
+import com.socrata.soql.tokens.QUERYPIVOT
+
 sealed trait BinaryTree[T] {
 
   def seq: Seq[T] = {
@@ -52,6 +54,7 @@ object Compound {
   val UnionAll = "UNION ALL"
   val Intersect = "INTERSECT"
   val Minus = "MINUS"
+  val Pivot = "PIVOT"
 
   def apply[T](op: String, left: BinaryTree[T], right: BinaryTree[T]): Compound[T] = {
     op match {
@@ -60,6 +63,7 @@ object Compound {
       case UnionAll => UnionAllQuery(left, right)
       case Intersect => IntersectQuery(left, right)
       case Minus => MinusQuery(left, right)
+      case Pivot => PivotQuery(left, right)
     }
   }
 
@@ -93,6 +97,8 @@ sealed trait Compound[T] extends BinaryTree[T] {
   override def outputSchema: Leaf[T] = {
     this match {
       case PipeQuery(_, r) =>
+        r.outputSchema
+      case PivotQuery(_, r) =>
         r.outputSchema
       case Compound(_, l, _) =>
         l.outputSchema
@@ -133,6 +139,10 @@ case class IntersectQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends 
 
 case class MinusQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
   val op = Compound.Minus
+}
+
+case class PivotQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
+  val op = Compound.Pivot
 }
 
 case class Leaf[T](leaf: T) extends BinaryTree[T] {

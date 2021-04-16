@@ -54,6 +54,7 @@ case class QUERYMINUS() extends FormattedToken("MINUS")
 case class QUERYUNIONALL() extends FormattedToken("UNION ALL")
 case class QUERYINTERSECTALL() extends FormattedToken("INTERSECT ALL")
 case class QUERYMINUSALL() extends FormattedToken("MINUS ALL")
+case class QUERYPIVOT() extends FormattedToken("PIVOT")
 
 // Subscripting
 // DOT() share with qualifying

@@ -292,6 +292,13 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     merged must equal (expected)
   }
 
+  test("Pivot") {
+    val soql = "(SELECT name_first, name_last, visits PIVOT SELECT 'name'::text, 'visits1'::number, 'visits2'::number)"
+    val analysis = analyzer.analyzeFullQueryBinary(soql)
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    println(merged)
+  }
+
   test("Union part merges") {
     val soqlCommon = "(SELECT name_first, name_last |> SELECT name_first, name_last WHERE name_first=name_last)"
     val soql = soqlCommon + " UNION " + soqlCommon

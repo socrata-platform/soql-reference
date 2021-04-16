@@ -294,6 +294,13 @@ class ParserTest extends WordSpec with MustMatchers {
       x.joins(1).lateral must be (true)
     }
 
+    "pivot" in {
+      val parser = new StandaloneParser()
+      val x = parser.binaryTreeSelect("select name, subject, max(score) from @scores group by name, subject PIVOT SELECT name::text, biology::number, chemistry::number, physics::number")
+      println(x)
+      println(x)
+    }
+
     // def show[T](x: => T) {
     //   try {
     //     println(x)
