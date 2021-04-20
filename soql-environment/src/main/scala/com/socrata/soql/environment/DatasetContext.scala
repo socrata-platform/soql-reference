@@ -12,3 +12,9 @@ trait DatasetContext[Type] extends UntypedDatasetContext {
   val schema: OrderedMap[ColumnName, Type] // Note: contains ALL columns, system AND user!
   lazy val columns: OrderedSet[ColumnName] = schema.keySet
 }
+
+object DatasetContext {
+  def empty[Type]: DatasetContext[Type] = new DatasetContext[Type] {
+    val schema = OrderedMap.empty[ColumnName, Type]
+  }
+}

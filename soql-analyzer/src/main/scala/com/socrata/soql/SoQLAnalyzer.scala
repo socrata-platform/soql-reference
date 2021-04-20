@@ -349,6 +349,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
   private def aliasContext(tableName: Option[TableName], ctx: AnalysisContext): AnalysisContext = {
     tableName match {
+      case Some(TableName(TableName.SingleRow, alias)) =>
+        Map(alias.getOrElse(TableName.SingleRow) -> DatasetContext.empty[Type])
       case Some(TableName(name, Some(alias))) =>
         val name1 = if (name == TableName.This) TableName.PrimaryTable.qualifier else name
         Map(alias -> ctx(name1))
@@ -602,7 +604,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                 columnNameToNewColumnId: ColumnName => NewColumnId,
                                 columnIdToNewColumnId: ColumnId => NewColumnId): SoQLAnalysis[NewColumnId, Type] = {
 
-    lazy val columnsByQualifier = qColumnIdNewColumnIdMap.groupBy(_._1._2)
+    lazy val columnsByQualifier = qColumnIdNewColumnIdMap.groupBy(_._1._2) + (Some(TableName.SingleRow) -> Map.empty)
 
     val qColumnIdNewColumnIdMapWithFrom = this.from.foldLeft(qColumnIdNewColumnIdMap) { (acc, tableName) =>
       val qual = tableName match {
