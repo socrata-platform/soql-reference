@@ -30,6 +30,9 @@ object TableName {
   val PrimaryTable = TableName(SodaFountainPrefix)
   val This = SodaFountainPrefix + "this"
   val SingleRow = SodaFountainPrefix + "single_row"
+
+  val reservedNames = Set(This, SingleRow)
+
   val Field = "."
   val PrefixIndex = 1
 
