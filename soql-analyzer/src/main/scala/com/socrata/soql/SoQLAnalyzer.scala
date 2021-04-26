@@ -209,14 +209,25 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     analyzeNoSelection(distinct, joins, where, groupBys, having, orderBys, limit, offset, search)
   }
 
+  private def validateAlias(alias: String): Unit = {
+    if(TableName.reservedNames(alias)) {
+      // ugh, but the way joins are structured threading the position
+      // of the alias through is tricky without major surgery.  Maybe
+      // this can get better later.
+      throw ReservedTableAlias(alias, NoPosition)
+    }
+  }
+
   private def joinCtx(joins: Seq[Join], parentFromContext: Map[Qualifier, DatasetContext[Type]])(implicit ctx: AnalysisContext): AnalysisContext = {
     joins.foldLeft(parentFromContext) { (acc, join) =>
       val jCtx = if (join.lateral) ctx ++ acc else ctx
       join.from match {
         case JoinSelect(Right(SubSelect(selects, alias))) =>
+          validateAlias(alias)
           val analyses = analyzeBinary(selects)(jCtx)
           acc + contextFromAnalysis(alias, analyses.outputSchema.leaf)
         case JoinSelect(Left(tn@TableName(name, Some(alias)))) =>
+          validateAlias(alias)
           acc ++ aliasContext(tn, jCtx)
         case _ =>
           acc
@@ -349,7 +360,11 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
   private def aliasContext(tableName: Option[TableName], ctx: AnalysisContext): AnalysisContext = {
     tableName match {
+      case Some(TableName(TableName.SingleRow, alias)) =>
+        alias.foreach(validateAlias(_))
+        Map(alias.getOrElse(TableName.SingleRow) -> DatasetContext.empty[Type])
       case Some(TableName(name, Some(alias))) =>
+        validateAlias(alias)
         val name1 = if (name == TableName.This) TableName.PrimaryTable.qualifier else name
         Map(alias -> ctx(name1))
       case Some(tn@TableName(name, None)) =>
@@ -359,8 +374,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     }
   }
 
-  private def aliasContext(tableName: TableName, ctx: AnalysisContext): AnalysisContext = {
-    aliasContext(Some(tableName), ctx)
+  private def aliasContext(from: TableName, ctx: AnalysisContext): AnalysisContext = {
+    aliasContext(Some(from), ctx)
   }
 
   def analyzeWithSelection(query: Select)(implicit ctx: AnalysisContext): Analysis = {
@@ -602,7 +617,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                 columnNameToNewColumnId: ColumnName => NewColumnId,
                                 columnIdToNewColumnId: ColumnId => NewColumnId): SoQLAnalysis[NewColumnId, Type] = {
 
-    lazy val columnsByQualifier = qColumnIdNewColumnIdMap.groupBy(_._1._2)
+    lazy val columnsByQualifier = qColumnIdNewColumnIdMap.groupBy(_._1._2) + (Some(TableName.SingleRow) -> Map.empty)
 
     val qColumnIdNewColumnIdMapWithFrom = this.from.foldLeft(qColumnIdNewColumnIdMap) { (acc, tableName) =>
       val qual = tableName match {

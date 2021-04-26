@@ -101,6 +101,8 @@ object SoQLException {
       and("non-groupable-group-by", AutomaticJsonCodecBuilder[NonGroupableGroupBy]).
       and("non-boolean-having", AutomaticJsonCodecBuilder[NonBooleanHaving]).
       and("unorderable-order-by", AutomaticJsonCodecBuilder[UnorderableOrderBy]).
+      // other
+      and("reserved-table-alias", AutomaticJsonCodecBuilder[ReservedTableAlias]).
       build
 
     def encode(e: SoQLException) = {
@@ -131,6 +133,8 @@ case class UnexpectedEOF(position: Position) extends SoQLException("Unexpected e
 case class UnterminatedString(position: Position) extends SoQLException("Unterminated string", position) with LexerException
 
 case class BadParse(message: String, position: Position) extends SoQLException(message, position)
+
+case class ReservedTableAlias(alias: String, position: Position) extends SoQLException("Reserved table alias", position)
 
 sealed trait TypecheckException extends SoQLException
 case class NoSuchFunction(name: FunctionName, arity: Int, position: Position) extends SoQLException("No such function `" + name + "/" + arity + "'", position) with TypecheckException
