@@ -82,6 +82,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     def missingInteger = "Integer expected"
     def missingQuery = "Query expected"
     def leafQueryOnTheRightExpected = "Leaf query on the right expected"
+    def thisTableMustHaveAlias = "'@this' must have alias"
   }
 
   /*
@@ -115,8 +116,12 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
       case d ~ s ~ optFrom ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
         val optTableName = optFrom.map {
-          case ((t: String, _) ~ a) =>
-            TableName(t, a)
+          case ((t: String, pos) ~ a) =>
+            val tn = TableName(t, a)
+            if (TableName.This == tn.nameWithSodaFountainPrefix && a.isEmpty) {
+              badParse(errors.thisTableMustHaveAlias, pos)
+            }
+            tn
         }
         Select(d, s, optTableName, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr)
     }

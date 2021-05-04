@@ -110,7 +110,6 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       case ((l, r), idx) =>
         if (l.typ != r.typ) {
           val pos = rs.selection.expressions(idx).expression.position
-
           throw TypeOfColumnsMismatch(la.selection.keys.drop(idx).head.name + ":" + l.typ.toString,
                                       ra.selection.keys.drop(idx).head.name + ":" + r.typ.toString,
                                       pos)
