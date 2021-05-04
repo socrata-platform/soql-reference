@@ -92,10 +92,28 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
         }
         PipeQuery(la, ra)
       case Compound(op, ls, rs) =>
-        // TODO: check previous left schema matches the ones in the right
         val la = analyzeBinary(ls)
         val ra = analyzeBinary(rs)
+        validateTableShapes(la.outputSchema.leaf, ra.outputSchema.leaf, rs.outputSchema.leaf)
         Compound(op, la, ra)
+    }
+  }
+
+  private def validateTableShapes(la: Analysis, ra: Analysis, rs: Select): Unit = {
+    val left = la.selection.values
+    val right = ra.selection.values
+    if (left.size != right.size) {
+      val pos = rs.selection.expressions.headOption.map(_.expression.position).getOrElse(NoPosition)
+      throw NumberOfColumnsMismatch(left.size, right.size, pos)
+    }
+    left.zip(right).zipWithIndex.foreach {
+      case ((l, r), idx) =>
+        if (l.typ != r.typ) {
+          val pos = rs.selection.expressions(idx).expression.position
+          throw TypeOfColumnsMismatch(la.selection.keys.drop(idx).head.name + ":" + l.typ.toString,
+                                      ra.selection.keys.drop(idx).head.name + ":" + r.typ.toString,
+                                      pos)
+        }
     }
   }
 
