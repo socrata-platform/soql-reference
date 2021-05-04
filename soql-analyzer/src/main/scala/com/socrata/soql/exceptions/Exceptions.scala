@@ -140,6 +140,8 @@ sealed trait TypecheckException extends SoQLException
 case class NoSuchFunction(name: FunctionName, arity: Int, position: Position) extends SoQLException("No such function `" + name + "/" + arity + "'", position) with TypecheckException
 case class TypeMismatch(name: FunctionName, actual: TypeName, position: Position) extends SoQLException("Cannot pass a value of type `" + actual + "' to function `" + name + "'", position) with TypecheckException
 case class AmbiguousCall(name: FunctionName, position: Position) extends SoQLException("Ambiguous call to `" + name + "'", position) with TypecheckException
+case class NumberOfColumnsMismatch(leftNumberOfColumns: Int, rightNumberOfColumns: Int, position: Position) extends SoQLException(s"Two selects must have the same number of columns: ${leftNumberOfColumns}, ${rightNumberOfColumns}", position) with TypecheckException
+case class TypeOfColumnsMismatch(leftType: String, rightType: String, position: Position) extends SoQLException(s"Two selects must have the same column type: ${leftType}, ${rightType}", position) with TypecheckException
 
 case class NonBooleanWhere(typ: TypeName, position: Position) extends SoQLException("Cannot filter by an expression of type `" + typ + "'", position) with TypecheckException
 case class NonGroupableGroupBy(typ: TypeName, position: Position) extends SoQLException("Cannot group by an expression of type `" + typ + "'", position) with TypecheckException
