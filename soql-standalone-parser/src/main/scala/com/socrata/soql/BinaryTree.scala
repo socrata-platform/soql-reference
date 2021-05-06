@@ -44,6 +44,17 @@ sealed trait BinaryTree[T] {
         else this
     }
   }
+
+  def map[U](f: T => U): BinaryTree[U] = {
+    this match {
+      case Compound(op, l, r) =>
+        val nl = l.map(f)
+        val nr = r.map(f)
+        Compound(op, left = nl, right = nr)
+      case Leaf(t) =>
+        Leaf(f(t))
+    }
+  }
 }
 
 object Compound {

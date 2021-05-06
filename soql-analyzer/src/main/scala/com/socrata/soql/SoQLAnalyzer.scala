@@ -240,11 +240,11 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     joins.foldLeft(parentFromContext) { (acc, join) =>
       val jCtx = if (join.lateral) ctx ++ acc else ctx
       join.from match {
-        case JoinSelect(Right(SubSelect(selects, alias))) =>
+        case JoinQuery(selects, alias) =>
           validateAlias(alias)
           val analyses = analyzeBinary(selects)(jCtx)
           acc + contextFromAnalysis(alias, analyses.outputSchema.leaf)
-        case JoinSelect(Left(tn@TableName(name, Some(alias)))) =>
+        case JoinTable(tn@TableName(name, Some(alias))) =>
           validateAlias(alias)
           acc ++ aliasContext(tn, jCtx)
         case _ =>
@@ -366,13 +366,15 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   }
 
   def subAnalysis(join: Join)(ctx: AnalysisContext): Either[TableName, SubAnalysis[ColumnName,Type]] = {
-    join.from.subSelect match {
-      case Right(SubSelect(selects, alias)) =>
+    join.from match {
+      case JoinQuery(selects, alias) =>
         val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx
         val analyses = analyzeBinary(selects)(joinCtx)
         Right(SubAnalysis(analyses, alias))
-      case Left(tn) =>
+      case JoinTable(tn) =>
         Left(tn)
+      case JoinFunc(_, _) =>
+        throw new Exception("Analysis got a joinfunc")
     }
   }
 

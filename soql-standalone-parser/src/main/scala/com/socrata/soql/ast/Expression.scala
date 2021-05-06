@@ -2,7 +2,7 @@ package com.socrata.soql.ast
 
 import scala.util.parsing.input.{NoPosition, Position}
 import scala.runtime.ScalaRunTime
-import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
+import com.socrata.soql.environment.{ColumnName, FunctionName, HoleName, TableName, TypeName}
 
 sealed abstract class Expression extends Product {
   val position: Position
@@ -32,6 +32,8 @@ sealed abstract class Expression extends Product {
   // it unfortunately.  The only place that depends on it is
   // FunctionCall's asString implementation.
   def format(depth: Int, sb: StringBuilder, limit: Option[Int]): Option[StringBuilder]
+
+  def replaceHoles(f: Hole => Expression): Expression
 }
 
 object Expression {
@@ -66,6 +68,8 @@ object Expression {
           start ++ sinon ++ Vector("end")
         case FunctionCall(other, args, window) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals) ++ findIdentsAndLiterals(window)
       }
+    case Hole(name) =>
+      Vector(name.name)
   }
 
   private def findIdentsAndLiterals(windowFunctionInfo: Option[WindowFunctionInfo]): Seq[String] =  {
@@ -179,11 +183,13 @@ case class ColumnOrAliasRef(qualifier: Option[String], column: ColumnName)(val p
   }
   def format(depth: Int, sb: StringBuilder, limit: Option[Int]) = Some(sb.append(asString))
   def allColumnRefs = Set(this)
+  def replaceHoles(f: Hole => Expression): this.type = this
 }
 
 sealed abstract class Literal extends Expression {
   def allColumnRefs = Set.empty
   def format(depth: Int, sb: StringBuilder, limit: Option[Int]) = Some(sb.append(asString))
+  def replaceHoles(f: Hole => Expression): this.type = this
 }
 case class NumberLiteral(value: BigDecimal)(val position: Position) extends Literal {
   protected def asString = value.toString
@@ -366,6 +372,10 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
   }
 
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
+
+  def replaceHoles(f: Hole => Expression): FunctionCall = {
+    FunctionCall(functionName, parameters.map(_.replaceHoles(f)), window.map(_.replaceHoles(f)))(position, functionNamePosition)
+  }
 }
 
 case class WindowFunctionInfo(partitions: Seq[Expression], orderings: Seq[OrderBy], frames: Seq[Expression]) {
@@ -384,4 +394,16 @@ case class WindowFunctionInfo(partitions: Seq[Expression], orderings: Seq[OrderB
     sb.append(")")
     Some(sb)
   }
+
+  def replaceHoles(f: Hole => Expression): WindowFunctionInfo = {
+    WindowFunctionInfo(partitions.map(_.replaceHoles(f)), orderings.map(_.replaceHoles(f)), frames.map(_.replaceHoles(f)))
+  }
+}
+
+case class Hole(name: HoleName)(val position: Position) extends Expression {
+  def allColumnRefs = Set.empty
+  protected override def asString = "?" + name
+  def format(depth: Int, sb: StringBuilder, limit: Option[Int]) = Some(sb.append(asString))
+
+  def replaceHoles(f: Hole => Expression) = f(this)
 }

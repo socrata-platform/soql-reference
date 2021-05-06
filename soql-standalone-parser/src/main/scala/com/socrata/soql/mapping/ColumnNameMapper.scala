@@ -45,14 +45,14 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
   }
 
   def mapJoin(join: Join): Join =  {
-    val mappedSubSelect = join.from.subSelect match {
-      case Right(ss) =>
-        Right(ss.copy(selects = mapSelect(ss.selects)))
-      case l@Left(_) =>
+    val mappedSubSelect = join.from match {
+      case jq: JoinQuery =>
+        jq.copy(selects = mapSelect(jq.selects))
+      case l =>
         l
     }
 
-    val mappedFrom = join.from.copy(subSelect = mappedSubSelect)
+    val mappedFrom = mappedSubSelect
     val mappedOn = mapExpression(join.on)
     join match {
       case j: InnerJoin =>
@@ -71,6 +71,7 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
     case StringLiteral(v) => StringLiteral(v)(NoPosition)
     case BooleanLiteral(v) => BooleanLiteral(v)(NoPosition)
     case NullLiteral() => NullLiteral()(NoPosition)
+    case Hole(name) => Hole(name)(NoPosition)
 
     case e: ColumnOrAliasRef =>
       ColumnOrAliasRef(e.qualifier, columnNameMap(e.column))(NoPosition)

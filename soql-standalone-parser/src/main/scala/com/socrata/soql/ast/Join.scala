@@ -1,6 +1,7 @@
 package com.socrata.soql.ast
 
 
+import com.socrata.soql.environment.{HoleName, TableName}
 import com.socrata.soql.tokens.{FULL, LEFT, RIGHT, Token}
 
 sealed trait JoinType
@@ -45,19 +46,23 @@ sealed trait Join {
   val lateral: Boolean
 
   // joins are simple if there is no subAnalysis, e.g. "join @aaaa-aaaa[ as a]"
-  def isSimple = from.subSelect.isLeft
+  def isSimple = from.isInstanceOf[JoinTable]
 
   override def toString: String = {
-    s"$typ $from ON $on"
+    s"$typ ${if(lateral) "LATERAL " else ""}$from ON $on"
   }
+
+  def replaceHoles(f: Hole => Expression): Join
+  def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): Join
 }
 
 object Join {
   def expandJoins(selects: Seq[Select]): Seq[Join] = {
     def expandJoin(join: Join): Seq[Join] = {
-      join.from.subSelect match {
-        case Left(_) => Seq(join)
-        case Right(s) => expandJoins(s.selects.seq) :+ join
+      join.from match {
+        case JoinTable(_) => Seq(join)
+        case JoinFunc(_, _) => Seq(join)
+        case JoinQuery(selects, _) => expandJoins(selects.seq) :+ join
       }
     }
 
@@ -76,18 +81,34 @@ object Join {
 
 case class InnerJoin(from: JoinSelect, on: Expression, lateral: Boolean) extends Join {
   val typ: JoinType = InnerJoinType
+  def replaceHoles(f: Hole => Expression): InnerJoin =
+    InnerJoin(from.replaceHoles(f), on.replaceHoles(f), lateral)
+  def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): Join =
+    copy(from = from.rewriteJoinFuncs(f, aliasProvider))
 }
 
 case class LeftOuterJoin(from: JoinSelect, on: Expression, lateral: Boolean) extends Join {
   val typ: JoinType = LeftOuterJoinType
+  def replaceHoles(f: Hole => Expression): LeftOuterJoin =
+    LeftOuterJoin(from.replaceHoles(f), on.replaceHoles(f), lateral)
+  def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): Join =
+    copy(from = from.rewriteJoinFuncs(f, aliasProvider))
 }
 
 case class RightOuterJoin(from: JoinSelect, on: Expression, lateral: Boolean) extends Join {
   val typ: JoinType = RightOuterJoinType
+  def replaceHoles(f: Hole => Expression): RightOuterJoin =
+    RightOuterJoin(from.replaceHoles(f), on.replaceHoles(f), lateral)
+  def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): Join =
+    copy(from = from.rewriteJoinFuncs(f, aliasProvider))
 }
 
 case class FullOuterJoin(from: JoinSelect, on: Expression, lateral: Boolean) extends Join {
   val typ: JoinType = FullOuterJoinType
+  def replaceHoles(f: Hole => Expression): FullOuterJoin =
+    FullOuterJoin(from.replaceHoles(f), on.replaceHoles(f), lateral)
+  def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): Join =
+    copy(from = from.rewriteJoinFuncs(f, aliasProvider))
 }
 
 object OuterJoin {

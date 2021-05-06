@@ -1,11 +1,12 @@
 package com.socrata.soql
 
-import com.socrata.soql.ast.Select
+import com.socrata.soql.ast.{Select, UDF}
 import com.socrata.soql.exceptions.SoQLException
 import com.socrata.soql.types._
-import environment.{ColumnName, DatasetContext, TableName}
+import environment.{ColumnName, DatasetContext, TableName, HoleName}
 import com.socrata.soql.functions.{SoQLFunctionInfo, SoQLTypeInfo}
 import com.rojoma.json.v3.util.JsonUtil
+import com.socrata.soql.parsing.{Parser, AbstractParser}
 
 object SoqlToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -44,6 +45,18 @@ object SoqlToy extends (Array[String] => Unit) {
 
     val analyzer = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo)
 
+    val stored_procs = Map(
+      TableName("_is_admin") -> UDF(
+        arguments = Seq(HoleName("fn") -> SoQLText.name,
+                        HoleName("ln") -> SoQLText.name),
+        body = new Parser(AbstractParser.defaultParameters.copy(allowHoles = true)).binaryTreeSelect("select 1 where ?fn = 'Adam' and ?ln = 'Admin'")
+      ),
+      TableName("_positive_balance") -> UDF(
+        arguments = Seq(HoleName("balance") -> SoQLNumber.name),
+        body = new Parser(AbstractParser.defaultParameters.copy(allowHoles = true)).binaryTreeSelect("select 1 where ?balance > 0")
+      )
+    )
+
     while(true) {
       val selection = readLine("> ")
       if(selection == null) return;
@@ -53,7 +66,10 @@ object SoqlToy extends (Array[String] => Unit) {
         return
       } else {
         try {
-          val analyses = analyzer.analyzeFullQuery(selection)
+          val parsed = new Parser(AbstractParser.defaultParameters.copy(allowJoinFunctions = true)).binaryTreeSelect(selection)
+          val substituted = Select.rewriteJoinFuncs(parsed, stored_procs)
+          println(substituted)
+          val analyses = analyzer.analyzeFullQuery(substituted.toString)
 
           println("Outputs:")
           analyses.seq.foreach { analysis =>

@@ -8,10 +8,13 @@ import util.parsing.input.Position
 import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, ast, tokens}
 import com.socrata.soql.tokens._
 import com.socrata.soql.ast._
-import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
+import com.socrata.soql.environment.{ColumnName, FunctionName, HoleName, TableName, TypeName}
 
 object AbstractParser {
-  class Parameters(val allowJoins: Boolean = true, val systemColumnAliasesAllowed: Set[ColumnName] = Set.empty)
+  case class Parameters(allowJoins: Boolean = true,
+                        systemColumnAliasesAllowed: Set[ColumnName] = Set.empty,
+                        allowJoinFunctions: Boolean = true,
+                        allowHoles: Boolean = false)
   val defaultParameters = new Parameters()
 }
 
@@ -208,13 +211,23 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   }
 
   val joinSelect: Parser[JoinSelect] = {
-    tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ {
-      case ((tid: String, _)) ~ alias =>
-        JoinSelect(Left(TableName(tid, alias)))
-    } |
-    atomSelect ~ ( AS() ~> simpleIdToAlias) ^^ {
-      case queries ~ alias =>
-        JoinSelect(Right(SubSelect(queries, alias)))
+    def base =
+      tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ {
+        case ((tid: String, _)) ~ alias =>
+          JoinTable(TableName(tid, alias))
+      } |
+      atomSelect ~ ( AS() ~> simpleIdToAlias) ^^ {
+        case queries ~ alias =>
+          JoinQuery(queries, alias)
+      }
+
+    if(allowJoinFunctions) {
+      tableIdentifier ~ (LPAREN() ~> repsep(expr, COMMA()) <~ RPAREN()) ~ opt(AS() ~> simpleIdToAlias) ^^ {
+        case ((tid: String, pos)) ~ args ~ alias =>
+          JoinFunc(TableName(tid, alias), args)(pos)
+      } | base
+    } else {
+      base
     }
   }
 
@@ -357,6 +370,9 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   val stringLiteral =
     accept[tokens.StringLiteral] ^^ (_.value)
 
+  val hole =
+    accept[HoleIdentifier] ^^ { n => ast.Hole(HoleName(n.value))(n.position) }
+
   /*
    *               ***************
    *               * EXPRESSIONS *
@@ -473,8 +489,12 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
                      None)(caseword.position, caseword.position)
     }
 
-  def atom =
-    conditional | literal | identifier_or_funcall | paren | failure(errors.missingExpr)
+  def atom = {
+    def base = conditional | literal | identifier_or_funcall | paren | failure(errors.missingExpr)
+
+    if(allowHoles) base | hole
+    else base
+  }
 
   lazy val dereference: PackratParser[Expression] =
     dereference ~ DOT() ~ simpleIdentifier ^^ {
