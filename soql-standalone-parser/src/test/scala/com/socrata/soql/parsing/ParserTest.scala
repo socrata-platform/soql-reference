@@ -294,6 +294,15 @@ class ParserTest extends WordSpec with MustMatchers {
       x.joins(1).lateral must be (true)
     }
 
+    "select empty" in {
+      val x = parseFull("select")
+      val s = x.selection
+      s.expressions.isEmpty must be (true)
+      s.allSystemExcept.isEmpty must be (true)
+      s.allUserExcept.isEmpty must be (true)
+      x.toString must be ("SELECT ")
+    }
+
     // def show[T](x: => T) {
     //   try {
     //     println(x)
