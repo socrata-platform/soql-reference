@@ -76,7 +76,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
 
   def typedExpression(s: String) = {
     val tc = new Typechecker(TestTypeInfo, TestFunctionInfo)
-    tc(expression(s), Map.empty)
+    tc(expression(s), Map.empty, None)
   }
 
   test("analysis succeeds in a most minimal query") {

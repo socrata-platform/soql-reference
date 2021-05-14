@@ -273,7 +273,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     //   2. Otherwise, it should be the equivalent of selecting "*".
     val typechecker = new Typechecker(typeInfo, functionInfo)(ctxWithJoins)
 
-    val typecheck = typechecker(_ : Expression, Map.empty)
+    val typecheck = typechecker(_ : Expression, Map.empty, None)
 
     val t0 = System.nanoTime()
     val checkedWhere = where.map(typecheck)
@@ -306,7 +306,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
       log.trace("alias analysis took {}ms", ns2ms(afterAliasAnalysis - beforeAliasAnalysis))
 
-      val typedSelectedExpressions = checkedGroupBy :+ typechecker(count_*, Map.empty)
+      val typedSelectedExpressions = checkedGroupBy :+ typechecker(count_*, Map.empty, None)
 
       (names, typedSelectedExpressions)
     } else { // ok, no group by...
@@ -410,10 +410,10 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     val aliasAnalysis = AliasAnalysis(query.selection, query.from)(ctxWithJoins)
     val t1 = System.nanoTime()
     val typedAliases = aliasAnalysis.evaluationOrder.foldLeft(Map.empty[ColumnName, Expr]) { (acc, alias) =>
-      acc + (alias -> typechecker(aliasAnalysis.expressions(alias), acc))
+      acc + (alias -> typechecker(aliasAnalysis.expressions(alias), acc, query.from))
     }
 
-    val typecheck = typechecker(_ : Expression, typedAliases)
+    val typecheck = typechecker(_ : Expression, typedAliases, query.from)
 
     val (_, checkedJoin) = query.joins.foldLeft((Map.empty[Qualifier, DatasetContext[Type]], Seq.empty[typed.Join[ColumnName, Type]])) { (acc, j) =>
       val (jCtx, typedJoins) = acc

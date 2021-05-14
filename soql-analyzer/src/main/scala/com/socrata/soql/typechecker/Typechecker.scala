@@ -5,20 +5,20 @@ import com.socrata.soql.exceptions._
 import com.socrata.soql.{AnalysisDeserializer, typed}
 import com.socrata.soql.environment.{ColumnName, DatasetContext, FunctionName, TableName}
 
-class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: Map[String, DatasetContext[Type]]) extends ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]]) => typed.CoreExpr[ColumnName, Type]) { self =>
+class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: Map[String, DatasetContext[Type]]) extends ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]], Option[TableName]) => typed.CoreExpr[ColumnName, Type]) { self =>
   import typeInfo._
 
   type Expr = typed.CoreExpr[ColumnName, Type]
 
   val functionCallTypechecker = new FunctionCallTypechecker(typeInfo, functionInfo)
 
-  def apply(e: Expression, aliases: Map[ColumnName, Expr]) = typecheck(e, aliases) match {
+  def apply(e: Expression, aliases: Map[ColumnName, Expr], from: Option[TableName]) = typecheck(e, aliases, from) match {
     case Left(tm) => throw tm
     case Right(es) => disambiguate(es)
   }
 
   // never returns an empty value
-  private def typecheck(e: Expression, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = e match {
+  private def typecheck(e: Expression, aliases: Map[ColumnName, Expr], from: Option[TableName]): Either[TypecheckException, Seq[Expr]] = e match {
     case r@ColumnOrAliasRef(qual, col) =>
       aliases.get(col) match {
         case Some(typed.ColumnRef(aQual, name, typ)) if name == col && qual == aQual =>
@@ -27,15 +27,20 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
           // semi-implicitly assigned aliases, so it's better anyway.
           Right(Seq(typed.ColumnRef(aQual, col, typ)(r.position)))
         case Some(typed.ColumnRef(aQual, name, typ)) if name == col && qual != aQual =>
-          typecheck(e, Map.empty) // TODO: Revisit aliases from multiple schemas
+          typecheck(e, Map.empty, from) // TODO: Revisit aliases from multiple schemas
         case Some(tree) =>
           Right(Seq(tree))
         case None =>
-          val theQual = qual.getOrElse(TableName.PrimaryTable.qualifier)
+          val (theQual, implicitQual) = (qual, from) match {
+            case (Some(q), _) => (q, Some(q))
+            case (None, Some(TableName(_, Some(a)))) => (TableName.PrimaryTable.qualifier, Some(a))
+            case (None, Some(TableName(n, None))) => (TableName.PrimaryTable.qualifier, Some(n))
+            case (None, None) => (TableName.PrimaryTable.qualifier, None)
+          }
           val columns = ctx.getOrElse(theQual, throw NoSuchTable(theQual, r.position)).schema
           columns.get(col) match {
             case Some(typ) =>
-              Right(Seq(typed.ColumnRef(qual, col, typ)(r.position)))
+              Right(Seq(typed.ColumnRef(implicitQual, col, typ)(r.position)))
             case None =>
               throw NoSuchColumn(col, r.position)
           }
@@ -43,7 +48,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
     case FunctionCall(SpecialFunctions.Parens, params, window) =>
       assert(params.length == 1, "Parens with more than one parameter?!")
       assert(window.isEmpty, "Window clause exists?!")
-      typecheck(params(0), aliases)
+      typecheck(params(0), aliases, from)
     case fc@FunctionCall(SpecialFunctions.Case, params, None) =>
       val actualParams =
         if(params.takeRight(2).headOption == Some(BooleanLiteral(true)(fc.position))) {
@@ -51,7 +56,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
         } else {
           params.dropRight(2)
         }
-      typecheck(fc.copy(functionName = SpecialFunctions.CasePostTypecheck, parameters=actualParams)(position = fc.position, functionNamePosition = fc.functionNamePosition), aliases)
+      typecheck(fc.copy(functionName = SpecialFunctions.CasePostTypecheck, parameters=actualParams)(position = fc.position, functionNamePosition = fc.functionNamePosition), aliases, from)
     case fc@FunctionCall(SpecialFunctions.Subscript, Seq(base, StringLiteral(prop)), window) =>
       assert(window.isEmpty, "Window clause exists?!")
       // Subscripting special case.  Some types have "subfields" that
@@ -60,14 +65,14 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       // Here's where we find that that corresponds to a field access.
       // If we don't find anything that works, we pretend that we
       // never did this and just typecheck it as a subscript access.
-      typecheck(base, aliases).right.flatMap { basePossibilities =>
+      typecheck(base, aliases, from).right.flatMap { basePossibilities =>
         val asFieldAccesses =
           basePossibilities.flatMap { basePossibility =>
             val typ = basePossibility.typ
             val fnName = SpecialFunctions.Field(typeNameFor(typ), prop)
-            typecheckFuncall(fc.copy(functionName = fnName, parameters = Seq(base))(fc.position, fc.functionNamePosition), aliases).right.getOrElse(Nil)
+            typecheckFuncall(fc.copy(functionName = fnName, parameters = Seq(base))(fc.position, fc.functionNamePosition), aliases, from).right.getOrElse(Nil)
           }
-        val rawSubscript = typecheckFuncall(fc, aliases)
+        val rawSubscript = typecheckFuncall(fc, aliases, from)
         if(asFieldAccesses.isEmpty) {
           rawSubscript
         } else {
@@ -78,7 +83,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
         }
       }
     case fc@FunctionCall(_, _, _) =>
-      typecheckFuncall(fc, aliases)
+      typecheckFuncall(fc, aliases, from)
     case bl@BooleanLiteral(b) =>
       Right(booleanLiteralExpr(b, bl.position))
     case sl@StringLiteral(s) =>
@@ -91,19 +96,19 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       throw new Exception("Typechecker found a hole")
   }
 
-  def typecheckFuncall(fc: FunctionCall, aliases: Map[ColumnName, Expr]): Either[TypecheckException, Seq[Expr]] = {
+  def typecheckFuncall(fc: FunctionCall, aliases: Map[ColumnName, Expr], from: Option[TableName]): Either[TypecheckException, Seq[Expr]] = {
 
     val FunctionCall(name, parameters, window) = fc
 
-    val typedParameters = parameters.map(typecheck(_, aliases)).map {
+    val typedParameters = parameters.map(typecheck(_, aliases, from)).map {
       case Left(tm) => return Left(tm)
       case Right(es) => es
     }
 
     val typedWindow = window.map { w =>
-      val typedPartitions = w.partitions.map(apply(_, aliases))
-      val typedOrderings = w.orderings.map(ob => typed.OrderBy(apply(ob.expression, aliases), ob.ascending, ob.nullLast) )
-      val typedFrames = w.frames.map { x => apply(x, aliases) }
+      val typedPartitions = w.partitions.map(apply(_, aliases, from))
+      val typedOrderings = w.orderings.map(ob => typed.OrderBy(apply(ob.expression, aliases, from), ob.ascending, ob.nullLast) )
+      val typedFrames = w.frames.map { x => apply(x, aliases, from) }
       typed.WindowFunctionInfo(typedPartitions, typedOrderings, typedFrames)
     }
 
