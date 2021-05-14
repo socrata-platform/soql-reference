@@ -115,7 +115,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def ifCanJoinList[T](p: Parser[List[T]]) = ifCanJoin(p).map(_.getOrElse(Nil))
 
   val select: Parser[Select] = {
-    SELECT() ~> distinct ~ selectList ~ opt((FROM() ~> tableIdentifier) ~ opt(AS() ~> simpleIdToAlias)) ~ ifCanJoinList(joinList) ~ opt(whereClause) ~
+    SELECT() ~> distinct ~ selectList ~ opt((FROM() ~> tableIdentifier) ~ opt(AS() ~> tableAlias)) ~ ifCanJoinList(joinList) ~ opt(whereClause) ~
       opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
       case d ~ s ~ optFrom ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
         val optTableName = optFrom.map {
@@ -206,25 +206,27 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
 
   val simpleIdentifier: Parser[(String, Position)] = simpleSystemIdentifier | simpleUserIdentifier | failure(errors.missingIdentifier)
 
-  val simpleIdToAlias: Parser[String] = simpleIdentifier ^^ {
+  val tableAlias: Parser[String] = simpleIdentifier ^^ {
     case (alias, _) => TableName.withSodaFountainPrefix(alias)
   }
 
   val joinSelect: Parser[JoinSelect] = {
     def base =
-      tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ {
+      tableIdentifier ~ opt(AS() ~> tableAlias) ^^ {
         case ((tid: String, _)) ~ alias =>
           JoinTable(TableName(tid, alias))
       } |
-      atomSelect ~ ( AS() ~> simpleIdToAlias) ^^ {
+      atomSelect ~ ( AS() ~> tableAlias) ^^ {
         case queries ~ alias =>
           JoinQuery(queries, alias)
       }
 
     if(allowJoinFunctions) {
-      tableIdentifier ~ (LPAREN() ~> repsep(expr, COMMA()) <~ RPAREN()) ~ opt(AS() ~> simpleIdToAlias) ^^ {
+      // I'd like this alias to be optional, but it would take a
+      // surprisingly major change to get that working.
+      tableIdentifier ~ (LPAREN() ~> repsep(expr, COMMA()) <~ RPAREN()) ~ (AS() ~> tableAlias) ^^ {
         case ((tid: String, pos)) ~ args ~ alias =>
-          JoinFunc(TableName(tid, alias), args)(pos)
+          JoinFunc(TableName(tid, Some(alias)), args)(pos)
       } | base
     } else {
       base
