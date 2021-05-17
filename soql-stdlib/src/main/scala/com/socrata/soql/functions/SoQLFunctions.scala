@@ -283,13 +283,13 @@ object SoQLFunctions {
     "Return a discrete median of a given set of numbers"
   )
   val RegrIntercept = mf("regr_intercept", FunctionName("regr_intercept"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber, isAggregate = true) (
-    "Return the OLS Regression intercept of (y, x) columns"
+    "Return the Ordinary Least Squares Regression intercept of (y, x) columns"
   )
   val RegrR2 = mf("regr_r2", FunctionName("regr_r2"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber, isAggregate = true) (
-    "Return the R^2 value of the linear regression model"
+    "Return the Coefficient of Determination (R^2) value of the linear regression model"
   )
   val RegrSlope = mf("regr_slope", FunctionName("regr_slope"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber, isAggregate = true) (
-    "Return the OLS Regression slope of (y, x) columns"
+    "Return the Ordinary Least Squares Regression slope of (y, x) columns"
   )
   val StddevPop = f("stddev_pop", FunctionName("stddev_pop"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
     "Return the population standard deviation of a given set of numbers"
