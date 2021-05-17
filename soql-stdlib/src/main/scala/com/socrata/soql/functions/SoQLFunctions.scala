@@ -282,6 +282,15 @@ object SoQLFunctions {
   val MedianDisc = f("median_disc", FunctionName("median"), Map("a" -> (Ordered -- NumLike)), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
     "Return a discrete median of a given set of numbers"
   )
+  val RegrIntercept = mf("regr_intercept", FunctionName("regr_intercept"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber, isAggregate = true) (
+    "Return the Ordinary Least Squares Regression intercept of (y, x) columns"
+  )
+  val RegrR2 = mf("regr_r2", FunctionName("regr_r2"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber, isAggregate = true) (
+    "Return the Coefficient of Determination (R^2) value of the linear regression model"
+  )
+  val RegrSlope = mf("regr_slope", FunctionName("regr_slope"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber, isAggregate = true) (
+    "Return the Ordinary Least Squares Regression slope of (y, x) columns"
+  )
   val StddevPop = f("stddev_pop", FunctionName("stddev_pop"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
     "Return the population standard deviation of a given set of numbers"
   )
@@ -363,6 +372,9 @@ object SoQLFunctions {
     "Find the remainder(modulus) of one number divided by another"
   )
 
+  val NaturalLog = f("ln", FunctionName("ln"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))(
+    "Return the natural log of a number"
+  )
   val Absolute = f("abs", FunctionName("abs"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))(
     "Produce the absolute value of a number"
   )
