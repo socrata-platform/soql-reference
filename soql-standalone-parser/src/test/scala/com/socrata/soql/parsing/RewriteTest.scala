@@ -23,7 +23,7 @@ class RewriteTest extends FunSuite with MustMatchers {
   val UDFs = Map(
     TableName("_foo") -> defineUDF("SELECT 5 from @haha-haha WHERE ?x = 3",
                                    "x" -> TypeName("number")),
-    TableName("_bar") -> defineUDF("SELECT 1 from @some-thng join @foo(?x) on true WHERE name = ?name",
+    TableName("_bar") -> defineUDF("SELECT 1 from @some-thng join @foo(?x) as foo on true WHERE name = ?name",
                                    "name" -> TypeName("string"),
                                    "x" -> TypeName("number")),
     TableName("_baz") -> defineUDF("SELECT 1 from @single_row")
@@ -55,7 +55,7 @@ class RewriteTest extends FunSuite with MustMatchers {
   test("Can find non-transitively referenced join functions") {
     val selection =
       parseSelect("""
-        select * join @foo(5, 6) on true join (select * from @bleh-bleh join @baz() as b on true) as blehbleh on false
+        select * join @foo(5, 6) as f on true join (select * from @bleh-bleh join @baz() as b on true) as blehbleh on false
       """)
     Select.findDirectlyReferencedJoinFuncs(selection) must equal (Set(TableName("_foo"), TableName("_baz")))
   }
@@ -63,8 +63,9 @@ class RewriteTest extends FunSuite with MustMatchers {
   test("Can expand transitively referenced join functions") {
     val selection =
       parseSelect("""
-        select * join @bar("hello", 6) on true
+        select * join @bar("hello", 6) as b on true
       """)
+
     Select.rewriteJoinFuncs(selection, UDFs) must equal (parseSelect("""
       SELECT
         *
@@ -104,14 +105,14 @@ class RewriteTest extends FunSuite with MustMatchers {
             WHERE
               `name` = @vars_2.`name`
           ) AS expr_1 ON TRUE
-        ) AS bar ON TRUE
+        ) AS b ON TRUE
     """))
   }
 
   test("Will fail to expand on parameter length mismatch") {
     val selection =
       parseSelect("""
-        select * join @foo(5, 6) on true
+        select * join @foo(5, 6) as f on true
       """)
     assertThrows[MismatchedParameterCount] {
       Select.rewriteJoinFuncs(selection, UDFs)
@@ -122,7 +123,7 @@ class RewriteTest extends FunSuite with MustMatchers {
   test("Will fail to expand on unknown function") {
     val selection =
       parseSelect("""
-        select * join @whatever(5, 6) on true
+        select * join @whatever(5, 6) as w on true
       """)
     assertThrows[UnknownUDF] {
       Select.rewriteJoinFuncs(selection, UDFs)
