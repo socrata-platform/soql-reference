@@ -247,8 +247,10 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
         case JoinTable(tn@TableName(name, Some(alias))) =>
           validateAlias(alias)
           acc ++ aliasContext(tn, jCtx)
-        case _ =>
+        case JoinTable(TableName(_, None)) =>
           acc
+        case JoinFunc(_, _) =>
+          throw UnexpectedJoinFunc()
       }
     }
   }
@@ -374,7 +376,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       case JoinTable(tn) =>
         Left(tn)
       case JoinFunc(_, _) =>
-        throw new Exception("Analysis got a joinfunc")
+        throw UnexpectedJoinFunc()
     }
   }
 

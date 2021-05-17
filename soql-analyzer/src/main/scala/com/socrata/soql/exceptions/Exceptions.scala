@@ -150,3 +150,9 @@ case class UnorderableOrderBy(typ: TypeName, position: Position) extends SoQLExc
 
 sealed trait QueryOperationException extends SoQLException
 case class RightSideOfChainQueryMustBeLeaf(position: Position) extends SoQLException("Right side of a chain query must be a leaf query.", position) with QueryOperationException
+
+// This class represents a problem that end-users should not be able
+// to cause (e.g., finding a Hole node during typechecking)
+sealed abstract class SoQLLogicException(message: String) extends Exception(message)
+case class UnexpectedJoinFunc() extends SoQLLogicException("Unexpected join function")
+case class UnexpectedHole() extends SoQLLogicException("Unexpected hole")

@@ -93,7 +93,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
     case nl@NullLiteral() =>
       Right(nullLiteralExpr(nl.position))
     case Hole(_) =>
-      throw new Exception("Typechecker found a hole")
+      throw new UnexpectedHole()
   }
 
   def typecheckFuncall(fc: FunctionCall, aliases: Map[ColumnName, Expr], from: Option[TableName]): Either[TypecheckException, Seq[Expr]] = {
