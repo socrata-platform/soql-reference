@@ -34,8 +34,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
           val (theQual, implicitQual) = (qual, from) match {
             case (Some(q), _) => (q, Some(q))
             case (None, Some(TableName(_, Some(a)))) => (TableName.PrimaryTable.qualifier, Some(a))
-            case (None, Some(TableName(n, None))) => (TableName.PrimaryTable.qualifier, Some(n))
-            case (None, None) => (TableName.PrimaryTable.qualifier, None)
+            case (None, _) => (TableName.PrimaryTable.qualifier, None)
           }
           val columns = ctx.getOrElse(theQual, throw NoSuchTable(theQual, r.position)).schema
           columns.get(col) match {
