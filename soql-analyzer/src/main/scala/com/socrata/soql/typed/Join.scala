@@ -25,12 +25,12 @@ sealed trait Join[ColumnId, Type] {
     typed.Join(typ, JoinAnalysis(mappedSub), on.mapColumnIds(f), lateral)
   }
 
-  def copy(from: JoinAnalysis[ColumnId, Type] = from, on: CoreExpr[ColumnId, Type] = on, lateral: Boolean): typed.Join[ColumnId, Type] = {
+  def copy(from: JoinAnalysis[ColumnId, Type] = from, on: CoreExpr[ColumnId, Type] = on, lateral: Boolean = lateral): typed.Join[ColumnId, Type] = {
     typed.Join(this.typ, from, on, lateral)
   }
 
   override def toString: String = {
-    s"$typ $from ON $on"
+    s"$typ ${if(lateral) "LATERAL " else ""}$from ON $on"
   }
 
   // joins are simple if there is no subAnalysis, e.g. "join @aaaa-aaaa[ as a]"

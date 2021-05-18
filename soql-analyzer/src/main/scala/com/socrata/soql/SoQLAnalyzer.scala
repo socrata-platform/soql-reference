@@ -240,15 +240,17 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     joins.foldLeft(parentFromContext) { (acc, join) =>
       val jCtx = if (join.lateral) ctx ++ acc else ctx
       join.from match {
-        case JoinSelect(Right(SubSelect(selects, alias))) =>
+        case JoinQuery(selects, alias) =>
           validateAlias(alias)
           val analyses = analyzeBinary(selects)(jCtx)
           acc + contextFromAnalysis(alias, analyses.outputSchema.leaf)
-        case JoinSelect(Left(tn@TableName(name, Some(alias)))) =>
+        case JoinTable(tn@TableName(name, Some(alias))) =>
           validateAlias(alias)
           acc ++ aliasContext(tn, jCtx)
-        case _ =>
+        case JoinTable(TableName(_, None)) =>
           acc
+        case JoinFunc(_, _) =>
+          throw UnexpectedJoinFunc()
       }
     }
   }
@@ -273,7 +275,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     //   2. Otherwise, it should be the equivalent of selecting "*".
     val typechecker = new Typechecker(typeInfo, functionInfo)(ctxWithJoins)
 
-    val typecheck = typechecker(_ : Expression, Map.empty)
+    val typecheck = typechecker(_ : Expression, Map.empty, None)
 
     val t0 = System.nanoTime()
     val checkedWhere = where.map(typecheck)
@@ -306,7 +308,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
       log.trace("alias analysis took {}ms", ns2ms(afterAliasAnalysis - beforeAliasAnalysis))
 
-      val typedSelectedExpressions = checkedGroupBy :+ typechecker(count_*, Map.empty)
+      val typedSelectedExpressions = checkedGroupBy :+ typechecker(count_*, Map.empty, None)
 
       (names, typedSelectedExpressions)
     } else { // ok, no group by...
@@ -366,13 +368,15 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   }
 
   def subAnalysis(join: Join)(ctx: AnalysisContext): Either[TableName, SubAnalysis[ColumnName,Type]] = {
-    join.from.subSelect match {
-      case Right(SubSelect(selects, alias)) =>
+    join.from match {
+      case JoinQuery(selects, alias) =>
         val joinCtx: Map[Qualifier, DatasetContext[Type]] = ctx
         val analyses = analyzeBinary(selects)(joinCtx)
         Right(SubAnalysis(analyses, alias))
-      case Left(tn) =>
+      case JoinTable(tn) =>
         Left(tn)
+      case JoinFunc(_, _) =>
+        throw UnexpectedJoinFunc()
     }
   }
 
@@ -408,10 +412,10 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     val aliasAnalysis = AliasAnalysis(query.selection, query.from)(ctxWithJoins)
     val t1 = System.nanoTime()
     val typedAliases = aliasAnalysis.evaluationOrder.foldLeft(Map.empty[ColumnName, Expr]) { (acc, alias) =>
-      acc + (alias -> typechecker(aliasAnalysis.expressions(alias), acc))
+      acc + (alias -> typechecker(aliasAnalysis.expressions(alias), acc, query.from))
     }
 
-    val typecheck = typechecker(_ : Expression, typedAliases)
+    val typecheck = typechecker(_ : Expression, typedAliases, query.from)
 
     val (_, checkedJoin) = query.joins.foldLeft((Map.empty[Qualifier, DatasetContext[Type]], Seq.empty[typed.Join[ColumnName, Type]])) { (acc, j) =>
       val (jCtx, typedJoins) = acc

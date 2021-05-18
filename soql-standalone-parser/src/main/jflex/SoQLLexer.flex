@@ -142,6 +142,8 @@ TableIdentifier = "@" ("-" | [:jletterdigit:])+
 
   {TableIdentifier} { return token(new TableIdentifier(yytext())); }
 
+  "?" {Identifier} { return token(new HoleIdentifier(yytext().substring(1))); }
+
   // Punctuation
   ","  { return token(new COMMA()); }
   ":*" { return token(new COLONSTAR()); }

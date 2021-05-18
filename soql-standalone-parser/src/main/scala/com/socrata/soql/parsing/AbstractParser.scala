@@ -8,10 +8,13 @@ import util.parsing.input.Position
 import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, ast, tokens}
 import com.socrata.soql.tokens._
 import com.socrata.soql.ast._
-import com.socrata.soql.environment.{ColumnName, FunctionName, TableName, TypeName}
+import com.socrata.soql.environment.{ColumnName, FunctionName, HoleName, TableName, TypeName}
 
 object AbstractParser {
-  class Parameters(val allowJoins: Boolean = true, val systemColumnAliasesAllowed: Set[ColumnName] = Set.empty)
+  case class Parameters(allowJoins: Boolean = true,
+                        systemColumnAliasesAllowed: Set[ColumnName] = Set.empty,
+                        allowJoinFunctions: Boolean = true,
+                        allowHoles: Boolean = false)
   val defaultParameters = new Parameters()
 }
 
@@ -112,7 +115,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   def ifCanJoinList[T](p: Parser[List[T]]) = ifCanJoin(p).map(_.getOrElse(Nil))
 
   val select: Parser[Select] = {
-    SELECT() ~> distinct ~ selectList ~ opt((FROM() ~> tableIdentifier) ~ opt(AS() ~> simpleIdToAlias)) ~ ifCanJoinList(joinList) ~ opt(whereClause) ~
+    SELECT() ~> distinct ~ selectList ~ opt((FROM() ~> tableIdentifier) ~ opt(AS() ~> tableAlias)) ~ ifCanJoinList(joinList) ~ opt(whereClause) ~
       opt(groupByClause) ~ opt(havingClause) ~ orderByAndSearch ~ limitOffset ^^ {
       case d ~ s ~ optFrom ~ j ~ w ~ gb ~ h ~ ((ord, sr)) ~ ((lim, off)) =>
         val optTableName = optFrom.map {
@@ -203,18 +206,30 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
 
   val simpleIdentifier: Parser[(String, Position)] = simpleSystemIdentifier | simpleUserIdentifier | failure(errors.missingIdentifier)
 
-  val simpleIdToAlias: Parser[String] = simpleIdentifier ^^ {
+  val tableAlias: Parser[String] = simpleIdentifier ^^ {
     case (alias, _) => TableName.withSodaFountainPrefix(alias)
   }
 
   val joinSelect: Parser[JoinSelect] = {
-    tableIdentifier ~ opt(AS() ~> simpleIdToAlias) ^^ {
-      case ((tid: String, _)) ~ alias =>
-        JoinSelect(Left(TableName(tid, alias)))
-    } |
-    atomSelect ~ ( AS() ~> simpleIdToAlias) ^^ {
-      case queries ~ alias =>
-        JoinSelect(Right(SubSelect(queries, alias)))
+    def base =
+      tableIdentifier ~ opt(AS() ~> tableAlias) ^^ {
+        case ((tid: String, _)) ~ alias =>
+          JoinTable(TableName(tid, alias))
+      } |
+      atomSelect ~ ( AS() ~> tableAlias) ^^ {
+        case queries ~ alias =>
+          JoinQuery(queries, alias)
+      }
+
+    if(allowJoinFunctions) {
+      // I'd like this alias to be optional, but it would take a
+      // surprisingly major change to get that working.
+      tableIdentifier ~ (LPAREN() ~> repsep(expr, COMMA()) <~ RPAREN()) ~ (AS() ~> tableAlias) ^^ {
+        case ((tid: String, pos)) ~ args ~ alias =>
+          JoinFunc(TableName(tid, Some(alias)), args)(pos)
+      } | base
+    } else {
+      base
     }
   }
 
@@ -357,6 +372,9 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
   val stringLiteral =
     accept[tokens.StringLiteral] ^^ (_.value)
 
+  val hole =
+    accept[HoleIdentifier] ^^ { n => ast.Hole(HoleName(n.value))(n.position) }
+
   /*
    *               ***************
    *               * EXPRESSIONS *
@@ -473,8 +491,12 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
                      None)(caseword.position, caseword.position)
     }
 
-  def atom =
-    conditional | literal | identifier_or_funcall | paren | failure(errors.missingExpr)
+  def atom = {
+    def base = conditional | literal | identifier_or_funcall | paren | failure(errors.missingExpr)
+
+    if(allowHoles) base | hole
+    else base
+  }
 
   lazy val dereference: PackratParser[Expression] =
     dereference ~ DOT() ~ simpleIdentifier ^^ {

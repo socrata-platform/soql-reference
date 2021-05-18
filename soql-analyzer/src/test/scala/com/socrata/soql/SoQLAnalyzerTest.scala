@@ -8,6 +8,7 @@ import org.scalatest.prop.PropertyChecks
 import scala.util.parsing.input.NoPosition
 import org.scalatest.FunSuite
 import org.scalatest.MustMatchers
+import com.socrata.soql.ast.JoinQuery
 import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
 import com.socrata.soql.parsing.{Parser, StandaloneParser}
 import com.socrata.soql.typechecker.Typechecker
@@ -75,7 +76,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
 
   def typedExpression(s: String) = {
     val tc = new Typechecker(TestTypeInfo, TestFunctionInfo)
-    tc(expression(s), Map.empty)
+    tc(expression(s), Map.empty, None)
   }
 
   test("analysis succeeds in a most minimal query") {
@@ -514,7 +515,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
 
   def parseJoin(joinSoql: String)(implicit ctx: analyzer.AnalysisContext): BinaryTree[SoQLAnalysis[ColumnName, TestType]] = {
     val parsed = new StandaloneParser().parseJoinSelect(joinSoql)
-    analyzer.analyzeBinary(parsed.selects.get)(ctx)
+    analyzer.analyzeBinary(parsed.asInstanceOf[JoinQuery].selects)(ctx)
   }
 
   test("join with sub-query") {
@@ -664,7 +665,7 @@ SELECT visits, @x2.zx
   test("lateral join with this alias") {
     val soql = "SELECT @t1.name_first, @j.x FROM @this as t1 JOIN LATERAL (SELECT @t2.x, @t2.y FROM @aaaa-aaax as t2 WHERE @t2.x=@t1.name_last) as j ON TRUE"
     val parsed = new Parser().unchainedSelectStatement(soql)
-    parsed.toString must equal ("SELECT @t1.`name_first`, @j.`x` FROM @this AS t1 JOIN (SELECT @t2.`x`, @t2.`y` FROM @aaaa-aaax AS t2 WHERE @t2.`x` = @t1.`name_last`) AS j ON TRUE")
+    parsed.toString must equal ("SELECT @t1.`name_first`, @j.`x` FROM @this AS t1 JOIN LATERAL (SELECT @t2.`x`, @t2.`y` FROM @aaaa-aaax AS t2 WHERE @t2.`x` = @t1.`name_last`) AS j ON TRUE")
     val analysis = analyzer.analyzeFullQueryBinary(soql)
 
     // And with chained soql
