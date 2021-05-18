@@ -55,6 +55,16 @@ sealed trait BinaryTree[T] {
         Leaf(f(t))
     }
   }
+
+  def foreach[U](f: T => U): Unit = {
+    this match {
+      case Compound(_, l, r) =>
+        l.foreach(f)
+        r.foreach(f)
+      case Leaf(t) =>
+        f(t)
+    }
+  }
 }
 
 object Compound {

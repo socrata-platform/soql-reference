@@ -29,15 +29,6 @@ class RewriteTest extends FunSuite with MustMatchers {
     TableName("_baz") -> defineUDF("SELECT 1 from @single_row")
   )
 
-  // make the generated vars and exprs table aliases predictable
-  implicit def countingAliasProvider = new AliasProvider {
-    private var x = 0
-    def apply(s: String) = {
-      x += 1
-      s"${s}_${x}"
-    }
-  }
-
   def parseSelect(soql: String) = {
     val parser =
       new StandaloneParser(AbstractParser.defaultParameters.copy(
@@ -63,7 +54,7 @@ class RewriteTest extends FunSuite with MustMatchers {
   test("Can expand transitively referenced join functions") {
     val selection =
       parseSelect("""
-        select * join @bar("hello", 6) as b on true
+        select * join @bar("hello", 6) as expr_3 on true -- the alias is to check the avoidance of existing aliases
       """)
 
     Select.rewriteJoinFuncs(selection, UDFs) must equal (parseSelect("""
@@ -86,26 +77,26 @@ class RewriteTest extends FunSuite with MustMatchers {
             FROM @some-thng
               JOIN (
                 SELECT
-                  @expr_3.:*,
-                  @expr_3.*
+                  @expr_4.:*,
+                  @expr_4.*
                 FROM @single_row
                   JOIN (
                     SELECT
                       @vars_2.`x` :: number AS x
                     FROM @single_row
-                  ) AS vars_4 ON TRUE
+                  ) AS vars_5 ON TRUE
                   JOIN LATERAL (
                     SELECT
                       5
                     FROM @haha-haha
                     WHERE
-                      @vars_4.`x` = 3
-                 ) AS expr_3 ON TRUE
+                      @vars_5.`x` = 3
+                 ) AS expr_4 ON TRUE
               ) AS foo ON TRUE
             WHERE
               `name` = @vars_2.`name`
           ) AS expr_1 ON TRUE
-        ) AS b ON TRUE
+        ) AS expr_3 ON TRUE
     """))
   }
 

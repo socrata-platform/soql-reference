@@ -21,6 +21,7 @@ import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, UnionQuery, Unio
   */
 sealed trait JoinSelect {
   val alias: Option[String]
+  def allTableNames: Set[String]
   def replaceHoles(f: Hole => Expression): JoinSelect
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): JoinSelect
   def directlyReferencedJoinFuncs: Set[TableName]
@@ -31,6 +32,13 @@ case class JoinTable(tableName: TableName) extends JoinSelect {
   def replaceHoles(f: Hole => Expression): this.type = this
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): this.type = this
   def directlyReferencedJoinFuncs = Set.empty
+
+  def allTableNames = {
+    val result = Set.newBuilder[String]
+    result += tableName.name
+    result ++= tableName.alias
+    result.result()
+  }
 }
 case class JoinQuery(selects: BinaryTree[Select], definiteAlias: String) extends JoinSelect {
   val alias = Some(definiteAlias)
@@ -40,11 +48,20 @@ case class JoinQuery(selects: BinaryTree[Select], definiteAlias: String) extends
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): JoinQuery =
     copy(selects = Select.rewriteJoinFuncs(selects, f)(aliasProvider))
   def directlyReferencedJoinFuncs = Select.findDirectlyReferencedJoinFuncs(selects)
+
+  val allTableNames = Select.allTableNames(selects) + definiteAlias
 }
 case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position: Position) extends JoinSelect {
   val alias = tableName.alias
   override def toString =
     TableName.withSoqlPrefix(tableName.name) + "(" + params.mkString(", ") + ")" + tableName.aliasWithoutPrefix.map(" AS " + _)
+
+  def allTableNames = {
+    val result = Set.newBuilder[String]
+    result += tableName.name
+    result ++= tableName.alias
+    result.result()
+  }
 
   def directlyReferencedJoinFuncs = Set(tableName.copy(alias = None))
 
@@ -75,8 +92,8 @@ case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position:
     if(udf.arguments.length != params.length) {
       throw MismatchedParameterCount(expected = udf.arguments.length, got = params.length)(position)
     }
-    val expr = aliasProvider("_expr")
-    val vars = aliasProvider("_vars")
+    val expr = aliasProvider("expr")
+    val vars = aliasProvider("vars")
     val singleRowFrom = Some(TableName(TableName.SingleRow))
     val labelledJoin =
       Select(
@@ -119,11 +136,6 @@ case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position:
 trait AliasProvider {
   def apply(base: String): String
 }
-object AliasProvider {
-  implicit val instance = new AliasProvider {
-    def apply(base: String) = base + UUID.randomUUID().toString.replaceAll("-", "_")
-  }
-}
 
 object Select {
   def itrToString(prefix: String, l: Iterable[_], sep: String = " "): Option[String] = {
@@ -157,6 +169,12 @@ object Select {
     def flatString = l.flatten.mkString(" ")
   }
 
+  def allTableNames(node: BinaryTree[Select]): Set[String] = {
+    val result = Set.newBuilder[String]
+    node.foreach { leaf => result ++= leaf.allTableNames }
+    result.result()
+  }
+
   def walkTreeReplacingHoles(node: BinaryTree[Select], f: Hole => Expression): BinaryTree[Select] = {
     node.map(_.replaceHoles(f))
   }
@@ -168,7 +186,29 @@ object Select {
     }
   }
 
-  def rewriteJoinFuncs(node: BinaryTree[Select], funcs: Map[TableName, UDF])(implicit aliasProvider: AliasProvider): BinaryTree[Select] =
+  def aliasProvider(node: BinaryTree[Select], funcs: Map[TableName, UDF]): AliasProvider = {
+    val result = Set.newBuilder[String]
+    result ++= allTableNames(node)
+    for((tn, udf) <- funcs) {
+      result += tn.name
+      result ++= tn.alias
+      result ++= allTableNames(udf.body)
+    }
+    val trulyAllTableNames = result.result()
+    // ..and now we just find a name that isn't in that set!
+    new AliasProvider {
+      var next = 0
+      def apply(base: String): String = {
+        def candidate = "_" + base + "_" + next
+        do {
+          next += 1
+        } while(trulyAllTableNames.contains(candidate))
+        candidate
+      }
+    }
+  }
+
+  def rewriteJoinFuncs(node: BinaryTree[Select], funcs: Map[TableName, UDF])(implicit aliasProvider: AliasProvider = Select.aliasProvider(node, funcs)): BinaryTree[Select] =
     node.map(_.rewriteJoinFuncs(funcs))
 }
 
@@ -204,6 +244,18 @@ case class Select(
     joins.foldLeft(Set.empty[TableName]) { (acc, join) =>
       acc union join.from.directlyReferencedJoinFuncs
     }
+
+  def allTableNames: Set[String] = {
+    val result = Set.newBuilder[String]
+    for(tn <- from) {
+      result += tn.name
+      result ++= tn.alias
+    }
+    for(join <- joins) {
+      result ++= join.from.allTableNames
+    }
+    result.result()
+  }
 
   def rewriteJoinFuncs(funcs: Map[TableName, UDF])(implicit aliasProvider: AliasProvider): Select =
     Select(distinct,
