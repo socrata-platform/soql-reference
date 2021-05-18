@@ -78,11 +78,11 @@ case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position:
     }
   }
 
-  def rewrite(udf: UDF, params: Seq[Expression], aliasProvider: AliasProvider): JoinQuery = {
+  private def rewrite(udf: UDF, params: Seq[Expression], aliasProvider: AliasProvider): JoinQuery = {
     // ok we're going to rewrite
     //   join @foo(x, y, z) as bleh
     // to
-    //   join (select @expr.:*, @expr.* from (select x,y,z from @single_row) as vars join lateral (body) as expr on true) as bleh;
+    //   join (select @expr.* from (select x,y,z from @single_row) as vars join lateral (body) as expr on true) as bleh;
     // ..or that's the ideal, anyway.  Turns out you can't FROM a
     // query in soql, so we'll actually rewrite to "..from @single_row
     // join (select x,y,z) join lateral (body)" instead.
@@ -98,7 +98,7 @@ case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position:
     val labelledJoin =
       Select(
         distinct = false,
-        selection = Selection(Some(StarSelection(Some(expr), Nil)),
+        selection = Selection(None,
                               Seq(StarSelection(Some(expr), Nil)),
                               Nil),
         from = singleRowFrom,

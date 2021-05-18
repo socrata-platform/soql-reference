@@ -62,7 +62,6 @@ class RewriteTest extends FunSuite with MustMatchers {
         *
       JOIN (
         SELECT
-          @expr_1.:*,
           @expr_1.*
         FROM @single_row
           JOIN (
@@ -77,7 +76,6 @@ class RewriteTest extends FunSuite with MustMatchers {
             FROM @some-thng
               JOIN (
                 SELECT
-                  @expr_4.:*,
                   @expr_4.*
                 FROM @single_row
                   JOIN (
