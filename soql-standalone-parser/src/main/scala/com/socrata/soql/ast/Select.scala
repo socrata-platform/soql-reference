@@ -54,7 +54,7 @@ case class JoinQuery(selects: BinaryTree[Select], definiteAlias: String) extends
 case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position: Position) extends JoinSelect {
   val alias = tableName.alias
   override def toString =
-    TableName.withSoqlPrefix(tableName.name) + "(" + params.mkString(", ") + ")" + tableName.aliasWithoutPrefix.map(" AS " + _)
+    TableName.withSoqlPrefix(tableName.name) + "(" + params.mkString(", ") + ")" + tableName.aliasWithoutPrefix.map(" AS " + _).getOrElse("")
 
   def allTableNames = {
     val result = Set.newBuilder[String]
