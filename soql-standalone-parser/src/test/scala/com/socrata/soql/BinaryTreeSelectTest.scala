@@ -26,7 +26,7 @@ class BinaryTreeSelectTest extends FunSpec with MustMatchers {
     it("of pipe is the right query") {
       val soql = "SELECT 1 as a |> SELECT 2 as b |> SELECT 3 as c"
       val selects = parser.binaryTreeSelect(soql)
-      selects.seq.map(_.toString) must be (Seq("SELECT 1 AS a", "SELECT 2 AS b", "SELECT 3 AS c"))
+      selects.seq.map(_.toString) must be (Seq("SELECT 1 AS `a`", "SELECT 2 AS `b`", "SELECT 3 AS `c`"))
     }
   }
 

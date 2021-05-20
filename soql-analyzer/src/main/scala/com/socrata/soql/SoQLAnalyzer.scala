@@ -583,7 +583,7 @@ case class JoinAnalysis[ColumnId, Type](subAnalysis: Either[TableName, SubAnalys
         (name, alias)
     }
 
-    List(Some(subAnasStr), itrToString("AS", aliasStrOpt.map(TableName.removeValidPrefix))).flatString
+    List(Some(subAnasStr), itrToString("AS", aliasStrOpt.map { a => "`" + TableName.removeValidPrefix(a) + "`" })).flatString
   }
 }
 
