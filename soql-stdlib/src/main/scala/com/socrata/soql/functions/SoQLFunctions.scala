@@ -384,6 +384,9 @@ object SoQLFunctions {
   val Floor = f("floor", FunctionName("floor"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))(
     NoDocs
   )
+  val Round = mf("round", FunctionName("round"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber)(
+    "Round a number to a specified decimal point, example: round(10.3012, 3) => 10.301; round(25, -1) => 30"
+  )
 
   val NumberToMoney = mf("number to money", SpecialFunctions.Cast(SoQLMoney.name), Seq(SoQLNumber), Seq.empty, SoQLMoney)(
     NoDocs
