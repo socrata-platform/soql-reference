@@ -61,17 +61,17 @@ class SoQLAnalyzerQueryOperatorTest extends FunSuite with MustMatchers with Prop
        "SELECT Map(name -> name :: text, breed -> _dog.breed :: text) JOIN _dog ON TRUE :: boolean",
        "SELECT Map(name -> str_cat_name :: text, breed -> _dog.str_dog_breed :: text) JOIN _dog ON TRUE :: boolean"),
       ("SELECT name, @d1.breed join @dog as d1 on true",
-       "SELECT Map(name -> name :: text, breed -> _d1.breed :: text) JOIN _dog AS `d1` ON TRUE :: boolean",
-       "SELECT Map(name -> str_cat_name :: text, breed -> _d1.str_dog_breed :: text) JOIN _dog AS `d1` ON TRUE :: boolean"),
+       "SELECT Map(name -> name :: text, breed -> _d1.breed :: text) JOIN _dog AS @d1 ON TRUE :: boolean",
+       "SELECT Map(name -> str_cat_name :: text, breed -> _d1.str_dog_breed :: text) JOIN _dog AS @d1 ON TRUE :: boolean"),
       ("SELECT name, @j1.breed join (select name, breed from @dog) as j1 on true",
-       "SELECT Map(name -> name :: text, breed -> _j1.breed :: text) JOIN (SELECT Map(name -> name :: text, breed -> breed :: text) FROM @dog) AS `j1` ON TRUE :: boolean",
-       "SELECT Map(name -> str_cat_name :: text, breed -> _j1.breed :: text) JOIN (SELECT Map(name -> str_dog_name :: text, breed -> str_dog_breed :: text) FROM @dog) AS `j1` ON TRUE :: boolean"),
+       "SELECT Map(name -> name :: text, breed -> _j1.breed :: text) JOIN (SELECT Map(name -> name :: text, breed -> breed :: text) FROM @dog) AS @j1 ON TRUE :: boolean",
+       "SELECT Map(name -> str_cat_name :: text, breed -> _j1.breed :: text) JOIN (SELECT Map(name -> str_dog_name :: text, breed -> str_dog_breed :: text) FROM @dog) AS @j1 ON TRUE :: boolean"),
       ("SELECT name, @j1.breed join (select @dog.name, @dog.breed from @dog) as j1 on true",
-       "SELECT Map(name -> name :: text, breed -> _j1.breed :: text) JOIN (SELECT Map(name -> _dog.name :: text, breed -> _dog.breed :: text) FROM @dog) AS `j1` ON TRUE :: boolean",
-       "SELECT Map(name -> str_cat_name :: text, breed -> _j1.breed :: text) JOIN (SELECT Map(name -> _dog.str_dog_name :: text, breed -> _dog.str_dog_breed :: text) FROM @dog) AS `j1` ON TRUE :: boolean"),
+       "SELECT Map(name -> name :: text, breed -> _j1.breed :: text) JOIN (SELECT Map(name -> _dog.name :: text, breed -> _dog.breed :: text) FROM @dog) AS @j1 ON TRUE :: boolean",
+       "SELECT Map(name -> str_cat_name :: text, breed -> _j1.breed :: text) JOIN (SELECT Map(name -> _dog.str_dog_name :: text, breed -> _dog.str_dog_breed :: text) FROM @dog) AS @j1 ON TRUE :: boolean"),
       ("SELECT name, @j1.breed join (select @d1.name, @d1.breed from @dog as d1) as j1 on true",
-       "SELECT Map(name -> name :: text, breed -> _j1.breed :: text) JOIN (SELECT Map(name -> _d1.name :: text, breed -> _d1.breed :: text) FROM @dog AS `d1`) AS `j1` ON TRUE :: boolean",
-       "SELECT Map(name -> str_cat_name :: text, breed -> _j1.breed :: text) JOIN (SELECT Map(name -> _d1.str_dog_name :: text, breed -> _d1.str_dog_breed :: text) FROM @dog AS `d1`) AS `j1` ON TRUE :: boolean"),
+       "SELECT Map(name -> name :: text, breed -> _j1.breed :: text) JOIN (SELECT Map(name -> _d1.name :: text, breed -> _d1.breed :: text) FROM @dog AS @d1) AS @j1 ON TRUE :: boolean",
+       "SELECT Map(name -> str_cat_name :: text, breed -> _j1.breed :: text) JOIN (SELECT Map(name -> _d1.str_dog_name :: text, breed -> _d1.str_dog_breed :: text) FROM @dog AS @d1) AS @j1 ON TRUE :: boolean"),
       ("SELECT name UNION SELECT name from @dog",
        "SELECT Map(name -> name :: text) UNION SELECT Map(name -> name :: text) FROM @dog",
        "SELECT Map(name -> str_cat_name :: text) UNION SELECT Map(name -> str_dog_name :: text) FROM @dog"),
@@ -87,8 +87,8 @@ class SoQLAnalyzerQueryOperatorTest extends FunSuite with MustMatchers with Prop
                 UNION ALL
                SELECT @cat.name, @cat.cat FROM @cat) as j4 ON TRUE
       """,
-       "SELECT Map(name -> name :: text, dogname -> _dog.name :: text, j2catname -> _j2.name :: text, j4name -> _j4.name :: text, dog -> _dog.dog :: text, j2cat -> _j2.cat :: text, j3cat -> _j3.cat :: text, j4bird -> _j4.bird :: text) JOIN _dog ON TRUE :: boolean JOIN _cat AS `j2` ON TRUE :: boolean JOIN _cat AS `j3` ON TRUE :: boolean JOIN (SELECT Map(name -> _b1.name :: text, bird -> _b1.bird :: text) FROM @bird AS `b1` UNION (SELECT Map(name -> name :: text, fish -> fish :: text, cat2 -> _c2.cat :: text) FROM @fish JOIN _cat AS `c2` ON TRUE :: boolean |> SELECT Map(name -> name :: text, cat2 -> cat2 :: text)) UNION ALL SELECT Map(name -> _cat.name :: text, cat -> _cat.cat :: text) FROM @cat) AS `j4` ON TRUE :: boolean",
-       "SELECT Map(name -> str_cat_name :: text, dogname -> _dog.str_dog_name :: text, j2catname -> _j2.str_cat_name :: text, j4name -> _j4.name :: text, dog -> _dog.str_dog_dog :: text, j2cat -> _j2.str_cat_cat :: text, j3cat -> _j3.str_cat_cat :: text, j4bird -> _j4.bird :: text) JOIN _dog ON TRUE :: boolean JOIN _cat AS `j2` ON TRUE :: boolean JOIN _cat AS `j3` ON TRUE :: boolean JOIN (SELECT Map(name -> _b1.str_bird_name :: text, bird -> _b1.str_bird_bird :: text) FROM @bird AS `b1` UNION (SELECT Map(name -> str_fish_name :: text, fish -> str_fish_fish :: text, cat2 -> _c2.str_cat_cat :: text) FROM @fish JOIN _cat AS `c2` ON TRUE :: boolean |> SELECT Map(name -> name :: text, cat2 -> cat2 :: text)) UNION ALL SELECT Map(name -> _cat.str_cat_name :: text, cat -> _cat.str_cat_cat :: text) FROM @cat) AS `j4` ON TRUE :: boolean")
+       "SELECT Map(name -> name :: text, dogname -> _dog.name :: text, j2catname -> _j2.name :: text, j4name -> _j4.name :: text, dog -> _dog.dog :: text, j2cat -> _j2.cat :: text, j3cat -> _j3.cat :: text, j4bird -> _j4.bird :: text) JOIN _dog ON TRUE :: boolean JOIN _cat AS @j2 ON TRUE :: boolean JOIN _cat AS @j3 ON TRUE :: boolean JOIN (SELECT Map(name -> _b1.name :: text, bird -> _b1.bird :: text) FROM @bird AS @b1 UNION (SELECT Map(name -> name :: text, fish -> fish :: text, cat2 -> _c2.cat :: text) FROM @fish JOIN _cat AS @c2 ON TRUE :: boolean |> SELECT Map(name -> name :: text, cat2 -> cat2 :: text)) UNION ALL SELECT Map(name -> _cat.name :: text, cat -> _cat.cat :: text) FROM @cat) AS @j4 ON TRUE :: boolean",
+       "SELECT Map(name -> str_cat_name :: text, dogname -> _dog.str_dog_name :: text, j2catname -> _j2.str_cat_name :: text, j4name -> _j4.name :: text, dog -> _dog.str_dog_dog :: text, j2cat -> _j2.str_cat_cat :: text, j3cat -> _j3.str_cat_cat :: text, j4bird -> _j4.bird :: text) JOIN _dog ON TRUE :: boolean JOIN _cat AS @j2 ON TRUE :: boolean JOIN _cat AS @j3 ON TRUE :: boolean JOIN (SELECT Map(name -> _b1.str_bird_name :: text, bird -> _b1.str_bird_bird :: text) FROM @bird AS @b1 UNION (SELECT Map(name -> str_fish_name :: text, fish -> str_fish_fish :: text, cat2 -> _c2.str_cat_cat :: text) FROM @fish JOIN _cat AS @c2 ON TRUE :: boolean |> SELECT Map(name -> name :: text, cat2 -> cat2 :: text)) UNION ALL SELECT Map(name -> _cat.str_cat_name :: text, cat -> _cat.str_cat_cat :: text) FROM @cat) AS @j4 ON TRUE :: boolean")
     )
 
     val qColumnIdNewColumnIdMap = Map(
