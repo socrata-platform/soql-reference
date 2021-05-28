@@ -42,7 +42,7 @@ case class JoinTable(tableName: TableName) extends JoinSelect {
 }
 case class JoinQuery(selects: BinaryTree[Select], definiteAlias: String) extends JoinSelect {
   val alias = Some(definiteAlias)
-  override def toString = "(" + Select.toString(selects) + ") AS `" + TableName.removeValidPrefix(definiteAlias) + "`"
+  override def toString = "(" + Select.toString(selects) + ") AS @" + TableName.removeValidPrefix(definiteAlias) + ""
   def replaceHoles(f: Hole => Expression): JoinQuery =
     copy(Select.walkTreeReplacingHoles(selects, f))
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): JoinQuery =
@@ -54,7 +54,7 @@ case class JoinQuery(selects: BinaryTree[Select], definiteAlias: String) extends
 case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position: Position) extends JoinSelect {
   val alias = tableName.alias
   override def toString =
-    TableName.withSoqlPrefix(tableName.name) + "(" + params.mkString(", ") + ")" + tableName.aliasWithoutPrefix.map(" AS `" + _ + "`").getOrElse("")
+    TableName.withSoqlPrefix(tableName.name) + "(" + params.mkString(", ") + ")" + tableName.aliasWithoutPrefix.map(" AS @" + _).getOrElse("")
 
   def allTableNames = {
     val result = Set.newBuilder[String]

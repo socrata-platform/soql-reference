@@ -206,7 +206,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
 
   val simpleIdentifier: Parser[(String, Position)] = simpleSystemIdentifier | simpleUserIdentifier | failure(errors.missingIdentifier)
 
-  val tableAlias: Parser[String] = simpleIdentifier ^^ {
+  val tableAlias: Parser[String] = (simpleIdentifier | tableIdentifier) ^^ {
     case (alias, _) => TableName.withSodaFountainPrefix(alias)
   }
 
@@ -224,9 +224,9 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     if(allowJoinFunctions) {
       // I'd like this alias to be optional, but it would take a
       // surprisingly major change to get that working.
-      tableIdentifier ~ (LPAREN() ~> repsep(expr, COMMA()) <~ RPAREN()) ~ (AS() ~> tableAlias) ^^ {
+      tableIdentifier ~ (LPAREN() ~> repsep(expr, COMMA()) <~ RPAREN()) ~ opt(AS() ~> tableAlias) ^^ {
         case ((tid: String, pos)) ~ args ~ alias =>
-          JoinFunc(TableName(tid, Some(alias)), args)(pos)
+          JoinFunc(TableName(tid, alias), args)(pos)
       } | base
     } else {
       base
