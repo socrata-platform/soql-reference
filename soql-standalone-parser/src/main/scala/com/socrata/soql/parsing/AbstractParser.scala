@@ -222,8 +222,6 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
       }
 
     if(allowJoinFunctions) {
-      // I'd like this alias to be optional, but it would take a
-      // surprisingly major change to get that working.
       tableIdentifier ~ (LPAREN() ~> repsep(expr, COMMA()) <~ RPAREN()) ~ opt(AS() ~> tableAlias) ^^ {
         case ((tid: String, pos)) ~ args ~ alias =>
           JoinFunc(TableName(tid, alias), args)(pos)
