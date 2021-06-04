@@ -104,7 +104,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       case Right(es) => es
     }
 
-    if((functionInfo.windowFunctions contains name) && window.isEmpty) {
+    if(functionInfo.windowFunctions(name) && window.isEmpty) {
       throw FunctionRequiresWindowInfo(name, fc.position)
     }
 
