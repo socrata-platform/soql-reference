@@ -144,6 +144,7 @@ case class AmbiguousCall(name: FunctionName, position: Position) extends SoQLExc
 case class NumberOfColumnsMismatch(leftNumberOfColumns: Int, rightNumberOfColumns: Int, position: Position) extends SoQLException(s"Two selects must have the same number of columns: ${leftNumberOfColumns}, ${rightNumberOfColumns}", position) with TypecheckException
 case class TypeOfColumnsMismatch(leftType: String, rightType: String, position: Position) extends SoQLException(s"Two selects must have the same column type: ${leftType}, ${rightType}", position) with TypecheckException
 case class FunctionRequiresWindowInfo(name: FunctionName, position: Position) extends SoQLException(s"Function ${name} requires window information", position) with TypecheckException
+case class FunctionDoesNotAcceptWindowInfo(name: FunctionName, position: Position) extends SoQLException(s"Function ${name} does not accept window information", position) with TypecheckException
 
 case class NonBooleanWhere(typ: TypeName, position: Position) extends SoQLException("Cannot filter by an expression of type `" + typ + "'", position) with TypecheckException
 case class NonGroupableGroupBy(typ: TypeName, position: Position) extends SoQLException("Cannot group by an expression of type `" + typ + "'", position) with TypecheckException

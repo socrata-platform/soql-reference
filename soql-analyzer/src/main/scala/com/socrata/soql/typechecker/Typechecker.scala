@@ -106,6 +106,8 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
 
     if(functionInfo.windowFunctions(name) && window.isEmpty) {
       throw FunctionRequiresWindowInfo(name, fc.position)
+    } else if(!functionInfo.windowFunctions(name) && !window.isEmpty) {
+      throw FunctionDoesNotAcceptWindowInfo(name, fc.position)
     }
 
     val typedWindow = window.map { w =>

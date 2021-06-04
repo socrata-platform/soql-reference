@@ -329,8 +329,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("All merge to a leaf with window function") {
-    val soql = "SELECT name_first, visits, 1 |> SELECT name_first, visits, 2 |> SELECT name_first, visits, 3 |> SELECT name_first, avg(visits) over()"
-    val soqlMerged = "SELECT name_first, avg(visits) over()"
+    val soql = "SELECT name_first, visits, 1 |> SELECT name_first, visits, 2 |> SELECT name_first, visits, 3 |> SELECT name_first, row_number() over()"
+    val soqlMerged = "SELECT name_first, row_number() over()"
     val analysis = analyzer.analyzeFullQueryBinary(soql)
     val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
     val expected = analyzer.analyzeFullQueryBinary(soqlMerged)
@@ -597,42 +597,36 @@ SELECT visits, @x2.zx
   }
 
   test("window function") {
-    val analysisWordStyle = analyzer.analyzeUnchainedQuery("SELECT name_last, avg(visits) OVER (PARTITION BY name_last, 2, 3)")
+    val analysisWordStyle = analyzer.analyzeUnchainedQuery("SELECT name_last, row_number() OVER (PARTITION BY name_last, 2, 3)")
     analysisWordStyle.isGrouped must equal (false)
     val select = analysisWordStyle.selection.toSeq
     select must equal (Seq(
       ColumnName("name_last") -> typedExpression("name_last"),
-      ColumnName("avg_visits_over_partition_by_name_last_2_3") -> typedExpression("avg(visits) OVER (PARTITION BY name_last, 2, 3)")
+      ColumnName("row_number_over_partition_by_name_last_2_3") -> typedExpression("row_number() OVER (PARTITION BY name_last, 2, 3)")
     ))
 
-    val analysisWordStyleOverEmpty = analyzer.analyzeUnchainedQuery("SELECT avg(visits) OVER ()")
+    val analysisWordStyleOverEmpty = analyzer.analyzeUnchainedQuery("SELECT row_number() OVER ()")
     val selectOverEmpty = analysisWordStyleOverEmpty.selection.toSeq
     selectOverEmpty must equal (Seq(
-      ColumnName("avg_visits_over") -> typedExpression("avg(visits) OVER ()")
-    ))
-
-    val analysis = analyzer.analyzeUnchainedQuery("SELECT avg(visits)")
-    analysis.isGrouped must equal (true)
-    analysis.selection.toSeq must equal (Seq(
-      ColumnName("avg_visits") -> typedExpression("avg(visits)")
+      ColumnName("row_number_over") -> typedExpression("row_number() OVER ()")
     ))
 
     intercept[FunctionRequiresWindowInfo] {
       analyzer.analyzeUnchainedQuery("SELECT row_number()")
     }
 
-    intercept[TypeMismatch] {
-      analyzer.analyzeUnchainedQuery("SELECT avg(name_last)")
+    intercept[FunctionDoesNotAcceptWindowInfo] {
+      analyzer.analyzeUnchainedQuery("SELECT upper('foo') over(partition by 1)")
     }
 
     val expressionExpected = intercept[BadParse] {
-      analyzer.analyzeUnchainedQuery("SELECT name_last, avg(visits) OVER (PARTITION BY)")
+      analyzer.analyzeUnchainedQuery("SELECT name_last, row_number() OVER (PARTITION BY)")
     }
     expressionExpected.message must startWith("Expression expected")
 
 
     val partitionExpected = intercept[BadParse] {
-      analyzer.analyzeUnchainedQuery("SELECT name_last, avg(visits) OVER (name_last, 2, 3)")
+      analyzer.analyzeUnchainedQuery("SELECT name_last, row_number() OVER (name_last, 2, 3)")
     }
     partitionExpected.message must startWith("`)' expected")
   }
