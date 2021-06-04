@@ -617,6 +617,10 @@ SELECT visits, @x2.zx
       ColumnName("avg_visits") -> typedExpression("avg(visits)")
     ))
 
+    intercept[FunctionRequiresWindowInfo] {
+      analyzer.analyzeUnchainedQuery("SELECT row_number()")
+    }
+
     intercept[TypeMismatch] {
       analyzer.analyzeUnchainedQuery("SELECT avg(name_last)")
     }
