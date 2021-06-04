@@ -25,8 +25,9 @@ object SoQLFunctions {
     params: Seq[SoQLType],
     varargs: Seq[SoQLType],
     result: SoQLType,
-    isAggregate: Boolean = false)(doc: String, examples: Example*) =
-    new MonomorphicFunction(identity, name, params, varargs, result, isAggregate = isAggregate)(doc, examples:_*).function
+    isAggregate: Boolean = false,
+    needsWindow: Boolean = false)(doc: String, examples: Example*) =
+    new MonomorphicFunction(identity, name, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow)(doc, examples:_*).function
   private def f(
     identity: String,
     name: FunctionName,
@@ -34,9 +35,10 @@ object SoQLFunctions {
     params: Seq[TypeLike[SoQLType]],
     varargs: Seq[TypeLike[SoQLType]],
     result: TypeLike[SoQLType],
-    isAggregate: Boolean = false
+    isAggregate: Boolean = false,
+    needsWindow: Boolean = false
   )(doc: String, examples: Example*) =
-    Function(identity, name, constraints, params, varargs, result, isAggregate = isAggregate, doc, examples)
+    Function(identity, name, constraints, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow, doc, examples)
   private def field(source: SoQLType, field: String, result: SoQLType) =
     mf(
       source.name.name + "_" + field,
@@ -140,6 +142,7 @@ object SoQLFunctions {
     Seq.empty,
     FixedType(SoQLMultiPolygon),
     isAggregate = true,
+    needsWindow = false,
     """
     Return the minimum convex geometry that encloses all of the geometries within a set
 
@@ -432,19 +435,19 @@ object SoQLFunctions {
     "Return the uppercase equivalent of a string of text"
   )
 
-  val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, SoQLNumber)(
+  val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, SoQLNumber, needsWindow = true)(
     NoDocs
   )
-  val Rank = mf("rank", FunctionName("rank"), Seq(), Seq.empty, SoQLNumber)(
+  val Rank = mf("rank", FunctionName("rank"), Seq(), Seq.empty, SoQLNumber, needsWindow = true)(
     NoDocs
   )
-  val DenseRank = mf("dense_rank", FunctionName("dense_rank"), Seq(), Seq.empty, SoQLNumber)(
+  val DenseRank = mf("dense_rank", FunctionName("dense_rank"), Seq(), Seq.empty, SoQLNumber, needsWindow = true)(
     NoDocs
   )
-  val FirstValue = f("first value", FunctionName("first_value"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"))(
+  val FirstValue = f("first value", FunctionName("first_value"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
     NoDocs
   )
-  val LastValue = f("last value", FunctionName("last_value"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"))(
+  val LastValue = f("last value", FunctionName("last_value"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
     NoDocs
   )
 

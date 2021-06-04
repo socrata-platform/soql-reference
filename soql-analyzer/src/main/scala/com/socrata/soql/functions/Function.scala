@@ -28,6 +28,7 @@ case class Function[Type](identity: String,
                           repeated: Seq[TypeLike[Type]],
                           result: TypeLike[Type],
                           isAggregate: Boolean,
+                          needsWindow: Boolean,
                           doc: String,
                           examples: Seq[Example])  {
 
