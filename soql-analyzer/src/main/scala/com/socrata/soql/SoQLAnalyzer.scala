@@ -844,7 +844,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   private def hasWindowFunction(a: Analysis): Boolean = {
     a.selection.exists {
       case (_, fc: com.socrata.soql.typed.FunctionCall[_, _]) =>
-        fc.window.nonEmpty || fc.function.name == SpecialFunctions.WindowFunctionOver
+        fc.window.nonEmpty
       case _ =>
         false
     }

@@ -39,13 +39,6 @@ object TestFunctions {
   val Avg = f("avg", FunctionName("avg"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
   val CountStar = mf("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, TestNumber, isAggregate = true)
 
-  val WindowFunctionOver = f("wf_over",
-                             SpecialFunctions.WindowFunctionOver,
-                             Map("a" -> AllTypes),
-                             Seq(VariableType("a")),
-                             Seq(WildcardType()),
-                             VariableType("a"))
-
   val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, TestNumber, needsWindow = true)
 
   val Mul = f("*", SpecialFunctions.Operator("*"), Map("a" -> NumLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"), isAggregate = false)

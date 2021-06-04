@@ -301,13 +301,6 @@ object SoQLFunctions {
     "Return a sampled standard deviation of a given set of numbers"
   )
 
-  val WindowFunctionOver = f("wf_over",
-                             SpecialFunctions.WindowFunctionOver,
-                             Map("a" -> AllTypes),
-                             Seq(VariableType("a")),
-                             Seq(WildcardType()),
-                             VariableType("a"))(NoDocs)
-
   val UnaryPlus = f("unary +", SpecialFunctions.Operator("+"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))(
     NoDocs
   )
