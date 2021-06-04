@@ -104,6 +104,10 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       case Right(es) => es
     }
 
+    if((functionInfo.windowFunctions contains name) && window.isEmpty) {
+      throw FunctionRequiresWindowInfo(name, fc.position)
+    }
+
     val typedWindow = window.map { w =>
       val typedPartitions = w.partitions.map(apply(_, aliases, from))
       val typedOrderings = w.orderings.map(ob => typed.OrderBy(apply(ob.expression, aliases, from), ob.ascending, ob.nullLast) )

@@ -101,6 +101,7 @@ object SoQLException {
       and("non-groupable-group-by", AutomaticJsonCodecBuilder[NonGroupableGroupBy]).
       and("non-boolean-having", AutomaticJsonCodecBuilder[NonBooleanHaving]).
       and("unorderable-order-by", AutomaticJsonCodecBuilder[UnorderableOrderBy]).
+      and("function-requires-window-info", AutomaticJsonCodecBuilder[FunctionRequiresWindowInfo]).
       // other
       and("reserved-table-alias", AutomaticJsonCodecBuilder[ReservedTableAlias]).
       build
@@ -142,6 +143,7 @@ case class TypeMismatch(name: FunctionName, actual: TypeName, position: Position
 case class AmbiguousCall(name: FunctionName, position: Position) extends SoQLException("Ambiguous call to `" + name + "'", position) with TypecheckException
 case class NumberOfColumnsMismatch(leftNumberOfColumns: Int, rightNumberOfColumns: Int, position: Position) extends SoQLException(s"Two selects must have the same number of columns: ${leftNumberOfColumns}, ${rightNumberOfColumns}", position) with TypecheckException
 case class TypeOfColumnsMismatch(leftType: String, rightType: String, position: Position) extends SoQLException(s"Two selects must have the same column type: ${leftType}, ${rightType}", position) with TypecheckException
+case class FunctionRequiresWindowInfo(name: FunctionName, position: Position) extends SoQLException(s"Function ${name} requires window information", position) with TypecheckException
 
 case class NonBooleanWhere(typ: TypeName, position: Position) extends SoQLException("Cannot filter by an expression of type `" + typ + "'", position) with TypecheckException
 case class NonGroupableGroupBy(typ: TypeName, position: Position) extends SoQLException("Cannot group by an expression of type `" + typ + "'", position) with TypecheckException

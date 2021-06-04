@@ -722,6 +722,7 @@ object SoQLFunctions {
 
   val nAdicFunctions = SoQLFunctions.allFunctions.filterNot(_.isVariadic)
   val variadicFunctions = SoQLFunctions.allFunctions.filter(_.isVariadic)
+  val windowFunctions = SoQLFunctions.allFunctions.filter(_.needsWindow)
 
   val nAdicFunctionsByNameThenArity: Map[FunctionName, Map[Int, Set[Function[SoQLType]]]] =
     nAdicFunctions.groupBy(_.name).mapValues { fs =>

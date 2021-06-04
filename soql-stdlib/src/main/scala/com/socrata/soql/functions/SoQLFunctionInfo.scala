@@ -35,4 +35,6 @@ object SoQLFunctionInfo extends FunctionInfo[SoQLType] {
         Set.empty
     }
   }
+
+  def windowFunctions() = SoQLFunctions.windowFunctions.map(_.name).toSet
 }
