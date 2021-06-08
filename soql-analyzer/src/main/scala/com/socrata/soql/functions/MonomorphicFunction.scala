@@ -3,7 +3,7 @@ package com.socrata.soql.functions
 import com.socrata.soql.environment.FunctionName
 
 case class MonomorphicFunction[Type](function: Function[Type], bindings: Map[String, Type]) {
-  def this(identity: String, name: FunctionName, parameters: Seq[Type], repeated: Seq[Type], result: Type, isAggregate: Boolean = false)(documentation: String, examples: Example*) =
+  def this(identity: String, name: FunctionName, parameters: Seq[Type], repeated: Seq[Type], result: Type, isAggregate: Boolean = false, needsWindow: Boolean = false)(documentation: String, examples: Example*) =
     this(Function(
       identity,
       name,
@@ -12,6 +12,7 @@ case class MonomorphicFunction[Type](function: Function[Type], bindings: Map[Str
       repeated.map(FixedType(_)),
       FixedType(result),
       isAggregate,
+      needsWindow,
       documentation,
       examples
     ), Map.empty)
@@ -29,6 +30,7 @@ case class MonomorphicFunction[Type](function: Function[Type], bindings: Map[Str
   def isVariadic = function.isVariadic
   def result: Type = bind(function.result)
   def isAggregate = function.isAggregate
+  def needsWindow = function.needsWindow
 
   private def bind[B >: Type](typeLike: TypeLike[B]) = typeLike match {
     case FixedType(t) => t

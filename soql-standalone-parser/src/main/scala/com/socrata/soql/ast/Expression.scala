@@ -117,9 +117,6 @@ object SpecialFunctions {
 
   val CountDistinct = FunctionName("count_distinct")
 
-  // window function: aggregatefunction(x) over (partition by a,b,c...)
-  val WindowFunctionOver = FunctionName("#WF_OVER")
-
   object Operator {
     def apply(op: String) = FunctionName("op$" + op)
     def unapply(f: FunctionName) = f.name match {

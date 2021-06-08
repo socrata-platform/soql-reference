@@ -20,10 +20,10 @@ object TestFunctions {
   private val AllTypes = TestType.typesByName.values.toSet
 
   // helpers to guide type inference (specifically forces TestType to be inferred)
-  private def mf(identity: String, name: FunctionName, params: Seq[TestType], varargs: Seq[TestType], result: TestType, isAggregate: Boolean = false) =
-    new MonomorphicFunction(identity, name, params, varargs, result, isAggregate = isAggregate)("").function
-  private def f(identity: String, name: FunctionName, constraints: Map[String, Set[TestType]], params: Seq[TypeLike[TestType]], varargs: Seq[TypeLike[TestType]], result: TypeLike[TestType], isAggregate: Boolean = false) =
-    Function(identity, name, constraints, params, varargs, result, isAggregate = isAggregate, "", Seq())
+  private def mf(identity: String, name: FunctionName, params: Seq[TestType], varargs: Seq[TestType], result: TestType, isAggregate: Boolean = false, needsWindow: Boolean = false) =
+    new MonomorphicFunction(identity, name, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow)("").function
+  private def f(identity: String, name: FunctionName, constraints: Map[String, Set[TestType]], params: Seq[TypeLike[TestType]], varargs: Seq[TypeLike[TestType]], result: TypeLike[TestType], isAggregate: Boolean = false, needsWindow: Boolean = false) =
+    Function(identity, name, constraints, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow, "", Seq())
 
   val TextToLocation = mf("text to location", SpecialFunctions.Cast(TestLocation.name), Seq(TestText), Seq.empty, TestLocation)
 
@@ -39,14 +39,7 @@ object TestFunctions {
   val Avg = f("avg", FunctionName("avg"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
   val CountStar = mf("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, TestNumber, isAggregate = true)
 
-  val WindowFunctionOver = f("wf_over",
-                             SpecialFunctions.WindowFunctionOver,
-                             Map("a" -> AllTypes),
-                             Seq(VariableType("a")),
-                             Seq(WildcardType()),
-                             VariableType("a"))
-
-  val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, TestNumber)
+  val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, TestNumber, needsWindow = true)
 
   val Mul = f("*", SpecialFunctions.Operator("*"), Map("a" -> NumLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"), isAggregate = false)
 
@@ -143,6 +136,7 @@ object TestFunctions {
 
   val nAdicFunctions = TestFunctions.allFunctions.filterNot(_.isVariadic)
   val variadicFunctions = TestFunctions.allFunctions.filter(_.isVariadic)
+  val windowFunctions = TestFunctions.allFunctions.filter(_.needsWindow)
 
   locally {
     val sharedNames = nAdicFunctions.map(_.name).toSet intersect variadicFunctions.map(_.name).toSet
