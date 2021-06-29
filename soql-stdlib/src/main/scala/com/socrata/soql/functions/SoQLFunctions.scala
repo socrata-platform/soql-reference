@@ -428,16 +428,16 @@ object SoQLFunctions {
     "Return the uppercase equivalent of a string of text"
   )
 
-  val Substring = mf("substring", FunctionName("substring"), Seq(SoQLText, SoQLNumber), Seq(SoQLNumber), SoQLText)(
-    "Get a substring of a specified length of a text from a start index (1 base)"
-  )
-
   val Length = mf("length", FunctionName("length"), Seq(SoQLText), Seq.empty, SoQLNumber)(
     "Return the number of characters in a string of text"
   )
 
   val SplitPart = mf("split_part", FunctionName("split_part"), Seq(SoQLText, SoQLText, SoQLNumber), Seq.empty, SoQLText)(
     "Split a string of text on delimiter and return the given field (1 base)"
+  )
+
+  val Substring = mf("substring", FunctionName("substring"), Seq(SoQLText, SoQLNumber), Seq(SoQLNumber), SoQLText)(
+    "Get a substring of a specified length of a text from a start index (1 base)"
   )
 
   val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, SoQLNumber, needsWindow = true)(
