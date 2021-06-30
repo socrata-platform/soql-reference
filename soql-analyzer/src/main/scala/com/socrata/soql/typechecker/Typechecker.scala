@@ -122,8 +122,6 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       val TypeMismatchFailure(expected, found, idx) = failed.maxBy(_.idx)
       Left(TypeMismatch(name, typeNameFor(typeInfo.typeParameterUniverse.find(found).get), parameters(idx).position))
     } else {
-      checkWindowFunction(fc, resolved.head)
-
       val potentials = resolved.flatMap { f =>
         val skipTypeCheckAfter = typedParameters.size
         val selectedParameters = (f.allParameters, typedParameters, Stream.from(0)).zipped.map { (expected, options, idx) =>
@@ -146,6 +144,8 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
         }.map(typed.FunctionCall(f, _, typedWindow)(fc.position, fc.functionNamePosition))
       }
 
+      potentials.headOption.foreach(checkWindowFunction)
+
       // If all possibilities result in the same type, we can disambiguate here.
       // In principle, this could be
       //   potentials.groupBy(_.typ).values.map(disambiguate)
@@ -158,15 +158,16 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
     }
   }
 
-  private def checkWindowFunction(fc: FunctionCall, candidateFn: MonomorphicFunction[_]): Unit = {
+  private def checkWindowFunction(fc: typed.FunctionCall[_, _]): Unit = {
     fc.window match {
       case Some(_) =>
-        if (!candidateFn.needsWindow && !candidateFn.isAggregate) {
-          throw FunctionDoesNotAcceptWindowInfo(fc.functionName, fc.position)
+        fc.function
+        if (!fc.function.needsWindow && !fc.function.isAggregate) {
+          throw FunctionDoesNotAcceptWindowInfo(fc.function.name, fc.position)
         }
       case None =>
-        if (candidateFn.needsWindow) {
-          throw FunctionRequiresWindowInfo(fc.functionName, fc.position)
+        if (fc.function.needsWindow) {
+          throw FunctionRequiresWindowInfo(fc.function.name, fc.position)
         }
     }
   }
