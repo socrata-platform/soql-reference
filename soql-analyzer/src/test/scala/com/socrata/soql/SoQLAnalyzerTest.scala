@@ -631,6 +631,16 @@ SELECT visits, @x2.zx
     partitionExpected.message must startWith("`)' expected")
   }
 
+  test("aggregate function call with window") {
+    val analysis = analyzer.analyzeUnchainedQuery("SELECT name_last, max(name_first) OVER (PARTITION BY name_last)")
+    analysis.isGrouped must equal (false)
+    val select = analysis.selection.toSeq
+    select must equal (Seq(
+      ColumnName("name_last") -> typedExpression("name_last"),
+      ColumnName("max_name_first_over_partition_by_name_last") -> typedExpression("max(name_first) OVER (PARTITION BY name_last)")
+    ))
+  }
+
   test("aliases work") {
     val analysisWordStyle = analyzer.analyzeUnchainedQuery(
       "SELECT datez_trunc_ymd(:created_at) as dt, date_trunc_ymd(:created_at, 'PDT') as dt_pdt")
