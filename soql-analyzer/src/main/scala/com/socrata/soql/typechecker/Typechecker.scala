@@ -161,7 +161,6 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
   private def checkWindowFunction(fc: typed.FunctionCall[_, _]): Unit = {
     fc.window match {
       case Some(_) =>
-        fc.function
         if (!fc.function.needsWindow && !fc.function.isAggregate) {
           throw FunctionDoesNotAcceptWindowInfo(fc.function.name, fc.position)
         }
