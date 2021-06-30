@@ -2,8 +2,8 @@ package com.socrata.soql.typechecker
 
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions._
-import com.socrata.soql.{AnalysisDeserializer, typed}
-import com.socrata.soql.environment.{ColumnName, DatasetContext, FunctionName, TableName}
+import com.socrata.soql.typed
+import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
 
 class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: Map[String, DatasetContext[Type]]) extends ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]], Option[TableName]) => typed.CoreExpr[ColumnName, Type]) { self =>
   import typeInfo._
@@ -104,12 +104,6 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       case Right(es) => es
     }
 
-    if(functionInfo.windowFunctions(name) && window.isEmpty) {
-      throw FunctionRequiresWindowInfo(name, fc.position)
-    } else if(!functionInfo.windowFunctions(name) && !window.isEmpty) {
-      throw FunctionDoesNotAcceptWindowInfo(name, fc.position)
-    }
-
     val typedWindow = window.map { w =>
       val typedPartitions = w.partitions.map(apply(_, aliases, from))
       val typedOrderings = w.orderings.map(ob => typed.OrderBy(apply(ob.expression, aliases, from), ob.ascending, ob.nullLast) )
@@ -149,6 +143,8 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
         }.map(typed.FunctionCall(f, _, typedWindow)(fc.position, fc.functionNamePosition))
       }
 
+      potentials.headOption.foreach(checkWindowFunction)
+
       // If all possibilities result in the same type, we can disambiguate here.
       // In principle, this could be
       //   potentials.groupBy(_.typ).values.map(disambiguate)
@@ -158,6 +154,19 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       val collapsed = if(potentials.forall(_.typ == potentials.head.typ)) Seq(disambiguate(potentials)) else potentials
 
       Right(collapsed)
+    }
+  }
+
+  private def checkWindowFunction(fc: typed.FunctionCall[_, _]): Unit = {
+    fc.window match {
+      case Some(_) =>
+        if (!fc.function.needsWindow && !fc.function.isAggregate) {
+          throw FunctionDoesNotAcceptWindowInfo(fc.function.name, fc.position)
+        }
+      case None =>
+        if (fc.function.needsWindow) {
+          throw FunctionRequiresWindowInfo(fc.function.name, fc.position)
+        }
     }
   }
 

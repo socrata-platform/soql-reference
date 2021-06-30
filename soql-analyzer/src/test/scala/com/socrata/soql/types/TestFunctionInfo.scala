@@ -35,6 +35,4 @@ object TestFunctionInfo extends FunctionInfo[TestType] {
         Set.empty
     }
   }
-
-  val windowFunctions = TestFunctions.windowFunctions.map(_.name).toSet
 }
