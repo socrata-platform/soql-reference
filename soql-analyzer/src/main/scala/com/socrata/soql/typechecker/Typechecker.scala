@@ -4,6 +4,7 @@ import com.socrata.soql.ast._
 import com.socrata.soql.exceptions._
 import com.socrata.soql.{AnalysisDeserializer, typed}
 import com.socrata.soql.environment.{ColumnName, DatasetContext, FunctionName, TableName}
+import com.socrata.soql.functions.MonomorphicFunction
 
 class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: Map[String, DatasetContext[Type]]) extends ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]], Option[TableName]) => typed.CoreExpr[ColumnName, Type]) { self =>
   import typeInfo._
@@ -121,18 +122,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       val TypeMismatchFailure(expected, found, idx) = failed.maxBy(_.idx)
       Left(TypeMismatch(name, typeNameFor(typeInfo.typeParameterUniverse.find(found).get), parameters(idx).position))
     } else {
-      // validate window function call
-      window match {
-        case Some(_) =>
-          val candidateFn = resolved.head
-          if (!candidateFn.needsWindow && !candidateFn.isAggregate) {
-            throw FunctionDoesNotAcceptWindowInfo(name, fc.position)
-          }
-        case None =>
-          if (functionInfo.windowFunctions(name)) {
-            throw FunctionRequiresWindowInfo(name, fc.position)
-          }
-      }
+      checkWindowFunction(fc, resolved.head)
 
       val potentials = resolved.flatMap { f =>
         val skipTypeCheckAfter = typedParameters.size
@@ -165,6 +155,19 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       val collapsed = if(potentials.forall(_.typ == potentials.head.typ)) Seq(disambiguate(potentials)) else potentials
 
       Right(collapsed)
+    }
+  }
+
+  private def checkWindowFunction(fc: FunctionCall, candidateFn: MonomorphicFunction[_]): Unit = {
+    fc.window match {
+      case Some(_) =>
+        if (!candidateFn.needsWindow && !candidateFn.isAggregate) {
+          throw FunctionDoesNotAcceptWindowInfo(fc.functionName, fc.position)
+        }
+      case None =>
+        if (candidateFn.needsWindow) {
+          throw FunctionRequiresWindowInfo(fc.functionName, fc.position)
+        }
     }
   }
 
