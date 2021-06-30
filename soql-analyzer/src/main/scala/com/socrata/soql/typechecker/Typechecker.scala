@@ -2,9 +2,8 @@ package com.socrata.soql.typechecker
 
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions._
-import com.socrata.soql.{AnalysisDeserializer, typed}
-import com.socrata.soql.environment.{ColumnName, DatasetContext, FunctionName, TableName}
-import com.socrata.soql.functions.MonomorphicFunction
+import com.socrata.soql.typed
+import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
 
 class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])(implicit ctx: Map[String, DatasetContext[Type]]) extends ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]], Option[TableName]) => typed.CoreExpr[ColumnName, Type]) { self =>
   import typeInfo._
