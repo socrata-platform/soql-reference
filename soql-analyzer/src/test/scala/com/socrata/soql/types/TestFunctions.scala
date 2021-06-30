@@ -100,6 +100,9 @@ object TestFunctions {
 
   val ToFloatingTimestamp = mf("to floating timestamp", FunctionName("to_floating_timestamp"), Seq(TestFixedTimestamp, TestText), Seq.empty, TestFloatingTimestamp)
 
+  val Lower = mf("lower", FunctionName("lower"), Seq(TestText), Seq.empty, TestText)
+  val Upper = mf("upper", FunctionName("upper"), Seq(TestText), Seq.empty, TestText)
+
   val Case = f("case", FunctionName("case"),
     Map("a" -> AllTypes),
     Seq(FixedType(TestBoolean), VariableType("a")),

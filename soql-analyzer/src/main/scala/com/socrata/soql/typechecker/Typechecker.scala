@@ -104,12 +104,6 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       case Right(es) => es
     }
 
-    if(functionInfo.windowFunctions(name) && window.isEmpty) {
-      throw FunctionRequiresWindowInfo(name, fc.position)
-    } else if(!functionInfo.windowFunctions(name) && !window.isEmpty) {
-      throw FunctionDoesNotAcceptWindowInfo(name, fc.position)
-    }
-
     val typedWindow = window.map { w =>
       val typedPartitions = w.partitions.map(apply(_, aliases, from))
       val typedOrderings = w.orderings.map(ob => typed.OrderBy(apply(ob.expression, aliases, from), ob.ascending, ob.nullLast) )
@@ -127,6 +121,19 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       val TypeMismatchFailure(expected, found, idx) = failed.maxBy(_.idx)
       Left(TypeMismatch(name, typeNameFor(typeInfo.typeParameterUniverse.find(found).get), parameters(idx).position))
     } else {
+      // validate window function call
+      window match {
+        case Some(_) =>
+          val candidateFn = resolved.head
+          if (!candidateFn.needsWindow && !candidateFn.isAggregate) {
+            throw FunctionDoesNotAcceptWindowInfo(name, fc.position)
+          }
+        case None =>
+          if (functionInfo.windowFunctions(name)) {
+            throw FunctionRequiresWindowInfo(name, fc.position)
+          }
+      }
+
       val potentials = resolved.flatMap { f =>
         val skipTypeCheckAfter = typedParameters.size
         val selectedParameters = (f.allParameters, typedParameters, Stream.from(0)).zipped.map { (expected, options, idx) =>
