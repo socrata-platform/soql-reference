@@ -440,6 +440,34 @@ object SoQLFunctions {
     "Get a substring of a specified length of a text from a start index (1 base)"
   )
 
+  val Chr = mf("chr", FunctionName("chr"), Seq(SoQLNumber), Seq.empty, SoQLText)(
+    "Convert an integer ASCII code to a character or a Unicode code point to a UTF8 character"
+  )
+
+  val Replace = mf("replace", FunctionName("replace"), Seq(SoQLText, SoQLText, SoQLText), Seq.empty, SoQLText)(
+    "Replace all occurrences in a string of substring from with substring to"
+  )
+
+  val TrimLeading = mf("trim_leading", FunctionName("trim_leading"), Seq(SoQLText), Seq.empty, SoQLText)(
+    "Remove the longest string that contains specified characters from the left of the input string"
+  )
+
+  val TrimTrailing = mf("trim_trailing", FunctionName("trim_trailing"), Seq(SoQLText), Seq.empty, SoQLText)(
+    "Remove the longest string that contains specified characters from the right of the input string"
+  )
+
+  val Trim = mf("trim", FunctionName("trim"), Seq(SoQLText), Seq.empty, SoQLText)(
+    "Remove the longest string that contains specified characters from the left and right of the input string"
+  )
+
+  val LeftPad = mf("left_pad", FunctionName("left_pad"), Seq(SoQLText, SoQLNumber, SoQLText), Seq.empty, SoQLText)(
+    "Pad on the left of a string with a character to a certain length"
+  )
+
+  val RightPad = mf("right_pad", FunctionName("right_pad"), Seq(SoQLText, SoQLNumber, SoQLText), Seq.empty, SoQLText)(
+    "Pad on the right of a string with a character to a certain length"
+  )
+
   val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, SoQLNumber, needsWindow = true)(
     NoDocs
   )
