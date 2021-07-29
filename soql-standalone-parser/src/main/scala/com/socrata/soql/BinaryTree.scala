@@ -72,7 +72,9 @@ object Compound {
   val Union = "UNION"
   val UnionAll = "UNION ALL"
   val Intersect = "INTERSECT"
+  val IntersectAll = "INTERSECT ALL"
   val Minus = "MINUS"
+  val MinusAll = "MINUS ALL"
 
   def apply[T](op: String, left: BinaryTree[T], right: BinaryTree[T]): Compound[T] = {
     op match {
@@ -80,7 +82,9 @@ object Compound {
       case Union => UnionQuery(left, right)
       case UnionAll => UnionAllQuery(left, right)
       case Intersect => IntersectQuery(left, right)
+      case IntersectAll => IntersectAllQuery(left, right)
       case Minus => MinusQuery(left, right)
+      case MinusAll => MinusAllQuery(left, right)
     }
   }
 
@@ -152,8 +156,16 @@ case class IntersectQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends 
   val op = Compound.Intersect
 }
 
+case class IntersectAllQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
+  val op = Compound.IntersectAll
+}
+
 case class MinusQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
   val op = Compound.Minus
+}
+
+case class MinusAllQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
+  val op = Compound.MinusAll
 }
 
 case class Leaf[T](leaf: T) extends BinaryTree[T] {
