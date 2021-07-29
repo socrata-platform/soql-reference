@@ -9,7 +9,7 @@ object SoqlAnalyzer {
       "com.google.protobuf" % "protobuf-java" % "2.4.1" % "optional",
       "net.sf.trove4j" % "trove4j" % "3.0.3" % "optional",
 
-      "com.rojoma" %% "rojoma-json-v3" % "3.11.0",
+      "com.rojoma" %% "rojoma-json-v3" % "3.13.0",
 
       "org.slf4j" % "slf4j-simple" % BuildSettings.slf4jVersion % "test",
       "org.scalacheck" %% "scalacheck" % "1.13.4" % "test"
