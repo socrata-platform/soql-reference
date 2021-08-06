@@ -75,6 +75,8 @@ object SoQLException {
   implicit val jCodec = new JsonEncode[SoQLException] with JsonDecode[SoQLException] {
     // ugggh
     private val rawCodec = SimpleHierarchyCodecBuilder[SoQLException](InternalTag("type")).
+      and("bad-parse", AutomaticJsonCodecBuilder[BadParse]).
+      and("reserved-table-alias", AutomaticJsonCodecBuilder[ReservedTableAlias]).
       // AggregateCheckException
       and("aggregate-in-ungrouped-context", AutomaticJsonCodecBuilder[AggregateInUngroupedContext]).
       and("column-not-in-group-bys", AutomaticJsonCodecBuilder[ColumnNotInGroupBys]).
@@ -91,19 +93,20 @@ object SoQLException {
       and("unexpected-character", AutomaticJsonCodecBuilder[UnexpectedCharacter]).
       and("unexpected-eof", AutomaticJsonCodecBuilder[UnexpectedEOF]).
       and("unterminated-string", AutomaticJsonCodecBuilder[UnterminatedString]).
-      // BadParse
-      and("bad-parse", AutomaticJsonCodecBuilder[BadParse]).
       // TypecheckException
       and("no-such-function", AutomaticJsonCodecBuilder[NoSuchFunction]).
       and("type-mismatch", AutomaticJsonCodecBuilder[TypeMismatch]).
       and("ambiguous-call", AutomaticJsonCodecBuilder[AmbiguousCall]).
+      and("number-of-columns-mismatch", AutomaticJsonCodecBuilder[NumberOfColumnsMismatch]).
+      and("type-of-columns-mismatch", AutomaticJsonCodecBuilder[TypeOfColumnsMismatch]).
+      and("function-requires-window-info", AutomaticJsonCodecBuilder[FunctionRequiresWindowInfo]).
+      and("function-does-not-accept-window-info", AutomaticJsonCodecBuilder[FunctionDoesNotAcceptWindowInfo]).
       and("non-boolean-where", AutomaticJsonCodecBuilder[NonBooleanWhere]).
       and("non-groupable-group-by", AutomaticJsonCodecBuilder[NonGroupableGroupBy]).
       and("non-boolean-having", AutomaticJsonCodecBuilder[NonBooleanHaving]).
       and("unorderable-order-by", AutomaticJsonCodecBuilder[UnorderableOrderBy]).
-      and("function-requires-window-info", AutomaticJsonCodecBuilder[FunctionRequiresWindowInfo]).
-      // other
-      and("reserved-table-alias", AutomaticJsonCodecBuilder[ReservedTableAlias]).
+      // QueryOperationException
+      and("right-side-of-chain-query-must-be-leaf", AutomaticJsonCodecBuilder[RightSideOfChainQueryMustBeLeaf]).
       build
 
     def encode(e: SoQLException) = {
@@ -113,6 +116,10 @@ object SoQLException {
     def decode(v: JValue) = rawCodec.decode(v)
   }
 }
+
+case class BadParse(message: String, position: Position) extends SoQLException(message, position)
+
+case class ReservedTableAlias(alias: String, position: Position) extends SoQLException("Reserved table alias", position)
 
 sealed trait AggregateCheckException extends SoQLException
 case class AggregateInUngroupedContext(function: FunctionName, clause: String, position: Position) extends SoQLException("Cannot use aggregate function `" + function + "' in " + clause, position) with AggregateCheckException
@@ -133,10 +140,6 @@ case class UnexpectedCharacter(char: Char, position: Position) extends SoQLExcep
 case class UnexpectedEOF(position: Position) extends SoQLException("Unexpected end of input", position) with LexerException
 case class UnterminatedString(position: Position) extends SoQLException("Unterminated string", position) with LexerException
 
-case class BadParse(message: String, position: Position) extends SoQLException(message, position)
-
-case class ReservedTableAlias(alias: String, position: Position) extends SoQLException("Reserved table alias", position)
-
 sealed trait TypecheckException extends SoQLException
 case class NoSuchFunction(name: FunctionName, arity: Int, position: Position) extends SoQLException("No such function `" + name + "/" + arity + "'", position) with TypecheckException
 case class TypeMismatch(name: FunctionName, actual: TypeName, position: Position) extends SoQLException("Cannot pass a value of type `" + actual + "' to function `" + name + "'", position) with TypecheckException
@@ -145,7 +148,6 @@ case class NumberOfColumnsMismatch(leftNumberOfColumns: Int, rightNumberOfColumn
 case class TypeOfColumnsMismatch(leftType: String, rightType: String, position: Position) extends SoQLException(s"Two selects must have the same column type: ${leftType}, ${rightType}", position) with TypecheckException
 case class FunctionRequiresWindowInfo(name: FunctionName, position: Position) extends SoQLException(s"Function ${name} requires window information", position) with TypecheckException
 case class FunctionDoesNotAcceptWindowInfo(name: FunctionName, position: Position) extends SoQLException(s"Function ${name} does not accept window information", position) with TypecheckException
-
 case class NonBooleanWhere(typ: TypeName, position: Position) extends SoQLException("Cannot filter by an expression of type `" + typ + "'", position) with TypecheckException
 case class NonGroupableGroupBy(typ: TypeName, position: Position) extends SoQLException("Cannot group by an expression of type `" + typ + "'", position) with TypecheckException
 case class NonBooleanHaving(typ: TypeName, position: Position) extends SoQLException("Cannot filter by an expression of type `" + typ + "'", position) with TypecheckException
