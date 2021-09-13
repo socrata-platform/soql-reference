@@ -27,7 +27,7 @@ private trait DeserializationDictionary[C, T] {
 }
 
 object AnalysisDeserializer {
-  val CurrentVersion = 8
+  val CurrentVersion = 9
   val LastVersion = 7
   val NonEmptySeqVersion = 6
 
@@ -167,12 +167,18 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     def readBinaryTree[A](f: => A): BinaryTree[A] = {
       in.readUInt32() match {
         case 1 =>
-          Leaf(f)
+          val inParen =
+            if (version >= CurrentVersion || version == TestVersionV5) in.readBool()
+            else false
+          Leaf(f, inParen)
         case 2 =>
           val op = in.readString()
+          val inParen =
+            if (version >= CurrentVersion || version == TestVersionV5) in.readBool()
+            else false
           val l = readBinaryTree(f)
           val r = readBinaryTree(f)
-          Compound(op, l, r)
+          Compound(op, l, r, inParen)
       }
     }
 
@@ -189,7 +195,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       readSeq {
         val joinType = JoinType(in.readString())
         val joinAnalysis = readJoinAnalysis()
-        val lateral = if (version >= CurrentVersion || version == TestVersionV5) in.readBool() else false
+        val lateral = if (version >= 8 || version == TestVersionV5) in.readBool() else false
         Join(joinType, joinAnalysis, readExpr(), lateral)
       }
     }

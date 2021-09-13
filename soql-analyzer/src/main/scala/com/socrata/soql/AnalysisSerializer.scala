@@ -256,13 +256,15 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
 
     def writeBinaryTree[A](bt: BinaryTree[A])(f: A => Unit): Unit = {
       bt match {
-        case Compound(op: String, l, r) =>
+        case c@Compound(op: String, l, r) =>
           out.writeUInt32NoTag(2)
           out.writeStringNoTag(op)
+          out.writeBoolNoTag(c.inParen)
           writeBinaryTree(l)(f)
           writeBinaryTree(r)(f)
-        case Leaf(a) =>
+        case Leaf(a, inParen) =>
           out.writeUInt32NoTag(1)
+          out.writeBoolNoTag(inParen)
           f(a)
       }
     }

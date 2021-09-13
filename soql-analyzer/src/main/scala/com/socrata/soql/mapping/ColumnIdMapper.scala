@@ -15,7 +15,7 @@ object ColumnIdMapper {
                                                 columnIdToNewColumnId: ColumnId => NewColumnId):
   BinaryTree[SoQLAnalysis[NewColumnId, Type]] = {
     bt match {
-      case PipeQuery(l, r) =>
+      case PipeQuery(l, r, inParen) =>
         val nl = mapColumnIds(l)(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
         val prev = nl.outputSchema.leaf
         val prevAlias = r.outputSchema.leaf.from match {
@@ -31,14 +31,14 @@ object ColumnIdMapper {
         val newQColumnIdToQColumnIdMap = qColumnIdNewColumnIdMap ++ prevQColumnIdToQColumnIdMap
         val rightLeaf = r.asLeaf.getOrElse(throw RightSideOfChainQueryMustBeLeaf(NoPosition))
         val nr = rightLeaf.mapColumnIds(newQColumnIdToQColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
-        PipeQuery(nl, Leaf(nr))
-      case Compound(op, l, r) =>
+        PipeQuery(nl, Leaf(nr), inParen)
+      case c@Compound(op, l, r) =>
         val nl = mapColumnIds(l)(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
         val nr = mapColumnIds(r)(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
-        Compound(op, nl, nr)
-      case Leaf(ana) =>
+        Compound(op, nl, nr, c.inParen)
+      case Leaf(ana, inParen) =>
         val nana = ana.mapColumnIds(qColumnIdNewColumnIdMap, qColumnNameToQColumnId, columnNameToNewColumnId, columnIdToNewColumnId)
-        Leaf(nana)
+        Leaf(nana, inParen)
     }
   }
 }
