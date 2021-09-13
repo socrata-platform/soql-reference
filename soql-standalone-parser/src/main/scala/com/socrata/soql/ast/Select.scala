@@ -54,8 +54,10 @@ case class JoinQuery(selects: BinaryTree[Select], definiteAlias: String) extends
   def replaceHoles(f: Hole => Expression): JoinQuery =
     copy(Select.walkTreeReplacingHoles(selects, f))
 
-  def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): JoinQuery =
-    copy(selects = Select.rewriteJoinFuncs(selects, f)(aliasProvider))
+  def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): JoinQuery = {
+    val rewritten = Select.rewriteJoinFuncs(selects, f)(aliasProvider)
+    copy(selects = rewritten.wrapInParen)
+  }
 
   def directlyReferencedJoinFuncs = Select.findDirectlyReferencedJoinFuncs(selects)
 
