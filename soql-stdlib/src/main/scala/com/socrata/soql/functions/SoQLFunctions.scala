@@ -156,6 +156,12 @@ object SoQLFunctions {
   val Intersects = f("intersects", FunctionName("intersects"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
     "Allow you to compare two geospatial types to see if they intersect or overlap each other")
+  val Crosses = f("crosses", FunctionName("crosses"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
+    "Return the rows where locations 'spatially cross', that is, the geometries have some, but not all interior points in common")
+  val Overlaps = f("overlaps", FunctionName("overlaps"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
+    "Return the rows that where the locations 'spatially overlap', meaning they intersect, but one does not completely contain another and they share interior points") 
   val DistanceInMeters = f("distance_in_meters", FunctionName("distance_in_meters"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLNumber))(NoDocs)
   val GeoMakeValid = f("geo_make_valid", FunctionName("geo_make_valid"), Map("a" -> GeospatialLike),
