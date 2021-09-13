@@ -34,7 +34,7 @@ class BinaryTreeSelectTest extends FunSpec with MustMatchers {
     it ("leftMost update compare uses reference equality") {
       val soql = "SELECT 1 as a UNION SELECT 1 as a"
       val binaryTree = parser.binaryTreeSelect(soql)
-      val compound@Compound(_, l@Leaf(_), r@Leaf(_)) = binaryTree
+      val compound@Compound(_, l@Leaf(_, _), r@Leaf(_, _)) = binaryTree
       l.eq(r) must be (false)
       val leftCopy = l.copy()
       leftCopy.eq(l) must be (false)
