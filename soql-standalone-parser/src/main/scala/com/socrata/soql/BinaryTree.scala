@@ -143,7 +143,7 @@ sealed trait Compound[T] extends BinaryTree[T] {
   def opString: String = op
 
   override def toString: String = {
-    val s = if (right.isInstanceOf[Compound[T]]) s"${left.toString} $opString (${right.toString})"
+    val s = if (right.isInstanceOf[Compound[T]] && !right.inParen) s"${left.toString} $opString (${right.toString})"
             else s"${left.toString} $opString ${right.toString}"
     if (inParen) s"(${s})"
     else s

@@ -167,11 +167,13 @@ object Select {
       case PipeQuery(l, r, inParen) =>
         val ls = Select.toString(l)
         val rs = Select.toString(r)
-        s"$ls |> $rs"
-      case Compound(op, l, r) =>
+        if (inParen) s"($ls |> $rs)"
+        else s"$ls |> $rs"
+      case c@Compound(op, l, r) =>
         val ls = Select.toString(l)
         val rs = Select.toString(r)
-        s"$ls $op $rs"
+        if (c.inParen) s"($ls $op $rs)"
+        else s"$ls $op $rs"
       case Leaf(select, inParen) =>
         if (inParen) s"(${select.toString})"
         else select.toString
