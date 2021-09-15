@@ -304,7 +304,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("Union parts merge") {
-    val soql = "SELECT name_first |> SELECT name_first UNION (SELECT name_first FROM @aaaa-aaab |> SELECT name_first)"
+    val soql = "(SELECT name_first |> SELECT name_first) UNION (SELECT name_first FROM @aaaa-aaab |> SELECT name_first)"
     val soqlMerged = "SELECT name_first UNION SELECT name_first FROM @aaaa-aaab"
     val analysis = analyzer.analyzeFullQueryBinary(soql)
     val expected = analyzer.analyzeFullQueryBinary(soqlMerged)

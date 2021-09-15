@@ -28,6 +28,28 @@ class ParserTest extends WordSpec with MustMatchers {
   def nullLiteral = NullLiteral()(NoPosition)
 
   "Parsing" should {
+    "xxx" in {
+      val parser = new Parser()
+      //val xx = parser.expression("( 1 + 2 ) * 3")
+
+
+      val x1 = parser.binaryTreeSelect("(SELECT 1 UNION SELECT 2) INTERSECT SELECT 3")
+      val x2 = parser.binaryTreeSelect("SELECT 1 UNION SELECT 2 INTERSECT SELECT 3")
+      val x3 = parser.binaryTreeSelect("SELECT 1 UNION SELECT 2 UNION SELECT 3")
+      val x4 = parser.binaryTreeSelect("(SELECT 1 UNION SELECT 2) UNION SELECT 3")
+      val x5 = parser.binaryTreeSelect("SELECT 1 UNION SELECT 2 INTERSECT SELECT 3 UNION SELECT 4 INTERSECT SELECT 5")
+      val x6 = parser.binaryTreeSelect("SELECT 1 UNION SELECT 2")
+      val x7 = parser.binaryTreeSelect("SELECT 1")
+      val e1 = parser.expression("1 + 2 * 3")
+      val e2 = parser.expression("(1 + 2) + 3")
+      println(x1)
+      println(x2)
+      println(x3)
+      println(x4)
+      println(e1)
+      println(e2)
+    }
+
     "require a full `between' clause" in {
       expectFailure("Expression expected", "x between")
       expectFailure("`AND' expected", "x between a")
