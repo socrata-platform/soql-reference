@@ -155,7 +155,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     QUERYUNIONALL() | QUERYINTERSECTALL() | QUERYMINUSALL()
 
   def parenSelect: Parser[BinaryTree[Select]] =
-    LPAREN() ~> compoundSelect <~ RPAREN() ^^ { s => s.wrapInParen }
+    LPAREN() ~> compoundSelect <~ RPAREN() ^^ { s => s }
 
   lazy val compoundSelect: PackratParser[BinaryTree[Select]] =
     opt(compoundSelect ~ query_op) ~ atomSelect ^^ {
@@ -169,7 +169,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
             badParse(errors.leafQueryOnTheRightExpected, op.position)
         }
       case Some(a ~ op) ~ b =>
-        Compound(op.printable, a, b, false)
+        Compound(op.printable, a, b)
     }
 
   def atomSelect: Parser[BinaryTree[Select]] =

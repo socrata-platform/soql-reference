@@ -207,7 +207,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("a subselect makes the output of the inner select available to the outer") {
-    val PipeQuery(inner, outer, _) = analyzer.analyzeFullQueryBinary("select 5 :: money as x |> select max(x)")
+    val PipeQuery(inner, outer) = analyzer.analyzeFullQueryBinary("select 5 :: money as x |> select max(x)")
     outer.asLeaf.get.selection(ColumnName("max_x")) must equal (typed.FunctionCall(MonomorphicFunction(TestFunctions.Max, Map("a" -> TestMoney)), Seq(typed.ColumnRef(None, ColumnName("x"), TestMoney : TestType)(NoPosition)), None)(NoPosition, NoPosition))
     inner.asLeaf.get.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestMoney)).get.monomorphic.get,
       Seq(typed.FunctionCall(TestFunctions.NumberToMoney.monomorphic.get, Seq(typed.NumberLiteral(java.math.BigDecimal.valueOf(5), TestNumber.t)(NoPosition)), None)(NoPosition, NoPosition)), None)(NoPosition, NoPosition))

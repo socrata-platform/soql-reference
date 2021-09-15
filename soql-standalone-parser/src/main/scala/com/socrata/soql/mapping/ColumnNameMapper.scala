@@ -18,16 +18,16 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
 
   def mapSelect(selects: BinaryTree[Select]): BinaryTree[Select] = {
     selects match {
-      case PipeQuery(l, r, inParen) =>
+      case PipeQuery(l, r) =>
         // previously when pipe query is in seq form,
         // mapSelect only operates on the first element
         val nl = mapSelect(l)
-        PipeQuery(nl, r, inParen)
-      case c@Compound(op, l, r) =>
+        PipeQuery(nl, r)
+      case Compound(op, l, r) =>
         val nl = mapSelect(l)
         val nr = mapSelect(r)
-        Compound(op, nl, nr, c.inParen)
-      case Leaf(h, inParen) =>
+        Compound(op, nl, nr)
+      case Leaf(h) =>
         Leaf(Select(
           distinct = h.distinct,
           selection = mapSelection(h.selection),
@@ -40,7 +40,7 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
           limit = h.limit,
           offset = h.offset,
           search = h.search
-        ), inParen)
+        ))
     }
   }
 

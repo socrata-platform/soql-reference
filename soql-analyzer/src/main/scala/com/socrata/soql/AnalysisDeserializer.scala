@@ -27,7 +27,8 @@ private trait DeserializationDictionary[C, T] {
 }
 
 object AnalysisDeserializer {
-  val CurrentVersion = 9
+  val CurrentVersion = 8
+  val LastVersion = 7
   val NonEmptySeqVersion = 6
 
   // This is odd and for smooth deploy transition.
@@ -166,18 +167,12 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
     def readBinaryTree[A](f: => A): BinaryTree[A] = {
       in.readUInt32() match {
         case 1 =>
-          val inParen =
-            if (version >= CurrentVersion || version == TestVersionV5) in.readBool()
-            else false
-          Leaf(f, inParen)
+          Leaf(f)
         case 2 =>
           val op = in.readString()
-          val inParen =
-            if (version >= CurrentVersion || version == TestVersionV5) in.readBool()
-            else false
           val l = readBinaryTree(f)
           val r = readBinaryTree(f)
-          Compound(op, l, r, inParen)
+          Compound(op, l, r)
       }
     }
 
@@ -194,7 +189,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       readSeq {
         val joinType = JoinType(in.readString())
         val joinAnalysis = readJoinAnalysis()
-        val lateral = if (version >= 8 || version == TestVersionV5) in.readBool() else false
+        val lateral = if (version >= CurrentVersion || version == TestVersionV5) in.readBool() else false
         Join(joinType, joinAnalysis, readExpr(), lateral)
       }
     }
@@ -332,7 +327,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         val seq: NonEmptySeq[SoQLAnalysis[C, T]] = deserializer.read()
         val bt: BinaryTree[SoQLAnalysis[C, T]] = toBinaryTree(seq.seq)
         bt
-      case v if v > NonEmptySeqVersion =>
+      case v if v >= LastVersion =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
         val bt: BinaryTree[SoQLAnalysis[C, T]] = deserializer.readBinaryTree(deserializer.readAnalysis)
