@@ -150,11 +150,11 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
         sys.error("Cannot happen, we only accept unquoted identifiers in this rule")
     }
 
-  val query_op = QUERYPIPE()
+  val query_op = QUERYUNION() | QUERYMINUS() | QUERYUNIONALL() | QUERYMINUSALL()
 
-  val query_op1 = QUERYUNION() | QUERYMINUS() | QUERYUNIONALL() | QUERYMINUSALL()
+  val query_op1 = QUERYINTERSECT() | QUERYINTERSECTALL()
 
-  val query_op2 = QUERYINTERSECT() | QUERYINTERSECTALL()
+  val query_op2 = QUERYPIPE()
 
   def parenSelect: Parser[BinaryTree[Select]] =
     LPAREN() ~> compoundSelect <~ RPAREN() ^^ { s => s }
