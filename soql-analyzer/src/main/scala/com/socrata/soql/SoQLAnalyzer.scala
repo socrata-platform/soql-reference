@@ -76,26 +76,26 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
   def analyzeBinary(bSelect: BinaryTree[Select])(implicit ctx: AnalysisContext): BinaryTree[Analysis] = {
     bSelect match {
-      case Leaf(s) =>
-        Leaf(analyzeWithSelection(s)(ctx))
-      case PipeQuery(ls, rs) =>
+      case Leaf(s, inParen) =>
+        Leaf(analyzeWithSelection(s)(ctx), inParen)
+      case PipeQuery(ls, rs, inParen) =>
         val la = ls match {
-          case Leaf(s) => Leaf(analyzeWithSelection(s)(ctx))
+          case Leaf(s, inParen) => Leaf(analyzeWithSelection(s)(ctx), inParen)
           case _ => analyzeBinary(ls)
         }
         val ra = rs match {
-          case Leaf(s) =>
+          case Leaf(s, inParen) =>
             val prev = la.outputSchema.leaf
-            Leaf(analyzeInOuterSelectionContext(ctx)(prev, s))
+            Leaf(analyzeInOuterSelectionContext(ctx)(prev, s), inParen)
           case _ =>
             analyzeBinary(ls)
         }
         PipeQuery(la, ra)
-      case Compound(op, ls, rs) =>
+      case c@Compound(op, ls, rs) =>
         val la = analyzeBinary(ls)
         val ra = analyzeBinary(rs)
         validateTableShapes(la.outputSchema.leaf, ra.outputSchema.leaf, rs.outputSchema.leaf)
-        Compound(op, la, ra)
+        Compound(op, la, ra, c.inParen)
     }
   }
 
@@ -578,7 +578,8 @@ case class JoinAnalysis[ColumnId, Type](subAnalysis: Either[TableName, SubAnalys
     val (subAnasStr, aliasStrOpt) = subAnalysis match {
       case Right(SubAnalysis(subAnalysis, subAlias)) =>
         val selectStr = subAnalysis.toString
-        (s"($selectStr)", Some(subAlias))
+        if (subAnalysis.inParen) (s"$selectStr", Some(subAlias))
+        else (s"($selectStr)", Some(subAlias))
       case Left(TableName(name, alias)) =>
         (name, alias)
     }
@@ -734,7 +735,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
 
   def merge(stages: BinaryTree[Analysis]): BinaryTree[Analysis] = {
     stages match {
-      case PipeQuery(l, r) =>
+      case PipeQuery(l, r, inParen) =>
         val ml = merge(l)
         leftMergeCandidate(ml) match {
           case Some(mlCandidate) =>
@@ -744,24 +745,24 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                 if (ml.asLeaf.isDefined) Leaf(merged)
                 else ml.replace(mlCandidate, Leaf(merged))
               case None =>
-                PipeQuery(ml, r)
+                PipeQuery(ml, r, inParen)
             }
           case None =>
-            PipeQuery(ml, r)
+            PipeQuery(ml, r, inParen)
         }
-      case Compound(op, l, r) =>
+      case c@Compound(op, l, r) =>
         val nl = merge(l)
         val nr = merge(r)
-        Compound(op, nl, nr)
-      case Leaf(_) =>
+        Compound(op, nl, nr, c.inParen)
+      case Leaf(_, _) =>
         stages
     }
   }
 
   private def leftMergeCandidate(left: BinaryTree[Analysis]): Option[Leaf[Analysis]] = {
     left match {
-      case leaf@Leaf(_) => Some(leaf)
-      case PipeQuery(_, _) => Some(left.outputSchema)
+      case leaf@Leaf(_, _) => Some(leaf)
+      case PipeQuery(_, _, _) => Some(left.outputSchema)
       case Compound(_, _, _) => None // UNIONs etc are not mergeable
     }
   }

@@ -42,11 +42,23 @@ case class JoinTable(tableName: TableName) extends JoinSelect {
 }
 case class JoinQuery(selects: BinaryTree[Select], definiteAlias: String) extends JoinSelect {
   val alias = Some(definiteAlias)
-  override def toString = "(" + Select.toString(selects) + ") AS @" + TableName.removeValidPrefix(definiteAlias)
+
+  override def toString = {
+    if (selects.inParen) {
+      Select.toString(selects) + " AS @" + TableName.removeValidPrefix(definiteAlias)
+    } else {
+      "(" + Select.toString(selects) + ") AS @" + TableName.removeValidPrefix(definiteAlias)
+    }
+  }
+
   def replaceHoles(f: Hole => Expression): JoinQuery =
     copy(Select.walkTreeReplacingHoles(selects, f))
-  def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): JoinQuery =
-    copy(selects = Select.rewriteJoinFuncs(selects, f)(aliasProvider))
+
+  def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): JoinQuery = {
+    val rewritten = Select.rewriteJoinFuncs(selects, f)(aliasProvider)
+    copy(selects = rewritten.wrapInParen)
+  }
+
   def directlyReferencedJoinFuncs = Select.findDirectlyReferencedJoinFuncs(selects)
 
   val allTableNames = Select.allTableNames(selects) + definiteAlias
@@ -152,16 +164,19 @@ object Select {
 
   def toString(selects: BinaryTree[Select]): String = {
     selects match {
-      case PipeQuery(l, r) =>
+      case PipeQuery(l, r, inParen) =>
         val ls = Select.toString(l)
         val rs = Select.toString(r)
-        s"$ls |> $rs"
-      case Compound(op, l, r) =>
+        if (inParen) s"($ls |> $rs)"
+        else s"$ls |> $rs"
+      case c@Compound(op, l, r) =>
         val ls = Select.toString(l)
         val rs = Select.toString(r)
-        s"$ls $op $rs"
-      case Leaf(select) =>
-        select.toString
+        if (c.inParen) s"($ls $op $rs)"
+        else s"$ls $op $rs"
+      case Leaf(select, inParen) =>
+        if (inParen) s"(${select.toString})"
+        else select.toString
     }
   }
 
@@ -182,7 +197,7 @@ object Select {
   def findDirectlyReferencedJoinFuncs(node: BinaryTree[Select]): Set[TableName] = {
     node match {
       case c: Compound[Select] => findDirectlyReferencedJoinFuncs(c.left) union findDirectlyReferencedJoinFuncs(c.right)
-      case Leaf(select) => select.directlyReferencedJoinFuncs
+      case Leaf(select, _) => select.directlyReferencedJoinFuncs
     }
   }
 
