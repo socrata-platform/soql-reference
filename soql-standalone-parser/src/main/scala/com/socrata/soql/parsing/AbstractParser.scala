@@ -150,15 +150,47 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
         sys.error("Cannot happen, we only accept unquoted identifiers in this rule")
     }
 
-  val query_op = QUERYPIPE() |
-    QUERYUNION() | QUERYINTERSECT() | QUERYMINUS() |
-    QUERYUNIONALL() | QUERYINTERSECTALL() | QUERYMINUSALL()
+  val query_op = QUERYPIPE()
+
+  val query_op1 = QUERYUNION() | QUERYMINUS() | QUERYUNIONALL() | QUERYMINUSALL()
+
+  val query_op2 = QUERYINTERSECT() | QUERYINTERSECTALL()
 
   def parenSelect: Parser[BinaryTree[Select]] =
     LPAREN() ~> compoundSelect <~ RPAREN() ^^ { s => s }
 
   lazy val compoundSelect: PackratParser[BinaryTree[Select]] =
-    opt(compoundSelect ~ query_op) ~ atomSelect ^^ {
+    opt(compoundSelect ~ query_op) ~ compoundSelect1 ^^ {
+      case None ~ a =>
+        a
+      case Some(a ~ op) ~ b if op == QUERYPIPE() =>
+        b.asLeaf match {
+          case Some(leaf) =>
+            PipeQuery(a, Leaf(leaf))
+          case None =>
+            badParse(errors.leafQueryOnTheRightExpected, op.position)
+        }
+      case Some(a ~ op) ~ b =>
+        Compound(op.printable, a, b)
+    }
+
+  lazy val compoundSelect1: PackratParser[BinaryTree[Select]] =
+    opt(compoundSelect1 ~ query_op1) ~ compoundSelect2 ^^ {
+      case None ~ a =>
+        a
+      case Some(a ~ op) ~ b if op == QUERYPIPE() =>
+        b.asLeaf match {
+          case Some(leaf) =>
+            PipeQuery(a, Leaf(leaf))
+          case None =>
+            badParse(errors.leafQueryOnTheRightExpected, op.position)
+        }
+      case Some(a ~ op) ~ b =>
+        Compound(op.printable, a, b)
+    }
+
+  lazy val compoundSelect2: PackratParser[BinaryTree[Select]] =
+    opt(compoundSelect2 ~ query_op2) ~ atomSelect ^^ {
       case None ~ a =>
         a
       case Some(a ~ op) ~ b if op == QUERYPIPE() =>
@@ -174,6 +206,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
 
   def atomSelect: Parser[BinaryTree[Select]] =
     (select ^^ { s => Leaf(s) }) |
+      compoundSelect |
       parenSelect |
       failure(errors.missingQuery)
 
