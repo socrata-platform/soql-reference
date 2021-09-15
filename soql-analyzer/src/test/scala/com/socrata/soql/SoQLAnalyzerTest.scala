@@ -304,7 +304,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("Union parts merge") {
-    val soql = "(SELECT name_first |> SELECT name_first) UNION (SELECT name_first FROM @aaaa-aaab |> SELECT name_first)"
+    val soql = "SELECT name_first |> SELECT name_first UNION (SELECT name_first FROM @aaaa-aaab |> SELECT name_first)"
     val soqlMerged = "SELECT name_first UNION SELECT name_first FROM @aaaa-aaab"
     val analysis = analyzer.analyzeFullQueryBinary(soql)
     val expected = analyzer.analyzeFullQueryBinary(soqlMerged)
@@ -322,7 +322,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
   }
 
   test("Union does not merge with chain") {
-    val soql = "SELECT name_first, name_last UNION SELECT 'one', 'two' FROM @aaaa-aaab |> SELECT name_first"
+    val soql = "(SELECT name_first, name_last UNION SELECT 'one', 'two' FROM @aaaa-aaab) |> SELECT name_first"
     val analysis = analyzer.analyzeFullQueryBinary(soql)
     val notMerged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
     notMerged must equal (analysis)
