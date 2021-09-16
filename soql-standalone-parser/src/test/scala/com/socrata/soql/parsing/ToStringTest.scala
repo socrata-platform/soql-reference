@@ -149,8 +149,8 @@ class ToStringTest extends FunSpec with MustMatchers {
     it("chains, unions, joins round trip") {
       val soqls = Seq(
         "SELECT 1 |> SELECT 2 |> SELECT 3",
-        "SELECT 1 |> SELECT 2 UNION (SELECT 3 |> SELECT 4 |> SELECT 5 |> SELECT 6)",
-        "SELECT 1 UNION (SELECT 2 UNION ALL (SELECT 3 UNION SELECT 4) UNION SELECT 5) UNION SELECT 6",
+        "(SELECT 1 |> SELECT 2) UNION (SELECT 3 |> SELECT 4 |> SELECT 5 |> SELECT 6)",
+        "SELECT 1 UNION ((SELECT 2 UNION ALL (SELECT 3 UNION SELECT 4)) UNION SELECT 5) UNION SELECT 6",
         "SELECT 1 INTERSECT ALL SELECT 2",
         "SELECT `x`, @a.`a1`, @jb.`b1`, @jcd.`c1` JOIN @a ON TRUE JOIN (SELECT @b.`b1` FROM @b) AS @jb ON TRUE JOIN (SELECT @cc.`c1` FROM @c AS @cc UNION SELECT `d1` FROM @d) AS @jcd ON TRUE |> SELECT `x`, `c1`, 1 + 2 ORDER BY `x` ASC NULL LAST, `c1` ASC NULL LAST"
       )
