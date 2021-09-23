@@ -1,10 +1,45 @@
 package com.socrata.soql.parsing
 
 import com.socrata.NonEmptySeq
+import com.socrata.soql.ast.Select
 import org.scalatest.{FunSpec, MustMatchers}
 
 class ToStringTest extends FunSpec with MustMatchers {
   val parser = new StandaloneParser()
+
+  describe("selections") {
+    it("simple selection") {
+
+      val selectExpected =
+        """`a`,
+          |`b`,
+          |lower(`c`),
+          |upper(
+          |  `aaaaaaaaaaa`,
+          |  `bbbbbbbbbbbbbb`,
+          |  `ccccccccccccccc`
+          |)""".stripMargin
+      val rendered = parser.selection(selectExpected).toString
+      rendered must equal(selectExpected)
+    }
+// TODO: nested select
+    it("select statement") {
+      val selectExpected =
+        """SELECT
+          |  `a`,
+          |  `b`,
+          |  lower(`c`),
+          |  upper(
+          |    `aaaaaaaaaaa`,
+          |    `bbbbbbbbbbbbbb`,
+          |    `ccccccccccccccc`
+          |  )""".stripMargin
+      val rendered = parser.selectStatement(selectExpected).head.toString
+      println(selectExpected)
+      println(rendered)
+      rendered must equal(selectExpected)
+    }
+  }
 
   describe("expressions") {
     it("simple expressions") {
@@ -23,6 +58,13 @@ class ToStringTest extends FunSpec with MustMatchers {
       notNullActual must equal(notNullExpect)
 
     }
+
+//    it("baffles and confuses me") {
+//      val expected = "foo(`aaaaaaaaaa`, `bbbbbbbbbbb`, `cc`) AND bar(`aaaaaaaaaa`, `bbbbbbbbbbb`, `cc`)"
+//      val rendered = parser.expression(expected).toString
+//      println(rendered)
+//      rendered must equal(expected)
+//    }
 
     it("wide expressions") {
       val expected =
@@ -116,7 +158,6 @@ class ToStringTest extends FunSpec with MustMatchers {
       val expected1 = "SELECT `:id`, `balance` AS `amt`, `visits`"
       val expected2 = "SELECT `:id` AS `i`, sum(`amt`) WHERE `visits` > 0 GROUP BY `i`, `visits` HAVING `sum_amt` < 5 ORDER BY `i` DESC NULL FIRST, sum(`amt`) ASC NULL FIRST SEARCH 'gnu' LIMIT 5 OFFSET 10"
       val parsed = parser.selectStatement(query).map(_.toString)
-      println(parsed)
       parsed must equal(NonEmptySeq(expected1, List(expected2)))
     }
   }
