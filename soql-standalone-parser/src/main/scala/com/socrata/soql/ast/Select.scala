@@ -1,12 +1,16 @@
 package com.socrata.soql.ast
 
 import scala.util.parsing.input.{NoPosition, Position}
+import scala.collection.immutable.VectorBuilder
 
 import java.util.UUID;
 
 import com.socrata.soql.environment._
 import Select._
 import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, UnionQuery, UnionAllQuery, IntersectQuery, MinusQuery}
+import com.socrata.prettyprint.{Doc, PageWidth, LayoutOptions}
+import com.socrata.prettyprint.implicits._
+import com.socrata.prettyprint.interpolation._
 
 /**
   * All joins must select from another table. A join may also join on sub-select. A join on a sub-select requires an
@@ -25,10 +29,12 @@ sealed trait JoinSelect {
   def replaceHoles(f: Hole => Expression): JoinSelect
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): JoinSelect
   def directlyReferencedJoinFuncs: Set[TableName]
+  def doc: Doc[Nothing]
 }
 case class JoinTable(tableName: TableName) extends JoinSelect {
   val alias = tableName.alias
   override def toString = tableName.toString
+  override def doc = Doc(tableName.toString)
   def replaceHoles(f: Hole => Expression): this.type = this
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): this.type = this
   def directlyReferencedJoinFuncs = Set.empty
@@ -43,6 +49,7 @@ case class JoinTable(tableName: TableName) extends JoinSelect {
 case class JoinQuery(selects: BinaryTree[Select], definiteAlias: String) extends JoinSelect {
   val alias = Some(definiteAlias)
   override def toString = "(" + Select.toString(selects) + ") AS @" + TableName.removeValidPrefix(definiteAlias)
+  override def doc = Seq(Select.toDoc(selects)).encloseNesting(d"(", d"", d") AS @${TableName.removeValidPrefix(definiteAlias)}")
   def replaceHoles(f: Hole => Expression): JoinQuery =
     copy(Select.walkTreeReplacingHoles(selects, f))
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): JoinQuery =
@@ -55,6 +62,10 @@ case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position:
   val alias = tableName.alias
   override def toString =
     TableName.withSoqlPrefix(tableName.name) + "(" + params.mkString(", ") + ")" + tableName.aliasWithoutPrefix.map(" AS @" + _).getOrElse("")
+  override def doc =
+    params.map(_.doc).encloseNesting(d"${TableName.withSoqlPrefix(tableName.name)}(",
+                                     Doc.Symbols.comma,
+                                     d")" ++ tableName.aliasWithoutPrefix.fold(d"") { a => d" AS @$a" })
 
   def allTableNames = {
     val result = Set.newBuilder[String]
@@ -151,17 +162,23 @@ object Select {
   }
 
   def toString(selects: BinaryTree[Select]): String = {
+    toDoc(selects).layoutSmart().toString
+  }
+
+  def toCompactString(selects: BinaryTree[Select]): String = {
+    toDoc(selects).layoutPretty(LayoutOptions(pageWidth = PageWidth.Unbounded)).toString
+  }
+
+  def toDoc(selects: BinaryTree[Select]): Doc[Nothing] = {
     selects match {
       case PipeQuery(l, r) =>
-        val ls = Select.toString(l)
-        val rs = Select.toString(r)
-        s"$ls |> $rs"
+        Seq(Select.toDoc(l), d"|>", Select.toDoc(r)).sep
+      case Compound(op, l, r@Compound(_,_,_)) =>
+        Seq(Select.toDoc(l), Doc(op), Seq(Select.toDoc(r)).encloseNesting(d"(", d"", d")")).sep
       case Compound(op, l, r) =>
-        val ls = Select.toString(l)
-        val rs = Select.toString(r)
-        s"$ls $op $rs"
+        Seq(Select.toDoc(l), Doc(op), Select.toDoc(r)).sep
       case Leaf(select) =>
-        select.toString
+        select.doc
     }
   }
 
@@ -239,6 +256,68 @@ case class Select(
   limit: Option[BigInt],
   offset: Option[BigInt],
   search: Option[String]) {
+
+  private def docOneCondition(e: Expression): Doc[Nothing] =
+    e match {
+      case fc@FunctionCall(SpecialFunctions.Parens | SpecialFunctions.Subscript, _, _) => fc.doc
+      case fc@FunctionCall(SpecialFunctions.Operator(_), _, _) => fc.doc.enclose(d"(", d")")
+      case other => other.doc
+    }
+
+  private def docCondition(expr: Expression): Doc[Nothing] =
+    expr match {
+      case fc@FunctionCall(SpecialFunctions.Operator(op@"AND"), params, None) if params.length == 2 =>
+        val vb = new VectorBuilder[Expression]
+        fc.variadizeAssociative(vb)
+        val result = vb.result()
+        (docOneCondition(result.head) +: result.drop(1).map { e => Doc(op) +#+ docOneCondition(e) }).sep.align
+      case other =>
+        other.doc
+    }
+
+  def doc: Doc[Nothing] = {
+    def selectClause = {
+      ((d"SELECT" ++ (if(distinct) d" DISTINCT" else Doc.empty)) +: selection.docs.punctuate(d",")).sep.hang(2)
+    }
+    def fromJoinClause =
+      (from, joins) match {
+        case (None, Seq()) => None
+        case (Some(f), js) => Some((d"FROM ${f.toString}" +: js.map(_.doc)).sep.hang(2))
+        case (None, js) => Some(js.map(_.doc).sep.hang(2))
+      }
+    def whereClause = where.map { w => Seq(d"WHERE", docCondition(w)).sep.hang(2) }
+    def groupByClause =
+      if(groupBys.nonEmpty) {
+        Some((d"GROUP BY" +: groupBys.map(_.doc).punctuate(d",")).sep.hang(2))
+      } else {
+        None
+      }
+    def havingClause =
+      having.map { h => Seq(d"HAVING", docCondition(h)).sep.hang(2) }
+    def orderByClause =
+      if(orderBys.nonEmpty) {
+        Some((d"ORDER BY" +: orderBys.map(_.doc).punctuate(d",")).sep.hang(2))
+      } else {
+        None
+      }
+    def searchClause =
+      search.map { s => Seq(d"SEARCH", StringLiteral(s)(NoPosition).doc).sep.hang(2) }
+    def limitClause =
+      limit.map { l => Seq(d"LIMIT", Doc(l)).sep.hang(2) }
+    def offsetClause =
+      offset.map { o => Seq(d"OFFSET", Doc(o)).sep.hang(2) }
+    Seq[Traversable[Doc[Nothing]]](
+      Some(selectClause),
+      fromJoinClause,
+      whereClause,
+      groupByClause,
+      havingClause,
+      orderByClause,
+      searchClause,
+      limitClause,
+      offsetClause
+    ).flatten.sep
+  }
 
   def directlyReferencedJoinFuncs: Set[TableName] =
     joins.foldLeft(Set.empty[TableName]) { (acc, join) =>
@@ -323,7 +402,7 @@ case class Select(
     parts.flatString
   }
 
-  override def toString: String = toString(None)
+  override def toString: String = doc.toString
 }
 
 // represents the columns being selected. examples:
@@ -353,10 +432,27 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[
     }
   }
 
+  def toCompactString = docs.punctuate(d",").hsep.layoutPretty(LayoutOptions(pageWidth=PageWidth.Unbounded)).toString
+
   def isSimple = allSystemExcept.isEmpty && allUserExcept.isEmpty && expressions.isEmpty
 
   def replaceHoles(f: Hole => Expression) =
     copy(expressions = expressions.map(_.replaceHoles(f)))
+
+  def docs: Seq[Doc[Nothing]] = {
+    val docs = Seq.newBuilder[Doc[Nothing]]
+    docs ++= allSystemExcept.map(_.doc(":*"))
+    docs ++= allUserExcept.map(_.doc("*"))
+    docs ++= expressions.map { case SelectedExpression(expr, name) =>
+      name match {
+        case Some((n, _)) =>
+          d"${expr.doc} AS `${n.toString}`"
+        case None =>
+          expr.doc
+      }
+    }
+    docs.result()
+  }
 }
 
 case class StarSelection(qualifier: Option[String], exceptions: Seq[(ColumnName, Position)]) {
@@ -364,6 +460,16 @@ case class StarSelection(qualifier: Option[String], exceptions: Seq[(ColumnName,
   def positionedAt(p: Position): this.type = {
     starPosition = p
     this
+  }
+
+  def doc(star: String): Doc[Nothing] = {
+    val baseDoc = qualifier.fold(Doc.empty) { q => Doc(TableName.withSoqlPrefix(q)) ++ d"." } ++ Doc(star)
+    val exceptionsDoc = if(exceptions.nonEmpty) {
+      exceptions.map { case (col, _) => Doc(col.toString) }.encloseHanging(d" (EXCEPT ", Doc.Symbols.comma, d")")
+    } else {
+      Doc.empty
+    }
+    baseDoc ++ exceptionsDoc
   }
 
   // SoQL ASTs ignore positions, so define equals and hashcode to honor that
@@ -414,6 +520,12 @@ case class OrderBy(expression: Expression, ascending: Boolean, nullLast: Boolean
 
   def replaceHoles(f: Hole => Expression) =
     copy(expression = expression.replaceHoles(f))
+
+  def doc = {
+    val direction = if(ascending) d"ASC" else d"DESC"
+    val nullPlacement = if(nullLast) d"NULL LAST" else d"NULL FIRST"
+    expression.doc +#+ direction +#+ nullPlacement
+  }
 }
 
 object SimpleSelect {

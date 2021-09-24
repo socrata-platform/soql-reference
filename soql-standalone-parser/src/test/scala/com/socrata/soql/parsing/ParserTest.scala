@@ -231,32 +231,32 @@ class ParserTest extends WordSpec with MustMatchers {
 
     "count(*) window" in {
       val x = parseFull("select count(*) over (partition by column)")
-      x.toString must be("SELECT count(*) OVER ( PARTITION BY `column`)")
+      x.toString must be("SELECT count(*) OVER (PARTITION BY `column`)")
     }
 
     "count(column) window" in {
       val x = parseFull("select count(column_a) over (partition by column_b)")
-      x.toString must be("SELECT count(`column_a`) OVER ( PARTITION BY `column_b`)")
+      x.toString must be("SELECT count(`column_a`) OVER (PARTITION BY `column_b`)")
     }
 
     "window function over partition order round trip" in {
       val x = parseFull("select row_number() over(partition by x, y order by m, n)")
-      x.selection.expressions.head.expression.toString must be ("row_number() OVER ( PARTITION BY `x`, `y` ORDER BY `m` ASC NULL LAST, `n` ASC NULL LAST)")
+      x.selection.expressions.head.expression.toCompactString must be ("row_number() OVER (PARTITION BY `x`, `y` ORDER BY `m` ASC NULL LAST, `n` ASC NULL LAST)")
     }
 
     "window function over partition order desc round trip" in {
       val x = parseFull("select row_number() over(partition by x, y order by m desc null last, n)")
-      x.selection.expressions.head.expression.toString must be ("row_number() OVER ( PARTITION BY `x`, `y` ORDER BY `m` DESC NULL LAST, `n` ASC NULL LAST)")
+      x.selection.expressions.head.expression.toCompactString must be ("row_number() OVER (PARTITION BY `x`, `y` ORDER BY `m` DESC NULL LAST, `n` ASC NULL LAST)")
     }
 
     "window function over partition round trip" in {
       val x = parseFull("select avg(x) over(partition by x, y)")
-      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( PARTITION BY `x`, `y`)")
+      x.selection.expressions.head.expression.toCompactString must be ("avg(`x`) OVER (PARTITION BY `x`, `y`)")
     }
 
     "window function over order round trip" in {
       val x = parseFull("select avg(x) over(order by m, n)")
-      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( ORDER BY `m` ASC NULL LAST, `n` ASC NULL LAST)")
+      x.selection.expressions.head.expression.toCompactString must be ("avg(`x`) OVER (ORDER BY `m` ASC NULL LAST, `n` ASC NULL LAST)")
     }
 
     "window function empty over round trip" in {
@@ -266,7 +266,7 @@ class ParserTest extends WordSpec with MustMatchers {
 
     "window function over partition frame" in {
       val x = parseFull("select avg(x) over(order by m range 123 PRECEDING)")
-      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER ( ORDER BY `m` ASC NULL LAST RANGE 123 PRECEDING)")
+      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER (ORDER BY `m` ASC NULL LAST RANGE 123 PRECEDING)")
     }
 
     "window frame clause should start with rows or range, not row" in {
@@ -300,7 +300,7 @@ class ParserTest extends WordSpec with MustMatchers {
       s.expressions.isEmpty must be (true)
       s.allSystemExcept.isEmpty must be (true)
       s.allUserExcept.isEmpty must be (true)
-      x.toString must be ("SELECT ")
+      x.toString must be ("SELECT")
     }
 
     // def show[T](x: => T) {

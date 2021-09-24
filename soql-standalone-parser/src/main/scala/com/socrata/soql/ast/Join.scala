@@ -3,6 +3,9 @@ package com.socrata.soql.ast
 
 import com.socrata.soql.environment.{HoleName, TableName}
 import com.socrata.soql.tokens.{FULL, LEFT, RIGHT, Token}
+import com.socrata.prettyprint.Doc
+import com.socrata.prettyprint.implicits._
+import com.socrata.prettyprint.interpolation._
 
 sealed trait JoinType
 
@@ -51,6 +54,9 @@ sealed trait Join {
   override def toString: String = {
     s"$typ ${if(lateral) "LATERAL " else ""}$from ON $on"
   }
+
+  def doc: Doc[Nothing] =
+    (Doc(typ.toString) ++ (if(lateral) d" LATERAL" else d"") +#+ from.doc +#+ d"ON" +#+ on.doc).hang(2)
 
   def replaceHoles(f: Hole => Expression): Join
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): Join
