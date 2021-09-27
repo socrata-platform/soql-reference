@@ -11,7 +11,6 @@ import com.socrata.prettyprint.interpolation._
 
 sealed abstract class Expression extends Product {
   val position: Position
-  protected def asString: String
   override final def toString = if(Expression.pretty) doc.layoutSmart().toString else ScalaRunTime._toString(this)
   final def toCompactString = doc.layoutPretty(LayoutOptions(pageWidth = PageWidth.Unbounded)).toString
 
@@ -20,25 +19,6 @@ sealed abstract class Expression extends Product {
 
   def toSyntheticIdentifierBase: String =
     com.socrata.soql.brita.IdentifierFilter(Expression.findIdentsAndLiterals(this))
-
-  // This is used to pretty-print expressions.  It's annoyingly
-  // complicated, but fast.  What happens is this: when we're
-  // pretty-printing an expression, we want to wrap the arguments if
-  // the expression is an overly-long function call, where "overly
-  // long" basically means "more than 30 characters from the start of
-  // the open parenthesis of the call's argument list".  BUT we don't
-  // want to just try rendering it and then checking if it's too long!
-  // For a deeply nested expression, that will lead to superlinear
-  // (quadratic, I think) runtime.  So what we'll do instead is build
-  // our function call into a StringBuilder, and if, _while we're
-  // generating that_, we run into our limit, we'll abandon it
-  // immediately and return None.
-  //
-  // Note that if `limit` is `None`, the result will be a `Some`.
-  // This is possible to express in Scala, but too clunky to be worth
-  // it unfortunately.  The only place that depends on it is
-  // FunctionCall's asString implementation.
-  def format(depth: Int, sb: StringBuilder, limit: Option[Int]): Option[StringBuilder]
 
   def replaceHoles(f: Hole => Expression): Expression
 
@@ -51,7 +31,7 @@ object Expression {
   def escapeString(s: String): String = "'" + s.replaceAll("'", "''") + "'"
 
   private def findIdentsAndLiterals(e: Expression): Seq[String] = e match {
-    case v: Literal => Vector(v.asString)
+    case v: Literal => Vector(v.toString)
     case ColumnOrAliasRef(aliasOpt, name) => aliasOpt ++: Vector(name.name)
     case fc: FunctionCall =>
       fc match {
@@ -187,7 +167,6 @@ case class ColumnOrAliasRef(qualifier: Option[String], column: ColumnName)(val p
         TableName.Field
     }.getOrElse("") + "`" + column.name + "`"
   }
-  def format(depth: Int, sb: StringBuilder, limit: Option[Int]) = Some(sb.append(asString))
   def allColumnRefs = Set(this)
   def replaceHoles(f: Hole => Expression): this.type = this
 
@@ -196,26 +175,22 @@ case class ColumnOrAliasRef(qualifier: Option[String], column: ColumnName)(val p
 
 sealed abstract class Literal extends Expression {
   def allColumnRefs = Set.empty
-  def format(depth: Int, sb: StringBuilder, limit: Option[Int]) = Some(sb.append(asString))
   def replaceHoles(f: Hole => Expression): this.type = this
-  def doc = Doc(asString)
 }
 case class NumberLiteral(value: BigDecimal)(val position: Position) extends Literal {
-  protected def asString = value.toString
+  def doc = Doc(value.toString)
 }
 case class StringLiteral(value: String)(val position: Position) extends Literal {
-  protected def asString = "'" + value.replaceAll("'", "''") + "'"
+  def doc = Doc("'" + value.replaceAll("'", "''") + "'")
 }
 case class BooleanLiteral(value: Boolean)(val position: Position) extends Literal {
-  protected def asString = value.toString.toUpperCase
+  def doc = Doc(value.toString.toUpperCase)
 }
 case class NullLiteral()(val position: Position) extends Literal {
-  override final def asString = "null"
+  def doc = d"null"
 }
 
 case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression], window: Option[WindowFunctionInfo])(val position: Position, val functionNamePosition: Position) extends Expression  {
-  protected def asString() = format(0, new StringBuilder, None).get.toString
-
   private[ast] def variadizeAssociative(builder: VectorBuilder[Expression]): Unit = {
     require(parameters.length == 2)
     require(window.isEmpty)
@@ -333,157 +308,6 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
     }
   }
 
-  private def appendParams(sb: StringBuilder, params: Iterator[Expression], sep: String, d: Int, limit: Option[Int]): Option[StringBuilder] = {
-    if(params.hasNext) {
-      params.next().format(d, sb, limit) match {
-        case None => return None
-        case Some(_) =>
-          limit.foreach { l => if(sb.length > l) return None }
-          while(params.hasNext) {
-            sb.append(sep)
-            params.next().format(d, sb, limit) match {
-              case None => return None
-              case Some(_) => // ok
-            }
-            limit.foreach { l => if(sb.length > l) return None }
-          }
-      }
-    }
-    Some(sb)
-  } // soql-standalone-parser/testOnly com.socrata.soql.parsing.ToStringTest -- -z "wide expressions"
-
-  private def indent(n: Int) = "  " * n
-
-  def format(d: Int, sb: StringBuilder, limit: Option[Int]): Option[StringBuilder] = {
-    functionName match {
-      case SpecialFunctions.Parens =>
-        sb.append("(")
-        parameters(0).format(d, sb, limit).map(_.append(")"))
-      case SpecialFunctions.Subscript =>
-        for {
-          sb <- parameters(0).format(d, sb, limit)
-          _ = sb.append("[")
-          sb <- parameters(1).format(d, sb, limit)
-        } yield sb.append("]")
-      case SpecialFunctions.StarFunc(f) =>
-       sb.append(f).append("(*)")
-       window match {
-         case Some(w) =>
-           w.format(d, sb, limit)
-         case None =>
-           Some(sb)
-       }
-      case SpecialFunctions.Operator(op) if parameters.size == 1 =>
-        op match {
-          case "NOT" =>
-            sb.append("NOT ")
-            parameters(0).format(d, sb, limit)
-          case _ =>
-            sb.append(op)
-            parameters(0).format(d, sb, limit)
-        }
-      case SpecialFunctions.Operator(op) if parameters.size == 2 =>
-        for {
-          sb <- parameters(0).format(d, sb, limit)
-          _ = sb.append(" ").append(op).append(" ")
-          sb <- parameters(1).format(d, sb, limit)
-        } yield sb
-      case SpecialFunctions.Operator(op) =>
-        sys.error("Found a non-unary, non-binary operator: " + op + " at " + position)
-      case SpecialFunctions.Cast(typ) if parameters.size == 1 =>
-        parameters(0).format(d, sb, limit).map(_.append(" :: ").append(typ))
-      case SpecialFunctions.Cast(_) =>
-        sys.error("Found a non-unary cast at " + position)
-      case SpecialFunctions.Between =>
-        for {
-          sb <- parameters(0).format(d, sb, limit)
-          _ = sb.append(" BETWEEN ")
-          sb <- parameters(1).format(d, sb, limit)
-          _ = sb.append(" AND ")
-          sb <- parameters(2).format(d, sb, limit)
-        } yield sb
-      case SpecialFunctions.NotBetween =>
-        for {
-          sb <- parameters(0).format(d, sb, limit)
-          _ = sb.append(" NOT BETWEEN ")
-          sb <- parameters(1).format(d, sb, limit)
-          _ = sb.append(" AND ")
-          sb <- parameters(2).format(d, sb, limit)
-        } yield sb
-      case SpecialFunctions.IsNull =>
-        parameters(0).format(d, sb, limit).map(_.append(" IS NULL"))
-      case SpecialFunctions.IsNotNull =>
-        parameters(0).format(d, sb, limit).map(_.append(" IS NOT NULL"))
-      case SpecialFunctions.In =>
-        parameters(0).format(d, sb, limit).map(_.append(" IN (")).flatMap { sb =>
-          appendParams(sb, parameters.iterator.drop(1), ",", d, limit)
-        }.map(_.append(")"))
-      case SpecialFunctions.NotIn =>
-        parameters(0).format(d, sb, limit).map(_.append(" NOT IN (")).flatMap { sb =>
-          appendParams(sb, parameters.iterator.drop(1), ",", d, limit)
-        }.map(_.append(")"))
-      case SpecialFunctions.Like =>
-        appendParams(sb, parameters.iterator, " LIKE ", d, limit)
-      case SpecialFunctions.NotLike =>
-        appendParams(sb, parameters.iterator, " NOT LIKE ", d, limit)
-      case SpecialFunctions.CountDistinct =>
-        sb.append("COUNT(DISTINCT ")
-        for {
-          sb <- parameters(0).format(d, sb, limit)
-          _ = sb.append(")")
-        } yield sb
-      case SpecialFunctions.Case =>
-        sb.append("CASE")
-        for(Seq(a, b) <- parameters.dropRight(2).grouped(2)) {
-          sb.append('\n').append(indent(d+2)).append("WHEN ")
-          a.format(d+1, sb, None)
-          sb.append('\n').append(indent(d+4)).append("THEN ")
-          b.format(d+2, sb, None)
-        }
-        parameters.takeRight(2) match {
-          case Seq(BooleanLiteral(true), e) =>
-            sb.append('\n').append(indent(d+2)).append("ELSE ")
-            e.format(d+1, sb, None)
-          case Seq(BooleanLiteral(false), _) =>
-            // no else
-        }
-        sb.append('\n').append(indent(d)).append("END")
-        Some(sb)
-      case other => {
-        formatBase(sb, d, limit, other, parameters)
-        window match {
-          case Some(w) =>
-            w.format(d, sb, limit)
-          case None =>
-            Some(sb)
-        }
-      }
-    }
-  }
-
-  private def formatBase(sb: StringBuilder, d: Int, limit: Option[Int], other: FunctionName, parameters: Seq[Expression]): Option[StringBuilder] = {
-    sb.append(other).append("(")
-    val startLength = sb.length
-    appendParams(sb, parameters.iterator, ", ", d, limit.orElse(Some(startLength + 30))) match {
-      case Some(sb) =>
-        // it all fit on one line
-        sb.append(")")
-        Some(sb)
-      case None =>
-        limit match {
-          case Some(l) =>
-            None
-          case None =>
-            // it didn't, we'll need to line-break
-            sb.setLength(startLength) // undo anything that got written
-            sb.append("\n").append(indent(d+1))
-            appendParams(sb, parameters.iterator, ",\n" + indent(d+1), d+1, None)
-            sb.append("\n").append(indent(d))
-            Some(sb.append(")"))
-        }
-    }
-  }
-
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
 
   def replaceHoles(f: Hole => Expression): FunctionCall = {
@@ -492,21 +316,6 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
 }
 
 case class WindowFunctionInfo(partitions: Seq[Expression], orderings: Seq[OrderBy], frames: Seq[Expression]) {
-
-  def format(d: Int, sb: StringBuilder, limit: Option[Int]): Option[StringBuilder] = {
-    sb.append(" OVER (")
-    if (partitions.nonEmpty) sb.append(" PARTITION BY ")
-    sb.append(partitions.map(_.toString).mkString(", "))
-    if (orderings.nonEmpty) sb.append(" ORDER BY ")
-    sb.append(orderings.map(_.toString).mkString(", "))
-    frames.foreach {
-      case StringLiteral(x) => sb.append(" "); sb.append(x)
-      case NumberLiteral(n) => sb.append(" "); sb.append(n)
-      case _ =>
-    }
-    sb.append(")")
-    Some(sb)
-  }
 
   def doc: Doc[Nothing] = {
     val partitionDocs: Option[Doc[Nothing]] =
@@ -543,12 +352,10 @@ case class WindowFunctionInfo(partitions: Seq[Expression], orderings: Seq[OrderB
 
 case class Hole(name: HoleName)(val position: Position) extends Expression {
   def allColumnRefs = Set.empty
-  protected override def asString = "?" + name
-  def format(depth: Int, sb: StringBuilder, limit: Option[Int]) = Some(sb.append(asString))
 
   def replaceHoles(f: Hole => Expression) = f(this)
 
-  def doc = Doc(asString)
+  def doc = Doc("?" + name)
 }
 
 object bleh extends App {
