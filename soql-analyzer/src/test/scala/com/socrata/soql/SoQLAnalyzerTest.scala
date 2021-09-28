@@ -453,8 +453,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     val soql = "select visits, @a1.name_first join @aaaa-aaaa as a1 on name_last = @a1.name_last"
     val parsed = new Parser().unchainedSelectStatement(soql)
 
-    val expected = """SELECT `visits`, @a1.`name_first`
-                     |JOIN @aaaa-aaaa AS @a1 ON `name_last` = @a1.`name_last`""".stripMargin
+    val expected = """SELECT `visits`, @a1.`name_first` JOIN @aaaa-aaaa AS @a1 ON `name_last` = @a1.`name_last`"""
     parsed.toString must equal(expected)
 
     val parsedAgain = new Parser().unchainedSelectStatement(expected)
@@ -465,8 +464,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     val soql = "select visits, @a1.name_first left outer join @aaaa-aaaa as a1 on name_last = @a1.name_last"
     val parsed = new Parser().unchainedSelectStatement(soql)
 
-    val expected = """SELECT `visits`, @a1.`name_first`
-                     |LEFT OUTER JOIN @aaaa-aaaa AS @a1 ON `name_last` = @a1.`name_last`""".stripMargin
+    val expected = """SELECT `visits`, @a1.`name_first` LEFT OUTER JOIN @aaaa-aaaa AS @a1 ON `name_last` = @a1.`name_last`"""
     parsed.toString must equal(expected)
 
     val parsedAgain = new Parser().unchainedSelectStatement(expected)
@@ -477,8 +475,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     val soql = "select visits, @a1.name_first right outer join @aaaa-aaaa as a1 on name_last = @a1.name_last"
     val parsed = new Parser().unchainedSelectStatement(soql)
 
-    val expected = """SELECT `visits`, @a1.`name_first`
-                     |RIGHT OUTER JOIN @aaaa-aaaa AS @a1 ON `name_last` = @a1.`name_last`""".stripMargin
+    val expected = """SELECT `visits`, @a1.`name_first` RIGHT OUTER JOIN @aaaa-aaaa AS @a1 ON `name_last` = @a1.`name_last`"""
     parsed.toString must equal(expected)
 
     val parsedAgain = new Parser().unchainedSelectStatement(expected)
@@ -676,13 +673,7 @@ SELECT visits, @x2.zx
   test("lateral join with this alias") {
     val soql = "SELECT @t1.name_first, @j.x FROM @this as t1 JOIN LATERAL (SELECT @t2.x, @t2.y FROM @aaaa-aaax as t2 WHERE @t2.x=@t1.name_last) as j ON TRUE"
     val parsed = new Parser().unchainedSelectStatement(soql)
-    parsed.toString must equal ("""SELECT @t1.`name_first`, @j.`x`
-                                  |FROM @this AS @t1
-                                  |  JOIN LATERAL (
-                                  |      SELECT @t2.`x`, @t2.`y`
-                                  |      FROM @aaaa-aaax AS @t2
-                                  |      WHERE @t2.`x` = @t1.`name_last`
-                                  |    ) AS @j ON TRUE"""stripMargin)
+    parsed.toString must equal ("""SELECT @t1.`name_first`, @j.`x` FROM @this AS @t1 JOIN LATERAL (SELECT @t2.`x`, @t2.`y` FROM @aaaa-aaax AS @t2 WHERE @t2.`x` = @t1.`name_last`) AS @j ON TRUE""")
     val analysis = analyzer.analyzeFullQueryBinary(soql)
 
     // And with chained soql

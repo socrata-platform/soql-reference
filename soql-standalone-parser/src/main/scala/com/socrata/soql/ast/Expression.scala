@@ -9,8 +9,11 @@ import com.socrata.prettyprint.prelude._
 
 sealed abstract class Expression extends Product {
   val position: Position
-  override final def toString = if(Expression.pretty) doc.layoutSmart().toString else ScalaRunTime._toString(this)
-  final def toCompactString = doc.layoutPretty(LayoutOptions(pageWidth = PageWidth.Unbounded)).toString
+  override final def toString =
+    if(Expression.pretty) doc.layoutSmart().toString
+    else ScalaRunTime._toString(this)
+
+  final def toCompactString = doc.layoutSmart(LayoutOptions(pageWidth = PageWidth.Unbounded)).toString
 
   override final lazy val hashCode = ScalaRunTime._hashCode(this)
   def allColumnRefs: Set[ColumnOrAliasRef]
@@ -132,7 +135,7 @@ object SpecialFunctions {
     // to make the underscorized names (deprecated) aliases for the
     // dot-notation) this object should look something like this,
     // together with a line re-sugaring the function call down below
-    // in FunctionCall#asString:
+    // in FunctionCall#doc:
 
     // def apply(typ: TypeName, field: String) = FunctionName("#FIELD$" + typ.name + "." + field)
     // def unapply(f: FunctionName) = f.name match {
@@ -158,17 +161,13 @@ object SpecialFunctions {
 
 case class ColumnOrAliasRef(qualifier: Option[String], column: ColumnName)(val position: Position) extends Expression {
 
-  protected def asString = {
+  def doc = {
     qualifier.map { q =>
-      TableName.SoqlPrefix +
-        q.substring(TableName.PrefixIndex) +
-        TableName.Field
-    }.getOrElse("") + "`" + column.name + "`"
+      Doc(TableName.SoqlPrefix ++ q.substring(TableName.PrefixIndex) ++ TableName.Field)
+    }.getOrElse(Doc.empty) ++ Doc("`" + column.name + "`")
   }
   def allColumnRefs = Set(this)
   def replaceHoles(f: Hole => Expression): this.type = this
-
-  def doc = Doc(asString)
 }
 
 sealed abstract class Literal extends Expression {

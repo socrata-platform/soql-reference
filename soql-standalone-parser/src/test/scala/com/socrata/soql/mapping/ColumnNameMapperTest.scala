@@ -41,7 +41,7 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
     val expS =
       parser.selection("date_trunc_ym(MAP_crime_date) AS crime_date, MAP_ward, count(*), MAP_arrest :: text, 'purple'")
 
-    assert(mapper.mapSelection(s).toCompactString === expS.toCompactString)
+    assert(mapper.mapSelection(s).toString === expS.toString)
   }
 
   test("SelectionExcept mapped") {
@@ -116,6 +116,6 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
     val actual = mapper.mapSelect(s)
     // Note that the (second) chained query in join union is not mapped and retains "SELECT name, cat2" because this is not supported.
     // But mapSelect should not raise exception because of that.
-    assert(Select.toCompactString(actual) === expected)
+    assert(Select.toString(actual) === expected)
   }
 }

@@ -50,7 +50,7 @@ sealed trait Join {
   def isSimple = from.isInstanceOf[JoinTable]
 
   override def toString: String = {
-    s"$typ ${if(lateral) "LATERAL " else ""}$from ON $on"
+    doc.layoutSmart(LayoutOptions(pageWidth = PageWidth.Unbounded)).toString
   }
 
   def doc: Doc[Nothing] =

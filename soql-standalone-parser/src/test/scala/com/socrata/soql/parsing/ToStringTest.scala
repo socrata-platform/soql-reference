@@ -112,14 +112,7 @@ class ToStringTest extends FunSpec with MustMatchers {
           |  limit 5
           |  offset 10""".stripMargin
       val expected1 = "SELECT `:id`, `balance` AS `amt`, `visits`"
-      val expected2 = """SELECT `:id` AS `i`, sum(`amt`)
-                        |WHERE `visits` > 0
-                        |GROUP BY `i`, `visits`
-                        |HAVING `sum_amt` < 5
-                        |ORDER BY `i` DESC NULL FIRST, sum(`amt`) ASC NULL FIRST
-                        |SEARCH 'gnu'
-                        |LIMIT 5
-                        |OFFSET 10""".stripMargin
+      val expected2 = "SELECT `:id` AS `i`, sum(`amt`) WHERE `visits` > 0 GROUP BY `i`, `visits` HAVING `sum_amt` < 5 ORDER BY `i` DESC NULL FIRST, sum(`amt`) ASC NULL FIRST SEARCH 'gnu' LIMIT 5 OFFSET 10"
       val parsed = parser.selectStatement(query).map(_.toString)
       parsed must equal(NonEmptySeq(expected1, List(expected2)))
     }
@@ -128,26 +121,21 @@ class ToStringTest extends FunSpec with MustMatchers {
   describe("joins") {
     it("simple") {
       val query = "select @aaaa-aaaa.name_last join @aaaa-aaaa on name_last = @aaaa-aaaa.name_last"
-      val expected = """SELECT @aaaa-aaaa.`name_last`
-                       |JOIN @aaaa-aaaa ON `name_last` = @aaaa-aaaa.`name_last`""".stripMargin
+      val expected = "SELECT @aaaa-aaaa.`name_last` JOIN @aaaa-aaaa ON `name_last` = @aaaa-aaaa.`name_last`"
       val parsed = parser.selectStatement(query).map(_.toString)
       parsed must equal(NonEmptySeq(expected))
     }
 
     it("simple 2") {
       val query = "select :id, @a.name_last join @aaaa-aaaa as a on name_last = @a.name_last"
-      val expected = """SELECT `:id`, @a.`name_last`
-                       |JOIN @aaaa-aaaa AS @a ON `name_last` = @a.`name_last`""".stripMargin
+      val expected = "SELECT `:id`, @a.`name_last` JOIN @aaaa-aaaa AS @a ON `name_last` = @a.`name_last`"
       val parsed = parser.selectStatement(query).map(_.toString)
       parsed must equal(NonEmptySeq(expected))
     }
 
     it("complex") {
       val query = "select :id, balance, @b.name_last join (select * from @aaaa-aaaa as a |> select @a.name_last) as b on name_last = @b.name_last |> select :id"
-      val expected1 = """SELECT `:id`, `balance`, @b.`name_last`
-                         |JOIN (
-                         |    SELECT * FROM @aaaa-aaaa AS @a |> SELECT @a.`name_last`
-                         |  ) AS @b ON `name_last` = @b.`name_last`""".stripMargin
+      val expected1 = "SELECT `:id`, `balance`, @b.`name_last` JOIN (SELECT * FROM @aaaa-aaaa AS @a |> SELECT @a.`name_last`) AS @b ON `name_last` = @b.`name_last`"
       val expected2 = "SELECT `:id`"
       val parsed = parser.selectStatement(query).map(_.toString)
       parsed must equal(NonEmptySeq(expected1, List(expected2)))
@@ -167,9 +155,7 @@ class ToStringTest extends FunSpec with MustMatchers {
         ),
         (
           "SELECT 1 UNION (SELECT 2 UNION ALL (SELECT 3 UNION SELECT 4) UNION SELECT 5) UNION SELECT 6",
-          """SELECT 1 UNION (SELECT 2 UNION ALL (SELECT 3 UNION SELECT 4) UNION SELECT 5)
-            |UNION
-            |SELECT 6""".stripMargin
+          "SELECT 1 UNION (SELECT 2 UNION ALL (SELECT 3 UNION SELECT 4) UNION SELECT 5) UNION SELECT 6"
         ),
         (
           "SELECT 1 INTERSECT ALL SELECT 2",
@@ -177,14 +163,7 @@ class ToStringTest extends FunSpec with MustMatchers {
         ),
         (
           "SELECT `x`, @a.`a1`, @jb.`b1`, @jcd.`c1` JOIN @a ON TRUE JOIN (SELECT @b.`b1` FROM @b) AS @jb ON TRUE JOIN (SELECT @cc.`c1` FROM @c AS @cc UNION SELECT `d1` FROM @d) AS @jcd ON TRUE |> SELECT `x`, `c1`, 1 + 2 ORDER BY `x` ASC NULL LAST, `c1` ASC NULL LAST",
-          """SELECT `x`, @a.`a1`, @jb.`b1`, @jcd.`c1`
-            |JOIN @a ON TRUE
-            |  JOIN (SELECT @b.`b1` FROM @b) AS @jb ON TRUE
-            |  JOIN (
-            |      SELECT @cc.`c1` FROM @c AS @cc UNION SELECT `d1` FROM @d
-            |    ) AS @jcd ON TRUE
-            ||>
-            |SELECT `x`, `c1`, 1 + 2 ORDER BY `x` ASC NULL LAST, `c1` ASC NULL LAST""".stripMargin
+          "SELECT `x`, @a.`a1`, @jb.`b1`, @jcd.`c1` JOIN @a ON TRUE JOIN (SELECT @b.`b1` FROM @b) AS @jb ON TRUE JOIN (SELECT @cc.`c1` FROM @c AS @cc UNION SELECT `d1` FROM @d) AS @jcd ON TRUE |> SELECT `x`, `c1`, 1 + 2 ORDER BY `x` ASC NULL LAST, `c1` ASC NULL LAST"
         )
       )
 

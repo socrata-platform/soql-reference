@@ -256,7 +256,7 @@ class ParserTest extends WordSpec with MustMatchers {
 
     "window function over order round trip" in {
       val x = parseFull("select avg(x) over(order by m, n)")
-      x.selection.expressions.head.expression.toCompactString must be ("avg(`x`) OVER (ORDER BY `m` ASC NULL LAST, `n` ASC NULL LAST)")
+      x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER (ORDER BY `m` ASC NULL LAST, `n` ASC NULL LAST)")
     }
 
     "window function empty over round trip" in {

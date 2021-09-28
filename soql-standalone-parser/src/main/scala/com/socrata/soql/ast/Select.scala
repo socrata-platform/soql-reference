@@ -160,10 +160,6 @@ object Select {
   }
 
   def toString(selects: BinaryTree[Select]): String = {
-    toDoc(selects).layoutSmart().toString
-  }
-
-  def toCompactString(selects: BinaryTree[Select]): String = {
     toDoc(selects).layoutPretty(LayoutOptions(pageWidth = PageWidth.Unbounded)).toString
   }
 
@@ -273,12 +269,12 @@ case class Select(
         other.doc
     }
 
-  def doc: Doc[Nothing] = {
+  private def docWithFrom(from: Option[TableName]): Doc[Nothing] = {
     def selectClause = {
       ((d"SELECT" ++ (if(distinct) d" DISTINCT" else Doc.empty)) +: selection.docs.punctuate(d",")).sep.hang(2)
     }
     def fromJoinClause =
-      (from, joins) match {
+      (this.from.orElse(from), joins) match {
         case (None, Seq()) => None
         case (Some(f), js) => Some((d"FROM ${f.toString}" +: js.map(_.doc)).sep.hang(2))
         case (None, js) => Some(js.map(_.doc).sep.hang(2))
@@ -316,6 +312,8 @@ case class Select(
       offsetClause
     ).flatten.sep
   }
+
+  def doc = docWithFrom(None)
 
   def directlyReferencedJoinFuncs: Set[TableName] =
     joins.foldLeft(Set.empty[TableName]) { (acc, join) =>
@@ -360,47 +358,17 @@ case class Select(
            offset,
            search)
 
-  private def toString(from: Option[TableName]): String = {
+  override def toString: String = {
     if(AST.pretty) {
-      val distinctStr = if (distinct) "DISTINCT " else ""
-      val selectStr = Some(s"SELECT $distinctStr$selection")
-      val fromStr = this.from.orElse(from).map(t => s"FROM $t")
-      val joinsStr = itrToString(None, joins.map(j => s"${j.toString}"), " ")
-      val whereStr = itrToString("WHERE", where)
-      val groupByStr = itrToString("GROUP BY", groupBys, ", ")
-      val havingStr = itrToString("HAVING", having)
-      val obStr = itrToString("ORDER BY", orderBys, ", ")
-      val searchStr = itrToString("SEARCH", search.map(Expression.escapeString))
-      val limitStr = itrToString("LIMIT", limit)
-      val offsetStr = itrToString("OFFSET", offset)
-
-      val parts = List(selectStr, fromStr, joinsStr, whereStr, groupByStr, havingStr, obStr, searchStr, limitStr, offsetStr)
-      parts.flatString
+      doc.layoutSmart(LayoutOptions(pageWidth = PageWidth.Unbounded)).toString
     } else {
       AST.unpretty(this)
     }
   }
 
-  def toStringWithFrom(fromTable: TableName): String = toString(Some(fromTable))
-
-  def format(from: Option[TableName]): String = {
-    val distinctStr = if (distinct) "DISTINCT " else ""
-    val selectStr = Some(s"SELECT $distinctStr$selection")
-    val fromStr = this.from.orElse(from).map(t => s"\nFROM $t")
-    val joinsStr = itrToString(None, joins.map(j => s"\n${j.toString}"), "\n ")
-    val whereStr = itrToString("\nWHERE", where)
-    val groupByStr = itrToString("\nGROUP BY", groupBys, ", ")
-    val havingStr = itrToString("\nHAVING", having)
-    val obStr = itrToString("\nORDER BY", orderBys, ", ")
-    val searchStr = itrToString("\nSEARCH", search.map(Expression.escapeString))
-    val limitStr = itrToString("\nLIMIT", limit)
-    val offsetStr = itrToString("\nOFFSET", offset)
-
-    val parts = List(selectStr, fromStr, joinsStr, whereStr, groupByStr, havingStr, obStr, searchStr, limitStr, offsetStr)
-    parts.flatString
+  def toStringWithFrom(fromTable: TableName): String = {
+    docWithFrom(Some(fromTable)).layoutSmart(LayoutOptions(pageWidth = PageWidth.Unbounded)).toString
   }
-
-  override def toString: String = doc.toString
 }
 
 // represents the columns being selected. examples:
@@ -412,30 +380,18 @@ case class Select(
 case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[StarSelection], expressions: Seq[SelectedExpression]) {
   override def toString = {
     if(AST.pretty) {
-      def star(s: StarSelection, token: String) = {
-        val sb = new StringBuilder()
-        s.qualifier.foreach { x =>
-          sb.append(TableName.withSoqlPrefix(x))
-          sb.append(TableName.Field)
-        }
-        sb.append(token)
-        if(s.exceptions.nonEmpty) {
-          sb.append(s.exceptions.map(e => e._1).mkString(" (EXCEPT ", ", ", ")"))
-        }
-        sb.toString
-      }
-      (allSystemExcept.map(star(_, ":*")) ++ allUserExcept.map(star(_, "*")) ++ expressions.map(_.toString)).mkString(", ")
+      doc.layoutSmart(LayoutOptions(pageWidth = PageWidth.Unbounded)).toString
     } else {
       AST.unpretty(this)
     }
   }
 
-  def toCompactString = docs.punctuate(d",").hsep.layoutPretty(LayoutOptions(pageWidth=PageWidth.Unbounded)).toString
-
   def isSimple = allSystemExcept.isEmpty && allUserExcept.isEmpty && expressions.isEmpty
 
   def replaceHoles(f: Hole => Expression) =
     copy(expressions = expressions.map(_.replaceHoles(f)))
+
+  def doc = docs.punctuate(d",").hsep
 
   def docs: Seq[Doc[Nothing]] = {
     val docs = Seq.newBuilder[Doc[Nothing]]
@@ -511,7 +467,7 @@ case class SelectedExpression(expression: Expression, name: Option[(ColumnName, 
 case class OrderBy(expression: Expression, ascending: Boolean, nullLast: Boolean) {
   override def toString =
     if(AST.pretty) {
-      expression + (if(ascending) " ASC" else " DESC") + (if(nullLast) " NULL LAST" else " NULL FIRST")
+      doc.layoutSmart(LayoutOptions(pageWidth = PageWidth.Unbounded)).toString
     } else {
       AST.unpretty(this)
     }
