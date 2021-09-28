@@ -5,9 +5,7 @@ import scala.runtime.ScalaRunTime
 import scala.collection.immutable.VectorBuilder
 
 import com.socrata.soql.environment.{ColumnName, FunctionName, HoleName, TableName, TypeName}
-import com.socrata.prettyprint.{Doc, LayoutOptions, PageWidth}
-import com.socrata.prettyprint.implicits._
-import com.socrata.prettyprint.interpolation._
+import com.socrata.prettyprint.prelude._
 
 sealed abstract class Expression extends Product {
   val position: Position

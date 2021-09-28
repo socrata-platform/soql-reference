@@ -8,9 +8,7 @@ import java.util.UUID;
 import com.socrata.soql.environment._
 import Select._
 import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, UnionQuery, UnionAllQuery, IntersectQuery, MinusQuery}
-import com.socrata.prettyprint.{Doc, PageWidth, LayoutOptions}
-import com.socrata.prettyprint.implicits._
-import com.socrata.prettyprint.interpolation._
+import com.socrata.prettyprint.prelude._
 
 /**
   * All joins must select from another table. A join may also join on sub-select. A join on a sub-select requires an

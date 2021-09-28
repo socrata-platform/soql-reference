@@ -3,9 +3,7 @@ package com.socrata.soql.ast
 
 import com.socrata.soql.environment.{HoleName, TableName}
 import com.socrata.soql.tokens.{FULL, LEFT, RIGHT, Token}
-import com.socrata.prettyprint.Doc
-import com.socrata.prettyprint.implicits._
-import com.socrata.prettyprint.interpolation._
+import com.socrata.prettyprint.prelude._
 
 sealed trait JoinType
 
