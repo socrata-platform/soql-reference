@@ -356,13 +356,3 @@ case class Hole(name: HoleName)(val position: Position) extends Expression {
 
   def doc = Doc("?" + name)
 }
-
-object bleh extends App {
-  val p = new com.socrata.soql.parsing.StandaloneParser
-  try {
-    println(Select.toDoc(p.binaryTreeSelect(args(0))).layoutPretty(LayoutOptions(PageWidth.AvailablePerLine(args(1).toInt, args(2).toFloat))))
-  } catch {
-    case e: Exception =>
-      println(e.getMessage)
-  }
-}
