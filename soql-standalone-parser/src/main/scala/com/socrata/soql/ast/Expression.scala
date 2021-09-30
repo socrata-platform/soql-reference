@@ -221,7 +221,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
       case SpecialFunctions.Parens =>
         parameters(0).doc.enclose(d"(", d")")
       case SpecialFunctions.Subscript =>
-        parameters(0).doc ++ parameters(1).doc.enclose(d"(", d")")
+        parameters(0).doc ++ parameters(1).doc.enclose(d"[", d"]")
       case SpecialFunctions.StarFunc(f) =>
         val close = window.fold(Doc.empty) { w => d" " ++ w.doc }
         d"$f(*)" ++ close
@@ -261,6 +261,8 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
         d"${parameters(0).doc} IS NOT NULL"
       case SpecialFunctions.In =>
         parameters.iterator.drop(1).map(_.doc).toStream.encloseNesting(d"${parameters(0).doc} IN (", Doc.Symbols.comma, d")").group
+      case SpecialFunctions.NotIn =>
+        parameters.iterator.drop(1).map(_.doc).toStream.encloseNesting(d"${parameters(0).doc} NOT IN (", Doc.Symbols.comma, d")").group
       case SpecialFunctions.Like =>
         d"${parameters(0).doc} LIKE ${parameters(1).doc}"
       case SpecialFunctions.NotLike =>
