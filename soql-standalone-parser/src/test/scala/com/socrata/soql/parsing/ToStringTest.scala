@@ -3,6 +3,8 @@ package com.socrata.soql.parsing
 import com.socrata.NonEmptySeq
 import org.scalatest.{FunSpec, MustMatchers}
 
+import com.socrata.soql.ast.Select
+
 class ToStringTest extends FunSpec with MustMatchers {
   val parser = new StandaloneParser()
 
@@ -26,34 +28,30 @@ class ToStringTest extends FunSpec with MustMatchers {
 
     it("wide expressions") {
       val expected =
-        """foo(
-          |  bar(
-          |    baz(
-          |      `hello`,
-          |      `there`,
-          |      'yikes',
-          |      'wow this is a complicated function',
-          |      'the arglist is very long in terms of rendered width',
-          |      'as well as arg count',
-          |      'this is a long arglist so it will get broken up',
-          |      biz(1, 2, 3, 'this', 'wont'),
-          |      this(
-          |        'should',
-          |        'get broken up',
-          |        'becuase it is very long',
-          |        'and this much stuff on one line',
-          |        'will make things',
-          |        'very hard to read',
-          |        'i could maybe write a whole poem',
-          |        'in these tests',
-          |        'but it is 5 oclock',
-          |        'and i am not creative',
-          |        'sorry about that',
-          |        'happy monday'
-          |      )
-          |    )
+        """foo(bar(baz(
+          |  `hello`,
+          |  `there`,
+          |  'yikes',
+          |  'wow this is a complicated function',
+          |  'the arglist is very long in terms of rendered width',
+          |  'as well as arg count',
+          |  'this is a long arglist so it will get broken up',
+          |  biz(1, 2, 3, 'this', 'wont'),
+          |  this(
+          |    'should',
+          |    'get broken up',
+          |    'becuase it is very long',
+          |    'and this much stuff on one line',
+          |    'will make things',
+          |    'very hard to read',
+          |    'i could maybe write a whole poem',
+          |    'in these tests',
+          |    'but it is 5 oclock',
+          |    'and i am not creative',
+          |    'sorry about that',
+          |    'happy monday'
           |  )
-          |)""".stripMargin
+          |)))""".stripMargin
       val rendered = parser.expression(expected).toString
       rendered must equal(expected)
     }
@@ -116,7 +114,6 @@ class ToStringTest extends FunSpec with MustMatchers {
       val expected1 = "SELECT `:id`, `balance` AS `amt`, `visits`"
       val expected2 = "SELECT `:id` AS `i`, sum(`amt`) WHERE `visits` > 0 GROUP BY `i`, `visits` HAVING `sum_amt` < 5 ORDER BY `i` DESC NULL FIRST, sum(`amt`) ASC NULL FIRST SEARCH 'gnu' LIMIT 5 OFFSET 10"
       val parsed = parser.selectStatement(query).map(_.toString)
-      println(parsed)
       parsed must equal(NonEmptySeq(expected1, List(expected2)))
     }
   }
@@ -148,16 +145,31 @@ class ToStringTest extends FunSpec with MustMatchers {
   describe("query operators") {
     it("chains, unions, joins round trip") {
       val soqls = Seq(
-        "SELECT 1 |> SELECT 2 |> SELECT 3",
-        "SELECT 1 |> SELECT 2 UNION (SELECT 3 |> SELECT 4 |> SELECT 5 |> SELECT 6)",
-        "SELECT 1 UNION (SELECT 2 UNION ALL (SELECT 3 UNION SELECT 4) UNION SELECT 5) UNION SELECT 6",
-        "SELECT 1 INTERSECT ALL SELECT 2",
-        "SELECT `x`, @a.`a1`, @jb.`b1`, @jcd.`c1` JOIN @a ON TRUE JOIN (SELECT @b.`b1` FROM @b) AS @jb ON TRUE JOIN (SELECT @cc.`c1` FROM @c AS @cc UNION SELECT `d1` FROM @d) AS @jcd ON TRUE |> SELECT `x`, `c1`, 1 + 2 ORDER BY `x` ASC NULL LAST, `c1` ASC NULL LAST"
+        (
+          "SELECT 1 |> SELECT 2 |> SELECT 3",
+          "SELECT 1 |> SELECT 2 |> SELECT 3"
+        ),
+        (
+          "SELECT 1 |> SELECT 2 UNION (SELECT 3 |> SELECT 4 |> SELECT 5 |> SELECT 6)",
+          "SELECT 1 |> SELECT 2 UNION (SELECT 3 |> SELECT 4 |> SELECT 5 |> SELECT 6)"
+        ),
+        (
+          "SELECT 1 UNION (SELECT 2 UNION ALL (SELECT 3 UNION SELECT 4) UNION SELECT 5) UNION SELECT 6",
+          "SELECT 1 UNION (SELECT 2 UNION ALL (SELECT 3 UNION SELECT 4) UNION SELECT 5) UNION SELECT 6"
+        ),
+        (
+          "SELECT 1 INTERSECT ALL SELECT 2",
+          "SELECT 1 INTERSECT ALL SELECT 2"
+        ),
+        (
+          "SELECT `x`, @a.`a1`, @jb.`b1`, @jcd.`c1` JOIN @a ON TRUE JOIN (SELECT @b.`b1` FROM @b) AS @jb ON TRUE JOIN (SELECT @cc.`c1` FROM @c AS @cc UNION SELECT `d1` FROM @d) AS @jcd ON TRUE |> SELECT `x`, `c1`, 1 + 2 ORDER BY `x` ASC NULL LAST, `c1` ASC NULL LAST",
+          "SELECT `x`, @a.`a1`, @jb.`b1`, @jcd.`c1` JOIN @a ON TRUE JOIN (SELECT @b.`b1` FROM @b) AS @jb ON TRUE JOIN (SELECT @cc.`c1` FROM @c AS @cc UNION SELECT `d1` FROM @d) AS @jcd ON TRUE |> SELECT `x`, `c1`, 1 + 2 ORDER BY `x` ASC NULL LAST, `c1` ASC NULL LAST"
+        )
       )
 
-      soqls.foreach { soql =>
+      soqls.foreach { case (soql, expected) =>
         val roundTrip = parser.binaryTreeSelect(soql)
-        roundTrip.toString must equal(soql)
+        Select.toString(roundTrip) must equal(expected)
       }
     }
   }

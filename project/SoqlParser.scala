@@ -19,6 +19,7 @@ object SoqlParser {
     },
     libraryDependencies ++= Seq(
       "com.socrata" %% "soql-brita" % "1.4.1",
+      "com.socrata" %% "prettyprinter" % "0.1.0",
       "org.slf4j" % "slf4j-simple" % BuildSettings.slf4jVersion % "test"
     )
   )

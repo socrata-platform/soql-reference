@@ -2,6 +2,7 @@ package com.socrata.soql.mapping
 
 import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.parsing.StandaloneParser
+import com.socrata.soql.ast.Select
 import org.scalatest.{Assertions, FunSuite}
 import org.scalatest.MustMatchers
 
@@ -110,11 +111,11 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
                SELECT @cat.name, @cat.cat FROM @cat) as j4 ON TRUE
       """
 
-    val expected = "SELECT `MAP_name`, @dog.`MAP_name` AS `dogname`, @j2.`MAP_name` AS `j2catname`, @j4.`MAP_name` AS `j4name`, @dog.`MAP_dog`, @j2.`MAP_cat` AS `j2cat`, @j3.`MAP_cat` AS `j3cat`, @j4.`MAP_bird` AS `j4bird` JOIN @dog ON TRUE JOIN @cat AS @j2 ON TRUE JOIN @cat AS @j3 ON TRUE JOIN (SELECT @b1.`MAP_name`, @b1.`MAP_bird` FROM @bird AS @b1 UNION SELECT `MAP_name`, `MAP_fish`, @c2.`MAP_cat` AS `cat2` FROM @fish JOIN @cat AS @c2 ON TRUE |> SELECT `name`, `cat2` UNION ALL SELECT @cat.`MAP_name`, @cat.`MAP_cat` FROM @cat) AS @j4 ON TRUE"
+    val expected = "SELECT `MAP_name`, @dog.`MAP_name` AS `dogname`, @j2.`MAP_name` AS `j2catname`, @j4.`MAP_name` AS `j4name`, @dog.`MAP_dog`, @j2.`MAP_cat` AS `j2cat`, @j3.`MAP_cat` AS `j3cat`, @j4.`MAP_bird` AS `j4bird` JOIN @dog ON TRUE JOIN @cat AS @j2 ON TRUE JOIN @cat AS @j3 ON TRUE JOIN (SELECT @b1.`MAP_name`, @b1.`MAP_bird` FROM @bird AS @b1 UNION (SELECT `MAP_name`, `MAP_fish`, @c2.`MAP_cat` AS `cat2` FROM @fish JOIN @cat AS @c2 ON TRUE |> SELECT `name`, `cat2`) UNION ALL SELECT @cat.`MAP_name`, @cat.`MAP_cat` FROM @cat) AS @j4 ON TRUE"
     val s = parser.binaryTreeSelect(soql)
     val actual = mapper.mapSelect(s)
     // Note that the (second) chained query in join union is not mapped and retains "SELECT name, cat2" because this is not supported.
     // But mapSelect should not raise exception because of that.
-    assert(actual.toString === expected)
+    assert(Select.toString(actual) === expected)
   }
 }
