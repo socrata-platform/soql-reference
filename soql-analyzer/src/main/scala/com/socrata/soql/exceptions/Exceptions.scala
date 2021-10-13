@@ -39,9 +39,9 @@ object SoQLException {
     def decode(v: JValue) = nameDecode(v, TypeName)
   }
   private implicit object PositionCodec extends JsonEncode[Position] with JsonDecode[Position] {
-    private val row = Variable[Int]
-    private val col = Variable[Int]
-    private val text = Variable[String]
+    private val row = Variable[Int]()
+    private val col = Variable[Int]()
+    private val text = Variable[String]()
     private val pattern =
       PObject(
         "row" -> row,
@@ -53,8 +53,11 @@ object SoQLException {
       pattern.generate(row := p.line, col := p.column, text := p.longString.split('\n')(0))
 
     def decode(v: JValue) =
-      pattern.matches(v).right.map { results =>
-        SoQLPosition(row(results), col(results), text(results), col(results))
+      pattern.matches(v) match {
+        case Right(results) =>
+          Right(SoQLPosition(row(results), col(results), text(results), col(results)))
+        case Left(e) =>
+          Left(e)
       }
   }
 
@@ -111,7 +114,7 @@ object SoQLException {
 
     def encode(e: SoQLException) = {
       val JObject(fields) = rawCodec.encode(e)
-      JObject(fields + ("english" -> JString(e.getMessage)))
+      JObject(fields.toMap + ("english" -> JString(e.getMessage)))
     }
     def decode(v: JValue) = rawCodec.decode(v)
   }

@@ -64,22 +64,27 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       // Here's where we find that that corresponds to a field access.
       // If we don't find anything that works, we pretend that we
       // never did this and just typecheck it as a subscript access.
-      typecheck(base, aliases, from).right.flatMap { basePossibilities =>
-        val asFieldAccesses =
-          basePossibilities.flatMap { basePossibility =>
-            val typ = basePossibility.typ
-            val fnName = SpecialFunctions.Field(typeNameFor(typ), prop)
-            typecheckFuncall(fc.copy(functionName = fnName, parameters = Seq(base))(fc.position, fc.functionNamePosition), aliases, from).right.getOrElse(Nil)
+      typecheck(base, aliases, from) match {
+        case Right(basePossibilities) =>
+          val asFieldAccesses =
+            basePossibilities.flatMap { basePossibility =>
+              val typ = basePossibility.typ
+              val fnName = SpecialFunctions.Field(typeNameFor(typ), prop)
+              typecheckFuncall(fc.copy(functionName = fnName, parameters = Seq(base))(fc.position, fc.functionNamePosition), aliases, from) match {
+                case Right(r) => r
+                case Left(_) => Nil
+              }
+            }
+          val rawSubscript = typecheckFuncall(fc, aliases, from)
+          if(asFieldAccesses.isEmpty) {
+            rawSubscript
+          } else {
+            rawSubscript match {
+              case Left(_) => Right(asFieldAccesses)
+              case Right(asSubscripts) => Right(asFieldAccesses ++ asSubscripts)
+            }
           }
-        val rawSubscript = typecheckFuncall(fc, aliases, from)
-        if(asFieldAccesses.isEmpty) {
-          rawSubscript
-        } else {
-          rawSubscript match {
-            case Left(_) => Right(asFieldAccesses)
-            case Right(asSubscripts) => Right(asFieldAccesses ++ asSubscripts)
-          }
-        }
+        case Left(l) => Left(l)
       }
     case fc@FunctionCall(_, _, _) =>
       typecheckFuncall(fc, aliases, from)
@@ -123,7 +128,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
     } else {
       val potentials = resolved.flatMap { f =>
         val skipTypeCheckAfter = typedParameters.size
-        val selectedParameters = (f.allParameters, typedParameters, Stream.from(0)).zipped.map { (expected, options, idx) =>
+        val selectedParameters = Iterator.from(0).zip(f.allParameters.iterator).zip(typedParameters.iterator).map { case ((idx, expected), options) =>
           val choices = if (idx < skipTypeCheckAfter) options.filter(_.typ == expected)
                         else options.headOption.toSeq // any type is ok for window functions
           if(choices.isEmpty) sys.error("Can't happen, we passed typechecking")
@@ -141,7 +146,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
         selectedParameters.toVector.foldRight(Seq(List.empty[Expr])) { (choices, remainingParams) =>
           choices.flatMap { choice => remainingParams.map(choice :: _) }
         }.map(typed.FunctionCall(f, _, typedWindow)(fc.position, fc.functionNamePosition))
-      }
+      }.toSeq
 
       potentials.headOption.foreach(checkWindowFunction)
 
@@ -170,7 +175,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
     }
   }
 
-  def divide[T, L, R](xs: TraversableOnce[T])(f: T => Either[L, R]): (Seq[L], Seq[R]) = {
+  def divide[T, L, R](xs: Iterable[T])(f: T => Either[L, R]): (Seq[L], Seq[R]) = {
     val left = Seq.newBuilder[L]
     val right = Seq.newBuilder[R]
     for(x <- xs) {

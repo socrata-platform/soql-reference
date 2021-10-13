@@ -1,7 +1,7 @@
 package com.socrata.soql
 
 import com.socrata.soql.collection.OrderedMap
-import org.scalatest.prop.PropertyChecks
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import org.scalatest.FunSuite
 import org.scalatest.MustMatchers
 import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
@@ -11,7 +11,7 @@ import com.socrata.soql.typechecker.Typechecker
 import com.socrata.soql.typed.Qualifier
 import com.socrata.soql.types._
 
-class SoQLAnalyzerQueryOperatorTest extends FunSuite with MustMatchers with PropertyChecks {
+class SoQLAnalyzerQueryOperatorTest extends FunSuite with MustMatchers with ScalaCheckPropertyChecks {
 
   val commonColumns = OrderedMap(
     ColumnName(":id") -> TestNumber,

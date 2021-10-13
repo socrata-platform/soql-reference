@@ -146,11 +146,11 @@ object TestFunctions {
     assert(sharedNames.isEmpty)
   }
 
-  val nAdicFunctionsByNameThenArity = nAdicFunctions.groupBy(_.name).mapValues { fs =>
-    fs.groupBy(_.minArity).mapValues(_.toSet).toMap
+  val nAdicFunctionsByNameThenArity = nAdicFunctions.groupBy(_.name).view.mapValues { fs =>
+    fs.groupBy(_.minArity).view.mapValues(_.toSet).toMap
   }.toMap
 
-  val variadicFunctionsByNameThenMinArity = variadicFunctions.groupBy(_.name).mapValues { fs =>
-    fs.groupBy(_.minArity).mapValues(_.toSet).toMap
+  val variadicFunctionsByNameThenMinArity = variadicFunctions.groupBy(_.name).view.mapValues { fs =>
+    fs.groupBy(_.minArity).view.mapValues(_.toSet).toMap
   }.toMap
 }

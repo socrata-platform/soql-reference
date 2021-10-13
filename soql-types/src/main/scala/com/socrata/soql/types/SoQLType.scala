@@ -292,44 +292,44 @@ case object SoQLJson extends SoQLType("json")
 case class SoQLPoint(value: Point) extends SoQLValue {
   def typ = SoQLPoint
 }
-case object SoQLPoint extends {
-  protected val Treified = classOf[Point]
-} with SoQLType("point") with SoQLGeometryLike[Point]
+case object SoQLPoint extends SoQLType("point") with SoQLGeometryLike[Point] {
+  override protected val Treified = classOf[Point]
+}
 
 case class SoQLMultiLine(value: MultiLineString) extends SoQLValue {
   def typ = SoQLMultiLine
 }
-case object SoQLMultiLine extends {
-  protected val Treified = classOf[MultiLineString]
-} with SoQLType("multiline") with SoQLGeometryLike[MultiLineString]
+case object SoQLMultiLine extends SoQLType("multiline") with SoQLGeometryLike[MultiLineString] {
+  override protected val Treified = classOf[MultiLineString]
+}
 
 case class SoQLMultiPolygon(value: MultiPolygon) extends SoQLValue {
   def typ = SoQLMultiPolygon
 }
-case object SoQLMultiPolygon extends {
-  protected val Treified = classOf[MultiPolygon]
-} with SoQLType("multipolygon") with SoQLGeometryLike[MultiPolygon]
+case object SoQLMultiPolygon extends SoQLType("multipolygon") with SoQLGeometryLike[MultiPolygon] {
+  override protected val Treified = classOf[MultiPolygon]
+}
 
 case class SoQLPolygon(value: Polygon) extends SoQLValue {
   def typ = SoQLPolygon
 }
-case object SoQLPolygon extends {
-  protected val Treified = classOf[Polygon]
-} with SoQLType("polygon") with SoQLGeometryLike[Polygon]
+case object SoQLPolygon extends SoQLType("polygon") with SoQLGeometryLike[Polygon] {
+  override protected val Treified = classOf[Polygon]
+}
 
 case class SoQLMultiPoint(value: MultiPoint) extends SoQLValue {
   def typ = SoQLMultiPoint
 }
-case object SoQLMultiPoint extends {
-  protected val Treified = classOf[MultiPoint]
-} with SoQLType("multipoint") with SoQLGeometryLike[MultiPoint]
+case object SoQLMultiPoint extends SoQLType("multipoint") with SoQLGeometryLike[MultiPoint] {
+  override protected val Treified = classOf[MultiPoint]
+}
 
 case class SoQLLine(value: LineString) extends SoQLValue {
   def typ = SoQLLine
 }
-case object SoQLLine extends {
-  protected val Treified = classOf[LineString]
-} with SoQLType("line") with SoQLGeometryLike[LineString]
+case object SoQLLine extends SoQLType("line") with SoQLGeometryLike[LineString] {
+  override protected val Treified = classOf[LineString]
+}
 
 case class SoQLBlob(value: String) extends SoQLValue {
   def typ = SoQLBlob
@@ -416,7 +416,10 @@ case object SoQLUrl extends SoQLType("url") {
 
   private def parseAsJson(value: String): Option[SoQLUrl] = {
     try {
-      JsonUtil.parseJson[SoQLUrl](value).right.toOption
+      JsonUtil.parseJson[SoQLUrl](value) match {
+        case Right(r) => Some(r)
+        case Left(_) => None
+      }
     } catch {
       case ex: JsonReaderException => None
     }
@@ -460,7 +463,10 @@ case object SoQLDocument extends SoQLType("document") {
 
   private def parseAsJson(value: String): Option[SoQLDocument] = {
     try {
-      JsonUtil.parseJson[SoQLDocument](value).right.toOption
+      JsonUtil.parseJson[SoQLDocument](value) match {
+        case Right(r) => Some(r)
+        case Left(_) => None
+      }
     } catch {
       case ex: JsonReaderException => None
     }

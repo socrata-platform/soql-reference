@@ -3,7 +3,7 @@ package com.socrata.soql
 import com.socrata.NonEmptySeq
 import com.socrata.soql.exceptions._
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.prop.PropertyChecks
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 import scala.util.parsing.input.NoPosition
 import org.scalatest.FunSuite
@@ -16,7 +16,7 @@ import com.socrata.soql.types._
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typed.ColumnRef
 
-class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
+class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropertyChecks {
   val datasetCtx = new DatasetContext[TestType] {
     val schema = com.socrata.soql.collection.OrderedMap(
       ColumnName(":id") -> TestNumber,
@@ -544,6 +544,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
     analysis.joins must equal (expected)
   }
 
+  implicit class ExtEither[L, R](underlying: Either[L, R]) {
+    def getRight =
+      underlying match {
+        case Right(r) => r
+        case Left(_) => throw new NoSuchElementException("Left.getRight")
+      }
+  }
+
   test("nested join") {
     val analysis = analyzer.analyzeUnchainedQuery(s"""
 SELECT visits, @x3.x
@@ -552,14 +560,14 @@ SELECT visits, @x3.x
        ) as x3 on @x3.x = name_first
       """)
 
-    val innermostJoins = analysis.joins.head.from.subAnalysis.right.get.analyses.asLeaf.get.joins
-    val innermostAnalysis = innermostJoins.head.from.subAnalysis.right.get.analyses.asLeaf.get
+    val innermostJoins = analysis.joins.head.from.subAnalysis.getRight.analyses.asLeaf.get.joins
+    val innermostAnalysis = innermostJoins.head.from.subAnalysis.getRight.analyses.asLeaf.get
     innermostAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x1"), ColumnName("x"), TestText)(NoPosition)
     ))
 
     val joins = analysis.joins
-    val joinAnalysis = joins.head.from.subAnalysis.right.get.analyses.asLeaf.get
+    val joinAnalysis = joins.head.from.subAnalysis.getRight.analyses.asLeaf.get
     joinAnalysis.selection.toSeq must equal (Seq(
       ColumnName("x") -> ColumnRef(Some("_x2"), ColumnName("x"), TestText)(NoPosition),
       ColumnName("name_first") -> ColumnRef(Some("_a1"), ColumnName("name_first"), TestText)(NoPosition)

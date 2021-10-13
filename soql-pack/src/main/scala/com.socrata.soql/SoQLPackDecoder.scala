@@ -30,7 +30,7 @@ object SoQLPackDecoder {
     SoQLNumber       -> (x => decodeBigDecimal(x).map(SoQLNumber(_))),
     SoQLMoney        -> (x => decodeBigDecimal(x).map(SoQLMoney(_))),
     SoQLDouble       -> (x => x match {
-                           case d: Double if d != null  => Some(SoQLDouble(d))
+                           case d: java.lang.Double if d != null  => Some(SoQLDouble(d))
                            case _: Any => None
                          }),
     SoQLFixedTimestamp -> (x => decodeDateTime(x).map(SoQLFixedTimestamp(_))),
@@ -42,8 +42,14 @@ object SoQLPackDecoder {
     SoQLJson         -> (x => decodeJson[JValue](x).map(SoQLJson(_))),
     SoQLBlob         -> decodeBlobId _,
     SoQLPhoto        -> decodePhoto _,
-    SoQLDocument     -> (x => decodeJson[JValue](x).flatMap(JsonDecode[SoQLDocument].decode(_).right.toOption)),
-    SoQLLocation     -> (x => decodeJson[JValue](x).flatMap(JsonDecode[SoQLLocation].decode(_).right.toOption)),
+    SoQLDocument     -> (x => decodeJson[JValue](x).flatMap(JsonDecode[SoQLDocument].decode(_) match {
+                                                              case Right(r) => Some(r)
+                                                              case Left(_) => None
+                                                            })),
+    SoQLLocation     -> (x => decodeJson[JValue](x).flatMap(JsonDecode[SoQLLocation].decode(_) match {
+                                                              case Right(r) => Some(r)
+                                                              case Left(_) => None
+                                                            })),
     SoQLUrl          -> (x => decodeUrl(x))
   )
 

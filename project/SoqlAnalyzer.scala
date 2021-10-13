@@ -12,7 +12,7 @@ object SoqlAnalyzer {
       "com.rojoma" %% "rojoma-json-v3" % "3.13.0",
 
       "org.slf4j" % "slf4j-simple" % BuildSettings.slf4jVersion % "test",
-      "org.scalacheck" %% "scalacheck" % "1.13.4" % "test"
+      "org.scalacheck" %% "scalacheck" % "1.14.0" % "test"
     )
   )
 }

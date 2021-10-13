@@ -23,8 +23,8 @@ case class MonomorphicFunction[Type](function: Function[Type], bindings: Map[Str
   def name: FunctionName = function.name
   lazy val parameters: Seq[Type] = function.parameters.map(bind)
   lazy val repeated = function.repeated.map(bind)
-  def allParameters =
-    if (repeated.isEmpty) parameters else parameters.toStream ++ Stream.continually(repeated).flatten
+  def allParameters: Seq[Type] =
+    if (repeated.isEmpty) parameters else parameters.to(LazyList) ++ LazyList.continually(repeated).flatten
 
   def minArity = function.minArity
   def isVariadic = function.isVariadic

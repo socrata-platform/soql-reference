@@ -6,12 +6,9 @@ import com.ibm.icu.lang.UCharacter
 import com.ibm.icu.util.ULocale
 
 import com.socrata.soql.tokens._
-import scala.Some
-import scala.Some
-import scala.Some
 
 trait StreamableReader[T] extends Reader[T] {
-  def toStream: Stream[T]
+  def toStream: StreamShim.Stream[T]
 }
 
 class LexerReader(lexer: AbstractLexer) extends StreamableReader[Token] { self =>
@@ -25,7 +22,7 @@ class LexerReader(lexer: AbstractLexer) extends StreamableReader[Token] { self =
   def atEnd = false
   def pos = first.position
 
-  def toStream: Stream[Token] = first #:: rest.toStream
+  def toStream: StreamShim.Stream[Token] = first #:: rest.toStream
 
   lazy val rest: StreamableReader[Token] = {
     if(atEnd) this
@@ -35,7 +32,7 @@ class LexerReader(lexer: AbstractLexer) extends StreamableReader[Token] { self =
         def rest = this
         def atEnd = true
         def pos = first.position
-        def toStream = Stream.empty
+        def toStream = StreamShim.Stream.empty
       }
     } else new LexerReader(lexer)
   }

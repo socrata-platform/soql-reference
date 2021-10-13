@@ -409,7 +409,7 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
     LPAREN() ~> DISTINCT() ~> expr <~ (RPAREN() | failure(errors.missingArg))
 
 
-  def windowFunctionParamList: Parser[Either[Position, Seq[Expression]]] =
+  def windowFunctionParamList: Parser[Right[Position, Seq[Expression]]] =
     rep1sep(expr, COMMA()) ^^ (Right(_))
 
   def windowFunctionParams: Parser[WindowFunctionInfo] = {
@@ -468,7 +468,10 @@ abstract class AbstractParser(parameters: AbstractParser.Parameters = AbstractPa
         functionWithParams(ident, params, identPos)
       case ((_, ident, identPos)) ~ Some(params ~ Some(_ ~ wfParams)) =>
         val innerFc = functionWithParams(ident, params, identPos)
-        val rightParams = params.right.getOrElse(Seq.empty[Expression])
+        val rightParams = params match {
+          case Right(r) => r
+          case Left(_) => Seq.empty[Expression]
+        }
         FunctionCall(innerFc.functionName, rightParams, Some(wfParams))(identPos, identPos)
     }
   }

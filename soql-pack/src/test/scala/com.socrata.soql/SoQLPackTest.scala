@@ -30,7 +30,7 @@ class SoQLPackTest extends FunSuite with MustMatchers {
     Array(SoQLNumber(new BD(-123.456)),     SoQLMoney(new BD(9.99)), SoQLDouble(-99.0))
   )
 
-  def writeThenRead(writer: java.io.OutputStream => Unit)(reader: java.io.DataInputStream => Unit) {
+  def writeThenRead(writer: java.io.OutputStream => Unit)(reader: java.io.DataInputStream => Unit): Unit = {
     val baos = new java.io.ByteArrayOutputStream
     try {
       writer(baos)
@@ -50,7 +50,7 @@ class SoQLPackTest extends FunSuite with MustMatchers {
   test("Can serialize SoQL rows to and from SoQLPack") {
     writeThenRead { os =>
       val w = new SoQLPackWriter(schema1)
-      w.write(os, data1.toIterator)
+      w.write(os, data1.iterator)
     } { dis =>
       val r = new SoQLPackIterator(dis)
       r.geomIndex must equal (4)
@@ -63,7 +63,7 @@ class SoQLPackTest extends FunSuite with MustMatchers {
 
     writeThenRead { os =>
       val w = new SoQLPackWriter(schema2)
-      w.write(os, data2.toIterator)
+      w.write(os, data2.iterator)
     } { dis =>
       val r = new SoQLPackIterator(dis)
       r.geomIndex must equal (-1)
@@ -94,7 +94,7 @@ class SoQLPackTest extends FunSuite with MustMatchers {
   test("Can serialize SoQL rows with date time types to and from SoQLPack") {
     writeThenRead { os =>
       val w = new SoQLPackWriter(schemaDT)
-      w.write(os, dataDT.toIterator)
+      w.write(os, dataDT.iterator)
     } { dis =>
       val r = new SoQLPackIterator(dis)
       r.geomIndex must equal (-1)
@@ -123,7 +123,7 @@ class SoQLPackTest extends FunSuite with MustMatchers {
   test("Can serialize SoQL rows with Json data types") {
     writeThenRead { os =>
       val w = new SoQLPackWriter(schemaJson)
-      w.write(os, dataJson.toIterator)
+      w.write(os, dataJson.iterator)
     } { dis =>
       val r = new SoQLPackIterator(dis)
       r.geomIndex must equal (-1)

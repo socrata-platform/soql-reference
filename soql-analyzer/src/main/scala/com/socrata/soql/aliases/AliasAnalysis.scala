@@ -133,9 +133,9 @@ object AliasAnalysis extends AliasAnalysis {
    * @return The fully-aliased selections, in the same order as they arrived
    */
   def assignImplicit(selections: Seq[SelectedExpression])(implicit ctx: AnalysisContext): OrderedMap[ColumnName, Expression] = {
-    val assignedAliases: Set[ColumnName] = selections.collect {
+    val assignedAliases: Set[ColumnName] = selections.iterator.collect {
       case SelectedExpression(_, Some((alias, _))) => alias
-    } (scala.collection.breakOut)
+    }.to(Set)
     selections.foldLeft((assignedAliases, OrderedMap.empty[ColumnName, Expression])) { (acc, selection) =>
       val (assignedSoFar, mapped) = acc
       selection match {
@@ -182,7 +182,7 @@ object AliasAnalysis extends AliasAnalysis {
   private def topoSort(graph: Map[ColumnName, Set[ColumnOrAliasRef]]): Seq[ColumnName] = {
     val visited = new mutable.HashSet[ColumnName]
     val result = new mutable.ListBuffer[ColumnName]
-    def visit(n: ColumnName, seen: Set[ColumnName]) {
+    def visit(n: ColumnName, seen: Set[ColumnName]): Unit = {
       if(!visited(n)) {
         visited += n
         val newSeen = seen + n

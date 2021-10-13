@@ -2,9 +2,9 @@ package com.socrata.soql.types.obfuscation
 
 import org.scalatest.FunSuite
 import org.scalatest.MustMatchers
-import org.scalatest.prop.PropertyChecks
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
-class QuadifierTest extends FunSuite with MustMatchers with PropertyChecks {
+class QuadifierTest extends FunSuite with MustMatchers with ScalaCheckPropertyChecks {
   test("Quadify always produces exactly four characters") {
     forAll { (x: Int) =>
       Quadifier.quadify(x).length must be (4)
@@ -16,9 +16,9 @@ class QuadifierTest extends FunSuite with MustMatchers with PropertyChecks {
     for(i <- 0 until n) {
       val buf = new Array[Char](n + 4)
       Quadifier.quadify(-1, buf, i)
-      buf.take(i) must equal (Array.fill(i)('\0'))
+      buf.take(i) must equal (Array.fill(i)('\u0000'))
       buf.drop(i).take(4) must equal (Array('z','z','z','z'))
-      buf.drop(i+4) must equal (Array.fill(n - i)('\0'))
+      buf.drop(i+4) must equal (Array.fill(n - i)('\u0000'))
     }
   }
 

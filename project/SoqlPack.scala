@@ -8,7 +8,7 @@ object SoqlPack {
       Seq(
         // Only used by serialization
         "org.velvia"         %% "msgpack4s"                % "0.4.3",
-        "com.rojoma" %% "simple-arm" % "1.2.0"
+        "com.rojoma" %% "simple-arm-v2" % "2.3.2"
       ),
     externalResolvers += "Socrata Jcenter Mirror" at "https://repo.socrata.com/artifactory/jcenter"
   )

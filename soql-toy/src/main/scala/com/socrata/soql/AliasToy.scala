@@ -5,6 +5,7 @@ import com.socrata.soql.aliases._
 import com.socrata.soql.parsing.Parser
 import com.socrata.soql.exceptions.SoQLException
 import environment.{ColumnName, TableName, UntypedDatasetContext}
+import scala.io.StdIn.readLine
 
 object AliasToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -17,12 +18,12 @@ object AliasToy extends (Array[String] => Unit) {
     val columns = com.socrata.soql.collection.OrderedSet(":id", ":created_at", "a", "b", "c", "d").map(ColumnName(_))
   })
 
-  def menu() {
+  def menu(): Unit = {
     println("Columns:")
     println(datasetCtx(TableName.PrimaryTable.qualifier).columns.mkString("  ", ", ", ""))
   }
 
-  def apply(args: Array[String]) {
+  def apply(args: Array[String]): Unit = {
     menu()
     val p = new Parser
     while(true) {

@@ -1,6 +1,6 @@
 package com.socrata.soql
 
-import com.rojoma.simplearm.util._
+import com.rojoma.simplearm.v2._
 import com.socrata.soql.types._
 import com.vividsolutions.jts.io.WKBWriter
 import java.io.{DataOutputStream, OutputStream}
@@ -67,7 +67,7 @@ class SoQLPackWriter(schema: Seq[(String, SoQLType)],
   def write(ostream: OutputStream, rows: Iterator[Array[SoQLValue]]): Long = {
     for {
       dos <- managed(new DataOutputStream(ostream))
-    } yield {
+    } {
       val schemaMaps = schema.map { case (name, typ) =>
         Map("c" -> name, "t" -> typ.toString)
       }.toSeq

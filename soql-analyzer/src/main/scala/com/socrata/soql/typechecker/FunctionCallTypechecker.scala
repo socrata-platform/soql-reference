@@ -63,7 +63,7 @@ class FunctionCallTypechecker[Type](typeInfo: TypeInfo[Type], functionInfo: Func
     val checkedParameters = parameters
     val checkedCandidateAllParameters = candidate.allParameters
 
-    (checkedCandidateAllParameters, checkedParameters, Stream.from(0)).zipped.foreach { (expectedType, availableTypes, idx) =>
+    Iterator.from(0).zip(checkedCandidateAllParameters.iterator).zip(checkedParameters.iterator).foreach { case ((idx, expectedType), availableTypes) =>
       if(!availableTypes(expectedType)) {
         return TypeMismatchFailure(Set(expectedType), availableTypes, idx)
       }

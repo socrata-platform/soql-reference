@@ -38,7 +38,7 @@ object SoQLPackDumper extends App {
       }
       print(", ")
     }
-    println
+    println()
   }
 
 }

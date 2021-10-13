@@ -17,7 +17,7 @@ abstract class Obfuscator(prefix: String, cryptProvider: CryptProvider) {
     _decryptor
   }
 
-  private def byteify(bs: Array[Byte], x: Long) {
+  private def byteify(bs: Array[Byte], x: Long): Unit = {
     bs(0) = x.toByte
     bs(1) = (x >> 8).toByte
     bs(2) = (x >> 16).toByte

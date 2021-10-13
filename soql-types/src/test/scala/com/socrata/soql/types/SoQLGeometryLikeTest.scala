@@ -24,9 +24,9 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
     val json2 = SoQLPoint.JsonRep(geoms.last.get)
     val wkt2 = SoQLPoint.WktRep(geoms.last.get)
 
-    json2 must not be { 'empty }
+    json2 must not be { Symbol("empty") }
     json2 must equal { json }
-    wkt2 must not be { 'empty }
+    wkt2 must not be { Symbol("empty") }
     wkt2 must equal { wkt }
   }
 
@@ -71,9 +71,9 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
     val json2 = SoQLMultiLine.JsonRep(geoms.last.get)
     val wkt2 = SoQLMultiLine.WktRep(geoms.last.get)
 
-    json2 must not be { 'empty }
+    json2 must not be { Symbol("empty") }
     json2 must equal { json }
-    wkt2 must not be { 'empty }
+    wkt2 must not be { Symbol("empty") }
     wkt2 must equal { wkt }
   }
 
@@ -109,9 +109,9 @@ class SoQLGeometryLikeTest extends FunSuite with MustMatchers {
     val json2 = SoQLMultiPolygon.JsonRep(geoms.last.get)
     val wkt2 = SoQLMultiPolygon.WktRep(geoms.last.get)
 
-    json2 must not be { 'empty }
+    json2 must not be { Symbol("empty") }
     json2 must equal { json.replaceAll("""\s""", "") }
-    wkt2 must not be { 'empty }
+    wkt2 must not be { Symbol("empty") }
     wkt2 must equal { wkt }
   }
 

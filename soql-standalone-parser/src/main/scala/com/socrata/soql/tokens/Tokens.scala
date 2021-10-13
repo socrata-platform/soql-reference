@@ -2,11 +2,13 @@ package com.socrata.soql.tokens
 
 import java.math.MathContext
 
-import scala.util.parsing.input.{Position, NoPosition}
+import scala.util.parsing.input.{Position, NoPosition, Positional}
 
-sealed abstract class Token {
-  var position: Position = NoPosition
-  def setPosition(pos: Position) { position = pos }
+sealed abstract class Token extends Positional {
+  def position = pos
+  def position_=(newPos: Position) = pos = newPos
+
+  def setPosition(pos: Position): Unit = { position = pos }
   def printable: String = getClass.getSimpleName
 }
 
