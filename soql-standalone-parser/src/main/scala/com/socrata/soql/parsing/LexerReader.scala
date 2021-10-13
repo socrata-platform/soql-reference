@@ -9,9 +9,20 @@ import com.socrata.soql.tokens._
 
 trait StreamableReader[T] extends Reader[T] {
   def toStream: StreamShim.Stream[T]
+  override def rest: StreamableReader[T]
 }
 
-class LexerReader(lexer: AbstractLexer) extends StreamableReader[Token] { self =>
+trait ExtendedReader[T] extends StreamableReader[T] {
+  private var alts: List[Set[HandRolledParser.Tokenlike]] = Nil
+
+  def alternates = alts.foldLeft(Set.empty[HandRolledParser.Tokenlike])(_ union _)
+  def alternates_=(a: Set[HandRolledParser.Tokenlike]): Unit = alts ::= a
+  def resetAlternates(): Unit = alts = Nil
+
+  override def rest: ExtendedReader[T]
+}
+
+class LexerReader(lexer: AbstractLexer) extends ExtendedReader[Token] { self =>
   import LexerReader._
 
   val first = lexer.yylex() match {
@@ -24,10 +35,10 @@ class LexerReader(lexer: AbstractLexer) extends StreamableReader[Token] { self =
 
   def toStream: StreamShim.Stream[Token] = first #:: rest.toStream
 
-  lazy val rest: StreamableReader[Token] = {
+  lazy val rest: ExtendedReader[Token] = {
     if(atEnd) this
     else if(first.isInstanceOf[EOF]) {
-      new StreamableReader[Token] {
+      new ExtendedReader[Token] {
         def first = self.first
         def rest = this
         def atEnd = true
