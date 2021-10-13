@@ -87,6 +87,5 @@ class HandParseTest extends FunSuite with MustMatchers {
     go("SELECT WHERE x = 3")
     go("SELECT :*, * WHERE x = 3")
     go("SELECT :*, * WHERE x = 3 GROUP BY q HAVING z")
-    go("SELECT :*, * WHERE x = 3 BLARGH")
   }
 }
