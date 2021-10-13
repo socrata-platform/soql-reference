@@ -11,9 +11,6 @@ class HandParseTest extends FunSuite with MustMatchers {
   private class HRParser extends HandRolledParser {
     override def lexer(s: String) = new StandaloneLexer(s)
 
-    override def expectedEOF(r: HandRolledParser.Reader) = new Exception("Expected EOF or " + r.alternates.map(_.printable).mkString(",") + "; got " + r.first.printable) with HandRolledParser.ParseException {
-      val reader = r
-    }
     override def expectedTokens(r: HandRolledParser.Reader, token: Set[HandRolledParser.Tokenlike]) = new Exception("Expected one of " + token.union(r.alternates).map(_.printable).mkString(", ") + ", got " + r.first.printable) with HandRolledParser.ParseException {
       val reader = r
     }

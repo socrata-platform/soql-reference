@@ -166,7 +166,6 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
   def search(soql: String): String = parseFull(stringLiteral, soql)
 
   protected def lexer(s: String): AbstractLexer
-  protected def expectedEOF(reader: Reader): ParseException
   protected def expectedTokens(reader: Reader, token: Set[Tokenlike]): ParseException
   protected def expectedToken(reader: Reader, token: Tokenlike): ParseException = expectedTokens(reader, Set(token))
 
@@ -175,7 +174,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
     if(end.first.isInstanceOf[EOF]) {
       result
     } else {
-      throw expectedEOF(end)
+      throw expectedToken(end, EOF())
     }
   }
 
