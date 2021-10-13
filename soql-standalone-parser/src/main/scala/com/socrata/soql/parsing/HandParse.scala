@@ -99,7 +99,12 @@ object HandRolledParser {
     def map[U](f: T=>U): ParseResult[U] = copy(value = f(value))
   }
 
-  // sigh...
+  // sigh... ut's unfortunate that these are all here rather than
+  // being close to the expectations they reflect, but alas Scala
+  // provides no way to create a nontrivial immutable value and have
+  // it cached other than by sticking it in a `val` on some object,
+  // and recreating these sets on-site has a fairly hefty runtime
+  // cost.
   private[this] def s(xs: Tokenlike*) = Set(xs : _*)
   private val ANDSET = s(AND())
   private val LIMITOFFSETSET = s(LIMIT(), OFFSET())
@@ -221,7 +226,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
         val ParseResult(r3, limitClause) = limit(r2)
         ParseResult(r3, (limitClause, offsetClause))
       case _ =>
-        reader.alternates = LIMITOFFSETSET
+        reader.addAlternates(LIMITOFFSETSET)
         ParseResult(reader, (None, None))
     }
   }
@@ -234,7 +239,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
           case _ => throw expectedToken(reader.rest, AnIntegerLiteral)
         }
       case _ =>
-        reader.alternates = LIMITSET
+        reader.addAlternates(LIMITSET)
         ParseResult(reader, None)
     }
   }
@@ -248,7 +253,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
           case _ => throw expectedToken(reader.rest, AnIntegerLiteral)
         }
       case _ =>
-        reader.alternates = OFFSETSET
+        reader.addAlternates(OFFSETSET)
         ParseResult(reader, None)
     }
   }
@@ -264,7 +269,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
         val ParseResult(r3, orderByClause) = orderBy(r2)
         ParseResult(r3, (orderByClause, searchClause))
       case _ =>
-        reader.alternates = ORDERBYSEARCHSET
+        reader.addAlternates(ORDERBYSEARCHSET)
         ParseResult(reader, (Nil, None))
     }
   }
@@ -279,7 +284,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
             throw expectedToken(reader.rest, BY())
         }
       case _ =>
-        reader.alternates = ORDERBYSET
+        reader.addAlternates(ORDERBYSET)
         ParseResult(reader, Nil)
     }
   }
@@ -294,7 +299,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
             throw expectedToken(reader.rest, AStringLiteral)
         }
       case _ =>
-        reader.alternates = SEARCHSET
+        reader.addAlternates(SEARCHSET)
         ParseResult(reader, None)
     }
   }
@@ -311,7 +316,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
             throw expectedToken(reader, BY())
         }
       case _ =>
-        reader.alternates = GROUPBYSET
+        reader.addAlternates(GROUPBYSET)
         ParseResult(reader, Nil)
     }
   }
@@ -321,7 +326,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
       case WHERE() =>
         topLevelExpr(reader.rest).map(Some(_))
       case _ =>
-        reader.alternates = WHERESET
+        reader.addAlternates(WHERESET)
         ParseResult(reader, None)
     }
   }
@@ -331,7 +336,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
       case HAVING() =>
         topLevelExpr(reader.rest).map(Some(_))
       case _ =>
-        reader.alternates = HAVINGSET
+        reader.addAlternates(HAVINGSET)
         ParseResult(reader, None)
     }
   }
@@ -355,7 +360,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
                 }
               case _ =>
                 // whoops, we're not parsing a :* at all, bail out
-                reader.alternates = TABLEIDCOLONSTARSET
+                reader.addAlternates(TABLEIDCOLONSTARSET)
                 ParseResult(reader, None)
             }
           case _ =>
@@ -366,7 +371,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
           Some(StarSelection(None, exceptions).positionedAt(star.position))
         }
       case _ =>
-        reader.alternates = TABLEIDCOLONSTARSET
+        reader.addAlternates(TABLEIDCOLONSTARSET)
         ParseResult(reader, None)
     }
   }
@@ -396,7 +401,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
             throw expectedToken(reader.rest, EXCEPT())
         }
       case _ =>
-        reader.alternates = LPARENSET
+        reader.addAlternates(LPARENSET)
         ParseResult(reader, Nil)
     }
   }
@@ -440,7 +445,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
               reader.rest
             case _ =>
               // We require a comma but do not see one - revert.
-              reader.alternates = COMMASET
+              reader.addAlternates(COMMASET)
               return reader
           }
         } else {
@@ -459,11 +464,11 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
                   loop(r2, commaFirst = true)
                 case _ =>
                   // Whoops, not a star selection, revert
-                  reader.alternates = TABLEIDSTARSET
+                  reader.addAlternates(TABLEIDSTARSET)
                   reader
               }
             case _ =>
-              reader.alternates = TABLEIDSTARSET
+              reader.addAlternates(TABLEIDSTARSET)
               reader
           }
         case star@STAR() =>
@@ -471,7 +476,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
           result += StarSelection(None, exceptions).positionedAt(star.position)
           loop(r2, commaFirst = true)
         case _ =>
-          reader.alternates = TABLEIDSTARSET
+          reader.addAlternates(TABLEIDSTARSET)
           reader
       }
     }
@@ -497,7 +502,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
               reader.rest
             case _ =>
               // We require a comma but do not see one - revert.
-              reader.alternates = COMMASET
+              reader.addAlternates(COMMASET)
               return reader
           }
         } else {
@@ -529,12 +534,12 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
               result += SelectedExpression(e, Some(identPos))
               loop(r3, commaFirst = true)
             case _ =>
-              r2.alternates = ASSET
+              r2.addAlternates(ASSET)
               result += SelectedExpression(e, None)
               loop(r2, commaFirst = true)
           }
         case None =>
-          reader.alternates = EXPRESSIONSET
+          reader.addAlternates(EXPRESSIONSET)
           reader
       }
     }
@@ -578,7 +583,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
       case JOIN() =>
         finishJoin(reader.rest, InnerJoin(_, _, _)).map(Some(_))
       case _ =>
-        reader.alternates = JOINSET
+        reader.addAlternates(JOINSET)
         ParseResult(reader, None)
     }
   }
@@ -616,16 +621,16 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
                   JoinFunc(TableName(intoQualifier(ti), Some(a)), args)(ti.position)
                 }
               case _ =>
-                r2.alternates = ASSET
+                r2.addAlternates(ASSET)
                 ParseResult(r2, JoinFunc(TableName(intoQualifier(ti), None), args)(ti.position))
             }
           case _ =>
             // Also JoinTable
-            reader.rest.alternates = ASLPARENSET
+            reader.rest.addAlternates(ASLPARENSET)
             ParseResult(reader.rest, JoinTable(TableName(intoQualifier(ti), None)))
         }
       case _ =>
-        reader.alternates = TABLEIDSET
+        reader.addAlternates(TABLEIDSET)
         val ParseResult(r2, s) = atomSelect(reader)
         r2.first match {
           case AS() =>
@@ -641,7 +646,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
       case LPAREN() =>
         parenSelect(reader.rest)
       case _ =>
-        reader.alternates = LPARENSET
+        reader.addAlternates(LPARENSET)
         select(reader).map(Leaf(_))
     }
   }
@@ -669,7 +674,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
           tail += s
           loop(r2)
         case _ =>
-          reader.alternates = QUERYPIPESET
+          reader.addAlternates(QUERYPIPESET)
           reader
       }
     }
@@ -697,7 +702,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
         val ParseResult(r2, arg2) = atomSelect(reader.rest)
         compoundSelect_!(r2, Compound(op.printable, arg, arg2))
       case _ =>
-        reader.alternates = ROWOPSET
+        reader.addAlternates(ROWOPSET)
         ParseResult(reader, arg)
     }
   }
@@ -707,7 +712,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
       case DISTINCT() =>
         ParseResult(reader.rest, true)
       case _ =>
-        reader.alternates = DISTINCTSET
+        reader.addAlternates(DISTINCTSET)
         ParseResult(reader, false)
     }
   }
@@ -734,7 +739,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
         }
         ParseResult(r2, Some(tableName))
       case _ =>
-        reader.alternates = FROMSET
+        reader.addAlternates(FROMSET)
         ParseResult(reader, None)
     }
   }
@@ -818,7 +823,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
         case COMMA() =>
           loop(r2.rest)
         case _ =>
-          r2.alternates = COMMASET
+          r2.addAlternates(COMMASET)
           r2
       }
     }
@@ -835,7 +840,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
           case _ => throw expectedToken(reader.rest, BY())
         }
       case _ =>
-        reader.alternates = PARTITIONBYSET
+        reader.addAlternates(PARTITIONBYSET)
         ParseResult(reader, Nil)
     }
   }
@@ -845,7 +850,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
       case a@ASC() => ParseResult(reader.rest, a)
       case d@DESC() => ParseResult(reader.rest, d)
       case _ =>
-        reader.alternates = ASCDESCSET
+        reader.addAlternates(ASCDESCSET)
         ParseResult(reader, ASC())
     }
   }
@@ -861,7 +866,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
           }
         ParseResult(reader.rest.rest, direction)
       case _ =>
-        reader.alternates = NULLNULLSSET
+        reader.addAlternates(NULLNULLSSET)
         ParseResult(reader, None)
     }
   }
@@ -885,7 +890,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
         case COMMA() =>
           loop(r2.rest)
         case _ =>
-          r2.alternates = Set[Tokenlike](COMMA())
+          r2.addAlternates(Set[Tokenlike](COMMA()))
           r2
       }
     }
@@ -902,7 +907,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
           case _ => throw expectedToken(reader.rest, BY())
         }
       case _ =>
-        reader.alternates = ORDERBYSET
+        reader.addAlternates(ORDERBYSET)
         ParseResult(reader, Nil)
     }
   }
@@ -963,7 +968,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
             throw expectedTokens(reader.rest, Set(BETWEEN(), UNBOUNDED(), CURRENT(), AnIntegerLiteral))
         }
       case _ =>
-        reader.alternates = RANGEROWSSET
+        reader.addAlternates(RANGEROWSSET)
         ParseResult(reader, Nil)
     }
   }
@@ -992,7 +997,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
           FunctionCall(fn, args, Some(wfp))(pos, pos)
         }
       case _ =>
-        reader.alternates = OVERSET
+        reader.addAlternates(OVERSET)
         ParseResult(reader, FunctionCall(fn, args, None)(pos, pos))
     }
   }
@@ -1029,7 +1034,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
             parseFunctionOver(r2, FunctionName(ident.value), ident.position, args)
         }
       case _ =>
-        reader.alternates = LPARENSET
+        reader.addAlternates(LPARENSET)
         ParseResult(reader, ColumnOrAliasRef(None, ColumnName(ident.value))(ident.position))
     }
   }
@@ -1127,7 +1132,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
             throw expectedToken(r2, RBRACKET())
         }
       case _ =>
-        reader.alternates = DOTLBRACKETSET
+        reader.addAlternates(DOTLBRACKETSET)
         ParseResult(reader, arg)
     }
   }
@@ -1144,7 +1149,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
         val ParseResult(r2, (ident, identPos)) = simpleIdentifier(reader.rest)
         cast_!(r2, FunctionCall(SpecialFunctions.Cast(TypeName(ident)), Seq(arg), None)(arg.position, identPos))
       case _ =>
-        reader.alternates = COLONCOLONSET
+        reader.addAlternates(COLONCOLONSET)
         ParseResult(reader, arg)
     }
   }
@@ -1156,7 +1161,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
           FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg), None)(op.position, op.position)
         }
       case _ =>
-        reader.alternates = MINUSPLUSSET
+        reader.addAlternates(MINUSPLUSSET)
         cast(reader)
     }
   }
@@ -1169,7 +1174,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
           FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg, arg2), None)(arg.position, op.position)
         }
       case _ =>
-        reader.alternates = CARETSET
+        reader.addAlternates(CARETSET)
         ParseResult(r2, arg)
     }
   }
@@ -1186,7 +1191,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
         val ParseResult(r2, arg2) = exp(reader.rest)
         factor_!(r2, FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg, arg2), None)(arg.position, op.position))
       case _ =>
-        reader.alternates = FACTORSET
+        reader.addAlternates(FACTORSET)
         ParseResult(reader, arg)
     }
   }
@@ -1203,7 +1208,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
         val ParseResult(r2, arg2) = factor(reader.rest)
         term_!(r2, FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg, arg2), None)(arg.position, op.position))
       case _ =>
-        reader.alternates = TERMSET
+        reader.addAlternates(TERMSET)
         ParseResult(reader, arg)
     }
   }
@@ -1220,7 +1225,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
         val ParseResult(r2, arg2) = term(reader.rest)
         order_!(r2, FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg, arg2), None)(arg.position, op.position))
       case _ =>
-        reader.alternates = COMPARISONSET
+        reader.addAlternates(COMPARISONSET)
         ParseResult(reader, arg)
     }
   }
@@ -1341,7 +1346,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
         val ParseResult(r2, arg2) = parseIn(SpecialFunctions.In, arg, in, reader.rest)
         likeBetweenIn_!(r2, arg2)
       case _ =>
-        reader.alternates = LIKEBETWEENINSET
+        reader.addAlternates(LIKEBETWEENINSET)
         ParseResult(reader, arg)
     }
   }
@@ -1353,7 +1358,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
           FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg), None)(op.position, op.position)
         }
       case _ =>
-        reader.alternates = NOTSET
+        reader.addAlternates(NOTSET)
         likeBetweenIn(reader)
     }
   }
@@ -1370,7 +1375,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
         val ParseResult(r2, arg2) = negation(reader.rest)
         conjunction_!(r2, FunctionCall(SpecialFunctions.Operator(and.printable), Seq(arg, arg2), None)(arg.position, and.pos))
       case _ =>
-        reader.alternates = ANDSET
+        reader.addAlternates(ANDSET)
         ParseResult(reader, arg)
     }
   }
@@ -1393,7 +1398,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
         val ParseResult(r2, arg2) = conjunction(reader.rest)
         disjunction_!(r2, FunctionCall(SpecialFunctions.Operator(or.printable), Seq(arg, arg2), None)(arg.position, or.pos))
       case _ =>
-        reader.alternates = ORSET
+        reader.addAlternates(ORSET)
         ParseResult(reader, arg)
     }
   }

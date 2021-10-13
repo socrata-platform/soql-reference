@@ -16,7 +16,7 @@ trait ExtendedReader[T] extends StreamableReader[T] {
   private var alts: List[Set[HandRolledParser.Tokenlike]] = Nil
 
   def alternates = alts.foldLeft(Set.empty[HandRolledParser.Tokenlike])(_ union _)
-  def alternates_=(a: Set[HandRolledParser.Tokenlike]): Unit = alts ::= a
+  def addAlternates(a: Set[HandRolledParser.Tokenlike]): Unit = alts ::= a
   def resetAlternates(): Unit = alts = Nil
 
   override def rest: ExtendedReader[T]
