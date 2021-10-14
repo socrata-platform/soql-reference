@@ -11,9 +11,10 @@ class HandParseTest extends FunSuite with MustMatchers {
   private class HRParser extends HandRolledParser {
     override def lexer(s: String) = new StandaloneLexer(s)
 
-    override def expectedTokens(r: HandRolledParser.Reader, token: Set[HandRolledParser.Tokenlike]) = new Exception("Expected one of " + token.union(r.alternates).map(_.printable).mkString(", ") + ", got " + r.first.printable) with HandRolledParser.ParseException {
-      val reader = r
-    }
+    override def expected(r: HandRolledParser.Reader) =
+      new Exception("Expected one of " + r.alternates.iterator.map(_.printable).mkString(", ") + ", got " + r.first.printable) with HandRolledParser.ParseException {
+        val reader = r
+      }
   }
 
   private def timing[T](tag: String)(f: => T): T = {
@@ -93,5 +94,22 @@ class HandParseTest extends FunSuite with MustMatchers {
     go("SELECT :*, *, x+2 as y WHERE x = 3 group by w, x*3, r having f(gnat) order by f(gnat) asc nulls last offset 5 limit 6")
     go("SELECT :*, *, x+2 as y WHERE x = 3 group by w, x*3, r having f(gnat) order by f(gnat) search 'gnu'")
     go("SELECT distinct :*, *, x+2 as y WHERE x = 3 group by w, x*3, r having f(gnat) order by f(gnat) search 'gnu'")
+
+    go("SELECT * from @this as bleh join @gnarf(1,2,3) on @gnarf.x = @this.y where true")
+    go("SELECT * join @gnarf(1,2,3) on @gnarf.x = y where true")
+  }
+
+  test("combinators and hand parser match - full compound statements") {
+    def go(s: String): Unit = {
+      val a = new HRParser()
+      val b = new StandaloneParser()
+      println(s)
+      timing("hand-rolled") { a.binaryTreeSelect(s) } must equal(timing("combinator") { b.binaryTreeSelect(s) })
+    }
+
+    go("select 1")
+    go("select 1 |> select _1")
+    go("select 1 union select x from @aaaa-aaaa")
+    go("select 1 union (select x from @aaaa-aaaa intersect select y from @bbbb-bbbb)")
   }
 }

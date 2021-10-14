@@ -13,10 +13,23 @@ trait StreamableReader[T] extends Reader[T] {
 }
 
 trait ExtendedReader[T] extends StreamableReader[T] {
-  private var alts: List[Set[HandRolledParser.Tokenlike]] = Nil
+  // This is a bit of a hack used by the hand-rolled parser.  Some
+  // productions choose not to consume anything.  When this happens
+  // they push a set of things that they would have accepted onto this
+  // list so that if an error occurs _while this token is still under
+  // consideration_ the error can say "..but maybe if you did this
+  // other thing it would have worked."
+  //
+  // Conceptually this is a single set of expectations, but these get
+  // added to the list a _lot_ (e.g., every nested sub expression adds
+  // to this set several times) and we only ever care about the final
+  // set if an error actually occurs, so to keep overhead down we
+  // reduce the cost of tracking that to a single cons-cell allocation
+  // and only actually build the final set if required.
+  private var alts: List[Set[HandRolledParser.Expectation]] = Nil
 
-  def alternates = alts.foldLeft(Set.empty[HandRolledParser.Tokenlike])(_ union _)
-  def addAlternates(a: Set[HandRolledParser.Tokenlike]): Unit = alts ::= a
+  def alternates = alts.foldLeft(Set.empty[HandRolledParser.Expectation])(_ union _)
+  def addAlternates(a: Set[HandRolledParser.Expectation]): Unit = alts ::= a
   def resetAlternates(): Unit = alts = Nil
 
   override def rest: ExtendedReader[T]
