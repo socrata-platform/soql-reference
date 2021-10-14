@@ -12,9 +12,7 @@ class HandParseTest extends FunSuite with MustMatchers {
     override def lexer(s: String) = new StandaloneLexer(s)
 
     override def expected(r: RecursiveDescentParser.Reader) =
-      new Exception("Expected one of " + r.alternates.iterator.map(_.printable).mkString(", ") + ", got " + r.first.printable) with RecursiveDescentParser.ParseException {
-        val reader = r
-      }
+      new standalone_exceptions.RecursiveDescentBadParse(r)
   }
 
   private def timing[T](tag: String)(f: => T): T = {
