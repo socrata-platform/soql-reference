@@ -52,7 +52,7 @@ function: ${
     if(function.name.toString.contains("op")) "$1" + s"${cleanTitle(function.name.toString)}" + "$2"
     else s"${cleanTitle(function.name.toString)}(${(1 to function.parameters.length).map{ i => "$" + s"${i}" }.mkString(", ")})"
 }
-description: ${function.doc} 
+description: "${function.doc}" 
 versions:
 - 2.1
 datatypes:
