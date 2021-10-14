@@ -8,6 +8,8 @@ import org.scalatest.MustMatchers
 import com.socrata.soql.tokens.Token
 
 class HandParseTest extends FunSuite with MustMatchers {
+  val printTimings = false
+
   private class HRParser extends RecursiveDescentParser {
     override def lexer(s: String) = new StandaloneLexer(s)
 
@@ -16,18 +18,22 @@ class HandParseTest extends FunSuite with MustMatchers {
   }
 
   private def timing[T](tag: String)(f: => T): T = {
-    val start = System.nanoTime()
-    val result = f
-    val end = System.nanoTime()
-    println(s"$tag: ${(end - start)/1e6}ms")
-    result
+    if(printTimings) {
+      val start = System.nanoTime()
+      val result = f
+      val end = System.nanoTime()
+      println(s"$tag: ${(end - start)/1e6}ms")
+      result
+    } else {
+      f
+    }
   }
 
   test("combinators and hand parser match - expressions") {
     def go(s: String): Unit = {
       val a = new HRParser()
       val b = new StandaloneCombinatorParser()
-      println(s)
+      if(printTimings) println(s)
       timing("hand-rolled") { a.expression(s) } must equal(timing("combinator") { b.expression(s) })
     }
 
@@ -69,7 +75,7 @@ class HandParseTest extends FunSuite with MustMatchers {
     def go(s: String): Unit = {
       val a = new HRParser()
       val b = new StandaloneParser()
-      println(s)
+      if(printTimings) println(s)
       timing("hand-rolled") { a.unchainedSelectStatement(s) } must equal(timing("combinator") { b.unchainedSelectStatement(s) })
     }
 
@@ -101,7 +107,7 @@ class HandParseTest extends FunSuite with MustMatchers {
     def go(s: String): Unit = {
       val a = new HRParser()
       val b = new StandaloneParser()
-      println(s)
+      if(printTimings) println(s)
       timing("hand-rolled") { a.binaryTreeSelect(s) } must equal(timing("combinator") { b.binaryTreeSelect(s) })
     }
 

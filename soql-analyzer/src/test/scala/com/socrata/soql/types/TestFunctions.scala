@@ -2,6 +2,7 @@ package com.socrata.soql.types
 
 import java.lang.reflect.Modifier
 
+import com.socrata.soql.collection._
 import com.socrata.soql.ast.SpecialFunctions
 import com.socrata.soql.environment.FunctionName
 import com.socrata.soql.functions._

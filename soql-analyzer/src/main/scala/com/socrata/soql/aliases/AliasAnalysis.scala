@@ -1,5 +1,6 @@
 package com.socrata.soql.aliases
 
+import scala.collection.compat._
 import scala.util.parsing.input.Position
 import scala.collection.mutable
 import com.socrata.soql.ast._

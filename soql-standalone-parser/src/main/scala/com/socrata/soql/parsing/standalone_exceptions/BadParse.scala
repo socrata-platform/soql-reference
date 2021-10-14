@@ -1,5 +1,6 @@
 package com.socrata.soql.parsing.standalone_exceptions
 
+import scala.collection.compat.immutable.LazyList
 import scala.util.parsing.input.Position
 
 import com.socrata.soql.parsing.RecursiveDescentParser
@@ -24,12 +25,12 @@ object RecursiveDescentBadParse {
         case LazyList() =>
           // Uhhh... this shouldn't happen
           sb.append(" nothing")
-        case hd #:: LazyList() =>
+        case LazyList.cons(hd, LazyList()) =>
           if(n == 1) sb.append(" or ")
           else if(n > 1) sb.append(", or ") // oxford comma 4eva
           else sb.append(' ')
           sb.append(hd.printable)
-        case hd #:: tl =>
+        case LazyList.cons(hd, tl) =>
           if(n == 0) sb.append(" one of ")
           else sb.append(", ")
           sb.append(hd.printable)

@@ -1,5 +1,6 @@
 package com.socrata.soql.functions
 
+import scala.collection.compat.immutable.LazyList
 import com.socrata.soql.environment.FunctionName
 
 case class MonomorphicFunction[Type](function: Function[Type], bindings: Map[String, Type]) {

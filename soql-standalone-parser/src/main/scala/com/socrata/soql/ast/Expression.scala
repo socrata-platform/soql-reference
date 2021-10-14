@@ -1,5 +1,6 @@
 package com.socrata.soql.ast
 
+import scala.collection.compat.immutable.LazyList
 import scala.util.parsing.input.{NoPosition, Position}
 import scala.runtime.ScalaRunTime
 import scala.collection.immutable.VectorBuilder

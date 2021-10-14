@@ -7,7 +7,7 @@ object BuildSettings {
   val buildSettings: Seq[Setting[_]] = Seq(
     organization := "com.socrata",
     scalaVersion := "2.13.6",
-    crossScalaVersions := Seq("2.11.12", "2.12.10", scalaVersion.value),
+    crossScalaVersions := Seq("2.12.10", scalaVersion.value),
     externalResolvers ++= Seq("socrata artifactory" at "https://repo.socrata.com/artifactory/libs-release")
   )
 
@@ -20,8 +20,7 @@ object BuildSettings {
     scalacOptions ++= Seq(
       "-language:implicitConversions",
       "-deprecation",
-      "-feature",
-      "-Werror"
+      "-feature"
     ),
     libraryDependencies ++= Seq(
       "org.slf4j" % "slf4j-api" % slf4jVersion,
