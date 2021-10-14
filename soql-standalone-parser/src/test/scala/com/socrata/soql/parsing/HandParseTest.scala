@@ -8,11 +8,11 @@ import org.scalatest.MustMatchers
 import com.socrata.soql.tokens.Token
 
 class HandParseTest extends FunSuite with MustMatchers {
-  private class HRParser extends HandRolledParser {
+  private class HRParser extends RecursiveDescentParser {
     override def lexer(s: String) = new StandaloneLexer(s)
 
-    override def expected(r: HandRolledParser.Reader) =
-      new Exception("Expected one of " + r.alternates.iterator.map(_.printable).mkString(", ") + ", got " + r.first.printable) with HandRolledParser.ParseException {
+    override def expected(r: RecursiveDescentParser.Reader) =
+      new Exception("Expected one of " + r.alternates.iterator.map(_.printable).mkString(", ") + ", got " + r.first.printable) with RecursiveDescentParser.ParseException {
         val reader = r
       }
   }

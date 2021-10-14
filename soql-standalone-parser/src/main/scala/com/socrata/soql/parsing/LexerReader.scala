@@ -26,10 +26,10 @@ trait ExtendedReader[T] extends StreamableReader[T] {
   // set if an error actually occurs, so to keep overhead down we
   // reduce the cost of tracking that to a single cons-cell allocation
   // and only actually build the final set if required.
-  private var alts: List[Set[HandRolledParser.Expectation]] = Nil
+  private var alts: List[Set[RecursiveDescentParser.Expectation]] = Nil
 
-  def alternates = alts.foldLeft(Set.empty[HandRolledParser.Expectation])(_ union _)
-  def addAlternates(a: Set[HandRolledParser.Expectation]): Unit = alts ::= a
+  def alternates = alts.foldLeft(Set.empty[RecursiveDescentParser.Expectation])(_ union _)
+  def addAlternates(a: Set[RecursiveDescentParser.Expectation]): Unit = alts ::= a
   def resetAlternates(): Unit = alts = Nil
 
   override def rest: ExtendedReader[T]

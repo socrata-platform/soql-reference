@@ -9,7 +9,7 @@ import com.socrata.soql.tokens._
 import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, ast, tokens}
 import com.socrata.soql.environment.{ColumnName, FunctionName, HoleName, TableName, TypeName}
 
-object HandRolledParser {
+object RecursiveDescentParser {
   private class Keyword(s: String) {
     def apply() = Identifier(s, false)
     def unapply(ident: Identifier): Boolean = {
@@ -34,6 +34,9 @@ object HandRolledParser {
   }
   case object AUserIdentifier extends Expectation {
     def printable = "a user identifier"
+  }
+  case object AnIdentifier extends Expectation {
+    def printable = "an identifier"
   }
   case object ATableIdentifier extends Expectation {
     def printable = "a table identifier"
@@ -152,9 +155,9 @@ object HandRolledParser {
   private val ORSET = s(OR())
 }
 
-abstract class HandRolledParser(parameters: AbstractParser.Parameters = AbstractParser.defaultParameters) {
+abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = AbstractParser.defaultParameters) extends AbstractParser {
   import parameters._
-  import HandRolledParser._
+  import RecursiveDescentParser._
 
   // These are the things that need implementing
   protected def lexer(s: String): AbstractLexer
@@ -437,6 +440,17 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
     }
   }
 
+  private def identifier(reader: Reader): ParseResult[(ColumnName, Position)] = {
+    reader.first match {
+      case i: Identifier =>
+        ParseResult(reader.rest, (ColumnName(i.value), i.position))
+      case si: SystemIdentifier =>
+        ParseResult(reader.rest, (ColumnName(si.value), si.position))
+      case _ =>
+        fail1(reader, AUserIdentifier)
+    }
+  }
+
   private def userStarSelections(reader: Reader, commaFirst: Boolean): ParseResult[Seq[StarSelection]] = {
     // This is a little tricky, because we may or may not be parsing
     // anything at all, so we need to keep track of when we've
@@ -543,7 +557,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
           r2.first match {
             case AS() =>
               // now we must see an identifier...
-              val ParseResult(r3, identPos) = userIdentifier(r2.rest)
+              val ParseResult(r3, identPos) = alias(r2.rest)
               result += SelectedExpression(e, Some(identPos))
               loop(r3, commaFirst = true)
             case _ =>
@@ -559,6 +573,22 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
 
     val finalReader = loop(reader, commaFirst)
     ParseResult(finalReader, result.result())
+  }
+
+  private def alias(reader: Reader): ParseResult[(ColumnName, Position)] = {
+    reader.first match {
+      case i: Identifier =>
+        ParseResult(reader.rest, (ColumnName(i.value), i.position))
+      case si: SystemIdentifier =>
+        val cn = ColumnName(si.value)
+        if(parameters.systemColumnAliasesAllowed.contains(cn)) {
+          ParseResult(reader.rest, (cn, si.position))
+        } else {
+          fail1(reader, AUserIdentifier)
+        }
+      case _ =>
+        fail1(reader, if(parameters.systemColumnAliasesAllowed.nonEmpty) AnIdentifier else AUserIdentifier)
+    }
   }
 
   private def joinList(reader: Reader): ParseResult[Seq[Join]] = {
@@ -1126,6 +1156,9 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
         ParseResult(reader.rest, ColumnOrAliasRef(None, ColumnName(ident.value))(ident.position))
       case table: TableIdentifier if allowJoins =>
         joinedColumn(reader.rest, table)
+
+      case hole: HoleIdentifier if allowHoles =>
+        ParseResult(reader.rest, Hole(HoleName(hole.value))(hole.position))
 
       case _ =>
         reader.resetAlternates()
