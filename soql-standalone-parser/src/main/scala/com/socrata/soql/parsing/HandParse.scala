@@ -701,6 +701,7 @@ abstract class HandRolledParser(parameters: AbstractParser.Parameters = Abstract
     compoundSelect_!(r2, s)
   }
 
+  @tailrec
   private def compoundSelect_!(reader: Reader, arg: BinaryTree[Select]): ParseResult[BinaryTree[Select]] = {
     reader.first match {
       case QUERYPIPE() =>
