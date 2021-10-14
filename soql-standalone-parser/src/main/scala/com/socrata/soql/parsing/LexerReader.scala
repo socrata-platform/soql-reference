@@ -1,5 +1,6 @@
 package com.socrata.soql.parsing
 
+import scala.collection.immutable.ListSet
 import scala.util.parsing.input.{Reader, NoPosition}
 
 import com.ibm.icu.lang.UCharacter
@@ -28,7 +29,7 @@ trait ExtendedReader[T] extends StreamableReader[T] {
   // and only actually build the final set if required.
   private var alts: List[Set[RecursiveDescentParser.Expectation]] = Nil
 
-  def alternates = alts.foldLeft(Set.empty[RecursiveDescentParser.Expectation])(_ union _)
+  def alternates = alts.foldLeft(ListSet.empty[RecursiveDescentParser.Expectation])(_ union _)
   def addAlternates(a: Set[RecursiveDescentParser.Expectation]): Unit = alts ::= a
   def resetAlternates(): Unit = alts = Nil
 

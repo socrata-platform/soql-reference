@@ -42,8 +42,8 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
   }
   def ident(e: String): ColumnName = {
     val p = new Parser()
-    p.identifier(new LexerReader(new Lexer(e))) match {
-      case p.Success(parsed, _) => ColumnName(parsed._2)
+    p.expression(e) match {
+      case ColumnOrAliasRef(None, parsed) => parsed
       case failure => fail("Unable to parse expression fixture " + e + ": " + failure)
     }
   }

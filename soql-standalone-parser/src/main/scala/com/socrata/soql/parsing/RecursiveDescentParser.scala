@@ -1,5 +1,6 @@
 package com.socrata.soql.parsing
 
+import scala.collection.immutable.ListSet
 import scala.util.parsing.input.Position
 import scala.annotation.tailrec
 
@@ -29,14 +30,18 @@ object RecursiveDescentParser {
   case object AStringLiteral extends Expectation {
     def printable = "a string"
   }
+  case object AnIdentifier extends Expectation {
+    // This is used both where we expect only a user identifier and
+    // where we expect either a user or a system identifier.  If the
+    // user provides a system id where we're not expecting it, _then_
+    // we'll specify a non-system identifier.
+    def printable = "an identifier"
+  }
   case object ASystemIdentifier extends Expectation {
     def printable = "a system identifier"
   }
-  case object AUserIdentifier extends Expectation {
-    def printable = "a user identifier"
-  }
-  case object AnIdentifier extends Expectation {
-    def printable = "an identifier"
+  case object ANonSystemIdentifier extends Expectation {
+    def printable = "a non-system identifier"
   }
   case object ATableIdentifier extends Expectation {
     def printable = "a table identifier"
@@ -114,7 +119,7 @@ object RecursiveDescentParser {
   // it cached other than by sticking it in a `val` on some object,
   // and recreating these sets on-site has a fairly hefty runtime
   // cost.
-  private[this] def s(xs: Expectation*) = Set(xs : _*)
+  private[this] def s(xs: Expectation*) = ListSet(xs : _*)
   private val ANDSET = s(AND())
   private val LIMITOFFSETSET = s(LIMIT(), OFFSET())
   private val LIMITSET = s(LIMIT())
@@ -408,7 +413,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
                 case RPAREN() =>
                   r2.rest
                 case _ =>
-                  throw fail(r2, Set(COMMA(), RPAREN()))
+                  fail(r2, Set(COMMA(), RPAREN()))
               }
             }
             val finalReader = loop(reader.rest.rest)
@@ -431,13 +436,15 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def userIdentifier(reader: Reader): ParseResult[(ColumnName, Position)] = {
+  private def simpleIdentifier(reader: Reader): ParseResult[(String, Position)] =
     reader.first match {
-      case si: Identifier =>
-        ParseResult(reader.rest, (ColumnName(si.value), si.position))
-      case _ =>
-        fail1(reader, AUserIdentifier)
+      case i: Identifier => ParseResult(reader.rest, (i.value, i.position))
+      case _ : SystemIdentifier => fail1(reader, ANonSystemIdentifier)
+      case _ => fail1(reader, AnIdentifier)
     }
+
+  private def userIdentifier(reader: Reader): ParseResult[(ColumnName, Position)] = {
+    simpleIdentifier(reader).map { case (n, p) => (ColumnName(n), p) }
   }
 
   private def identifier(reader: Reader): ParseResult[(ColumnName, Position)] = {
@@ -447,7 +454,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       case si: SystemIdentifier =>
         ParseResult(reader.rest, (ColumnName(si.value), si.position))
       case _ =>
-        fail1(reader, AUserIdentifier)
+        fail1(reader, AnIdentifier)
     }
   }
 
@@ -584,10 +591,10 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         if(parameters.systemColumnAliasesAllowed.contains(cn)) {
           ParseResult(reader.rest, (cn, si.position))
         } else {
-          fail1(reader, AUserIdentifier)
+          fail1(reader, ANonSystemIdentifier)
         }
       case _ =>
-        fail1(reader, if(parameters.systemColumnAliasesAllowed.nonEmpty) AnIdentifier else AUserIdentifier)
+        fail1(reader, AnIdentifier)
     }
   }
 
@@ -738,7 +745,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r2, arg2) = atomSelect(reader.rest)
         arg2.asLeaf match {
           case Some(leaf) =>
-            ParseResult(r2, PipeQuery(arg, Leaf(leaf)))
+            compoundSelect_!(r2, PipeQuery(arg, Leaf(leaf)))
           case None =>
             // We need arg2 to be a leaf query, and we got a compound
             // query, so reset any alternate expectations we have and
@@ -800,16 +807,10 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       reader.first match {
         case ident: Identifier => ident.value
         case ident: TableIdentifier => intoQualifier(ident)
-        case _ => throw fail(reader, Set(AUserIdentifier, ATableIdentifier))
+        case _ => fail1(reader, ATableIdentifier) // This is a lie because we also accept an unadorned identifier, but that's legacy syntax
       }
     ParseResult(reader.rest, TableName.withSodaFountainPrefix(ta))
   }
-
-  private def simpleIdentifier(reader: Reader): ParseResult[(String, Position)] =
-    reader.first match {
-      case i: Identifier => ParseResult(reader.rest, (i.value, i.position))
-      case _ => fail1(reader, AUserIdentifier)
-    }
 
   private def conditional(reader: Reader, casePos: Position): ParseResult[Expression] = {
     // we're given a reader that's already past the CASE, so we just
@@ -833,7 +834,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             case END() =>
               Right(r3.rest)
             case _ =>
-              throw fail(r3, Set(WHEN(), ELSE(), END()))
+              fail(r3, Set(WHEN(), ELSE(), END()))
           }
         case _ =>
           fail1(r2, THEN())
@@ -913,7 +914,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           reader.rest.first match {
             case FIRST() => Some(First)
             case LAST() => Some(Last)
-            case _ => throw fail(reader.rest, Set(FIRST(), LAST()))
+            case _ => fail(reader.rest, Set(FIRST(), LAST()))
           }
         ParseResult(reader.rest.rest, direction)
       case _ =>
@@ -964,7 +965,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   }
 
   private def tokenToLiteral(token: Token): Literal = {
-    ast.StringLiteral(token.printable)(token.position)
+    ast.StringLiteral(token.printable.toUpperCase)(token.position)
   }
 
   private def frameStartEnd(reader: Reader): ParseResult[Seq[Expression]] = {
@@ -988,10 +989,10 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           case b@(PRECEDING() | FOLLOWING()) =>
             ParseResult(reader.rest.rest, Seq(ast.NumberLiteral(BigDecimal(n.asInt))(n.position), tokenToLiteral(b)))
           case _ =>
-            throw fail(reader.rest, Set(PRECEDING(), FOLLOWING()))
+            fail(reader.rest, Set(PRECEDING(), FOLLOWING()))
         }
       case _ =>
-        throw fail(reader, Set(UNBOUNDED(), CURRENT(), AnIntegerLiteral))
+        fail(reader, Set(UNBOUNDED(), CURRENT(), AnIntegerLiteral))
     }
   }
 
@@ -1009,14 +1010,16 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
               case _ =>
                 fail1(r2, AND())
             }
-          case UNBOUNDED() =>
-            frameStartEnd(reader.rest)
-          case CURRENT() =>
-            frameStartEnd(reader.rest)
+          case UNBOUNDED() | CURRENT() =>
+            frameStartEnd(reader.rest).map { fb =>
+              tokenToLiteral(r) +: fb
+            }
           case _: IntegerLiteral =>
-            frameStartEnd(reader.rest)
+            frameStartEnd(reader.rest).map { fb =>
+              tokenToLiteral(r) +: fb
+            }
           case _ =>
-            throw fail(reader.rest, Set(BETWEEN(), UNBOUNDED(), CURRENT(), AnIntegerLiteral))
+            fail(reader.rest, Set(BETWEEN(), UNBOUNDED(), CURRENT(), AnIntegerLiteral))
         }
       case _ =>
         reader.addAlternates(RANGEROWSSET)
@@ -1034,7 +1037,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           case RPAREN() =>
             ParseResult(r4.rest, WindowFunctionInfo(partition, orderBy, frame))
           case _ =>
-            fail1(reader, RPAREN())
+            fail1(r4, RPAREN())
         }
       case _ =>
         fail1(reader, LPAREN())
@@ -1102,7 +1105,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           case i@Identifier(s, _) =>
             ParseResult(reader.rest.rest, ColumnOrAliasRef(Some(intoQualifier(tableIdent)), ColumnName(s))(tableIdent.position))
           case _ =>
-            throw fail(reader.rest, Set(ASystemIdentifier, AUserIdentifier))
+            fail1(reader.rest, AnIdentifier)
         }
       case _ =>
         fail1(reader, DOT())
@@ -1181,8 +1184,9 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r2, index) = nestedExpr(reader.rest)
         r2.first match {
           case RBRACKET() =>
-            ParseResult(r2.rest, FunctionCall(SpecialFunctions.Subscript, Seq(arg, index), None)(arg.position, open.position))
+            dereference_!(r2.rest, FunctionCall(SpecialFunctions.Subscript, Seq(arg, index), None)(arg.position, open.position))
           case _ =>
+            r2.resetAlternates()
             fail1(r2, RBRACKET())
         }
       case _ =>
@@ -1303,7 +1307,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             case COMMA() =>
               loop(r2.rest)
             case _ =>
-              throw fail(r2, Set(RPAREN(), COMMA()))
+              fail(r2, Set(RPAREN(), COMMA()))
           }
         }
 
@@ -1338,6 +1342,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           FunctionCall(name, Seq(scrutinee, lowerBound, upperBound), None)(scrutinee.position, op.position)
         }
       case _ =>
+        r2.resetAlternates()
         fail1(r2, AND())
     }
   }
@@ -1370,7 +1375,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
                   fail1(reader.rest.rest, NULL())
               }
             case _ =>
-              throw fail(reader.rest, Set(NULL(), NOT()))
+              fail(reader.rest, Set(NULL(), NOT()))
           }
         likeBetweenIn_!(r2, arg2)
       case like: LIKE =>
@@ -1393,7 +1398,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             val ParseResult(r2, arg2) = parseLike(SpecialFunctions.NotLike, arg, not, reader.rest.rest)
             likeBetweenIn_!(r2, arg2)
           case other =>
-            throw fail(reader.rest, Set(BETWEEN(), IN(), LIKE()))
+            fail(reader.rest, Set(BETWEEN(), IN(), LIKE()))
         }
       case in: IN =>
         // Again only one possibility!
@@ -1408,7 +1413,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   private def negation(reader: Reader): ParseResult[Expression] = {
     reader.first match {
       case op: NOT =>
-        negation(reader).map { arg =>
+        negation(reader.rest).map { arg =>
           FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg), None)(op.position, op.position)
         }
       case _ =>

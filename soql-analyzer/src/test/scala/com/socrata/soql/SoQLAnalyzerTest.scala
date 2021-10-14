@@ -630,13 +630,13 @@ SELECT visits, @x2.zx
     val expressionExpected = intercept[BadParse] {
       analyzer.analyzeUnchainedQuery("SELECT name_last, row_number() OVER (PARTITION BY)")
     }
-    expressionExpected.message must startWith("Expression expected")
+    expressionExpected.message must startWith("Expected an expression")
 
 
     val partitionExpected = intercept[BadParse] {
       analyzer.analyzeUnchainedQuery("SELECT name_last, row_number() OVER (name_last, 2, 3)")
     }
-    partitionExpected.message must startWith("`)' expected")
+    partitionExpected.message must startWith("Expected one of )")
   }
 
   test("aggregate function call with window") {

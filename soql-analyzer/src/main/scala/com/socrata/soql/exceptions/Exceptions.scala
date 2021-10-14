@@ -10,6 +10,8 @@ import com.rojoma.json.v3.matcher._
 
 import com.socrata.soql.environment.{TypeName, FunctionName, ColumnName}
 import com.socrata.soql.parsing.SoQLPosition
+import com.socrata.soql.parsing.RecursiveDescentParser.{Reader, ParseException}
+import com.socrata.soql.parsing.RecursiveDescentParser
 
 sealed abstract class SoQLException(m: String, p: Position) extends RuntimeException(m + ":\n" + p.longString) {
   def position: Position
@@ -121,6 +123,42 @@ object SoQLException {
 }
 
 case class BadParse(message: String, position: Position) extends SoQLException(message, position)
+class RecursiveDescentBadParse(val reader: Reader)
+    extends BadParse(RecursiveDescentBadParse.msg(reader), reader.first.position)
+    with ParseException
+{
+  override val position = super.position
+}
+
+object RecursiveDescentBadParse {
+  private def msg(reader: Reader) = {
+    val sb = new StringBuilder
+    sb.append("Expected")
+
+    def loop(expectations: LazyList[RecursiveDescentParser.Expectation], n: Int): Unit = {
+      expectations match {
+        case LazyList() =>
+          // Uhhh... this shouldn't happen
+          sb.append(" nothing")
+        case hd #:: LazyList() =>
+          if(n == 1) sb.append(" or ")
+          else if(n > 1) sb.append(", or ") // oxford comma 4eva
+          else sb.append(' ')
+          sb.append(hd.printable)
+        case hd #:: tl =>
+          if(n == 0) sb.append(" one of ")
+          else sb.append(", ")
+          sb.append(hd.printable)
+          loop(tl, n+1)
+      }
+    }
+    loop(reader.alternates.to(LazyList), 0)
+
+    sb.append(", but got ").
+      append(reader.first.printable).
+      toString
+  }
+}
 
 case class ReservedTableAlias(alias: String, position: Position) extends SoQLException("Reserved table alias", position)
 

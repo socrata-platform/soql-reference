@@ -26,7 +26,7 @@ class HandParseTest extends FunSuite with MustMatchers {
   test("combinators and hand parser match - expressions") {
     def go(s: String): Unit = {
       val a = new HRParser()
-      val b = new StandaloneParser()
+      val b = new StandaloneCombinatorParser()
       println(s)
       timing("hand-rolled") { a.expression(s) } must equal(timing("combinator") { b.expression(s) })
     }
