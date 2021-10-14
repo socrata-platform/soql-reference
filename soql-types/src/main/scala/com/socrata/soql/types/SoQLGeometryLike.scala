@@ -18,10 +18,7 @@ trait SoQLGeometryLike[T <: Geometry] {
 
   object JsonRep {
     def unapply(text: String): Option[T] =
-      JtsCodecs.geoCodec.decode(JsonReader.fromString(text)) match {
-        case Right(r) => Some(Treified.cast(r))
-        case Left(_) => None
-      }
+      JtsCodecs.geoCodec.decode(JsonReader.fromString(text)).toOption.map(Treified.cast)
 
     def apply(geom: T): String =
       CompactJsonWriter.toString(JtsCodecs.geoCodec.encode(geom))

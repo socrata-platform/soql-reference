@@ -56,11 +56,8 @@ object SoQLException {
       pattern.generate(row := p.line, col := p.column, text := p.longString.split('\n')(0))
 
     def decode(v: JValue) =
-      pattern.matches(v) match {
-        case Right(results) =>
-          Right(SoQLPosition(row(results), col(results), text(results), col(results)))
-        case Left(e) =>
-          Left(e)
+      pattern.matches(v).map { results =>
+        SoQLPosition(row(results), col(results), text(results), col(results))
       }
   }
 

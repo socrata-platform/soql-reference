@@ -416,10 +416,7 @@ case object SoQLUrl extends SoQLType("url") {
 
   private def parseAsJson(value: String): Option[SoQLUrl] = {
     try {
-      JsonUtil.parseJson[SoQLUrl](value) match {
-        case Right(r) => Some(r)
-        case Left(_) => None
-      }
+      JsonUtil.parseJson[SoQLUrl](value).toOption
     } catch {
       case ex: JsonReaderException => None
     }
@@ -463,10 +460,7 @@ case object SoQLDocument extends SoQLType("document") {
 
   private def parseAsJson(value: String): Option[SoQLDocument] = {
     try {
-      JsonUtil.parseJson[SoQLDocument](value) match {
-        case Right(r) => Some(r)
-        case Left(_) => None
-      }
+      JsonUtil.parseJson[SoQLDocument](value).toOption
     } catch {
       case ex: JsonReaderException => None
     }

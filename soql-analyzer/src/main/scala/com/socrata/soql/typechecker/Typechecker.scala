@@ -64,27 +64,22 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       // Here's where we find that that corresponds to a field access.
       // If we don't find anything that works, we pretend that we
       // never did this and just typecheck it as a subscript access.
-      typecheck(base, aliases, from) match {
-        case Right(basePossibilities) =>
-          val asFieldAccesses =
-            basePossibilities.flatMap { basePossibility =>
-              val typ = basePossibility.typ
-              val fnName = SpecialFunctions.Field(typeNameFor(typ), prop)
-              typecheckFuncall(fc.copy(functionName = fnName, parameters = Seq(base))(fc.position, fc.functionNamePosition), aliases, from) match {
-                case Right(r) => r
-                case Left(_) => Nil
-              }
-            }
-          val rawSubscript = typecheckFuncall(fc, aliases, from)
-          if(asFieldAccesses.isEmpty) {
-            rawSubscript
-          } else {
-            rawSubscript match {
-              case Left(_) => Right(asFieldAccesses)
-              case Right(asSubscripts) => Right(asFieldAccesses ++ asSubscripts)
-            }
+      typecheck(base, aliases, from).flatMap { basePossibilities =>
+        val asFieldAccesses =
+          basePossibilities.flatMap { basePossibility =>
+            val typ = basePossibility.typ
+            val fnName = SpecialFunctions.Field(typeNameFor(typ), prop)
+            typecheckFuncall(fc.copy(functionName = fnName, parameters = Seq(base))(fc.position, fc.functionNamePosition), aliases, from).getOrElse(Nil)
           }
-        case Left(l) => Left(l)
+        val rawSubscript = typecheckFuncall(fc, aliases, from)
+        if(asFieldAccesses.isEmpty) {
+          rawSubscript
+        } else {
+          rawSubscript match {
+            case Left(_) => Right(asFieldAccesses)
+            case Right(asSubscripts) => Right(asFieldAccesses ++ asSubscripts)
+          }
+        }
       }
     case fc@FunctionCall(_, _, _) =>
       typecheckFuncall(fc, aliases, from)

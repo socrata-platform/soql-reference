@@ -42,14 +42,8 @@ object SoQLPackDecoder {
     SoQLJson         -> (x => decodeJson[JValue](x).map(SoQLJson(_))),
     SoQLBlob         -> decodeBlobId _,
     SoQLPhoto        -> decodePhoto _,
-    SoQLDocument     -> (x => decodeJson[JValue](x).flatMap(JsonDecode[SoQLDocument].decode(_) match {
-                                                              case Right(r) => Some(r)
-                                                              case Left(_) => None
-                                                            })),
-    SoQLLocation     -> (x => decodeJson[JValue](x).flatMap(JsonDecode[SoQLLocation].decode(_) match {
-                                                              case Right(r) => Some(r)
-                                                              case Left(_) => None
-                                                            })),
+    SoQLDocument     -> (x => decodeJson[JValue](x).flatMap(JsonDecode[SoQLDocument].decode(_).toOption)),
+    SoQLLocation     -> (x => decodeJson[JValue](x).flatMap(JsonDecode[SoQLLocation].decode(_).toOption)),
     SoQLUrl          -> (x => decodeUrl(x))
   )
 
