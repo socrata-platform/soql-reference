@@ -14,6 +14,6 @@ SoQLPack format - an efficient, MessagePack-based SoQL transport medium.
 
  ### SoQL Docs
  
- `sbt "soqlStdlib/runMain com.socrata.soql.functions.Docs {~/developer/socrata/dev.socrata.com/docs/functions/}"`
+ `sbt "soqlStdlib/runMain com.socrata.soql.functions.Docs ~/developer/socrata/dev.socrata.com/docs/functions/"`
 
  Running this command will generate SoQL function docs into the dev.socrata.com repository.
