@@ -30,18 +30,18 @@ class ParserTest extends WordSpec with MustMatchers {
   "Parsing" should {
     "require a full `between' clause" in {
       expectFailure("Expected an expression, but got end of input", "x between")
-      expectFailure("Expected AND, but got end of input", "x between a")
+      expectFailure("Expected `AND', but got end of input", "x between a")
       expectFailure("Expected an expression, but got end of input", "x between a and")
-      expectFailure("Expected one of BETWEEN, IN, or LIKE, but got end of input", "x not")
+      expectFailure("Expected one of `BETWEEN', `IN', or `LIKE', but got end of input", "x not")
       expectFailure("Expected an expression, but got end of input", "x not between")
-      expectFailure("Expected AND, but got end of input", "x not between a")
+      expectFailure("Expected `AND', but got end of input", "x not between a")
     }
 
     "require a full `is null' clause" in {
-      expectFailure("Expected one of NULL or NOT, but got end of input", "x is")
-      expectFailure("Expected NULL, but got end of input", "x is not")
-      expectFailure("Expected NULL, but got 5", "x is not 5")
-      expectFailure("Expected one of NULL or NOT, but got 5", "x is 5")
+      expectFailure("Expected one of `NULL' or `NOT', but got end of input", "x is")
+      expectFailure("Expected `NULL', but got end of input", "x is not")
+      expectFailure("Expected `NULL', but got `5'", "x is not 5")
+      expectFailure("Expected one of `NULL' or `NOT', but got `5'", "x is 5")
     }
 
     "require an expression after `not'" in {
@@ -49,7 +49,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "reject a more-than-complete expression" in {
-      expectFailure("Expected end of input, but got y", "x y")
+      expectFailure("Expected end of input, but got `y'", "x y")
     }
 
     "reject a null expression" in {
@@ -65,7 +65,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "reject a system id after a dereference-dot" in {
-      expectFailure("Expected a non-system identifier, but got :id", "a.:id")
+      expectFailure("Expected a non-system identifier, but got `:id'", "a.:id")
     }
 
     "accept expr.identifier" in {
@@ -81,7 +81,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "reject expr[expr" in {
-      expectFailure("Expected ], but got end of input", "a[2 * b")
+      expectFailure("Expected `]', but got end of input", "a[2 * b")
     }
 
     "accept expr[expr]" in {
@@ -274,7 +274,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "window frame clause should start with rows or range, not row" in {
-      expectFailure("Expected one of ), RANGE, ROWS, COMMA, NULL, NULLS, ASC, or DESC, but got row", "avg(x) over(order by m row 123 PRECEDING)")
+      expectFailure("Expected one of `)', `RANGE', `ROWS', `,', `NULL', `NULLS', `ASC', or `DESC', but got `row'", "avg(x) over(order by m row 123 PRECEDING)")
     }
 
     "reject pipe query where right side is not a leaf." in {
@@ -284,7 +284,7 @@ class ParserTest extends WordSpec with MustMatchers {
         fail("Unexpected success")
       } catch {
         case e: BadParse =>
-          e.message must equal ("Expected a non-compound query, but got (")
+          e.message must equal ("Expected a non-compound query, but got `('")
       }
     }
 

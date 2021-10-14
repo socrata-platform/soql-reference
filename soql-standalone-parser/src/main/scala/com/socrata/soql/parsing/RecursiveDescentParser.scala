@@ -22,7 +22,7 @@ object RecursiveDescentParser {
     def printable: String
   }
   case class ActualToken(token: Token) extends Expectation {
-    def printable = token.printable
+    def printable = token.quotedPrintable
   }
   case object AnIntegerLiteral extends Expectation {
     def printable = "an integer"
@@ -50,31 +50,31 @@ object RecursiveDescentParser {
     def printable = "an expression"
   }
   case object AGroupBy extends Expectation {
-    def printable = "GROUP BY"
+    def printable = "`GROUP BY'"
   }
   case object AnOrderBy extends Expectation {
-    def printable = "ORDER BY"
+    def printable = "`ORDER BY'"
   }
   case object APartitionBy extends Expectation {
-    def printable = "PARTITION BY"
+    def printable = "`PARTITION BY'"
   }
   case object AnIsNot extends Expectation {
-    def printable = "IS NOT"
+    def printable = "`IS NOT'"
   }
   case object ANotLike extends Expectation {
-    def printable = "NOT LIKE"
+    def printable = "`NOT LIKE'"
   }
   case object ANotBetween extends Expectation {
-    def printable = "NOT BETWEEN"
+    def printable = "`NOT BETWEEN'"
   }
   case object ANotIn extends Expectation {
-    def printable = "NOT IN"
+    def printable = "`NOT IN'"
   }
   case object ALeafQuery extends Expectation {
     def printable = "a non-compound query"
   }
   case object AnAliasForThis extends Expectation {
-    def printable = "an alias for @this"
+    def printable = "an alias for `@this'"
   }
 
   private implicit def tokenAsTokenLike(t: Token): Expectation = ActualToken(t)

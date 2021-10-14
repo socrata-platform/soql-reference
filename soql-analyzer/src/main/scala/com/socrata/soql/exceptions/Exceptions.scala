@@ -155,7 +155,7 @@ object RecursiveDescentBadParse {
     loop(reader.alternates.to(LazyList), 0)
 
     sb.append(", but got ").
-      append(reader.first.printable).
+      append(reader.first.quotedPrintable).
       toString
   }
 }

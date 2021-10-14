@@ -10,6 +10,7 @@ sealed abstract class Token extends Positional {
 
   def setPosition(pos: Position): Unit = { position = pos }
   def printable: String = getClass.getSimpleName
+  def quotedPrintable: String = "`" + printable + "'"
 }
 
 sealed abstract class FormattedToken(override val printable: String) extends Token
@@ -128,9 +129,10 @@ case class HoleIdentifier(value: String) extends ValueToken[String] { // For ?ho
 }
 
 // Punctuation
-case class COMMA() extends Token
+case class COMMA() extends FormattedToken(",")
 case class COLONSTAR() extends FormattedToken(":*")
 
 case class EOF() extends Token {
   override def printable = "end of input"
+  override def quotedPrintable = printable
 }

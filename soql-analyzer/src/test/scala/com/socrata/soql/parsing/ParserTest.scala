@@ -30,18 +30,18 @@ class ParserTest extends WordSpec with MustMatchers {
   "Parsing" should {
     "require a full `between' clause" in {
       expectFailure("Expected an expression, but got end of input", "x between")
-      expectFailure("Expected AND, but got end of input", "x between a")
+      expectFailure("Expected `AND', but got end of input", "x between a")
       expectFailure("Expected an expression, but got end of input", "x between a and")
-      expectFailure("Expected one of BETWEEN, IN, or LIKE, but got end of input", "x not")
+      expectFailure("Expected one of `BETWEEN', `IN', or `LIKE', but got end of input", "x not")
       expectFailure("Expected an expression, but got end of input", "x not between")
-      expectFailure("Expected AND, but got end of input", "x not between a")
+      expectFailure("Expected `AND', but got end of input", "x not between a")
     }
 
     "require a full `is null' clause" in {
-      expectFailure("Expected one of NULL or NOT, but got end of input", "x is")
-      expectFailure("Expected NULL, but got end of input", "x is not")
-      expectFailure("Expected NULL, but got 5", "x is not 5")
-      expectFailure("Expected one of NULL or NOT, but got 5", "x is 5")
+      expectFailure("Expected one of `NULL' or `NOT', but got end of input", "x is")
+      expectFailure("Expected `NULL', but got end of input", "x is not")
+      expectFailure("Expected `NULL', but got `5'", "x is not 5")
+      expectFailure("Expected one of `NULL' or `NOT', but got `5'", "x is 5")
     }
 
     "accept both the 'case' sugar and the 'case' function" in {
@@ -58,7 +58,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "reject a more-than-complete expression" in {
-      expectFailure("Expected end of input, but got y", "x y")
+      expectFailure("Expected end of input, but got `y'", "x y")
     }
 
     "reject a null expression" in {
@@ -86,7 +86,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "reject expr[expr" in {
-      expectFailure("Expected ], but got end of input", "a[2 * b")
+      expectFailure("Expected `]', but got end of input", "a[2 * b")
     }
 
     "accept expr[expr]" in {
