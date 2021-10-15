@@ -92,11 +92,12 @@ parents:
 ## Description
 ${functions.head.doc}
 
-${functions.head.examples.map { exp => 
-    "### Explanation\n" + exp.explanation + "\n" +
-    "### Query\n" + exp.query + "\n" +
-    "### Try it\n" + exp.tryit
-}.mkString("\n")}
+## Examples
+${functions.head.examples.zipWithIndex.map { case (exp, i) => 
+    s"**${i + 1}. " + exp.explanation + "**\n\n" +
+    "**Query**\n\n`" + exp.query + "`\n\n" +
+    "**Try it**\n\n" + exp.tryit
+}.mkString("\n\n")}
 
 ## Signature
 ${functions.map(f => s"${JString(f.identity)} => " + f.toString.replace("op$", "")).mkString("\n\n")}
