@@ -39,6 +39,6 @@ soqldoc := {
   // to avoid scala version clashes.
   val classloader = new java.net.URLClassLoader(classpath.toArray, ClassLoader.getSystemClassLoader().getParent())
   val mainClass = classloader.loadClass("com.socrata.soql.functions.Docs")
-  val mainMethod = mainClass.getDeclaredMethod("main", classOf[Array[String]])
-  mainMethod.invoke(null, Array(arg.getAbsolutePath + "/"))
+  val mainMethod = mainClass.getDeclaredMethod("generate", classOf[File])
+  mainMethod.invoke(null, arg)
 }

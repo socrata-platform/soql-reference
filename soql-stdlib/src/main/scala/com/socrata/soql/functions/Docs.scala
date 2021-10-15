@@ -1,5 +1,7 @@
 package com.socrata.soql.functions
 
+import java.io.File
+
 import com.socrata.soql.types._
 import com.socrata.soql.ast.SpecialFunctions
 import com.socrata.soql.environment.FunctionName
@@ -7,8 +9,7 @@ import com.rojoma.simplearm.v2._
 import com.rojoma.json.v3.ast.JString
 
 object Docs {
-    def main(args: Array[String]) {
-        val out_path = args(0)
+    def generate(outPath: File) {
         SoQLFunctions.allFunctions.filter(x => x.name match { 
             case SpecialFunctions.Subscript => false
             case _ => true
@@ -16,7 +17,7 @@ object Docs {
             val doc = makeFuncDoc(name, functions)
             println(name.toString)
             val cleanedName = cleanName(name.toString)
-            val file_path = out_path + s"$cleanedName.md"
+            val file_path = new File(outPath, s"$cleanedName.md")
             println(file_path)
             for {
                 fos <- managed(new java.io.FileOutputStream(file_path))
