@@ -34,6 +34,9 @@ val soqldoc = inputKey[Unit]("Build soql documentation")
 soqldoc := {
   val arg: File = sbt.complete.DefaultParsers.fileParser(baseDirectory.value).parsed
   val classpath = (soqlStdlib / Runtime / fullClasspath).value.map(_.data.toURI.toURL)
+  // The system class loader is the app class loader, which contains
+  // SBT's copy of Scala, so we want to move up a step to _its_ parent
+  // to avoid scala version clashes.
   val classloader = new java.net.URLClassLoader(classpath.toArray, ClassLoader.getSystemClassLoader().getParent())
   val mainClass = classloader.loadClass("com.socrata.soql.functions.Docs")
   val mainMethod = mainClass.getDeclaredMethod("main", classOf[Array[String]])
