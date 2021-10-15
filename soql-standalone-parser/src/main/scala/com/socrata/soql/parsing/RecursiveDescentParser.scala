@@ -1,6 +1,7 @@
 package com.socrata.soql.parsing
 
 import scala.collection.immutable.ListSet
+import scala.collection.compat.immutable.LazyList
 import scala.util.parsing.input.Position
 import scala.annotation.tailrec
 
@@ -78,6 +79,34 @@ object RecursiveDescentParser {
   }
 
   private implicit def tokenAsTokenLike(t: Token): Expectation = ActualToken(t)
+
+  def expectationsToEnglish(expectation: Iterable[Expectation], got: Token): String = {
+    val sb = new StringBuilder
+    sb.append("Expected")
+
+    def loop(expectations: LazyList[RecursiveDescentParser.Expectation], n: Int): Unit = {
+      expectations match {
+        case LazyList() =>
+          // Uhhh... this shouldn't happen
+          sb.append(" nothing")
+        case LazyList.cons(hd, LazyList()) =>
+          if(n == 1) sb.append(" or ")
+          else if(n > 1) sb.append(", or ") // oxford comma 4eva
+          else sb.append(' ')
+          sb.append(hd.printable)
+        case LazyList.cons(hd, tl) =>
+          if(n == 0) sb.append(" one of ")
+          else sb.append(", ")
+          sb.append(hd.printable)
+          loop(tl, n+1)
+      }
+    }
+    loop(expectation.to(LazyList), 0)
+
+    sb.append(", but got ").
+      append(got.quotedPrintable).
+      toString
+  }
 
   private val CASE = new Keyword("CASE")
   private val WHEN = new Keyword("WHEN")

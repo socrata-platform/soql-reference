@@ -130,31 +130,7 @@ class RecursiveDescentBadParse(val reader: Reader)
 
 object RecursiveDescentBadParse {
   private def msg(reader: Reader) = {
-    val sb = new StringBuilder
-    sb.append("Expected")
-
-    def loop(expectations: LazyList[RecursiveDescentParser.Expectation], n: Int): Unit = {
-      expectations match {
-        case LazyList() =>
-          // Uhhh... this shouldn't happen
-          sb.append(" nothing")
-        case LazyList.cons(hd, LazyList()) =>
-          if(n == 1) sb.append(" or ")
-          else if(n > 1) sb.append(", or ") // oxford comma 4eva
-          else sb.append(' ')
-          sb.append(hd.printable)
-        case LazyList.cons(hd, tl) =>
-          if(n == 0) sb.append(" one of ")
-          else sb.append(", ")
-          sb.append(hd.printable)
-          loop(tl, n+1)
-      }
-    }
-    loop(reader.alternates.to(LazyList), 0)
-
-    sb.append(", but got ").
-      append(reader.first.quotedPrintable).
-      toString
+    RecursiveDescentParser.expectationsToEnglish(reader.alternates, reader.first)
   }
 }
 
