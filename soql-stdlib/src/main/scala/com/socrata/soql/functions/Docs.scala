@@ -93,9 +93,9 @@ parents:
 ${functions.head.doc}
 
 ${functions.head.examples.map { exp => 
-    "## Explanation\n" + exp.explanation + "\n" +
-    "## Query\n" + exp.query + "\n" +
-    "## Try it\n" + exp.tryit
+    "### Explanation\n" + exp.explanation + "\n" +
+    "### Query\n" + exp.query + "\n" +
+    "### Try it\n" + exp.tryit
 }.mkString("\n")}
 
 ## Signature
