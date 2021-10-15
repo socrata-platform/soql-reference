@@ -28,3 +28,14 @@ lazy val soqlToy = (project in file("soql-toy")).
 lazy val soqlPack = (project in file("soql-pack")).
   settings(SoqlPack.settings).
   dependsOn(soqlTypes)
+
+val soqldoc = inputKey[Unit]("Build soql documentation")
+
+soqldoc := {
+  val arg: File = sbt.complete.DefaultParsers.fileParser(baseDirectory.value).parsed
+  val classpath = (soqlStdlib / Runtime / fullClasspath).value.map(_.data.toURI.toURL)
+  val classloader = new java.net.URLClassLoader(classpath.toArray, ClassLoader.getSystemClassLoader().getParent())
+  val mainClass = classloader.loadClass("com.socrata.soql.functions.Docs")
+  val mainMethod = mainClass.getDeclaredMethod("main", classOf[Array[String]])
+  mainMethod.invoke(null, Array(arg.getAbsolutePath + "/"))
+}
