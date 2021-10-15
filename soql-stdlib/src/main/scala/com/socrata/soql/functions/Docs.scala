@@ -15,7 +15,6 @@ object Docs {
             case _ => true
         }).groupBy(_.name).foreach { case(name, functions) => 
             val doc = makeFuncDoc(name, functions)
-            println(name.toString)
             val cleanedName = cleanName(name.toString)
             val file_path = new File(outPath, s"$cleanedName.md")
             println(file_path)
