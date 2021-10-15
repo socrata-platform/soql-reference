@@ -1,20 +1,29 @@
 package com.socrata.soql.functions
 
 import com.socrata.soql.types._
+import com.socrata.soql.ast.SpecialFunctions
+import com.socrata.soql.environment.FunctionName
+import com.rojoma.simplearm.v2._
+import com.rojoma.json.v3.ast.JString
 
 object Docs {
     def main(args: Array[String]) {
         val out_path = args(0)
-        SoQLFunctions.allFunctions.filter(x => x.name.toString != "op$[]").foreach { function => 
-            val doc = makeFuncDoc(function)
-            println(function.name.toString)
-            val cleanedName = cleanName(function.name.toString)
+        SoQLFunctions.allFunctions.filter(x => x.name match { 
+            case SpecialFunctions.Subscript => false
+            case _ => true
+        }).groupBy(_.name).foreach { case(name, functions) => 
+            val doc = makeFuncDoc(name, functions)
+            println(name.toString)
+            val cleanedName = cleanName(name.toString)
             val file_path = out_path + s"$cleanedName.md"
             println(file_path)
-            val f = new java.io.File(file_path)
-            if(!f.exists) f.createNewFile
-            val fw = new java.io.FileWriter(f)
-            try fw.write(doc) finally fw.close
+            for {
+                fos <- managed(new java.io.FileOutputStream(file_path))
+                osw <- managed(new java.io.OutputStreamWriter(fos, java.nio.charset.StandardCharsets.UTF_8))
+            } {
+                osw.write(doc)
+            }
         }
     }
     def cleanName(name: String): String = {
@@ -41,26 +50,37 @@ object Docs {
         )
         operators.getOrElse(rep, rep)
     }
-    def makeFuncDoc(function: Function[SoQLType]): String = {
+    def makeFuncDoc(name: FunctionName, functions: Seq[Function[SoQLType]]): String = {
 s"""---
 layout: with-sidebar
 sidebar: documentation
-title: "${cleanTitle(function.name.toString)}"
+title: ${JString(cleanTitle(name.toString))}
 
 type: function
 function: ${
-    if(function.name.toString.contains("op")) "$1" + s"${cleanTitle(function.name.toString)}" + "$2"
-    else s"${cleanTitle(function.name.toString)}(${(1 to function.parameters.length).map{ i => "$" + s"${i}" }.mkString(", ")})"
+    if(name.toString.contains("op")) "$1" + s" ${cleanTitle(name.toString)} " + "$2"
+    else s"${cleanTitle(name.toString)}(${(1 to functions.head.parameters.length).map{ i => "$" + s"${i}" }.mkString(", ")})"
 }
-description: "${function.doc}" 
+description: ${
+    // It doesn't matter which one we use if there are multiple overloads
+    if(functions.head.doc.length > 55) JString(functions.head.doc.slice(0, 55)+"...")
+    else JString(functions.head.doc)
+}
 versions:
 - 2.1
 datatypes:
-${
-function.parameters.map {
-      case FixedType(typ) => s"- $typ"
-      case VariableType(name) => function.constraints.getOrElse(name, Set.empty[SoQLType]).map { t => s"- $t"}.mkString("\n")
+${functions.map{ function => function.parameters.headOption match {
+        case Some(FixedType(typ)) => s"- ${JString(typ.toString)}"
+        case Some(VariableType(name)) => function.constraints.getOrElse(name, SoQLTypeClasses.Ordered ++ SoQLTypeClasses.GeospatialLike).map { t => s"- ${JString(t.toString)}"}.mkString("\n")
+        case None => ""
+    }
 }.toSet.mkString("\n")
+}
+returns: 
+${functions.head.result match {
+    case FixedType(typ) => s"- ${JString(typ.toString)}"
+    case VariableType(name) => functions.head.constraints.getOrElse(name, SoQLTypeClasses.Ordered ++ SoQLTypeClasses.GeospatialLike).map { t => s"- ${JString(t.toString)}"}.mkString("\n")
+    }
 }
 parent_paths: 
 - /docs/functions/
@@ -70,16 +90,16 @@ parents:
 {% include function_header.html %}
 
 ## Description
-${function.doc}
+${functions.head.doc}
 
-${function.examples.map { exp => 
+${functions.head.examples.map { exp => 
     "## Explanation\n" + exp.explanation + "\n" +
     "## Query\n" + exp.query + "\n" +
     "## Try it\n" + exp.tryit
 }.mkString("\n")}
 
 ## Signature
-${function.toString}
+${functions.map(f => s"${JString(f.identity)} => " + f.toString.replace("op$", "")).mkString("\n\n")}
 """.stripMargin
     }
     def cleanTitle(name: String): String = {
