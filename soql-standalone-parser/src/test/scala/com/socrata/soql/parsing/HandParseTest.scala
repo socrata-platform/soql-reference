@@ -10,13 +10,6 @@ import com.socrata.soql.tokens.Token
 class HandParseTest extends FunSuite with MustMatchers {
   val printTimings = false
 
-  private class HRParser extends RecursiveDescentParser {
-    override def lexer(s: String) = new StandaloneLexer(s)
-
-    override def expected(r: RecursiveDescentParser.Reader) =
-      new standalone_exceptions.RecursiveDescentBadParse(r)
-  }
-
   private def timing[T](tag: String)(f: => T): T = {
     if(printTimings) {
       val start = System.nanoTime()
@@ -31,7 +24,7 @@ class HandParseTest extends FunSuite with MustMatchers {
 
   test("combinators and hand parser match - expressions") {
     def go(s: String): Unit = {
-      val a = new HRParser()
+      val a = new StandaloneParser()
       val b = new StandaloneCombinatorParser()
       if(printTimings) println(s)
       timing("hand-rolled") { a.expression(s) } must equal(timing("combinator") { b.expression(s) })
@@ -73,8 +66,8 @@ class HandParseTest extends FunSuite with MustMatchers {
 
   test("combinators and hand parser match - statements") {
     def go(s: String): Unit = {
-      val a = new HRParser()
-      val b = new StandaloneParser()
+      val a = new StandaloneParser()
+      val b = new StandaloneCombinatorParser()
       if(printTimings) println(s)
       timing("hand-rolled") { a.unchainedSelectStatement(s) } must equal(timing("combinator") { b.unchainedSelectStatement(s) })
     }
@@ -105,8 +98,8 @@ class HandParseTest extends FunSuite with MustMatchers {
 
   test("combinators and hand parser match - full compound statements") {
     def go(s: String): Unit = {
-      val a = new HRParser()
-      val b = new StandaloneParser()
+      val a = new StandaloneParser()
+      val b = new StandaloneCombinatorParser()
       if(printTimings) println(s)
       timing("hand-rolled") { a.binaryTreeSelect(s) } must equal(timing("combinator") { b.binaryTreeSelect(s) })
     }
