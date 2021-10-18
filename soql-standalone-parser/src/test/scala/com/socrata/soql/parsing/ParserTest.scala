@@ -283,8 +283,8 @@ class ParserTest extends WordSpec with MustMatchers {
         parser.binaryTreeSelect("SELECT 1 |> (SELECT 2 UNION SELECT 3 FROM @t2 )")
         fail("Unexpected success")
       } catch {
-        case e: BadParse =>
-          e.message must equal ("Expected a non-compound query, but got `('")
+        case e: BadParse.ExpectedLeafQuery =>
+          // ok good
       }
     }
 

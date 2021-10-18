@@ -121,16 +121,32 @@ object SoQLException {
 }
 
 case class BadParse(message: String, position: Position) extends SoQLException(message, position)
-class RecursiveDescentBadParse(val reader: Reader)
-    extends BadParse(RecursiveDescentBadParse.msg(reader), reader.first.position)
-    with ParseException
-{
-  override val position = super.position
-}
 
-object RecursiveDescentBadParse {
-  private def msg(reader: Reader) = {
-    RecursiveDescentParser.expectationsToEnglish(reader.alternates, reader.first)
+object BadParse {
+  class ExpectedToken(val reader: Reader)
+      extends BadParse(ExpectedToken.msg(reader), reader.first.position)
+      with ParseException
+  {
+    override val position = super.position
+  }
+
+  object ExpectedToken {
+    private def msg(reader: Reader) = {
+      RecursiveDescentParser.expectationsToEnglish(reader.alternates, reader.first)
+    }
+  }
+
+  class ExpectedLeafQuery(val reader: Reader)
+      extends BadParse(ExpectedLeafQuery.msg(reader), reader.first.position)
+      with ParseException
+  {
+    override val position = super.position
+  }
+
+  object ExpectedLeafQuery {
+    private def msg(reader: Reader) = {
+      "Expected a non-compound query on the right side of a pipe operator"
+    }
   }
 }
 

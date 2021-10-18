@@ -71,9 +71,6 @@ object RecursiveDescentParser {
   case object ANotIn extends Expectation {
     def printable = "`NOT IN'"
   }
-  case object ALeafQuery extends Expectation {
-    def printable = "a non-compound query"
-  }
   case object AnAliasForThis extends Expectation {
     def printable = "an alias for `@this'"
   }
@@ -196,6 +193,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   // These are the things that need implementing
   protected def lexer(s: String): AbstractLexer
   protected def expected(reader: Reader): ParseException
+  protected def expectedLeafQuery(reader: Reader): ParseException
 
   def binaryTreeSelect(soql: String): BinaryTree[Select] = parseFull(compoundSelect, soql)
 
@@ -780,7 +778,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             // query, so reset any alternate expectations we have and
             // fail with that specific error.
             reader.rest.resetAlternates()
-            fail1(reader.rest, ALeafQuery)
+            throw expectedLeafQuery(reader.rest)
         }
       case op@(QUERYUNION() | QUERYINTERSECT() | QUERYMINUS() | QUERYUNIONALL() | QUERYINTERSECTALL() | QUERYMINUSALL()) =>
         val ParseResult(r2, arg2) = atomSelect(reader.rest)
