@@ -1,10 +1,11 @@
-package com.socrata.soql.functions
+package com.socrata.soql.docs
 
 import java.io.File
 
 import com.socrata.soql.types._
 import com.socrata.soql.ast.SpecialFunctions
 import com.socrata.soql.environment.FunctionName
+import com.socrata.soql.functions._
 import com.rojoma.simplearm.v2._
 import com.rojoma.json.v3.ast.JString
 
