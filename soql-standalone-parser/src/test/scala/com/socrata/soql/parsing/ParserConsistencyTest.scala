@@ -7,7 +7,7 @@ import org.scalatest.MustMatchers
 
 import com.socrata.soql.tokens.Token
 
-class HandParseTest extends FunSuite with MustMatchers {
+class ParserConsistencyTest extends FunSuite with MustMatchers {
   val printTimings = false
 
   private def timing[T](tag: String)(f: => T): T = {
@@ -22,13 +22,15 @@ class HandParseTest extends FunSuite with MustMatchers {
     }
   }
 
+  def check[T](f: (AbstractParser, String) => T) = { (s: String) =>
+    val a = new StandaloneParser()
+    val b = new StandaloneCombinatorParser()
+    if(printTimings) println(s)
+    timing("recursive-descent") { f(a, s) } must equal(timing("combinator") { f(b, s) })
+  }
+
   test("combinators and hand parser match - expressions") {
-    def go(s: String): Unit = {
-      val a = new StandaloneParser()
-      val b = new StandaloneCombinatorParser()
-      if(printTimings) println(s)
-      timing("hand-rolled") { a.expression(s) } must equal(timing("combinator") { b.expression(s) })
-    }
+    val go = check(_.expression(_))
 
     go("1 + 1")
     go("1 + 2 * 3")
@@ -65,12 +67,7 @@ class HandParseTest extends FunSuite with MustMatchers {
   }
 
   test("combinators and hand parser match - statements") {
-    def go(s: String): Unit = {
-      val a = new StandaloneParser()
-      val b = new StandaloneCombinatorParser()
-      if(printTimings) println(s)
-      timing("hand-rolled") { a.unchainedSelectStatement(s) } must equal(timing("combinator") { b.unchainedSelectStatement(s) })
-    }
+    val go = check(_.unchainedSelectStatement(_))
 
     go("SELECT 1")
     go("SELECT WHERE x = 3")
@@ -97,12 +94,7 @@ class HandParseTest extends FunSuite with MustMatchers {
   }
 
   test("combinators and hand parser match - full compound statements") {
-    def go(s: String): Unit = {
-      val a = new StandaloneParser()
-      val b = new StandaloneCombinatorParser()
-      if(printTimings) println(s)
-      timing("hand-rolled") { a.binaryTreeSelect(s) } must equal(timing("combinator") { b.binaryTreeSelect(s) })
-    }
+    val go = check(_.binaryTreeSelect(_))
 
     go("select 1")
     go("select 1 |> select _1")
