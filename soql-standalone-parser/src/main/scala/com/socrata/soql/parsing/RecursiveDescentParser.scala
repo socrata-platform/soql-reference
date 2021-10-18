@@ -74,6 +74,9 @@ object RecursiveDescentParser {
   case object AnAliasForThis extends Expectation {
     def printable = "an alias for `@this'"
   }
+  case object AnOperator extends Expectation {
+    def printable = "an operator"
+  }
 
   private implicit def tokenAsTokenLike(t: Token): Expectation = ActualToken(t)
 
@@ -175,12 +178,20 @@ object RecursiveDescentParser {
   private val RANGEROWSSET = s(RANGE(), ROWS())
   private val OVERSET = s(OVER())
   private val DOTLBRACKETSET = s(DOT(), LBRACKET())
-  private val COLONCOLONSET = s(COLONCOLON())
-  private val MINUSPLUSSET = s(MINUS(), PLUS())
-  private val CARETSET = s(CARET())
-  private val FACTORSET = s(STAR(), SLASH(), PERCENT())
-  private val TERMSET = s(PLUS(), MINUS(), PIPEPIPE())
-  private val COMPARISONSET = s(EQUALS(), LESSGREATER(), LESSTHAN(), LESSTHANOREQUALS(), GREATERTHAN(), GREATERTHANOREQUALS(), EQUALSEQUALS(), BANGEQUALS())
+
+  // These are all collapsed into "an operator" for ease of
+  // interpretation by an end-user instead of getting a bunch of
+  // line-noise.  Leaving them here in case we want to bring them back
+  // for some reason...
+
+  // private val COLONCOLONSET = s(COLONCOLON())
+  // private val MINUSPLUSSET = s(MINUS(), PLUS())
+  // private val CARETSET = s(CARET())
+  // private val FACTORSET = s(STAR(), SLASH(), PERCENT())
+  // private val TERMSET = s(PLUS(), MINUS(), PIPEPIPE())
+  // private val COMPARISONSET = s(EQUALS(), LESSGREATER(), LESSTHAN(), LESSTHANOREQUALS(), GREATERTHAN(), GREATERTHANOREQUALS(), EQUALSEQUALS(), BANGEQUALS())
+  private val OPERATORSET = s(AnOperator)
+
   private val LIKEBETWEENINSET = s(IS(), AnIsNot, LIKE(), ANotLike, BETWEEN(), ANotBetween, IN(), ANotIn)
   private val NOTSET = s(NOT())
   private val ORSET = s(OR())
@@ -1234,7 +1245,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r2, (ident, identPos)) = simpleIdentifier(reader.rest)
         cast_!(r2, FunctionCall(SpecialFunctions.Cast(TypeName(ident)), Seq(arg), None)(arg.position, identPos))
       case _ =>
-        reader.addAlternates(COLONCOLONSET)
+        reader.addAlternates(OPERATORSET) // COLONCOLONSET - See note in order_!()
         ParseResult(reader, arg)
     }
   }
@@ -1246,7 +1257,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg), None)(op.position, op.position)
         }
       case _ =>
-        reader.addAlternates(MINUSPLUSSET)
+        reader.addAlternates(OPERATORSET) // MINUSPLUSSET - See note in order_!()
         cast(reader)
     }
   }
@@ -1259,7 +1270,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg, arg2), None)(arg.position, op.position)
         }
       case _ =>
-        reader.addAlternates(CARETSET)
+        reader.addAlternates(OPERATORSET) // CARETSET - See note in order_!()
         ParseResult(r2, arg)
     }
   }
@@ -1276,7 +1287,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r2, arg2) = exp(reader.rest)
         factor_!(r2, FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg, arg2), None)(arg.position, op.position))
       case _ =>
-        reader.addAlternates(FACTORSET)
+        reader.addAlternates(OPERATORSET) // FACTORSET - See note in order_!()
         ParseResult(reader, arg)
     }
   }
@@ -1293,7 +1304,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r2, arg2) = factor(reader.rest)
         term_!(r2, FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg, arg2), None)(arg.position, op.position))
       case _ =>
-        reader.addAlternates(TERMSET)
+        reader.addAlternates(OPERATORSET) // TERMSET - See note in order_!()
         ParseResult(reader, arg)
     }
   }
@@ -1310,12 +1321,21 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r2, arg2) = term(reader.rest)
         order_!(r2, FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg, arg2), None)(arg.position, op.position))
       case _ =>
-        reader.addAlternates(COMPARISONSET)
+        // So a bunch this adds an expectation of just "an operator"
+        // rather than specifying the operators it expects, and the
+        // functions above up through `cast` do not.  This only works
+        // because these handful of functions are a unique chain of
+        // parser functions - everything that enters enter order()
+        // (and _only_ those things) will be able to pass through
+        // those, and they pass through them without any intervening
+        // parsing steps.  As a result, we can just collapse _all_ of
+        // their expectations into just "we want some operator here".
+
+        reader.addAlternates(OPERATORSET) // COMPARISONSET
         ParseResult(reader, arg)
     }
   }
 
-  // reader is positioned after the open-paren
   private def parseArgList(reader: Reader, arg0: Option[Expression] = None): ParseResult[Seq[Expression]] = {
     reader.first match {
       case RPAREN() =>
