@@ -95,7 +95,7 @@ object SoQLFunctions {
   )
 
   val Concat = f("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))(
-    "Concatenate two strings"
+    "Concatenate two strings", Example("Concatenate two strings", "'first' || 'second' as concat", ""), Example("Concatenate with columns", "col_a || 'second' as concat", "")
   )
   val Gte = f(">=", SpecialFunctions.Operator(">="), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))(
     "Return true if the value on the left is greater than or equal to the value on the right"
