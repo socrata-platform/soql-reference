@@ -49,7 +49,7 @@ case class ASC() extends Token with OrderDirection
 case class DESC() extends Token with OrderDirection
 
 // Query chaining
-case class QUERYPIPE() extends Token
+case class QUERYPIPE() extends FormattedToken("|>")
 
 case class QUERYUNION() extends FormattedToken("UNION")
 case class QUERYINTERSECT() extends FormattedToken("INTERSECT")
