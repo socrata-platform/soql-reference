@@ -1,20 +1,42 @@
 package com.socrata.soql.parsing
 
+import scala.collection.immutable.ListSet
 import scala.util.parsing.input.{Reader, NoPosition}
 
 import com.ibm.icu.lang.UCharacter
 import com.ibm.icu.util.ULocale
 
 import com.socrata.soql.tokens._
-import scala.Some
-import scala.Some
-import scala.Some
 
 trait StreamableReader[T] extends Reader[T] {
-  def toStream: Stream[T]
+  def toStream: StreamShim.Stream[T]
+  override def rest: StreamableReader[T]
 }
 
-class LexerReader(lexer: AbstractLexer) extends StreamableReader[Token] { self =>
+trait ExtendedReader[T] extends StreamableReader[T] {
+  // This is a bit of a hack used by the hand-rolled parser.  Some
+  // productions choose not to consume anything.  When this happens
+  // they push a set of things that they would have accepted onto this
+  // list so that if an error occurs _while this token is still under
+  // consideration_ the error can say "..but maybe if you did this
+  // other thing it would have worked."
+  //
+  // Conceptually this is a single set of expectations, but these get
+  // added to the list a _lot_ (e.g., every nested sub expression adds
+  // to this set several times) and we only ever care about the final
+  // set if an error actually occurs, so to keep overhead down we
+  // reduce the cost of tracking that to a single cons-cell allocation
+  // and only actually build the final set if required.
+  private var alts: List[Set[RecursiveDescentParser.Expectation]] = Nil
+
+  def alternates = alts.foldLeft(ListSet.empty[RecursiveDescentParser.Expectation])(_ union _)
+  def addAlternates(a: Set[RecursiveDescentParser.Expectation]): Unit = alts ::= a
+  def resetAlternates(): Unit = alts = Nil
+
+  override def rest: ExtendedReader[T]
+}
+
+class LexerReader(lexer: AbstractLexer) extends ExtendedReader[Token] { self =>
   import LexerReader._
 
   val first = lexer.yylex() match {
@@ -25,17 +47,17 @@ class LexerReader(lexer: AbstractLexer) extends StreamableReader[Token] { self =
   def atEnd = false
   def pos = first.position
 
-  def toStream: Stream[Token] = first #:: rest.toStream
+  def toStream: StreamShim.Stream[Token] = first #:: rest.toStream
 
-  lazy val rest: StreamableReader[Token] = {
+  lazy val rest: ExtendedReader[Token] = {
     if(atEnd) this
     else if(first.isInstanceOf[EOF]) {
-      new StreamableReader[Token] {
+      new ExtendedReader[Token] {
         def first = self.first
         def rest = this
         def atEnd = true
         def pos = first.position
-        def toStream = Stream.empty
+        def toStream = StreamShim.Stream.empty
       }
     } else new LexerReader(lexer)
   }

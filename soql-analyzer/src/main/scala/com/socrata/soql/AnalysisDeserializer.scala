@@ -231,9 +231,9 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
     def readSubAnalysis(): SubAnalysis[C, T] = {
       if (this.version > NonEmptySeqVersion || this.version == TestVersionV5) {
-        SubAnalysis(readBinaryTree(readAnalysis), in.readString())
+        SubAnalysis(readBinaryTree(readAnalysis()), in.readString())
       } else {
-        val neseq = readNonEmptySeq(readAnalysis)
+        val neseq = readNonEmptySeq(readAnalysis())
         val bt = toBinaryTree(neseq.seq)
         SubAnalysis(bt, in.readString())
       }
@@ -330,7 +330,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       case v if v >= LastVersion =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
-        val bt: BinaryTree[SoQLAnalysis[C, T]] = deserializer.readBinaryTree(deserializer.readAnalysis)
+        val bt: BinaryTree[SoQLAnalysis[C, T]] = deserializer.readBinaryTree(deserializer.readAnalysis())
         bt
       case v if v == TestVersionV5 => // single select
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)

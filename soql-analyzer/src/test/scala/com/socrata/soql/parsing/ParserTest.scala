@@ -29,19 +29,19 @@ class ParserTest extends WordSpec with MustMatchers {
 
   "Parsing" should {
     "require a full `between' clause" in {
-      expectFailure("Expression expected", "x between")
-      expectFailure("`AND' expected", "x between a")
-      expectFailure("Expression expected", "x between a and")
-      expectFailure("`BETWEEN', `IN', or `LIKE' expected", "x not")
-      expectFailure("Expression expected", "x not between")
-      expectFailure("`AND' expected", "x not between a")
+      expectFailure("Expected an expression, but got end of input", "x between")
+      expectFailure("Expected `AND', but got end of input", "x between a")
+      expectFailure("Expected an expression, but got end of input", "x between a and")
+      expectFailure("Expected one of `BETWEEN', `IN', or `LIKE', but got end of input", "x not")
+      expectFailure("Expected an expression, but got end of input", "x not between")
+      expectFailure("Expected `AND', but got end of input", "x not between a")
     }
 
     "require a full `is null' clause" in {
-      expectFailure("`NOT' or `NULL' expected", "x is")
-      expectFailure("`NULL' expected", "x is not")
-      expectFailure("`NULL' expected", "x is not 5")
-      expectFailure("`NOT' or `NULL' expected", "x is 5")
+      expectFailure("Expected one of `NULL' or `NOT', but got end of input", "x is")
+      expectFailure("Expected `NULL', but got end of input", "x is not")
+      expectFailure("Expected `NULL', but got `5'", "x is not 5")
+      expectFailure("Expected one of `NULL' or `NOT', but got `5'", "x is 5")
     }
 
     "accept both the 'case' sugar and the 'case' function" in {
@@ -54,15 +54,15 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "require an expression after `not'" in {
-      expectFailure("Expression expected", "not")
+      expectFailure("Expected an expression, but got end of input", "not")
     }
 
     "reject a more-than-complete expression" in {
-      expectFailure("Unexpected token `y'", "x y")
+      expectFailure("Expected end of input, but got `y'", "x y")
     }
 
     "reject a null expression" in {
-      expectFailure("Expression expected", "")
+      expectFailure("Expected an expression, but got end of input", "")
     }
 
     "accept a lone identifier" in {
@@ -70,7 +70,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "require something after a dereference-dot" in {
-      expectFailure("Identifier expected", "a.")
+      expectFailure("Expected an identifier, but got end of input", "a.")
     }
 
     "accept expr.identifier" in {
@@ -78,15 +78,15 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "reject expr.identifier." in {
-      expectFailure("Identifier expected", "a.b.")
+      expectFailure("Expected an identifier, but got end of input", "a.b.")
     }
 
     "reject expr[" in {
-      expectFailure("Expression expected", "a[")
+      expectFailure("Expected an expression, but got end of input", "a[")
     }
 
     "reject expr[expr" in {
-      expectFailure("`]' expected", "a[2 * b")
+      expectFailure("Expected `]', but got end of input", "a[2 * b")
     }
 
     "accept expr[expr]" in {
@@ -109,7 +109,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "reject expr[expr]." in {
-      expectFailure("Identifier expected", "a[2 * b].")
+      expectFailure("Expected an identifier, but got end of input", "a[2 * b].")
     }
 
     "accept expr[expr].ident" in {

@@ -1,6 +1,6 @@
 package com.socrata.soql
 
-import org.scalatest.prop.PropertyChecks
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import org.scalatest.FunSuite
 import org.scalatest.MustMatchers
 import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
@@ -10,7 +10,7 @@ import com.socrata.soql.types._
 import com.socrata.soql.functions.{SoQLFunctionInfo, SoQLTypeInfo}
 
 
-class SoQLTypeAnalyzerTest extends FunSuite with MustMatchers with PropertyChecks {
+class SoQLTypeAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropertyChecks {
   val datasetCtx = new DatasetContext[SoQLType] {
     val schema = com.socrata.soql.collection.OrderedMap(
       ColumnName(":id") -> SoQLNumber,

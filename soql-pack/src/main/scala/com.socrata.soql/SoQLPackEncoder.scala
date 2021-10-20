@@ -77,7 +77,7 @@ object SoQLPackEncoder {
   // as ISO8601 date time string, which records +/-hh:mm.
   def encodeDateTime(dt: DateTime): Any = {
     val tz15min = dt.getZone.getOffset(0) / FifteenMinMillis
-    (dt.getChronology.getClass, tz15min) match {
+    (dt.getChronology.getClass.asInstanceOf[Class[_ <: AssembledChronology]], tz15min) match {
       case (IsoClass, 0) =>         // UTC timezone, standard chronology.  Encode as aray of len 1
         Array[Any](dt.getMillis)
       case (IsoClass, tz) =>        // Non-UTC timezone, standard chrono - encode as [millis, tz]

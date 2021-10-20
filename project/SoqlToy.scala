@@ -6,6 +6,6 @@ object SoqlToy {
     name := "soql-toy",
     libraryDependencies ++= Seq(
       "org.slf4j" % "slf4j-simple" % BuildSettings.slf4jVersion,
-      "org.scalacheck" %% "scalacheck" % "1.13.4" % "test")
+      "org.scalacheck" %% "scalacheck" % "1.14.0" % "test")
   )
 }

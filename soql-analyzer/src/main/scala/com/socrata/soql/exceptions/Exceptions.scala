@@ -1,5 +1,6 @@
 package com.socrata.soql.exceptions
 
+import scala.collection.compat.immutable.LazyList
 import scala.util.parsing.input.Position
 import scala.reflect.ClassTag
 
@@ -10,6 +11,8 @@ import com.rojoma.json.v3.matcher._
 
 import com.socrata.soql.environment.{TypeName, FunctionName, ColumnName}
 import com.socrata.soql.parsing.SoQLPosition
+import com.socrata.soql.parsing.RecursiveDescentParser.{Reader, ParseException}
+import com.socrata.soql.parsing.RecursiveDescentParser
 
 sealed abstract class SoQLException(m: String, p: Position) extends RuntimeException(m + ":\n" + p.longString) {
   def position: Position
@@ -39,9 +42,9 @@ object SoQLException {
     def decode(v: JValue) = nameDecode(v, TypeName)
   }
   private implicit object PositionCodec extends JsonEncode[Position] with JsonDecode[Position] {
-    private val row = Variable[Int]
-    private val col = Variable[Int]
-    private val text = Variable[String]
+    private val row = Variable[Int]()
+    private val col = Variable[Int]()
+    private val text = Variable[String]()
     private val pattern =
       PObject(
         "row" -> row,
@@ -53,7 +56,7 @@ object SoQLException {
       pattern.generate(row := p.line, col := p.column, text := p.longString.split('\n')(0))
 
     def decode(v: JValue) =
-      pattern.matches(v).right.map { results =>
+      pattern.matches(v).map { results =>
         SoQLPosition(row(results), col(results), text(results), col(results))
       }
   }
@@ -111,13 +114,41 @@ object SoQLException {
 
     def encode(e: SoQLException) = {
       val JObject(fields) = rawCodec.encode(e)
-      JObject(fields + ("english" -> JString(e.getMessage)))
+      JObject(fields.toMap + ("english" -> JString(e.getMessage)))
     }
     def decode(v: JValue) = rawCodec.decode(v)
   }
 }
 
 case class BadParse(message: String, position: Position) extends SoQLException(message, position)
+
+object BadParse {
+  class ExpectedToken(val reader: Reader)
+      extends BadParse(ExpectedToken.msg(reader), reader.first.position)
+      with ParseException
+  {
+    override val position = super.position
+  }
+
+  object ExpectedToken {
+    private def msg(reader: Reader) = {
+      RecursiveDescentParser.expectationsToEnglish(reader.alternates, reader.first)
+    }
+  }
+
+  class ExpectedLeafQuery(val reader: Reader)
+      extends BadParse(ExpectedLeafQuery.msg(reader), reader.first.position)
+      with ParseException
+  {
+    override val position = super.position
+  }
+
+  object ExpectedLeafQuery {
+    private def msg(reader: Reader) = {
+      "Expected a non-compound query on the right side of a pipe operator"
+    }
+  }
+}
 
 case class ReservedTableAlias(alias: String, position: Position) extends SoQLException("Reserved table alias", position)
 

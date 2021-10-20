@@ -88,7 +88,7 @@ object Compound {
     }
   }
 
-  def unapply[T](arg: Compound[T]): Option[(String, BinaryTree[T], BinaryTree[T])] = {
+  def unapply[T](arg: Compound[T]): Some[(String, BinaryTree[T], BinaryTree[T])] = {
     Some(arg.op, arg.left, arg.right)
   }
 }

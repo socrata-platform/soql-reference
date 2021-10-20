@@ -10,7 +10,7 @@ class SoQLFunctionsTest extends FunSuite with MustMatchers {
 
   test("fixed-arity and variable-arity functions do not share any names") {
     val sharedNames = SoQLFunctions.nAdicFunctions.map(_.name).toSet intersect SoQLFunctions.variadicFunctions.map(_.name).toSet
-    sharedNames must be ('empty)
+    sharedNames must be (Symbol("empty"))
   }
 
   test("SoQLFunctions has no Monomorphic accessors") {

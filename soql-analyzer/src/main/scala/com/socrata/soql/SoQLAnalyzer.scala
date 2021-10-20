@@ -10,7 +10,7 @@ import com.socrata.soql.ast._
 import com.socrata.soql.parsing.{AbstractParser, Parser}
 import com.socrata.soql.typechecker._
 import com.socrata.soql.environment._
-import com.socrata.soql.collection.OrderedMap
+import com.socrata.soql.collection._
 import com.socrata.soql.typed.Qualifier
 import Select._
 import com.socrata.NonEmptySeq
@@ -349,20 +349,20 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
   def analyzeInOuterSelectionContext(initialCtx: AnalysisContext)(lastQuery: Analysis, query: Select): Analysis = {
     val prevCtx = contextFromAnalysis(lastQuery)
-    val nextCtx = prevCtx ++ initialCtx.filterKeys(qualifier => TableName.PrimaryTable.qualifier != qualifier)
+    val nextCtx = prevCtx ++ initialCtx.view.filterKeys(qualifier => TableName.PrimaryTable.qualifier != qualifier)
     analyzeWithSelection(query)(nextCtx)
   }
 
   def contextFromAnalysis(a: Analysis): AnalysisContext = {
     val ctx = new DatasetContext[Type] {
-      override val schema: OrderedMap[ColumnName, Type] = a.selection.mapValues(_.typ)
+      override val schema: OrderedMap[ColumnName, Type] = a.selection.withValuesMapped(_.typ)
     }
     Map(TableName.PrimaryTable.qualifier -> ctx)
   }
 
   private def contextFromAnalysis(qualifier: Qualifier, a: Analysis) = {
     val ctx = new DatasetContext[Type] {
-      override val schema: OrderedMap[ColumnName, Type] = a.selection.mapValues(_.typ)
+      override val schema: OrderedMap[ColumnName, Type] = a.selection.withValuesMapped(_.typ)
     }
     (qualifier -> ctx)
   }
@@ -479,7 +479,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                      offset: Option[BigInt],
                      search: Option[String]): Analysis =
   {
-    def check(items: TraversableOnce[Expr], pred: Type => Boolean, onError: (TypeName, Position) => Throwable) {
+    def check(items: Iterable[Expr], pred: Type => Boolean, onError: (TypeName, Position) => Throwable): Unit = {
       for(item <- items if !pred(item.typ)) throw onError(typeInfo.typeNameFor(item.typ), item.position)
     }
 
@@ -625,7 +625,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
    */
   def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): SoQLAnalysis[NewColumnId, Type] = {
     copy(
-      selection = selection.mapValues(_.mapColumnIds(f)),
+      selection = selection.withValuesMapped(_.mapColumnIds(f)),
       joins = joins.map(_.mapColumnIds(f)),
       where = where.map(_.mapColumnIds(f)),
       groupBys = groupBys.map(_.mapColumnIds(f)),
@@ -639,7 +639,8 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                 columnNameToNewColumnId: ColumnName => NewColumnId,
                                 columnIdToNewColumnId: ColumnId => NewColumnId): SoQLAnalysis[NewColumnId, Type] = {
 
-    lazy val columnsByQualifier = qColumnIdNewColumnIdMap.groupBy(_._1._2) + (Some(TableName.SingleRow) -> Map.empty)
+    lazy val columnsByQualifier: Map[Qualifier, Map[(ColumnId, Qualifier), NewColumnId]] =
+      qColumnIdNewColumnIdMap.groupBy(_._1._2) + (Some(TableName.SingleRow) -> Map.empty)
 
     val qColumnIdNewColumnIdMapWithFrom = this.from.foldLeft(qColumnIdNewColumnIdMap) { (acc, tableName) =>
       val qual = tableName match {
@@ -692,7 +693,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
     }
 
     copy(
-      selection = selection.mapValues(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
+      selection = selection.withValuesMapped(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
       joins = mappedJoins,
       where = where.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
       groupBys = groupBys.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
@@ -853,7 +854,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   private def mergeSelection(a: OrderedMap[ColumnName, Expr],
                              b: OrderedMap[ColumnName, Expr]): OrderedMap[ColumnName, Expr] =
     // ok.  We don't need anything from A, but columnRefs in b's expr that refer to a's values need to get substituted
-    b.mapValues(replaceRefs(a, _))
+    b.withValuesMapped(replaceRefs(a, _))
 
   private def mergeOrderBy(aliases: OrderedMap[ColumnName, Expr],
                            obA: Seq[typed.OrderBy[ColumnName, T]],

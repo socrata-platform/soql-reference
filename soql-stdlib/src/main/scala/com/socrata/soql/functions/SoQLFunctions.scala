@@ -2,6 +2,7 @@ package com.socrata.soql.functions
 
 import java.lang.reflect.Modifier
 
+import com.socrata.soql.collection._
 import com.socrata.soql.ast.SpecialFunctions
 import com.socrata.soql.environment.FunctionName
 import com.socrata.soql.types._
@@ -764,12 +765,12 @@ object SoQLFunctions {
   val windowFunctions = SoQLFunctions.allFunctions.filter(_.needsWindow)
 
   val nAdicFunctionsByNameThenArity: Map[FunctionName, Map[Int, Set[Function[SoQLType]]]] =
-    nAdicFunctions.groupBy(_.name).mapValues { fs =>
-      fs.groupBy(_.minArity).mapValues(_.toSet).toMap
+    nAdicFunctions.groupBy(_.name).view.mapValues { fs =>
+      fs.groupBy(_.minArity).view.mapValues(_.toSet).toMap
     }.toMap
 
   val variadicFunctionsByNameThenMinArity: Map[FunctionName, Map[Int, Set[Function[SoQLType]]]] =
-    variadicFunctions.groupBy(_.name).mapValues { fs =>
-      fs.groupBy(_.minArity).mapValues(_.toSet).toMap
+    variadicFunctions.groupBy(_.name).view.mapValues { fs =>
+      fs.groupBy(_.minArity).view.mapValues(_.toSet).toMap
     }.toMap
 }

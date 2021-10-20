@@ -1,5 +1,6 @@
 package com.socrata.soql.ast
 
+import scala.collection.compat.immutable.LazyList
 import scala.util.parsing.input.{NoPosition, Position}
 import scala.runtime.ScalaRunTime
 import scala.collection.immutable.VectorBuilder
@@ -260,9 +261,9 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
       case SpecialFunctions.IsNotNull =>
         d"${parameters(0).doc} IS NOT NULL"
       case SpecialFunctions.In =>
-        parameters.iterator.drop(1).map(_.doc).toStream.encloseNesting(d"${parameters(0).doc} IN (", Doc.Symbols.comma, d")").group
+        parameters.iterator.drop(1).map(_.doc).to(LazyList).encloseNesting(d"${parameters(0).doc} IN (", Doc.Symbols.comma, d")").group
       case SpecialFunctions.NotIn =>
-        parameters.iterator.drop(1).map(_.doc).toStream.encloseNesting(d"${parameters(0).doc} NOT IN (", Doc.Symbols.comma, d")").group
+        parameters.iterator.drop(1).map(_.doc).to(LazyList).encloseNesting(d"${parameters(0).doc} NOT IN (", Doc.Symbols.comma, d")").group
       case SpecialFunctions.Like =>
         d"${parameters(0).doc} LIKE ${parameters(1).doc}"
       case SpecialFunctions.NotLike =>

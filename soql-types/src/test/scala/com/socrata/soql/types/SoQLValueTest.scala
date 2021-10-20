@@ -14,11 +14,11 @@ class SoQLValueTest extends FunSuite with MustMatchers {
     val valueClasses = typeOf[SoQLValue].typeSymbol.asClass.knownDirectSubclasses
     val typeClasses = typeOf[SoQLValue].typeSymbol.asClass.knownDirectSubclasses
 
-    valueClasses must not be ('empty)
+    valueClasses must not be (Symbol("empty"))
     valueClasses.size must equal (typeClasses.size)
 
     valueClasses.foreach { sym =>
-      val companionType = sym.typeSignature.member(newTermName("typ")).asMethod.returnType.typeSymbol
+      val companionType = sym.typeSignature.member(TermName("typ")).asMethod.returnType.typeSymbol
       companionType.name.toString must equal (sym.name.toString)
     }
   }

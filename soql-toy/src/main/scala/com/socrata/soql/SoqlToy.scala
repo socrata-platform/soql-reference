@@ -7,6 +7,7 @@ import environment.{ColumnName, DatasetContext, TableName, HoleName}
 import com.socrata.soql.functions.{SoQLFunctionInfo, SoQLTypeInfo}
 import com.rojoma.json.v3.util.JsonUtil
 import com.socrata.soql.parsing.{Parser, AbstractParser}
+import scala.io.StdIn.readLine
 
 object SoqlToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -35,12 +36,12 @@ object SoqlToy extends (Array[String] => Unit) {
     )
   })
 
-  def menu() {
+  def menu(): Unit = {
     println("Columns:")
     Util.printList(datasetCtx(TableName.PrimaryTable.qualifier).schema)
   }
 
-  def apply(args: Array[String]) {
+  def apply(args: Array[String]): Unit = {
     menu()
 
     val analyzer = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo)

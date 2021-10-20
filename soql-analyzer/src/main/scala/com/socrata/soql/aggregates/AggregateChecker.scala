@@ -42,7 +42,7 @@ class AggregateChecker[Type] {
     }
   }
 
-  def checkGrouped(outputs: Seq[Expr], where: Option[Expr], groupBy: Seq[Expr], having: Option[Expr], orderBy: Seq[Expr]) {
+  def checkGrouped(outputs: Seq[Expr], where: Option[Expr], groupBy: Seq[Expr], having: Option[Expr], orderBy: Seq[Expr]): Unit = {
     outputs.foreach(checkPostgroupExpression("selected columns", _, groupBy))
     where.foreach(checkPregroupExpression("WHERE", _))
     groupBy.foreach(checkPregroupExpression("GROUP BY", _))
@@ -50,7 +50,7 @@ class AggregateChecker[Type] {
     orderBy.foreach(checkPostgroupExpression("ORDER BY", _, groupBy))
   }
 
-  def checkPregroupExpression(clause: String, e: Expr) {
+  def checkPregroupExpression(clause: String, e: Expr): Unit = {
     e match {
       case FunctionCall(function, _, None) if function.isAggregate =>
         throw AggregateInUngroupedContext(function.name, clause, e.position)
@@ -62,7 +62,7 @@ class AggregateChecker[Type] {
     }
   }
 
-  def checkPostgroupExpression(clause: String, e: Expr, groupExpressions: Iterable[Expr]) {
+  def checkPostgroupExpression(clause: String, e: Expr, groupExpressions: Iterable[Expr]): Unit = {
     if(!isGroupExpression(e, groupExpressions)) {
       e match {
         case FunctionCall(function, params, None) if function.isAggregate =>

@@ -95,7 +95,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       }
     }
 
-    private def saveRegistry[A](out: CodedOutputStream, registry: TObjectIntHashMap[A])(f: A => Unit) {
+    private def saveRegistry[A](out: CodedOutputStream, registry: TObjectIntHashMap[A])(f: A => Unit): Unit = {
       out.writeUInt32NoTag(registry.size)
       val it = registry.iterator
       while(it.hasNext) {
@@ -135,7 +135,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
         out.writeUInt32NoTag(strings.get(l.name))
       }
 
-    def save(out: CodedOutputStream) {
+    def save(out: CodedOutputStream): Unit = {
       saveStrings(out)
       saveLabels(out)
       saveTypes(out)
@@ -147,7 +147,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
   private class Serializer(out: CodedOutputStream, dictionary: SerializationDictionary[C, T]) {
     import dictionary._
 
-    private def writePosition(pos: Position) {
+    private def writePosition(pos: Position): Unit = {
       pos match {
         case SoQLPosition(line, column, sourceText, offset) =>
           out.writeRawByte(0)
@@ -170,7 +170,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       }
     }
 
-    private def writeExpr(e: Expr) {
+    private def writeExpr(e: Expr): Unit = {
       writePosition(e.position)
       e match {
         case ColumnRef(qual, col, typ) =>
@@ -208,14 +208,14 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     private def writeDistinct(distinct: Boolean) =
       out.writeBoolNoTag(distinct)
 
-    private def writeSelection(selection: OrderedMap[ColumnName, Expr]) {
+    private def writeSelection(selection: OrderedMap[ColumnName, Expr]): Unit = {
       writeSeq(selection) { case (col, expr) =>
         out.writeUInt32NoTag(dictionary.registerLabel(col))
         writeExpr(expr)
       }
     }
 
-    private def writeJoins(joins: Seq[Join[C, T]]) {
+    private def writeJoins(joins: Seq[Join[C, T]]): Unit = {
       writeSeq(joins) { join =>
         out.writeStringNoTag(join.typ.toString)
         writeJoinAnalysis(join.from)
@@ -224,7 +224,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       }
     }
 
-    private def writeWindowFunctionInfo(windowFunctionInfo: Option[WindowFunctionInfo[C, T]]) {
+    private def writeWindowFunctionInfo(windowFunctionInfo: Option[WindowFunctionInfo[C, T]]): Unit = {
       writeSeq(windowFunctionInfo.toSeq) { w =>
         writeSeq(w.partitions)(writeExpr)
         writeOrderBy(w.orderings)
@@ -312,7 +312,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
         writeTableName(tableName)
       }
 
-    def writeAnalysis(analysis: SoQLAnalysis[C, T]) {
+    def writeAnalysis(analysis: SoQLAnalysis[C, T]): Unit = {
       val SoQLAnalysis(isGrouped,
                        distinct,
                        selection,
@@ -344,7 +344,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     }
   }
 
-  def apply(outputStream: OutputStream, analyses: NonEmptySeq[SoQLAnalysis[C, T]]) {
+  def apply(outputStream: OutputStream, analyses: NonEmptySeq[SoQLAnalysis[C, T]]): Unit = {
     val dictionary = new SerializationDictionaryImpl
     val postDictionaryData = new ByteArrayOutputStream
     val out = CodedOutputStream.newInstance(postDictionaryData)
@@ -359,7 +359,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     postDictionaryData.writeTo(outputStream)
   }
 
-  def applyBinaryTree(outputStream: OutputStream, analyses: BinaryTree[SoQLAnalysis[C, T]]) {
+  def applyBinaryTree(outputStream: OutputStream, analyses: BinaryTree[SoQLAnalysis[C, T]]): Unit = {
     val dictionary = new SerializationDictionaryImpl
     val postDictionaryData = new ByteArrayOutputStream
     val out = CodedOutputStream.newInstance(postDictionaryData)

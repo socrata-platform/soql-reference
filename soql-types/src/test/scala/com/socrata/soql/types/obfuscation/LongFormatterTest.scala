@@ -2,9 +2,9 @@ package com.socrata.soql.types.obfuscation
 
 import org.scalatest.FunSuite
 import org.scalatest.MustMatchers
-import org.scalatest.prop.PropertyChecks
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
-class LongFormatterTest extends FunSuite with MustMatchers with PropertyChecks {
+class LongFormatterTest extends FunSuite with MustMatchers with ScalaCheckPropertyChecks {
   test("Format always produces exactly 14 characters") {
     forAll { x: Long =>
       LongFormatter.format(x).length must be (14)

@@ -20,7 +20,7 @@ class LexerTest extends WordSpec with MustMatchers {
     tokens.map(_.position).toList must equal (fixture.toList.map { case (_, r,c,o) => new SoQLPosition(r, c, s, o) })
   }
 
-  def lex(s: String) {
+  def lex(s: String): Unit = {
     new LexerReader(new StandaloneLexer(s)).toStream.force
   }
 

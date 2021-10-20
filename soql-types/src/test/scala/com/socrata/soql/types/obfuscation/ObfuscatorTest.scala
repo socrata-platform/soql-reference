@@ -2,9 +2,9 @@ package com.socrata.soql.types.obfuscation
 
 import org.scalatest.FunSuite
 import org.scalatest.MustMatchers
-import org.scalatest.prop.PropertyChecks
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
-class ObfuscatorTest extends FunSuite with MustMatchers with PropertyChecks {
+class ObfuscatorTest extends FunSuite with MustMatchers with ScalaCheckPropertyChecks {
   private class LongObfuscator(cryptProvider: CryptProvider, prefix: String) extends Obfuscator(prefix, cryptProvider) {
     def obfuscate(l: Long) = encrypt(l)
     def deobfuscate(s: String) = decrypt(s)

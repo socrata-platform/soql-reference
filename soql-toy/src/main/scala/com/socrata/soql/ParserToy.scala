@@ -6,6 +6,7 @@ import com.ibm.icu.util.ULocale
 
 import com.socrata.soql.exceptions.SoQLException
 import com.socrata.soql.parsing.Parser
+import scala.io.StdIn.readLine
 
 object ParserToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -13,7 +14,7 @@ object ParserToy extends (Array[String] => Unit) {
     sys.exit(1)
   }
 
-  def menu() {
+  def menu(): Unit = {
     println("1) selectStatement")
     println("2) selection")
     println("3) expression")
@@ -23,7 +24,7 @@ object ParserToy extends (Array[String] => Unit) {
     println("7) offset")
   }
 
-  def apply(args: Array[String]) {
+  def apply(args: Array[String]): Unit = {
     menu()
     val p = new Parser
     while(true) {

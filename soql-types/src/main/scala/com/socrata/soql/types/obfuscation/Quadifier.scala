@@ -25,7 +25,7 @@ object Quadifier {
     new String(cs)
   }
 
-  def quadify(n: Int, cs: Array[Char], offset: Int = 0) {
+  def quadify(n: Int, cs: Array[Char], offset: Int = 0): Unit = {
     cs(offset) = alphabet(((n >> 15) & digitMask).toInt)
     cs(offset+1) = alphabet(((n >> 10) & digitMask).toInt)
     cs(offset+2) = alphabet(((n >> 5) & digitMask).toInt)

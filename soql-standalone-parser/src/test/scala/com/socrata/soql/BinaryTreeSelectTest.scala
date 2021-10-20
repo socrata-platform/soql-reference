@@ -2,6 +2,7 @@ package com.socrata.soql.parsing
 
 import com.socrata.soql.{Compound, Leaf}
 import org.scalatest.{FunSpec, MustMatchers}
+import scala.language.existentials
 
 class BinaryTreeSelectTest extends FunSpec with MustMatchers {
   val parser = new StandaloneParser()

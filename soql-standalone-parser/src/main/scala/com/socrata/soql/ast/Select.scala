@@ -300,7 +300,7 @@ case class Select(
       limit.map { l => Seq(d"LIMIT", Doc(l)).sep.hang(2) }
     def offsetClause =
       offset.map { o => Seq(d"OFFSET", Doc(o)).sep.hang(2) }
-    Seq[Traversable[Doc[Nothing]]](
+    Seq[Iterable[Doc[Nothing]]](
       Some(selectClause),
       fromJoinClause,
       whereClause,
@@ -442,7 +442,7 @@ case class SelectedExpression(expression: Expression, name: Option[(ColumnName, 
   override def toString =
     if(AST.pretty) {
       name match {
-        case Some(name) => expression + " AS `" + name._1 + "`"
+        case Some(name) => s"$expression AS `${name._1}`"
         case None => expression.toString
       }
     } else {

@@ -5,7 +5,6 @@ import scala.collection.immutable.{HashMap, MapLike}
 import scala.collection.generic.{CanBuildFrom, ImmutableMapFactory}
 
 class OrderedMap[A, +B](underlying: Map[A, (Int, B)], ordering: Vector[A]) extends Map[A,B] with MapLike[A, B, OrderedMap[A, B]] with Serializable {
-
   override def size: Int = underlying.size
 
   override def empty = OrderedMap.empty[A, B]
@@ -15,6 +14,9 @@ class OrderedMap[A, +B](underlying: Map[A, (Int, B)], ordering: Vector[A]) exten
   }
 
   override def mapValues[C](f: B => C): OrderedMap[A, C] = new OrderedMap(underlying.mapValues { case (k,v) => (k,f(v)) }, ordering)
+
+  def withValuesMapped[C](f: B => C): OrderedMap[A, C] =
+    new OrderedMap(underlying.iterator.map { case (k, (i, v)) => k -> (i, f(v)) }.toMap, ordering)
 
   override def foreach[U](f: ((A, B)) =>  U): Unit = iterator.foreach(f)
 
@@ -55,6 +57,13 @@ class OrderedMap[A, +B](underlying: Map[A, (Int, B)], ordering: Vector[A]) exten
     }
 
   override def keySet: OrderedSet[A] = new OrderedSet(underlying.mapValues(_._1), ordering)
+
+  override def toString =
+    // Sadness - but the 2.13 version is just a ListMap directly, and
+    // its toString tags itself as being a ListMap in its string
+    // representation.  So we'll do the same here, even though we're
+    // not actually a ListMap.
+    iterator.map { case (k,v) => s"$k -> $v" }.mkString("ListMap(", ", ", ")")
 }
 
 object OrderedMap extends ImmutableMapFactory[OrderedMap] {
