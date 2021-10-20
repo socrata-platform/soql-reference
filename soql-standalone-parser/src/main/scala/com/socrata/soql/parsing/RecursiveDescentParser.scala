@@ -149,52 +149,53 @@ object RecursiveDescentParser {
   // and recreating these sets on-site has a fairly hefty runtime
   // cost.
   private[this] def s(xs: Expectation*) = ListSet(xs : _*)
-  private val ANDSET = s(AND())
-  private val LIMITOFFSETSET = s(LIMIT(), OFFSET())
-  private val LIMITSET = s(LIMIT())
-  private val OFFSETSET = s(OFFSET())
-  private val ORDERBYSEARCHSET = s(AnOrderBy, SEARCH())
-  private val ORDERBYSET = s(AnOrderBy)
-  private val SEARCHSET = s(SEARCH())
-  private val GROUPBYSET = s(AGroupBy)
-  private val WHERESET = s(WHERE())
-  private val HAVINGSET = s(HAVING())
-  private val TABLEIDCOLONSTARSET = s(ATableIdentifier, COLONSTAR())
-  private val LPARENSET = s(LPAREN())
-  private val COMMASET = s(COMMA())
-  private val TABLEIDSTARSET = s(ATableIdentifier, STAR())
-  private val ASSET = s(AS())
-  private val EXPRESSIONSET = s(AnExpression)
-  private val JOINSET = s(LEFT(), RIGHT(), FULL(), JOIN())
-  private val ASLPARENSET = s(AS(), LPAREN())
-  private val TABLEIDSET = s(ATableIdentifier)
-  private val QUERYPIPESET = s(QUERYPIPE())
-  private val ROWOPSET = s(QUERYPIPE(), QUERYUNION(), QUERYINTERSECT(), QUERYMINUS(), QUERYUNIONALL(), QUERYINTERSECTALL(), QUERYMINUSALL())
-  private val DISTINCTSET = s(DISTINCT())
-  private val FROMSET = s(FROM())
-  private val PARTITIONBYSET = s(APartitionBy)
-  private val ASCDESCSET = s(ASC(), DESC())
-  private val NULLNULLSSET = s(NULL(), NULLS())
-  private val RANGEROWSSET = s(RANGE(), ROWS())
-  private val OVERSET = s(OVER())
-  private val DOTLBRACKETSET = s(DOT(), LBRACKET())
+  private val AND_SET = s(AND())
+  private val LIMIT_OFFSET_SET = s(LIMIT(), OFFSET())
+  private val LIMIT_SET = s(LIMIT())
+  private val OFFSET_SET = s(OFFSET())
+  private val ORDERBY_SEARCH_SET = s(AnOrderBy, SEARCH())
+  private val ORDERBY_SET = s(AnOrderBy)
+  private val SEARCH_SET = s(SEARCH())
+  private val GROUPBY_SET = s(AGroupBy)
+  private val WHERE_SET = s(WHERE())
+  private val HAVING_SET = s(HAVING())
+  private val TABLEID_COLONSTAR_SET = s(ATableIdentifier, COLONSTAR())
+  private val LPAREN_SET = s(LPAREN())
+  private val COMMA_SET = s(COMMA())
+  private val TABLEID_STAR_SET = s(ATableIdentifier, STAR())
+  private val AS_SET = s(AS())
+  private val EXPRESSION_SET = s(AnExpression)
+  private val JOIN_SET = s(LEFT(), RIGHT(), FULL(), JOIN())
+  private val AS_LPAREN_SET = s(AS(), LPAREN())
+  private val TABLEID_SET = s(ATableIdentifier)
+  private val QUERYPIPE_SET = s(QUERYPIPE())
+  private val ROWOP_SET = s(QUERYPIPE(), QUERYUNION(), QUERYINTERSECT(), QUERYMINUS(), QUERYUNIONALL(), QUERYINTERSECTALL(), QUERYMINUSALL())
+  private val DISTINCT_SET = s(DISTINCT())
+  private val FROM_SET = s(FROM())
+  private val PARTITIONBY_SET = s(APartitionBy)
+  private val ASC_DESC_SET = s(ASC(), DESC())
+  private val NULL_NULLS_SET = s(NULL(), NULLS())
+  private val RANGE_ROWS_SET = s(RANGE(), ROWS())
+  private val OVER_SET = s(OVER())
+  private val DOT_LBRACKET_SET = s(DOT(), LBRACKET())
+
+  private val COLONCOLON_SET = s(COLONCOLON())
+  private val MINUS_PLUS_SET = s(MINUS(), PLUS())
 
   // These are all collapsed into "an operator" for ease of
   // interpretation by an end-user instead of getting a bunch of
   // line-noise.  Leaving them here in case we want to bring them back
   // for some reason...
 
-  // private val COLONCOLONSET = s(COLONCOLON())
-  // private val MINUSPLUSSET = s(MINUS(), PLUS())
-  // private val CARETSET = s(CARET())
-  // private val FACTORSET = s(STAR(), SLASH(), PERCENT())
-  // private val TERMSET = s(PLUS(), MINUS(), PIPEPIPE())
-  // private val COMPARISONSET = s(EQUALS(), LESSGREATER(), LESSTHAN(), LESSTHANOREQUALS(), GREATERTHAN(), GREATERTHANOREQUALS(), EQUALSEQUALS(), BANGEQUALS())
-  private val OPERATORSET = s(AnOperator)
+  // private val CARET_SET = s(CARET())
+  // private val FACTOR_SET = s(STAR(), SLASH(), PERCENT())
+  // private val TERM_SET = s(PLUS(), MINUS(), PIPEPIPE())
+  // private val COMPARISON_SET = s(EQUALS(), LESSGREATER(), LESSTHAN(), LESSTHANOREQUALS(), GREATERTHAN(), GREATERTHANOREQUALS(), EQUALSEQUALS(), BANGEQUALS())
+  private val OPERATOR_SET = s(AnOperator)
 
-  private val LIKEBETWEENINSET = s(IS(), AnIsNot, LIKE(), ANotLike, BETWEEN(), ANotBetween, IN(), ANotIn)
-  private val NOTSET = s(NOT())
-  private val ORSET = s(OR())
+  private val LIKE_BETWEEN_IN_SET = s(IS(), AnIsNot, LIKE(), ANotLike, BETWEEN(), ANotBetween, IN(), ANotIn)
+  private val NOT_SET = s(NOT())
+  private val OR_SET = s(OR())
 }
 
 abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = AbstractParser.defaultParameters) extends AbstractParser {
@@ -285,7 +286,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r3, limitClause) = limit(r2)
         ParseResult(r3, (limitClause, offsetClause))
       case _ =>
-        reader.addAlternates(LIMITOFFSETSET)
+        reader.addAlternates(LIMIT_OFFSET_SET)
         ParseResult(reader, (None, None))
     }
   }
@@ -298,7 +299,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           case _ => fail1(reader.rest, AnIntegerLiteral)
         }
       case _ =>
-        reader.addAlternates(LIMITSET)
+        reader.addAlternates(LIMIT_SET)
         ParseResult(reader, None)
     }
   }
@@ -312,7 +313,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           case _ => fail1(reader.rest, AnIntegerLiteral)
         }
       case _ =>
-        reader.addAlternates(OFFSETSET)
+        reader.addAlternates(OFFSET_SET)
         ParseResult(reader, None)
     }
   }
@@ -328,7 +329,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r3, orderByClause) = orderBy(r2)
         ParseResult(r3, (orderByClause, searchClause))
       case _ =>
-        reader.addAlternates(ORDERBYSEARCHSET)
+        reader.addAlternates(ORDERBY_SEARCH_SET)
         ParseResult(reader, (Nil, None))
     }
   }
@@ -343,7 +344,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             fail1(reader.rest, BY())
         }
       case _ =>
-        reader.addAlternates(ORDERBYSET)
+        reader.addAlternates(ORDERBY_SET)
         ParseResult(reader, Nil)
     }
   }
@@ -358,7 +359,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             fail1(reader.rest, AStringLiteral)
         }
       case _ =>
-        reader.addAlternates(SEARCHSET)
+        reader.addAlternates(SEARCH_SET)
         ParseResult(reader, None)
     }
   }
@@ -375,7 +376,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             fail1(reader, BY())
         }
       case _ =>
-        reader.addAlternates(GROUPBYSET)
+        reader.addAlternates(GROUPBY_SET)
         ParseResult(reader, Nil)
     }
   }
@@ -385,7 +386,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       case WHERE() =>
         topLevelExpr(reader.rest).map(Some(_))
       case _ =>
-        reader.addAlternates(WHERESET)
+        reader.addAlternates(WHERE_SET)
         ParseResult(reader, None)
     }
   }
@@ -395,7 +396,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       case HAVING() =>
         topLevelExpr(reader.rest).map(Some(_))
       case _ =>
-        reader.addAlternates(HAVINGSET)
+        reader.addAlternates(HAVING_SET)
         ParseResult(reader, None)
     }
   }
@@ -419,7 +420,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
                 }
               case _ =>
                 // whoops, we're not parsing a :* at all, bail out
-                reader.addAlternates(TABLEIDCOLONSTARSET)
+                reader.addAlternates(TABLEID_COLONSTAR_SET)
                 ParseResult(reader, None)
             }
           case _ =>
@@ -430,7 +431,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           Some(StarSelection(None, exceptions).positionedAt(star.position))
         }
       case _ =>
-        reader.addAlternates(TABLEIDCOLONSTARSET)
+        reader.addAlternates(TABLEID_COLONSTAR_SET)
         ParseResult(reader, None)
     }
   }
@@ -460,7 +461,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             fail1(reader.rest, EXCEPT())
         }
       case _ =>
-        reader.addAlternates(LPARENSET)
+        reader.addAlternates(LPAREN_SET)
         ParseResult(reader, Nil)
     }
   }
@@ -517,7 +518,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
               reader.rest
             case _ =>
               // We require a comma but do not see one - revert.
-              reader.addAlternates(COMMASET)
+              reader.addAlternates(COMMA_SET)
               return reader
           }
         } else {
@@ -536,11 +537,11 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
                   loop(r2, commaFirst = true)
                 case _ =>
                   // Whoops, not a star selection, revert
-                  reader.addAlternates(TABLEIDSTARSET)
+                  reader.addAlternates(TABLEID_STAR_SET)
                   reader
               }
             case _ =>
-              reader.addAlternates(TABLEIDSTARSET)
+              reader.addAlternates(TABLEID_STAR_SET)
               reader
           }
         case star@STAR() =>
@@ -548,7 +549,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           result += StarSelection(None, exceptions).positionedAt(star.position)
           loop(r2, commaFirst = true)
         case _ =>
-          reader.addAlternates(TABLEIDSTARSET)
+          reader.addAlternates(TABLEID_STAR_SET)
           reader
       }
     }
@@ -574,7 +575,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
               reader.rest
             case _ =>
               // We require a comma but do not see one - revert.
-              reader.addAlternates(COMMASET)
+              reader.addAlternates(COMMA_SET)
               return reader
           }
         } else {
@@ -606,12 +607,12 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
               result += SelectedExpression(e, Some(identPos))
               loop(r3, commaFirst = true)
             case _ =>
-              r2.addAlternates(ASSET)
+              r2.addAlternates(AS_SET)
               result += SelectedExpression(e, None)
               loop(r2, commaFirst = true)
           }
         case None =>
-          reader.addAlternates(EXPRESSIONSET)
+          reader.addAlternates(EXPRESSION_SET)
           reader
       }
     }
@@ -671,7 +672,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       case JOIN() =>
         finishJoin(reader.rest, InnerJoin(_, _, _)).map(Some(_))
       case _ =>
-        reader.addAlternates(JOINSET)
+        reader.addAlternates(JOIN_SET)
         ParseResult(reader, None)
     }
   }
@@ -709,16 +710,16 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
                   JoinFunc(TableName(intoQualifier(ti), Some(a)), args)(ti.position)
                 }
               case _ =>
-                r2.addAlternates(ASSET)
+                r2.addAlternates(AS_SET)
                 ParseResult(r2, JoinFunc(TableName(intoQualifier(ti), None), args)(ti.position))
             }
           case _ =>
             // Also JoinTable
-            reader.rest.addAlternates(ASLPARENSET)
+            reader.rest.addAlternates(AS_LPAREN_SET)
             ParseResult(reader.rest, JoinTable(TableName(intoQualifier(ti), None)))
         }
       case _ =>
-        reader.addAlternates(TABLEIDSET)
+        reader.addAlternates(TABLEID_SET)
         val ParseResult(r2, s) = atomSelect(reader)
         r2.first match {
           case AS() =>
@@ -734,7 +735,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       case LPAREN() =>
         parenSelect(reader.rest)
       case _ =>
-        reader.addAlternates(LPARENSET)
+        reader.addAlternates(LPAREN_SET)
         select(reader).map(Leaf(_))
     }
   }
@@ -762,7 +763,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           tail += s
           loop(r2)
         case _ =>
-          reader.addAlternates(QUERYPIPESET)
+          reader.addAlternates(QUERYPIPE_SET)
           reader
       }
     }
@@ -795,7 +796,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r2, arg2) = atomSelect(reader.rest)
         compoundSelect_!(r2, Compound(op.printable, arg, arg2))
       case _ =>
-        reader.addAlternates(ROWOPSET)
+        reader.addAlternates(ROWOP_SET)
         ParseResult(reader, arg)
     }
   }
@@ -805,7 +806,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       case DISTINCT() =>
         ParseResult(reader.rest, true)
       case _ =>
-        reader.addAlternates(DISTINCTSET)
+        reader.addAlternates(DISTINCT_SET)
         ParseResult(reader, false)
     }
   }
@@ -835,7 +836,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         }
         ParseResult(r2, Some(tableName))
       case _ =>
-        reader.addAlternates(FROMSET)
+        reader.addAlternates(FROM_SET)
         ParseResult(reader, None)
     }
   }
@@ -913,7 +914,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         case COMMA() =>
           loop(r2.rest)
         case _ =>
-          r2.addAlternates(COMMASET)
+          r2.addAlternates(COMMA_SET)
           r2
       }
     }
@@ -930,7 +931,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           case _ => fail1(reader.rest, BY())
         }
       case _ =>
-        reader.addAlternates(PARTITIONBYSET)
+        reader.addAlternates(PARTITIONBY_SET)
         ParseResult(reader, Nil)
     }
   }
@@ -940,7 +941,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       case a@ASC() => ParseResult(reader.rest, a)
       case d@DESC() => ParseResult(reader.rest, d)
       case _ =>
-        reader.addAlternates(ASCDESCSET)
+        reader.addAlternates(ASC_DESC_SET)
         ParseResult(reader, ASC())
     }
   }
@@ -956,7 +957,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           }
         ParseResult(reader.rest.rest, direction)
       case _ =>
-        reader.addAlternates(NULLNULLSSET)
+        reader.addAlternates(NULL_NULLS_SET)
         ParseResult(reader, None)
     }
   }
@@ -997,7 +998,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           case _ => fail1(reader.rest, BY())
         }
       case _ =>
-        reader.addAlternates(ORDERBYSET)
+        reader.addAlternates(ORDERBY_SET)
         ParseResult(reader, Nil)
     }
   }
@@ -1060,7 +1061,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             fail(reader.rest, Set(BETWEEN(), UNBOUNDED(), CURRENT(), AnIntegerLiteral))
         }
       case _ =>
-        reader.addAlternates(RANGEROWSSET)
+        reader.addAlternates(RANGE_ROWS_SET)
         ParseResult(reader, Nil)
     }
   }
@@ -1089,7 +1090,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           FunctionCall(fn, args, Some(wfp))(pos, pos)
         }
       case _ =>
-        reader.addAlternates(OVERSET)
+        reader.addAlternates(OVER_SET)
         ParseResult(reader, FunctionCall(fn, args, None)(pos, pos))
     }
   }
@@ -1126,7 +1127,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             parseFunctionOver(r2, FunctionName(ident.value), ident.position, args)
         }
       case _ =>
-        reader.addAlternates(LPARENSET)
+        reader.addAlternates(LPAREN_SET)
         ParseResult(reader, ColumnOrAliasRef(None, ColumnName(ident.value))(ident.position))
     }
   }
@@ -1228,7 +1229,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             fail1(r2, RBRACKET())
         }
       case _ =>
-        reader.addAlternates(DOTLBRACKETSET)
+        reader.addAlternates(DOT_LBRACKET_SET)
         ParseResult(reader, arg)
     }
   }
@@ -1245,7 +1246,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r2, (ident, identPos)) = simpleIdentifier(reader.rest)
         cast_!(r2, FunctionCall(SpecialFunctions.Cast(TypeName(ident)), Seq(arg), None)(arg.position, identPos))
       case _ =>
-        reader.addAlternates(OPERATORSET) // COLONCOLONSET - See note in order_!()
+        reader.addAlternates(COLONCOLON_SET)
         ParseResult(reader, arg)
     }
   }
@@ -1257,7 +1258,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg), None)(op.position, op.position)
         }
       case _ =>
-        reader.addAlternates(OPERATORSET) // MINUSPLUSSET - See note in order_!()
+        reader.addAlternates(MINUS_PLUS_SET)
         cast(reader)
     }
   }
@@ -1270,7 +1271,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg, arg2), None)(arg.position, op.position)
         }
       case _ =>
-        reader.addAlternates(OPERATORSET) // CARETSET - See note in order_!()
+        reader.addAlternates(OPERATOR_SET) // CARETSET - See note in order_!()
         ParseResult(r2, arg)
     }
   }
@@ -1287,7 +1288,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r2, arg2) = exp(reader.rest)
         factor_!(r2, FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg, arg2), None)(arg.position, op.position))
       case _ =>
-        reader.addAlternates(OPERATORSET) // FACTORSET - See note in order_!()
+        reader.addAlternates(OPERATOR_SET) // FACTORSET - See note in order_!()
         ParseResult(reader, arg)
     }
   }
@@ -1304,7 +1305,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r2, arg2) = factor(reader.rest)
         term_!(r2, FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg, arg2), None)(arg.position, op.position))
       case _ =>
-        reader.addAlternates(OPERATORSET) // TERMSET - See note in order_!()
+        reader.addAlternates(OPERATOR_SET) // TERMSET - See note in order_!()
         ParseResult(reader, arg)
     }
   }
@@ -1323,7 +1324,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       case _ =>
         // So a bunch this adds an expectation of just "an operator"
         // rather than specifying the operators it expects, and the
-        // functions above up through `cast` do not.  This only works
+        // functions above up through `exp` do not.  This only works
         // because these handful of functions are a unique chain of
         // parser functions - everything that enters enter order()
         // (and _only_ those things) will be able to pass through
@@ -1331,7 +1332,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         // parsing steps.  As a result, we can just collapse _all_ of
         // their expectations into just "we want some operator here".
 
-        reader.addAlternates(OPERATORSET) // COMPARISONSET
+        reader.addAlternates(OPERATOR_SET) // COMPARISONSET
         ParseResult(reader, arg)
     }
   }
@@ -1452,7 +1453,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r2, arg2) = parseIn(SpecialFunctions.In, arg, in, reader.rest)
         likeBetweenIn_!(r2, arg2)
       case _ =>
-        reader.addAlternates(LIKEBETWEENINSET)
+        reader.addAlternates(LIKE_BETWEEN_IN_SET)
         ParseResult(reader, arg)
     }
   }
@@ -1464,7 +1465,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg), None)(op.position, op.position)
         }
       case _ =>
-        reader.addAlternates(NOTSET)
+        reader.addAlternates(NOT_SET)
         likeBetweenIn(reader)
     }
   }
@@ -1481,17 +1482,17 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r2, arg2) = negation(reader.rest)
         conjunction_!(r2, FunctionCall(SpecialFunctions.Operator(and.printable), Seq(arg, arg2), None)(arg.position, and.pos))
       case _ =>
-        reader.addAlternates(ANDSET)
+        reader.addAlternates(AND_SET)
         ParseResult(reader, arg)
     }
   }
 
   // This is a pattern that'll be used all over this parser.  The
   // combinators approach was
-  //    disjunction = (disjunction OR conjunction) | conjunction;
+  //    disjunction = (disjunction `OR` conjunction) | conjunction;
   // which is left-recursive.  We can eliminate that by instead doing
   //    disjunction = conjunction disjunction'
-  //    disjunction' = OR conjunction disjunction' | ε
+  //    disjunction' = `OR` conjunction disjunction' | ε
   private def disjunction(reader: Reader): ParseResult[Expression] = {
     val ParseResult(r2, e) = conjunction(reader)
     disjunction_!(r2, e)
@@ -1504,7 +1505,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r2, arg2) = conjunction(reader.rest)
         disjunction_!(r2, FunctionCall(SpecialFunctions.Operator(or.printable), Seq(arg, arg2), None)(arg.position, or.pos))
       case _ =>
-        reader.addAlternates(ORSET)
+        reader.addAlternates(OR_SET)
         ParseResult(reader, arg)
     }
   }
