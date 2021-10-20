@@ -11,8 +11,16 @@ import com.socrata.soql.tokens._
 import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, ast, tokens}
 import com.socrata.soql.environment.{ColumnName, FunctionName, HoleName, TableName, TypeName}
 
+// Things are "protected" if they are reasonably useful to potential
+// subclasses _in themselves_.  In particular, this excludes the
+// various things that are pre-committed by having their first token
+// consumed by the things that call them.
+//
+// Things which are protected in the class but not abstract should be
+// `final` without a good reason otherwise.
+
 object RecursiveDescentParser {
-  private class Keyword(s: String) {
+  final class Keyword(s: String) {
     def apply() = Identifier(s, false)
     def unapply(ident: Identifier): Boolean = {
       !ident.quoted && ident.value.equalsIgnoreCase(s)
@@ -38,8 +46,15 @@ object RecursiveDescentParser {
     // we'll specify a non-system identifier.
     def printable = "an identifier"
   }
+  case object AQualifiedIdentifier extends Expectation {
+    // Ditto re: the note on AnIdentifier
+    def printable = "a qualified identifier"
+  }
   case object ASystemIdentifier extends Expectation {
     def printable = "a system identifier"
+  }
+  case object AQualifiedSystemIdentifier extends Expectation {
+    def printable = "a qualified system identifier"
   }
   case object ANonSystemIdentifier extends Expectation {
     def printable = "a non-system identifier"
@@ -78,7 +93,7 @@ object RecursiveDescentParser {
     def printable = "an operator"
   }
 
-  private implicit def tokenAsTokenLike(t: Token): Expectation = ActualToken(t)
+  implicit def tokenAsTokenLike(t: Token): Expectation = ActualToken(t)
 
   def expectationsToEnglish(expectation: Iterable[Expectation], got: Token): String = {
     val sb = new StringBuilder
@@ -108,28 +123,28 @@ object RecursiveDescentParser {
       toString
   }
 
-  private val CASE = new Keyword("CASE")
-  private val WHEN = new Keyword("WHEN")
-  private val THEN = new Keyword("THEN")
-  private val ELSE = new Keyword("ELSE")
-  private val END = new Keyword("END")
-  private val OVER = new Keyword("OVER")
-  private val PARTITION = new Keyword("PARTITION")
-  private val BY = new Keyword("BY")
-  private val NULLS = new Keyword("NULLS")
-  private val FIRST = new Keyword("FIRST")
-  private val LAST = new Keyword("LAST")
-  private val RANGE = new Keyword("RANGE")
-  private val ROWS = new Keyword("ROWS")
-  private val UNBOUNDED = new Keyword("UNBOUNDED")
-  private val PRECEDING = new Keyword("PRECEDING")
-  private val CURRENT = new Keyword("CURRENT")
-  private val ROW = new Keyword("ROW")
-  private val FOLLOWING = new Keyword("FOLLOWING")
+  val CASE = new Keyword("CASE")
+  val WHEN = new Keyword("WHEN")
+  val THEN = new Keyword("THEN")
+  val ELSE = new Keyword("ELSE")
+  val END = new Keyword("END")
+  val OVER = new Keyword("OVER")
+  val PARTITION = new Keyword("PARTITION")
+  val BY = new Keyword("BY")
+  val NULLS = new Keyword("NULLS")
+  val FIRST = new Keyword("FIRST")
+  val LAST = new Keyword("LAST")
+  val RANGE = new Keyword("RANGE")
+  val ROWS = new Keyword("ROWS")
+  val UNBOUNDED = new Keyword("UNBOUNDED")
+  val PRECEDING = new Keyword("PRECEDING")
+  val CURRENT = new Keyword("CURRENT")
+  val ROW = new Keyword("ROW")
+  val FOLLOWING = new Keyword("FOLLOWING")
 
-  private sealed abstract class NullPlacement
-  private case object First extends NullPlacement
-  private case object Last extends NullPlacement
+  sealed abstract class NullPlacement
+  case object First extends NullPlacement
+  case object Last extends NullPlacement
 
   type Reader = ExtendedReader[Token]
 
@@ -138,7 +153,7 @@ object RecursiveDescentParser {
     val reader: Reader
   }
 
-  private case class ParseResult[+T](reader: Reader, value: T) {
+  case class ParseResult[+T](reader: Reader, value: T) {
     def map[U](f: T=>U): ParseResult[U] = copy(value = f(value))
   }
 
@@ -230,7 +245,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     throw expected(reader)
   }
 
-  private def parseFull[T](parser: Reader => ParseResult[T], soql: String): T = {
+  protected final def parseFull[T](parser: Reader => ParseResult[T], soql: String): T = {
     val ParseResult(end, result) = parser(new LexerReader(lexer(soql)))
     if(end.first.isInstanceOf[EOF]) {
       result
@@ -239,7 +254,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def integerLiteral(reader: Reader): ParseResult[BigInt] = {
+  protected final def integerLiteral(reader: Reader): ParseResult[BigInt] = {
     reader.first match {
       case n: IntegerLiteral =>
         ParseResult(reader.rest, n.asInt)
@@ -248,7 +263,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def stringLiteral(reader: Reader): ParseResult[String] = {
+  protected final def stringLiteral(reader: Reader): ParseResult[String] = {
     reader.first match {
       case s: tokens.StringLiteral =>
         ParseResult(reader.rest, s.value)
@@ -257,7 +272,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def select(reader: Reader): ParseResult[Select] = {
+  protected final def select(reader: Reader): ParseResult[Select] = {
     reader.first match {
       case SELECT() =>
         val ParseResult(r2, d) = distinct(reader.rest)
@@ -275,7 +290,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def limitOffset(reader: Reader): ParseResult[(Option[BigInt], Option[BigInt])] = {
+  protected final def limitOffset(reader: Reader): ParseResult[(Option[BigInt], Option[BigInt])] = {
     reader.first match {
       case LIMIT() =>
         val ParseResult(r2, limitClause) = limit(reader)
@@ -291,7 +306,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def limit(reader: Reader): ParseResult[Option[BigInt]] = {
+  protected final def limit(reader: Reader): ParseResult[Option[BigInt]] = {
     reader.first match {
       case LIMIT() =>
         reader.rest.first match {
@@ -305,7 +320,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   }
 
 
-  private def offset(reader: Reader): ParseResult[Option[BigInt]] = {
+  protected final def offset(reader: Reader): ParseResult[Option[BigInt]] = {
     reader.first match {
       case OFFSET() =>
         reader.rest.first match {
@@ -318,7 +333,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def orderByAndSearch(reader: Reader): ParseResult[(Seq[OrderBy], Option[String])] = {
+  protected final def orderByAndSearch(reader: Reader): ParseResult[(Seq[OrderBy], Option[String])] = {
     reader.first match {
       case ORDER() =>
         val ParseResult(r2, orderByClause) = orderBy(reader)
@@ -334,7 +349,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def orderBy(reader: Reader): ParseResult[Seq[OrderBy]] = {
+  protected final def orderBy(reader: Reader): ParseResult[Seq[OrderBy]] = {
     reader.first match {
       case ORDER() =>
         reader.rest.first match {
@@ -349,7 +364,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def search(reader: Reader): ParseResult[Option[String]] = {
+  protected final def search(reader: Reader): ParseResult[Option[String]] = {
     reader.first match {
       case SEARCH() =>
         reader.rest.first match {
@@ -364,7 +379,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def groupBy(reader: Reader): ParseResult[Seq[Expression]] = {
+  protected final def groupBy(reader: Reader): ParseResult[Seq[Expression]] = {
     reader.first match {
       case GROUP() =>
         reader.rest.first match {
@@ -381,7 +396,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def where(reader: Reader): ParseResult[Option[Expression]] = {
+  protected final def where(reader: Reader): ParseResult[Option[Expression]] = {
     reader.first match {
       case WHERE() =>
         topLevelExpr(reader.rest).map(Some(_))
@@ -391,7 +406,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def having(reader: Reader): ParseResult[Option[Expression]] = {
+  private final def having(reader: Reader): ParseResult[Option[Expression]] = {
     reader.first match {
       case HAVING() =>
         topLevelExpr(reader.rest).map(Some(_))
@@ -401,7 +416,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def selectList(reader: Reader): ParseResult[Selection] = {
+  private final def selectList(reader: Reader): ParseResult[Selection] = {
     val ParseResult(r2, systemStar) = systemStarSelection(reader)
     val ParseResult(r3, userStars) = userStarSelections(r2, systemStar.isDefined)
     val ParseResult(r4, expressions) = expressionSelectList(r3, systemStar.isDefined || userStars.nonEmpty)
@@ -415,7 +430,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           case DOT() =>
             reader.rest.rest.first match {
               case star@COLONSTAR() =>
-                selectExceptions(reader.rest.rest.rest, systemIdentifier).map { exceptions =>
+                selectExceptions(reader.rest.rest.rest, unqualifiedSystemIdentifier).map { exceptions =>
                   Some(StarSelection(Some(intoQualifier(ti)), exceptions).positionedAt(star.position))
                 }
               case _ =>
@@ -427,7 +442,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             fail(reader.rest, DOT())
         }
       case star@COLONSTAR() =>
-        selectExceptions(reader.rest, systemIdentifier).map { exceptions =>
+        selectExceptions(reader.rest, unqualifiedSystemIdentifier).map { exceptions =>
           Some(StarSelection(None, exceptions).positionedAt(star.position))
         }
       case _ =>
@@ -466,7 +481,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def systemIdentifier(reader: Reader): ParseResult[(ColumnName, Position)] = {
+  protected final def unqualifiedSystemIdentifier(reader: Reader): ParseResult[(ColumnName, Position)] = {
     reader.first match {
       case si: SystemIdentifier =>
         ParseResult(reader.rest, (ColumnName(si.value), si.position))
@@ -475,18 +490,18 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def simpleIdentifier(reader: Reader): ParseResult[(String, Position)] =
+  protected final def simpleIdentifier(reader: Reader): ParseResult[(String, Position)] =
     reader.first match {
       case i: Identifier => ParseResult(reader.rest, (i.value, i.position))
       case _ : SystemIdentifier => fail(reader, ANonSystemIdentifier)
       case _ => fail(reader, AnIdentifier)
     }
 
-  private def userIdentifier(reader: Reader): ParseResult[(ColumnName, Position)] = {
+  protected final def unqualifiedUserIdentifier(reader: Reader): ParseResult[(ColumnName, Position)] = {
     simpleIdentifier(reader).map { case (n, p) => (ColumnName(n), p) }
   }
 
-  private def identifier(reader: Reader): ParseResult[(ColumnName, Position)] = {
+  protected final def unqualifiedIdentifier(reader: Reader): ParseResult[(ColumnName, Position)] = {
     reader.first match {
       case i: Identifier =>
         ParseResult(reader.rest, (ColumnName(i.value), i.position))
@@ -532,7 +547,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
               r.rest.rest.first match {
                 case star@STAR() =>
                   // We are now committed to parsing a user-star-selection
-                  val ParseResult(r2, exceptions) = selectExceptions(r.rest.rest.rest, userIdentifier)
+                  val ParseResult(r2, exceptions) = selectExceptions(r.rest.rest.rest, unqualifiedUserIdentifier)
                   result += StarSelection(Some(intoQualifier(ti)), exceptions).positionedAt(star.position)
                   loop(r2, commaFirst = true)
                 case _ =>
@@ -545,7 +560,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
               reader
           }
         case star@STAR() =>
-          val ParseResult(r2, exceptions) = selectExceptions(r.rest, userIdentifier)
+          val ParseResult(r2, exceptions) = selectExceptions(r.rest, unqualifiedUserIdentifier)
           result += StarSelection(None, exceptions).positionedAt(star.position)
           loop(r2, commaFirst = true)
         case _ =>
@@ -637,7 +652,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def joinList(reader: Reader): ParseResult[Seq[Join]] = {
+  protected final def joinList(reader: Reader): ParseResult[Seq[Join]] = {
     val acc = Vector.newBuilder[Join]
 
     @tailrec
@@ -656,7 +671,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     ParseResult(finalReader, acc.result())
   }
 
-  private def join(reader: Reader): ParseResult[Option[Join]] = {
+  protected final def join(reader: Reader): ParseResult[Option[Join]] = {
     reader.first match {
       case direction@(LEFT() | RIGHT() | FULL()) =>
         val r2 = reader.rest.first match {
@@ -691,7 +706,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def joinSelect(reader: Reader): ParseResult[JoinSelect] = {
+  protected final def joinSelect(reader: Reader): ParseResult[JoinSelect] = {
     reader.first match {
       case ti: TableIdentifier =>
         // could be JoinTable, could be JoinFunc if that's allowed here
@@ -730,7 +745,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def atomSelect(reader: Reader): ParseResult[BinaryTree[Select]] = {
+  protected final def atomSelect(reader: Reader): ParseResult[BinaryTree[Select]] = {
     reader.first match {
       case LPAREN() =>
         parenSelect(reader.rest)
@@ -751,7 +766,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def pipedSelect(reader: Reader): ParseResult[NonEmptySeq[Select]] = {
+  protected final def pipedSelect(reader: Reader): ParseResult[NonEmptySeq[Select]] = {
     val ParseResult(r2, s1) = select(reader)
     val tail = Vector.newBuilder[Select]
 
@@ -772,7 +787,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     ParseResult(finalReader, NonEmptySeq(s1, tail.result()))
   }
 
-  private def compoundSelect(reader: Reader): ParseResult[BinaryTree[Select]] = {
+  protected final def compoundSelect(reader: Reader): ParseResult[BinaryTree[Select]] = {
     val ParseResult(r2, s) = atomSelect(reader)
     compoundSelect_!(r2, s)
   }
@@ -801,7 +816,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def distinct(reader: Reader): ParseResult[Boolean] = {
+  protected final def distinct(reader: Reader): ParseResult[Boolean] = {
     reader.first match {
       case DISTINCT() =>
         ParseResult(reader.rest, true)
@@ -811,7 +826,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def from(reader: Reader): ParseResult[Option[TableName]] = {
+  protected final def from(reader: Reader): ParseResult[Option[TableName]] = {
     reader.first match {
       case FROM() =>
         // sadness: this loses position information
@@ -903,7 +918,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def commaSeparatedExprs(reader: Reader): ParseResult[Seq[Expression]] = {
+  protected final def commaSeparatedExprs(reader: Reader): ParseResult[Seq[Expression]] = {
     val args = Vector.newBuilder[Expression]
 
     @tailrec
@@ -962,7 +977,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def ordering(reader: Reader): ParseResult[OrderBy] = {
+  protected final def ordering(reader: Reader): ParseResult[OrderBy] = {
     val ParseResult(r2, criterion) = topLevelExpr(reader)
     val ParseResult(r3, ascDesc) = maybeAscDesc(r2)
     val ParseResult(r4, firstLast) = maybeNullPlacement(r3)
@@ -970,7 +985,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     ParseResult(r4, OrderBy(criterion, ascDesc == ASC(), firstLast.fold(ascDesc == ASC())(_ == Last)))
   }
 
-  private def orderingList(reader: Reader): ParseResult[Seq[OrderBy]] = {
+  protected final def orderingList(reader: Reader): ParseResult[Seq[OrderBy]] = {
     val args = Vector.newBuilder[OrderBy]
 
     @tailrec
@@ -1132,7 +1147,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def intoQualifier(t: TableIdentifier): String =
+  protected def intoQualifier(t: TableIdentifier): String =
     TableName.SodaFountainPrefix + t.value.substring(1) /* remove prefix @ */
 
   private def joinedColumn(reader: Reader, tableIdent: TableIdentifier): ParseResult[Expression] = {
@@ -1510,13 +1525,122 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def nestedExpr(reader: Reader): ParseResult[Expression] = {
+  protected final def nestedExpr(reader: Reader): ParseResult[Expression] = {
     disjunction(reader)
   }
 
-  private def topLevelExpr(reader: Reader): ParseResult[Expression] = {
+  protected def topLevelExpr(reader: Reader): ParseResult[Expression] = {
     val r = disjunction(reader)
     r.reader.resetAlternates()
     r
+  }
+
+  // The remainder of these parsers aren't used here but may be useful
+  // to subclasses that extend the soql language in some way.  They
+  // all assume that it is certain the thing being parsed is desired
+  // and will fail if it is not present.
+
+  protected final def qualifiedSystemIdentifier(reader: Reader): ParseResult[(String, ColumnName, Position)] = {
+    reader.first match {
+      case ti: TableIdentifier =>
+        reader.rest.first match {
+          case DOT() =>
+            reader.rest.rest.first match {
+              case si: SystemIdentifier =>
+                ParseResult(reader.rest.rest.rest, (intoQualifier(ti), ColumnName(si.value), ti.position))
+              case _ =>
+                fail(reader.rest.rest, ASystemIdentifier)
+            }
+          case _ =>
+            fail(reader.rest, DOT())
+        }
+      case _ =>
+        fail(reader, AQualifiedSystemIdentifier)
+    }
+  }
+
+  protected final def possiblyQualifiedSystemIdentifier(reader: Reader): ParseResult[(Option[String], ColumnName, Position)] = {
+    reader.first match {
+      case ti: TableIdentifier =>
+        qualifiedSystemIdentifier(reader).map { case (qual, cn, pos) =>
+          (Some(qual), cn, pos)
+        }
+      case si: SystemIdentifier =>
+        ParseResult(reader.rest, (None, ColumnName(si.value), si.position))
+      case _ =>
+        fail(reader, ATableIdentifier, ASystemIdentifier)
+    }
+  }
+
+  protected final def qualifiedUserIdentifier(reader: Reader): ParseResult[(String, ColumnName, Position)] = {
+    reader.first match {
+      case ti: TableIdentifier =>
+        reader.rest.first match {
+          case DOT() =>
+            reader.rest.rest.first match {
+              case ui: Identifier =>
+                ParseResult(reader.rest.rest.rest, (intoQualifier(ti), ColumnName(ui.value), ti.position))
+              case _ : SystemIdentifier =>
+                fail(reader.rest.rest, ANonSystemIdentifier)
+              case _ =>
+                fail(reader.rest.rest, AnIdentifier)
+            }
+          case _ =>
+            fail(reader.rest, DOT())
+        }
+      case _ =>
+        fail(reader, AQualifiedIdentifier)
+    }
+  }
+
+  protected final def possiblyQualifiedUserIdentifier(reader: Reader): ParseResult[(Option[String], ColumnName, Position)] = {
+    reader.first match {
+      case ti: TableIdentifier =>
+        qualifiedUserIdentifier(reader).map { case (qual, cn, pos) =>
+          (Some(qual), cn, pos)
+        }
+      case ui: Identifier =>
+        ParseResult(reader.rest, (None, ColumnName(ui.value), ui.position))
+      case si: SystemIdentifier =>
+        fail(reader, ANonSystemIdentifier)
+      case _ =>
+        fail(reader, ATableIdentifier, AnIdentifier)
+    }
+  }
+
+  protected final def qualifiedIdentifier(reader: Reader): ParseResult[(String, ColumnName, Position)] = {
+    reader.first match {
+      case ti: TableIdentifier =>
+        reader.rest.first match {
+          case DOT() =>
+            reader.rest.rest.first match {
+              case ui: Identifier =>
+                ParseResult(reader.rest.rest.rest, (intoQualifier(ti), ColumnName(ui.value), ti.position))
+              case si : SystemIdentifier =>
+                ParseResult(reader.rest.rest.rest, (intoQualifier(ti), ColumnName(si.value), ti.position))
+              case _ =>
+                fail(reader.rest.rest, AnIdentifier)
+            }
+          case _ =>
+            fail(reader.rest, DOT())
+        }
+      case _ =>
+        fail(reader, AQualifiedIdentifier)
+    }
+  }
+
+  protected final def possiblyQualifiedIdentifier(reader: Reader): ParseResult[(Option[String], ColumnName, Position)] = {
+    reader.first match {
+      case ti: TableIdentifier =>
+        qualifiedIdentifier(reader).map { case (qual, cn, pos) =>
+          (Some(qual), cn, pos)
+        }
+      case ui: Identifier =>
+        ParseResult(reader.rest, (None, ColumnName(ui.value), ui.position))
+      case si: SystemIdentifier =>
+        ParseResult(reader.rest, (None, ColumnName(si.value), si.position))
+      case _ =>
+        fail(reader, ATableIdentifier, AnIdentifier)
+    }
   }
 }
