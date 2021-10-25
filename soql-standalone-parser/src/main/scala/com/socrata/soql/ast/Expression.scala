@@ -229,9 +229,19 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
       case SpecialFunctions.Operator(op) if parameters.size == 1 =>
         op match {
           case "NOT" =>
-            d"NOT ${parameters(0).doc}"
+            d"NOT" +#+ parameters(0).doc
           case _ =>
-            d"${op}${parameters(0).doc}"
+            // need to prevent "- -x" from formatting as "--x" but
+            // otherwise we want the op to be right next to its
+            // argument; for consistency we won't care what the second
+            // operator is, we'll just uniformly introduce a space
+            // there.
+            parameters(0) match {
+              case FunctionCall(SpecialFunctions.Operator(_), Seq(_), _) =>
+                Doc(op) +#+ parameters(0).doc
+              case _ =>
+                Doc(op) ++ parameters(0).doc
+            }
         }
       case SpecialFunctions.Operator(op) if parameters.size == 2 =>
         op match {
