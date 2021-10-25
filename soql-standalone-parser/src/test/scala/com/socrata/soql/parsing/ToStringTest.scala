@@ -23,7 +23,12 @@ class ToStringTest extends FunSpec with MustMatchers {
       val notNullExpect = "foo(`something` IS NOT NULL)"
       val notNullActual = parser.expression(notNullExpect).toString
       notNullActual must equal(notNullExpect)
+    }
 
+    it("multiple unary operators") {
+      val expected = "- -`x`"
+      val rendered = parser.expression(expected).toString
+      rendered must equal(expected)
     }
 
     it("wide expressions") {
