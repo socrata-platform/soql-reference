@@ -490,6 +490,12 @@ object SoQLFunctions {
   val LastValue = f("last value", FunctionName("last_value"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
     NoDocs
   )
+  val Lead = f("lead", FunctionName("lead"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
+    NoDocs
+  )
+  val Lag = f("lag", FunctionName("lag"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
+    NoDocs
+  )
 
   val FloatingTimeStampTruncYmd = mf("floating timestamp trunc day", FunctionName("date_trunc_ymd"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)(
     "Truncate a date at the year/month/day threshold"
