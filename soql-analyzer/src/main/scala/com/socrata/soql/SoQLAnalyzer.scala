@@ -867,7 +867,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   private def hasLiteral(e: CoreExpr[_, _]): Boolean = {
     e match {
       case fc: com.socrata.soql.typed.FunctionCall[_, _] =>
-        fc.window.nonEmpty || fc.parameters.exists(hasLiteral)
+        fc.parameters.exists(hasLiteral)
       case _: TypedLiteral[_] =>
         true
       case _ =>
