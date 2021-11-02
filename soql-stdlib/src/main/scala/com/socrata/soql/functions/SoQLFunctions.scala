@@ -61,6 +61,9 @@ object SoQLFunctions {
   val TextToTime = mf("text to time", SpecialFunctions.Cast(SoQLTime.name), Seq(SoQLText), Seq.empty, SoQLTime)(
     NoDocs
   )
+  val TextToInterval = mf("text to interval", SpecialFunctions.Cast(SoQLInterval.name), Seq(SoQLText), Seq.empty, SoQLInterval)(
+    NoDocs
+  )
   val TextToPoint = mf("text to point", SpecialFunctions.Cast(SoQLPoint.name), Seq(SoQLText), Seq.empty, SoQLPoint)(
     NoDocs
   )
@@ -162,7 +165,7 @@ object SoQLFunctions {
     "Return the rows where locations 'spatially cross', that is, the geometries have some, but not all interior points in common")
   val Overlaps = f("overlaps", FunctionName("overlaps"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
-    "Return the rows that where the locations 'spatially overlap', meaning they intersect, but one does not completely contain another and they share interior points") 
+    "Return the rows that where the locations 'spatially overlap', meaning they intersect, but one does not completely contain another and they share interior points")
   val DistanceInMeters = f("distance_in_meters", FunctionName("distance_in_meters"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLNumber))(NoDocs)
   val GeoMakeValid = f("geo_make_valid", FunctionName("geo_make_valid"), Map("a" -> GeospatialLike),
@@ -565,6 +568,10 @@ object SoQLFunctions {
   )
 
   val TimeStampDiffD = f("timestamp diff in days", FunctionName("date_diff_d"), Map("a" -> TimestampLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLNumber))(
+    NoDocs
+  )
+
+  val TimeStampAdd = f("timestamp add", FunctionName("date_add"), Map("a" -> TimestampLike, "b" -> Set(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
     NoDocs
   )
 

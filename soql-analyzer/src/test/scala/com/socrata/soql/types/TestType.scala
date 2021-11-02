@@ -14,6 +14,7 @@ object TestType {
   // FIXME: Figure out a way to DRY this
   val typesByName = Seq(
     TestText, TestBoolean, TestNumber, TestMoney, TestDouble, TestFixedTimestamp, TestFloatingTimestamp,
+    TestDuration,
     TestObject, TestArray, TestBlob, TestLocation,
     TestPoint, TestMultiPoint, TestLine, TestMultiLine, TestPolygon, TestMultiPolygon
   ).foldLeft(Map.empty[TypeName, TestType]) { (acc, typ) =>
@@ -28,6 +29,7 @@ case object TestMoney extends TestType("money", isOrdered = true)
 case object TestDouble extends TestType("double", isOrdered = true)
 case object TestFixedTimestamp extends TestType("fixed_timestamp", isOrdered = true)
 case object TestFloatingTimestamp extends TestType("floating_timestamp", isOrdered = true)
+case object TestDuration extends TestType("duration", isOrdered = true)
 case object TestObject extends TestType("object", isOrdered = false)
 case object TestArray extends TestType("array", isOrdered = false)
 case object TestJson extends TestType("json", isOrdered = false)
