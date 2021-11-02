@@ -11,7 +11,7 @@ import com.socrata.soql.parsing.{AbstractParser, Parser}
 import com.socrata.soql.typechecker._
 import com.socrata.soql.environment._
 import com.socrata.soql.collection._
-import com.socrata.soql.typed.Qualifier
+import com.socrata.soql.typed.{ColumnRef, CoreExpr, Qualifier, TypedLiteral}
 import Select._
 import com.socrata.NonEmptySeq
 import com.socrata.soql.mapping.ColumnIdMapper
@@ -778,7 +778,9 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
           // Do not merge when the previous soql is grouped and the next soql has joins
           // select g, count(x) as cx group by g |> select g, cx, @b.a join @b on @b.g=g
           // Newly introduced columns from joins cannot be merged and brought in w/o grouping and aggregate functions.
-          !(aIsGroup && bJoins.nonEmpty) => // TODO: relaxed requirement on aFrom = bFrom? is this ok?
+          !(aIsGroup && bJoins.nonEmpty) && // TODO: relaxed requirement on aFrom = bFrom? is this ok?
+          !aGroup.exists(hasLiteral)
+          =>
       // we can merge a change of only selection and limit + offset onto anything
       val (newLim, newOff) = Merger.combineLimits(aLim, aOff, bLim, bOff)
       Some(SoQLAnalysis(isGrouped = aIsGroup,
@@ -824,7 +826,9 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         offset = bOff,
                         search = None))
     case (SoQLAnalysis(true,  false, aSelect, aFrom, Nil, aWhere, aGroup, aHaving, aOrder, None, None, None),
-          SoQLAnalysis(false, false, bSelect, None, Nil, bWhere, Nil,      None,    bOrder, bLim, bOff, None)) =>
+          SoQLAnalysis(false, false, bSelect, None, Nil, bWhere, Nil,      None,    bOrder, bLim, bOff, None))
+          if !aGroup.exists(hasLiteral)
+          =>
       // a non-aggregate on an aggregate -- merge the WHERE of the second with the HAVING of the first
       Some(SoQLAnalysis(isGrouped = true,
                         distinct = false,
@@ -844,8 +848,28 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
 
   private def hasWindowFunction(a: Analysis): Boolean = {
     a.selection.exists {
-      case (_, fc: com.socrata.soql.typed.FunctionCall[_, _]) =>
-        fc.window.nonEmpty
+      case (_, expr) =>
+        hasWindowFunction(expr)
+      case _ =>
+        false
+    }
+  }
+
+  private def hasWindowFunction(e: CoreExpr[_, _]): Boolean = {
+    e match {
+      case fc: com.socrata.soql.typed.FunctionCall[_, _] =>
+        fc.window.nonEmpty || fc.parameters.exists(hasWindowFunction)
+      case _ =>
+        false
+    }
+  }
+
+  private def hasLiteral(e: CoreExpr[_, _]): Boolean = {
+    e match {
+      case fc: com.socrata.soql.typed.FunctionCall[_, _] =>
+        fc.parameters.exists(hasLiteral)
+      case _: TypedLiteral[_] =>
+        true
       case _ =>
         false
     }
