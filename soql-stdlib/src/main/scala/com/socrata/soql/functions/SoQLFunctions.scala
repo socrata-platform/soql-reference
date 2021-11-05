@@ -572,7 +572,11 @@ object SoQLFunctions {
   )
 
   val TimeStampAdd = f("timestamp add", FunctionName("date_add"), Map("a" -> TimestampLike, "b" -> Set(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
-    NoDocs
+    "Add interval (ISO period format) to timestamp"
+  )
+
+  val TimeStampPlus = f("timestamp +", SpecialFunctions.Operator("+"), Map("a" -> TimestampLike, "b" -> Set(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
+    "Add interval (ISO period format) to timestamp"
   )
 
   // Translate a fixed timestamp to a given time zone and convert it to a floating timestamp.
