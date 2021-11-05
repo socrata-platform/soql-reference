@@ -10,7 +10,7 @@ import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, JsonKey, JsonUtil}
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.types.obfuscation.{CryptProvider, Obfuscator}
 import com.vividsolutions.jts.geom.{LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon}
-import org.joda.time.{DateTime, LocalDate, LocalDateTime, LocalTime}
+import org.joda.time.{DateTime, LocalDate, LocalDateTime, LocalTime, Period}
 import org.joda.time.format.ISODateTimeFormat
 
 import scala.xml.SAXParseException
@@ -29,7 +29,7 @@ object SoQLType {
   // I still want to retain pre-2.10 compat.
   val typesByName = Seq(
     SoQLID, SoQLVersion, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
-    SoQLDate, SoQLTime, SoQLObject, SoQLArray, SoQLJson, SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine,
+    SoQLDate, SoQLTime, SoQLInterval, SoQLObject, SoQLArray, SoQLJson, SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine,
     SoQLPolygon, SoQLMultiPolygon, SoQLBlob,
     SoQLPhone, SoQLLocation, SoQLUrl, SoQLDocument, SoQLPhoto
   ).foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
@@ -48,6 +48,7 @@ object SoQLType {
     SoQLFloatingTimestamp,
     SoQLDate,
     SoQLTime,
+    SoQLInterval,
     SoQLPoint,
     SoQLMultiPoint,
     SoQLLine,
@@ -271,6 +272,30 @@ case object SoQLTime extends SoQLType("time") {
 
     def printTo(appendable: Appendable, time: LocalTime) =
       ISODateTimeFormat.dateTime.printTo(appendable, time)
+  }
+}
+
+case class SoQLInterval(value: Period) extends SoQLValue {
+  def typ = SoQLInterval
+}
+
+case object SoQLInterval extends SoQLType("interval") {
+  object StringRep {
+    def unapply(text: String): Option[Period] =
+      try {
+        Some(Period.parse(text)) // Accept ISO period format like P1Y2DT3H P=period, Y=year, D=day, T=time, H=hour
+      }
+      catch { case _: IllegalArgumentException => None }
+
+    def unapply(text: CaseInsensitiveString): Option[Period] = unapply(text.getString)
+
+    def apply(value: Period) = {
+      value.toString
+    }
+
+    def printTo(appendable: Appendable, value: Period) = {
+      appendable.append(apply(value))
+    }
   }
 }
 

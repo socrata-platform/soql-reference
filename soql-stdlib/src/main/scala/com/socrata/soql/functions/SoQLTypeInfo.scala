@@ -20,6 +20,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
   private val textToFloatingTimestampFunc = getMonomorphically(SoQLFunctions.TextToFloatingTimestamp)
   private val textToDateFunc = getMonomorphically(SoQLFunctions.TextToDate)
   private val textToTimeFunc = getMonomorphically(SoQLFunctions.TextToTime)
+  private val textToIntervalFunc = getMonomorphically(SoQLFunctions.TextToInterval)
   private val numberToMoneyFunc = getMonomorphically(SoQLFunctions.NumberToMoney)
   private val numberToDoubleFunc = getMonomorphically(SoQLFunctions.NumberToDouble)
   private val textToRowIdFunc = getMonomorphically(SoQLFunctions.TextToRowIdentifier)
@@ -70,6 +71,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
     (SoQLFloatingTimestamp.StringRep.unapply(_).isDefined, Seq(textToFloatingTimestampFunc)),
     (SoQLDate.StringRep.unapply(_).isDefined, Seq(textToDateFunc)),
     (SoQLTime.StringRep.unapply(_).isDefined, Seq(textToTimeFunc)),
+    (SoQLInterval.StringRep.unapply(_).isDefined, Seq(textToIntervalFunc)),
     (SoQLID.isPossibleId, Seq(textToRowIdFunc)),
     (SoQLVersion.isPossibleVersion, Seq(textToRowVersionFunc)),
     (isNumberLiteral, Seq(textToNumberFunc, textToMoneyFunc)),
