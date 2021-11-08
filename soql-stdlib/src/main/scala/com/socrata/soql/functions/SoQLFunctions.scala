@@ -579,6 +579,10 @@ object SoQLFunctions {
     "Add interval (ISO period format) to timestamp"
   )
 
+  val TimeStampMinus = f("timestamp -", SpecialFunctions.Operator("-"), Map("a" -> TimestampLike, "b" -> Set(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
+    "Subtract interval (ISO period format) from timestamp"
+  )
+
   // Translate a fixed timestamp to a given time zone and convert it to a floating timestamp.
   val ToFloatingTimestamp = mf("to floating timestamp", FunctionName("to_floating_timestamp"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)(
     NoDocs
@@ -750,6 +754,14 @@ object SoQLFunctions {
     Seq(VariableType("a")),
     VariableType("a"))(
     "Take the leftmost non-null value"
+  )
+
+  val Nullif = f("nullif", FunctionName("nullif"),
+    Map("a" -> Equatable),
+    Seq(VariableType("a"), VariableType("a")),
+    Seq.empty,
+    VariableType("a"))(
+    "Return a null value if the first argument equals to the second argument.  Otherwise, return the first argument."
   )
 
   val GetContext = f("get_context", FunctionName("get_context"),
