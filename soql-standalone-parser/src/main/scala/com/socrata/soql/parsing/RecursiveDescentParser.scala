@@ -221,6 +221,8 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   protected def lexer(s: String): AbstractLexer
   protected def expected(reader: Reader): ParseException
   protected def expectedLeafQuery(reader: Reader): ParseException
+  protected def unexpectedStarSelect(reader: Reader): ParseException
+  protected def unexpectedSystemStarSelect(reader: Reader): ParseException
 
   def binaryTreeSelect(soql: String): BinaryTree[Select] = parseFull(compoundSelect, soql)
 
@@ -550,6 +552,8 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
                   val ParseResult(r2, exceptions) = selectExceptions(r.rest.rest.rest, unqualifiedUserIdentifier)
                   result += StarSelection(Some(intoQualifier(ti)), exceptions).positionedAt(star.position)
                   loop(r2, commaFirst = true)
+                case star@COLONSTAR() =>
+                  throw unexpectedSystemStarSelect(r.rest.rest)
                 case _ =>
                   // Whoops, not a star selection, revert
                   reader.addAlternates(TABLEID_STAR_SET)
@@ -563,6 +567,8 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           val ParseResult(r2, exceptions) = selectExceptions(r.rest, unqualifiedUserIdentifier)
           result += StarSelection(None, exceptions).positionedAt(star.position)
           loop(r2, commaFirst = true)
+        case star@COLONSTAR() =>
+          throw unexpectedSystemStarSelect(r)
         case _ =>
           reader.addAlternates(TABLEID_STAR_SET)
           reader
@@ -601,6 +607,15 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       // tail-recursion checker (it's still lexically tail-recursive
       // if the `catch` does a `return reader` but apparently that
       // does something internally which causes it not to be)
+
+      // We'll do a little lookahead to see if this is a star-select
+      // or a qualified-star-select, and if it is we'll complain
+      r.toStream.take(3) match {
+        case Seq(_ : TableIdentifier, DOT(), STAR() | COLONSTAR()) | Seq(STAR() | COLONSTAR(), _ @ _*) =>
+          throw unexpectedStarSelect(r)
+        case _ =>
+          // ok, it's not
+      }
 
       val exprResult =
         try {
