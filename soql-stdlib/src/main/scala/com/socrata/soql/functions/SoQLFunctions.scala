@@ -167,9 +167,9 @@ object SoQLFunctions {
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
     "Return the rows that where the locations 'spatially overlap', meaning they intersect, but one does not completely contain another and they share interior points")
   
-  val Intersection = f("intersection", FunctionName("intersection"), Map("a" -> Set(SoQLMultiPolygon, SoQLPolygon), "b" -> Set(SoQLMultiPolygon, SoQLPolygon)),
+  val Intersection = f("polygon_intersection", FunctionName("polygon_intersection"), Map("a" -> Set(SoQLMultiPolygon, SoQLPolygon), "b" -> Set(SoQLMultiPolygon, SoQLPolygon)),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon))(
-    "Returns the geometry of the intersection between two polygon or multipolygon geometries")
+    "Returns the geometry of the overlapping multipolygon intersection between two polygon or multipolygon geometries")
   
   val Area = f("area", FunctionName("area"), Map("a" -> Set(SoQLMultiPolygon, SoQLPolygon)),
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber))(
