@@ -166,6 +166,15 @@ object SoQLFunctions {
   val Overlaps = f("overlaps", FunctionName("overlaps"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
     "Return the rows that where the locations 'spatially overlap', meaning they intersect, but one does not completely contain another and they share interior points")
+  
+  val Intersection = f("polygon_intersection", FunctionName("polygon_intersection"), Map("a" -> Set(SoQLMultiPolygon, SoQLPolygon), "b" -> Set(SoQLMultiPolygon, SoQLPolygon)),
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon))(
+    "Returns the geometry of the overlapping multipolygon intersection between two polygon or multipolygon geometries")
+  
+  val Area = f("area", FunctionName("area"), Map("a" -> Set(SoQLMultiPolygon, SoQLPolygon)),
+    Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber))(
+    "Returns the area of a polygon or multipolygon geometry")
+
   val DistanceInMeters = f("distance_in_meters", FunctionName("distance_in_meters"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLNumber))(NoDocs)
   val GeoMakeValid = f("geo_make_valid", FunctionName("geo_make_valid"), Map("a" -> GeospatialLike),
@@ -497,6 +506,9 @@ object SoQLFunctions {
     NoDocs
   )
   val Lag = f("lag", FunctionName("lag"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
+    NoDocs
+  )
+  val Ntile = f("ntile", FunctionName("ntile"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), needsWindow=true)(
     NoDocs
   )
 
