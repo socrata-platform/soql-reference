@@ -399,7 +399,7 @@ object SoQLFunctions {
   val Floor = f("floor", FunctionName("floor"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))(
     NoDocs
   )
-  val Round = mf("round", FunctionName("round"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber)(
+  val Round = f("round", FunctionName("round"), Map("a" -> NumLike, "b" -> NumLike), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
     "Round a number to a specified decimal point, example: round(10.3012, 3) => 10.301; round(25, -1) => 30"
   )
 
