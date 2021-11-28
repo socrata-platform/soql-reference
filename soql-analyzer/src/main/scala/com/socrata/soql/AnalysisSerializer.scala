@@ -193,11 +193,12 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
         case NullLiteral(typ) =>
           out.writeRawByte(5)
           out.writeUInt32NoTag(registerType(typ))
-        case f@FunctionCall(func, params, window) =>
+        case f@FunctionCall(func, params, filter, window) =>
           out.writeRawByte(6)
           writePosition(f.functionNamePosition)
           out.writeUInt32NoTag(registerFunction(func))
           writeSeq(params)(writeExpr)
+          maybeWrite(filter)(writeExpr)
           writeWindowFunctionInfo(window)
       }
     }

@@ -897,7 +897,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
       case (None, None) => None
       case (Some(a), None) => Some(a)
       case (None, Some(b)) => Some(replaceRefs(aliases, b))
-      case (Some(a), Some(b)) => Some(typed.FunctionCall(andFunction, List(a, replaceRefs(aliases, b)), None)(NoPosition, NoPosition))
+      case (Some(a), Some(b)) => Some(typed.FunctionCall(andFunction, List(a, replaceRefs(aliases, b)), None, None)(NoPosition, NoPosition))
     }
 
   private def mergeGroupBy(aliases: OrderedMap[ColumnName, Expr], gb: Seq[Expr]): Seq[Expr] = {
@@ -913,14 +913,15 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
         a.getOrElse(c, cr)
       case tl: typed.TypedLiteral[T] =>
         tl
-      case fc@typed.FunctionCall(f, params, window) =>
+      case fc@typed.FunctionCall(f, params, filter, window) =>
+        val fi = filter.map(x => replaceRefs(a, x))
         val w = window.map {
           case typed.WindowFunctionInfo(partitions, orderings, frames) =>
             typed.WindowFunctionInfo(partitions.map(replaceRefs(a, _)),
                                      orderings.map(ob => ob.copy(expression = replaceRefs(a, ob.expression))),
                                      frames)
         }
-        typed.FunctionCall(f, params.map(replaceRefs(a, _)), w)(fc.position, fc.functionNamePosition)
+        typed.FunctionCall(f, params.map(replaceRefs(a, _)), fi, w)(fc.position, fc.functionNamePosition)
     }
 }
 

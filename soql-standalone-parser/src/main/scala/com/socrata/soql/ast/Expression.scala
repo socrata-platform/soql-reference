@@ -36,20 +36,20 @@ object Expression {
     case v: Literal => Vector(v.toString)
     case ColumnOrAliasRef(aliasOpt, name) => aliasOpt ++: Vector(name.name)
     case fc: FunctionCall =>
-      fc match {
-        case FunctionCall(SpecialFunctions.Operator("-"), args, _) => args.flatMap(findIdentsAndLiterals) // otherwise minus looks like a non-synthetic underscore
-        case FunctionCall(SpecialFunctions.Operator(op), Seq(arg), _) => op +: findIdentsAndLiterals(arg)
-        case FunctionCall(SpecialFunctions.Operator(op), Seq(arg1, arg2), _) => findIdentsAndLiterals(arg1) ++ Vector(op) ++ findIdentsAndLiterals(arg2)
-        case FunctionCall(SpecialFunctions.Operator(_), _, _) => sys.error("Found a non-unary, non-binary operator: " + fc)
-        case FunctionCall(SpecialFunctions.Cast(typ), Seq(arg), _) => findIdentsAndLiterals(arg) :+ typ.name
-        case FunctionCall(SpecialFunctions.Cast(_), _, _) => sys.error("Found a non-unary cast: " + fc)
-        case FunctionCall(SpecialFunctions.IsNull, args, _) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "null")
-        case FunctionCall(SpecialFunctions.IsNotNull, args, _) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "not", "null")
-        case FunctionCall(SpecialFunctions.Between, Seq(a,b,c), _) =>
+      val ils = fc match {
+        case FunctionCall(SpecialFunctions.Operator("-"), args, _, _) => args.flatMap(findIdentsAndLiterals) // otherwise minus looks like a non-synthetic underscore
+        case FunctionCall(SpecialFunctions.Operator(op), Seq(arg), _, _) => op +: findIdentsAndLiterals(arg)
+        case FunctionCall(SpecialFunctions.Operator(op), Seq(arg1, arg2), _, _) => findIdentsAndLiterals(arg1) ++ Vector(op) ++ findIdentsAndLiterals(arg2)
+        case FunctionCall(SpecialFunctions.Operator(_), _, _, _) => sys.error("Found a non-unary, non-binary operator: " + fc)
+        case FunctionCall(SpecialFunctions.Cast(typ), Seq(arg), _, _) => findIdentsAndLiterals(arg) :+ typ.name
+        case FunctionCall(SpecialFunctions.Cast(_), _, _, _) => sys.error("Found a non-unary cast: " + fc)
+        case FunctionCall(SpecialFunctions.IsNull, args, _, _) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "null")
+        case FunctionCall(SpecialFunctions.IsNotNull, args, _, _) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "not", "null")
+        case FunctionCall(SpecialFunctions.Between, Seq(a,b,c), _, _) =>
           findIdentsAndLiterals(a) ++ Vector("between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
-        case FunctionCall(SpecialFunctions.NotBetween, Seq(a,b,c), _) =>
+        case FunctionCall(SpecialFunctions.NotBetween, Seq(a,b,c), _, _) =>
           findIdentsAndLiterals(a) ++ Vector("not", "between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
-        case FunctionCall(SpecialFunctions.Case, args, _) =>
+        case FunctionCall(SpecialFunctions.Case, args, _, _) =>
           val whens = args.dropRight(2).grouped(2)
           val start = Vector("case") ++ args.dropRight(2).grouped(2).flatMap { case Seq(cond, expr) => Vector("when") ++ findIdentsAndLiterals(cond) ++ Vector("then") ++ findIdentsAndLiterals(expr) }
           val sinon = args.takeRight(2) match {
@@ -57,8 +57,9 @@ object Expression {
             case Seq(BooleanLiteral(true), e) => Vector("else") ++ findIdentsAndLiterals(e)
           }
           start ++ sinon ++ Vector("end")
-        case FunctionCall(other, args, window) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals) ++ findIdentsAndLiterals(window)
+        case FunctionCall(other, args, _, window) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals) ++ findIdentsAndLiterals(window)
       }
+      ils ++ fc.filter.toSeq.flatMap(findIdentsAndLiterals(_))
     case Hole(name) =>
       Vector(name.name)
   }
@@ -188,20 +189,20 @@ case class NullLiteral()(val position: Position) extends Literal {
   def doc = d"null"
 }
 
-case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression], window: Option[WindowFunctionInfo])(val position: Position, val functionNamePosition: Position) extends Expression  {
+case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression], filter: Option[Expression] = None, window: Option[WindowFunctionInfo] = None)(val position: Position, val functionNamePosition: Position) extends Expression  {
   private[ast] def variadizeAssociative(builder: VectorBuilder[Expression]): Unit = {
     require(parameters.length == 2)
     require(window.isEmpty)
 
     parameters(0) match {
-      case fc@FunctionCall(op2, params, None) if op2 == functionName && params.length == 2 =>
+      case fc@FunctionCall(op2, params, _, None) if op2 == functionName && params.length == 2 =>
         fc.variadizeAssociative(builder)
       case other =>
         builder += other
     }
 
     parameters(1) match {
-      case fc@FunctionCall(op2, params, None) if op2 == functionName && params.length == 2 =>
+      case fc@FunctionCall(op2, params, _, None) if op2 == functionName && params.length == 2 =>
         fc.variadizeAssociative(builder)
       case other =>
         builder += other
@@ -210,8 +211,8 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
 
   private def maybeParens(e: Expression) =
     e match {
-      case FunctionCall(SpecialFunctions.Parens | SpecialFunctions.Subscript, _, _) => e.doc
-      case FunctionCall(SpecialFunctions.Operator(_), _, _) =>
+      case FunctionCall(SpecialFunctions.Parens | SpecialFunctions.Subscript, _, _, _) => e.doc
+      case FunctionCall(SpecialFunctions.Operator(_), _, _, _) =>
         val edoc = e.doc
         ((d"(" ++ edoc ++ d")") flatAlt edoc).group
       case other => other.doc
@@ -237,7 +238,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
             // operator is, we'll just uniformly introduce a space
             // there.
             parameters(0) match {
-              case FunctionCall(SpecialFunctions.Operator(_), Seq(_), _) =>
+              case FunctionCall(SpecialFunctions.Operator(_), Seq(_), _, _) =>
                 Doc(op) +#+ parameters(0).doc
               case _ =>
                 Doc(op) ++ parameters(0).doc
@@ -293,9 +294,10 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
         }
         (whens ++ otherwise).encloseNesting(d"CASE" flatAlt d"CASE ", d"", d"END" flatAlt d" END")
       case other =>
+        val filterd = filter.fold(Doc.empty) { f => d" FILTER(WHERE ${f.doc})" }
         val close = window.fold(Doc.empty) { w => d" " ++ w.doc }
         if(parameters.lengthCompare(1) == 0) {
-          d"${other.toString}(${parameters(0).doc})$close"
+          d"${other.toString}(${parameters(0).doc})$filterd$close"
         } else {
           parameters.map(_.doc).encloseNesting(
             d"${other.toString}(",
@@ -321,7 +323,11 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
 
   def replaceHoles(f: Hole => Expression): FunctionCall = {
-    FunctionCall(functionName, parameters.map(_.replaceHoles(f)), window.map(_.replaceHoles(f)))(position, functionNamePosition)
+
+    FunctionCall(functionName,
+                 parameters.map(_.replaceHoles(f)),
+                 filter.map(_.replaceHoles(f)),
+                 window.map(_.replaceHoles(f)))(position, functionNamePosition)
   }
 }
 

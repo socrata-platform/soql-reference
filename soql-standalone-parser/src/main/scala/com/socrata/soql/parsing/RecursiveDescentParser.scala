@@ -141,6 +141,7 @@ object RecursiveDescentParser {
   val CURRENT = new Keyword("CURRENT")
   val ROW = new Keyword("ROW")
   val FOLLOWING = new Keyword("FOLLOWING")
+  val FILTER = new Keyword("FILTER")
 
   sealed abstract class NullPlacement
   case object First extends NullPlacement
@@ -1113,15 +1114,37 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def parseFunctionOver(reader: Reader, fn: FunctionName, pos: Position, args: Seq[Expression]): ParseResult[Expression] = {
+  private def aggWindowFunction(reader: Reader): ParseResult[Option[WindowFunctionInfo]] = {
     reader.first match {
       case OVER() =>
         windowFunctionParams(reader.rest).map { wfp =>
-          FunctionCall(fn, args, Some(wfp))(pos, pos)
+          Some(wfp)
         }
       case _ =>
-        reader.addAlternates(OVER_SET)
-        ParseResult(reader, FunctionCall(fn, args, None)(pos, pos))
+        ParseResult(reader, None)
+    }
+  }
+
+  private def aggFilter(reader: Reader): ParseResult[Option[Expression]] = {
+    val fir = reader.first
+    println(fir.toString)
+    fir match {
+      case tokens.FILTER() =>
+        println(fir.toString + "+++")
+        reader.rest.first match {
+          case LPAREN() =>
+            val r@ParseResult(r6, _whereClause) = where(reader.rest.rest)
+            r6.first match {
+              case RPAREN() =>
+                r.copy(reader = r6.rest)
+              case _ =>
+                ???
+            }
+          case _ =>
+            ???
+        }
+      case _ =>
+        ParseResult(reader, None)
     }
   }
 
@@ -1133,7 +1156,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     //    id(expr,...) [OVER windowstuff]
     reader.first match {
       case LPAREN() =>
-        reader.rest.first match {
+        val pr@ParseResult(r1, fc) = reader.rest.first match {
           case DISTINCT() =>
             val ParseResult(r2, arg) = nestedExpr(reader.rest.rest)
             r2.first match {
@@ -1146,15 +1169,27 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           case STAR() =>
             reader.rest.rest.first match {
               case RPAREN() =>
-                parseFunctionOver(reader.rest.rest.rest, SpecialFunctions.StarFunc(ident.value), ident.position, Nil)
+                //parseFunctionOver(reader.rest.rest.rest, SpecialFunctions.StarFunc(ident.value), ident.position, Nil)
+                ParseResult(reader.rest.rest.rest, FunctionCall(SpecialFunctions.StarFunc(ident.value), Nil, None)(ident.position, ident.position))
               case _ =>
                 fail(reader.rest.rest, RPAREN())
             }
           case RPAREN() =>
-            parseFunctionOver(reader.rest.rest, FunctionName(ident.value), ident.position, Nil)
+            ParseResult(reader.rest.rest, FunctionCall(FunctionName(ident.value), Nil, None)(ident.position, ident.position))
+           // parseFunctionOver(reader.rest.rest, FunctionName(ident.value), ident.position, Nil)
           case _ =>
             val ParseResult(r2, args) = parseArgList(reader.rest)
-            parseFunctionOver(r2, FunctionName(ident.value), ident.position, args)
+            ParseResult(r2, FunctionCall(FunctionName(ident.value), args, None)(ident.position, ident.position))
+            //parseFunctionOver(r2, FunctionName(ident.value), ident.position, args)
+        }
+
+        val ParseResult(r2, filterExpr) = aggFilter(r1)
+        val ParseResult(r3, wfi) = aggWindowFunction(r2)
+        if (filterExpr.isEmpty && wfi.isEmpty) {
+          pr
+        } else {
+          val afc = FunctionCall(FunctionName(ident.value), fc.parameters, filterExpr, wfi)(ident.position, ident.position)
+          ParseResult(r3, afc)
         }
       case _ =>
         reader.addAlternates(LPAREN_SET)

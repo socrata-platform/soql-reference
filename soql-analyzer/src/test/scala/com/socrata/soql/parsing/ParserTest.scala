@@ -21,7 +21,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
   def ident(name: String) = ColumnOrAliasRef(None, ColumnName(name))(NoPosition)
-  def functionCall(name: FunctionName, args: Seq[Expression], window: Option[WindowFunctionInfo]) = FunctionCall(name, args, window)(NoPosition, NoPosition)
+  def functionCall(name: FunctionName, args: Seq[Expression], filter: Option[Expression], window: Option[WindowFunctionInfo]) = FunctionCall(name, args, filter, window)(NoPosition, NoPosition)
   def stringLiteral(s: String) = StringLiteral(s)(NoPosition)
   def numberLiteral(num: BigDecimal) = NumberLiteral(num)(NoPosition)
   def booleanLiteral(bool: Boolean) = BooleanLiteral(bool)(NoPosition)
@@ -45,12 +45,12 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "accept both the 'case' sugar and the 'case' function" in {
-      parseExpression("case when x then y end") must equal (functionCall(SpecialFunctions.Case, Seq(ident("x"), ident("y"), booleanLiteral(false), nullLiteral), None))
-      parseExpression("case(x, y)") must equal (functionCall(FunctionName("case"), Seq(ident("x"), ident("y")), None))
+      parseExpression("case when x then y end") must equal (functionCall(SpecialFunctions.Case, Seq(ident("x"), ident("y"), booleanLiteral(false), nullLiteral), None, None))
+      parseExpression("case(x, y)") must equal (functionCall(FunctionName("case"), Seq(ident("x"), ident("y")), None, None))
     }
 
     "accept 'case' sugar with multiple clauses and an else" in {
-      parseExpression("case when a then b when c then d else e end") must equal (functionCall(SpecialFunctions.Case, Seq(ident("a"), ident("b"), ident("c"), ident("d"), booleanLiteral(true), ident("e")), None))
+      parseExpression("case when a then b when c then d else e end") must equal (functionCall(SpecialFunctions.Case, Seq(ident("a"), ident("b"), ident("c"), ident("d"), booleanLiteral(true), ident("e")), None, None))
     }
 
     "require an expression after `not'" in {
@@ -74,7 +74,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "accept expr.identifier" in {
-      parseExpression("a.b") must equal (functionCall(SpecialFunctions.Subscript, Seq(ident("a"), stringLiteral("b")), None))
+      parseExpression("a.b") must equal (functionCall(SpecialFunctions.Subscript, Seq(ident("a"), stringLiteral("b")), None, None))
     }
 
     "reject expr.identifier." in {
@@ -99,7 +99,7 @@ class ParserTest extends WordSpec with MustMatchers {
               SpecialFunctions.Operator("*"),
               Seq(
                 numberLiteral(2),
-                ident("b")), None)), None))
+                ident("b")), None, None)), None, None))
     }
 
     "accept unreserved keywords as identifiers" in {
@@ -120,8 +120,8 @@ class ParserTest extends WordSpec with MustMatchers {
             ident("a"),
             functionCall(SpecialFunctions.Operator("*"), Seq(
               numberLiteral(2),
-              ident("b")), None)), None),
-        stringLiteral("c")), None))
+              ident("b")), None, None)), None, None),
+        stringLiteral("c")), None, None))
     }
 
     "accept expr[expr].ident[expr]" in {
@@ -135,9 +135,9 @@ class ParserTest extends WordSpec with MustMatchers {
                 ident("a"),
                 functionCall(SpecialFunctions.Operator("*"), Seq(
                   numberLiteral(2),
-                  ident("b")), None)), None),
-            stringLiteral("c")), None),
-        numberLiteral(3)), None))
+                  ident("b")), None, None)), None, None),
+            stringLiteral("c")), None, None),
+        numberLiteral(3)), None, None))
     }
 
     "allow offset/limit" in {

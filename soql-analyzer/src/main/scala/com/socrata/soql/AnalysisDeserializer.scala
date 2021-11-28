@@ -27,8 +27,8 @@ private trait DeserializationDictionary[C, T] {
 }
 
 object AnalysisDeserializer {
-  val CurrentVersion = 8
-  val LastVersion = 7
+  val CurrentVersion = 9
+  val LastVersion = 8
   val NonEmptySeqVersion = 6
 
   // This is odd and for smooth deploy transition.
@@ -142,9 +142,11 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
           val functionNamePosition = readPosition()
           val func = dictionary.functions(in.readUInt32())
           val params = readSeq { readExpr() }
+          val filter = if (this.version != CurrentVersion - 1) maybeRead { readExpr() }
+                       else None
           val window = if (this.version != 5) readWindowFunctionInfo()
                        else None
-          FunctionCall(func, params, window)(pos, functionNamePosition)
+          FunctionCall(func, params, filter, window)(pos, functionNamePosition)
       }
     }
 

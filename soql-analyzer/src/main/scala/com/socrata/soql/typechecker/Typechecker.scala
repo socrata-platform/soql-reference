@@ -44,11 +44,11 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
               throw NoSuchColumn(col, r.position)
           }
       }
-    case FunctionCall(SpecialFunctions.Parens, params, window) =>
+    case FunctionCall(SpecialFunctions.Parens, params, _, window) =>
       assert(params.length == 1, "Parens with more than one parameter?!")
       assert(window.isEmpty, "Window clause exists?!")
       typecheck(params(0), aliases, from)
-    case fc@FunctionCall(SpecialFunctions.Case, params, None) =>
+    case fc@FunctionCall(SpecialFunctions.Case, params, _, None) =>
       val actualParams =
         if(params.takeRight(2).headOption == Some(BooleanLiteral(true)(fc.position))) {
           params
@@ -56,7 +56,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
           params.dropRight(2)
         }
       typecheck(fc.copy(functionName = SpecialFunctions.CasePostTypecheck, parameters=actualParams)(position = fc.position, functionNamePosition = fc.functionNamePosition), aliases, from)
-    case fc@FunctionCall(SpecialFunctions.Subscript, Seq(base, StringLiteral(prop)), window) =>
+    case fc@FunctionCall(SpecialFunctions.Subscript, Seq(base, StringLiteral(prop)), _, window) =>
       assert(window.isEmpty, "Window clause exists?!")
       // Subscripting special case.  Some types have "subfields" that
       // can be accessed with dot notation.  The parser turns this
@@ -81,7 +81,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
           }
         }
       }
-    case fc@FunctionCall(_, _, _) =>
+    case fc@FunctionCall(_, _, _, _) =>
       typecheckFuncall(fc, aliases, from)
     case bl@BooleanLiteral(b) =>
       Right(booleanLiteralExpr(b, bl.position))
@@ -97,7 +97,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
 
   def typecheckFuncall(fc: FunctionCall, aliases: Map[ColumnName, Expr], from: Option[TableName]): Either[TypecheckException, Seq[Expr]] = {
 
-    val FunctionCall(name, parameters, window) = fc
+    val FunctionCall(name, parameters, filter, window) = fc
 
     val typedParameters = parameters.map(typecheck(_, aliases, from)).map {
       case Left(tm) => return Left(tm)
@@ -110,6 +110,8 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
       val typedFrames = w.frames.map { x => apply(x, aliases, from) }
       typed.WindowFunctionInfo(typedPartitions, typedOrderings, typedFrames)
     }
+
+    val typedFilter = filter.map(apply(_, aliases, from))
 
     val options = functionInfo.functionsWithArity(name, typedParameters.length)
     if(options.isEmpty) return Left(NoSuchFunction(name, typedParameters.length, fc.functionNamePosition))
@@ -140,7 +142,7 @@ class Typechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Typ
 
         selectedParameters.toVector.foldRight(Seq(List.empty[Expr])) { (choices, remainingParams) =>
           choices.flatMap { choice => remainingParams.map(choice :: _) }
-        }.map(typed.FunctionCall(f, _, typedWindow)(fc.position, fc.functionNamePosition))
+        }.map(typed.FunctionCall(f, _, typedFilter, typedWindow)(fc.position, fc.functionNamePosition))
       }.toSeq
 
       potentials.headOption.foreach(checkWindowFunction)
