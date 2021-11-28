@@ -90,6 +90,7 @@ object LexerReader {
     SEARCH,
     ASC,
     DESC,
+    FILTER,
 
     // Presently unused keywords
     FROM,

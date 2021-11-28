@@ -253,14 +253,14 @@ case class Select(
 
   private def docOneCondition(e: Expression): Doc[Nothing] =
     e match {
-      case fc@FunctionCall(SpecialFunctions.Parens | SpecialFunctions.Subscript, _, _) => fc.doc
-      case fc@FunctionCall(SpecialFunctions.Operator(_), _, _) => fc.doc.enclose(d"(", d")")
+      case fc@FunctionCall(SpecialFunctions.Parens | SpecialFunctions.Subscript, _, _, _) => fc.doc
+      case fc@FunctionCall(SpecialFunctions.Operator(_), _, _, _) => fc.doc.enclose(d"(", d")")
       case other => other.doc
     }
 
   private def docCondition(expr: Expression): Doc[Nothing] =
     expr match {
-      case fc@FunctionCall(SpecialFunctions.Operator(op@"AND"), params, None) if params.length == 2 =>
+      case fc@FunctionCall(SpecialFunctions.Operator(op@"AND"), params, None, None) if params.length == 2 =>
         val vb = new VectorBuilder[Expression]
         fc.variadizeAssociative(vb)
         val result = vb.result()

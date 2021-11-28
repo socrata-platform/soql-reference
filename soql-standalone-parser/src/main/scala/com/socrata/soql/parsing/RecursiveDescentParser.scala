@@ -141,6 +141,7 @@ object RecursiveDescentParser {
   val CURRENT = new Keyword("CURRENT")
   val ROW = new Keyword("ROW")
   val FOLLOWING = new Keyword("FOLLOWING")
+  val FILTER = new Keyword("FILTER")
 
   sealed abstract class NullPlacement
   case object First extends NullPlacement
@@ -192,6 +193,7 @@ object RecursiveDescentParser {
   private val NULL_NULLS_SET = s(NULL(), NULLS())
   private val RANGE_ROWS_SET = s(RANGE(), ROWS())
   private val OVER_SET = s(OVER())
+  private val FILTER_SET = s(FILTER())
   private val DOT_LBRACKET_SET = s(DOT(), LBRACKET())
 
   private val COLONCOLON_SET = s(COLONCOLON())
@@ -1113,15 +1115,36 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def parseFunctionOver(reader: Reader, fn: FunctionName, pos: Position, args: Seq[Expression]): ParseResult[Expression] = {
+  private def parseFunctionOver(reader: Reader): ParseResult[Option[WindowFunctionInfo]] = {
     reader.first match {
       case OVER() =>
         windowFunctionParams(reader.rest).map { wfp =>
-          FunctionCall(fn, args, Some(wfp))(pos, pos)
+          Some(wfp)
         }
       case _ =>
         reader.addAlternates(OVER_SET)
-        ParseResult(reader, FunctionCall(fn, args, None)(pos, pos))
+        ParseResult(reader, None)
+    }
+  }
+
+  private def parseFunctionFilter(reader: Reader): ParseResult[Option[Expression]] = {
+    reader.first match {
+      case tokens.FILTER() =>
+        reader.rest.first match {
+          case LPAREN() =>
+            val r@ParseResult(r2, _) = where(reader.rest.rest)
+            r2.first match {
+              case RPAREN() =>
+                r.copy(reader = r2.rest)
+              case _ =>
+                fail(r2, RPAREN())
+            }
+          case _ =>
+            fail(reader.rest, LPAREN())
+        }
+      case _ =>
+        reader.addAlternates(FILTER_SET)
+        ParseResult(reader, None)
     }
   }
 
@@ -1129,11 +1152,11 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     // we want to match
     //    id
     //    id(DISTINCT expr)
-    //    id(*) [OVER windowstuff]
-    //    id(expr,...) [OVER windowstuff]
+    //    id(*) [FILTER(WHERE filterstuff)] [OVER windowstuff]
+    //    id(expr,...) [FILTER(WHERE filterstuff)] [OVER windowstuff]
     reader.first match {
       case LPAREN() =>
-        reader.rest.first match {
+        val pr@ParseResult(r1, fc) = reader.rest.first match {
           case DISTINCT() =>
             val ParseResult(r2, arg) = nestedExpr(reader.rest.rest)
             r2.first match {
@@ -1146,15 +1169,23 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           case STAR() =>
             reader.rest.rest.first match {
               case RPAREN() =>
-                parseFunctionOver(reader.rest.rest.rest, SpecialFunctions.StarFunc(ident.value), ident.position, Nil)
+                ParseResult(reader.rest.rest.rest, FunctionCall(SpecialFunctions.StarFunc(ident.value), Nil, None)(ident.position, ident.position))
               case _ =>
                 fail(reader.rest.rest, RPAREN())
             }
           case RPAREN() =>
-            parseFunctionOver(reader.rest.rest, FunctionName(ident.value), ident.position, Nil)
+            ParseResult(reader.rest.rest, FunctionCall(FunctionName(ident.value), Nil, None)(ident.position, ident.position))
           case _ =>
             val ParseResult(r2, args) = parseArgList(reader.rest)
-            parseFunctionOver(r2, FunctionName(ident.value), ident.position, args)
+            ParseResult(r2, FunctionCall(FunctionName(ident.value), args, None)(ident.position, ident.position))
+        }
+
+        val ParseResult(r2, filterExpr) = parseFunctionFilter(r1)
+        val ParseResult(r3, wfi) = parseFunctionOver(r2)
+        if (filterExpr.isEmpty && wfi.isEmpty) {
+          pr
+        } else {
+          ParseResult(r3, FunctionCall(fc.functionName, fc.parameters, filterExpr, wfi)(fc.position, ident.position))
         }
       case _ =>
         reader.addAlternates(LPAREN_SET)

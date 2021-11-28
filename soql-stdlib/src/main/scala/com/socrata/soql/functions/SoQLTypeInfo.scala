@@ -95,9 +95,9 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
       (test, funcs) <- stringConversions
       if test(s)
       func <- funcs
-    } yield typed.FunctionCall(func, Seq(baseString), None)(pos, pos))
-    results += typed.FunctionCall(textToBlobFunc, Seq(baseString), None)(pos, pos)
-    results += typed.FunctionCall(textToPhotoFunc, Seq(baseString), None)(pos, pos)
+    } yield typed.FunctionCall(func, Seq(baseString), None, None)(pos, pos))
+    results += typed.FunctionCall(textToBlobFunc, Seq(baseString), None, None)(pos, pos)
+    results += typed.FunctionCall(textToPhotoFunc, Seq(baseString), None, None)(pos, pos)
     results.result()
   }
 
@@ -105,8 +105,8 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
     val baseNumber = typed.NumberLiteral(n, SoQLNumber.t)(pos)
     Seq(
       baseNumber,
-      typed.FunctionCall(numberToMoneyFunc, Seq(baseNumber), None)(pos, pos),
-      typed.FunctionCall(numberToDoubleFunc, Seq(baseNumber), None)(pos, pos)
+      typed.FunctionCall(numberToMoneyFunc, Seq(baseNumber), None, None)(pos, pos),
+      typed.FunctionCall(numberToDoubleFunc, Seq(baseNumber), None, None)(pos, pos)
     )
   }
 
