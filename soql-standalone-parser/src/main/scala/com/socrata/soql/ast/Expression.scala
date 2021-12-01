@@ -331,7 +331,6 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
   lazy val allColumnRefs = parameters.foldLeft(Set.empty[ColumnOrAliasRef])(_ ++ _.allColumnRefs)
 
   def replaceHoles(f: Hole => Expression): FunctionCall = {
-
     FunctionCall(functionName,
                  parameters.map(_.replaceHoles(f)),
                  filter.map(_.replaceHoles(f)),
