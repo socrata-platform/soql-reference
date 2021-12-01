@@ -144,8 +144,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
           val params = readSeq { readExpr() }
           val filter = if (this.version != CurrentVersion - 1) maybeRead { readExpr() }
                        else None
-          val window = if (this.version != 5) readWindowFunctionInfo()
-                       else None
+          val window = readWindowFunctionInfo()
           FunctionCall(func, params, filter, window)(pos, functionNamePosition)
       }
     }
