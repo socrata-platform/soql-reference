@@ -295,12 +295,12 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
         (whens ++ otherwise).encloseNesting(d"CASE" flatAlt d"CASE ", d"", d"END" flatAlt d" END")
       case other =>
         val filterd = filter.fold(Doc.empty) { f =>
-          Seq(doc"WHERE" +#+ f.doc).encloseNesting(doc" FILTER(", Doc.empty, doc")")
+          Seq(doc"WHERE" +#+ f.doc).encloseNesting(doc"FILTER(", Doc.empty, doc")")
         }
 
-        val close = window.fold(Doc.empty) { w => d" " ++ w.doc }
+        val close = window.fold(Doc.empty) { w => w.doc }
         if(parameters.lengthCompare(1) == 0) {
-          d"${other.toString}(${parameters(0).doc})$filterd$close"
+          Seq(Doc(other.toString) ++ d"(" ++ parameters(0).doc ++ d")", filterd, close).vsep.hang(2)
         } else {
           parameters.map(_.doc).encloseNesting(
             d"${other.toString}(",
