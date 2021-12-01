@@ -218,9 +218,14 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
       case other => other.doc
     }
 
-  private def filterDoc(filter: Option[Expression]) = {
-    filter.fold(Doc.empty) { f =>
-      Seq(doc"WHERE" +#+ f.doc).encloseNesting(doc" FILTER (", Doc.empty, doc")")
+  private def functionDoc(funDoc: Doc[Nothing], filter: Option[Expression], window: Option[WindowFunctionInfo]): Doc[Nothing] = {
+    if (filter.isEmpty && window.isEmpty) {
+      funDoc
+    } else {
+      val seq = Seq(funDoc) ++
+        filter.map(f => Seq(doc"WHERE" +#+ f.doc).encloseNesting(doc"FILTER (", Doc.empty, doc")")) ++
+        window.map(_.doc)
+      seq.encloseNesting(Doc.empty, Doc.empty, Doc.empty)
     }
   }
 
@@ -231,9 +236,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
       case SpecialFunctions.Subscript =>
         parameters(0).doc ++ parameters(1).doc.enclose(d"[", d"]")
       case SpecialFunctions.StarFunc(f) =>
-        val filterd = filterDoc(filter)
-        val close = window.fold(Doc.empty) { w => d" " ++ w.doc }
-        d"$f(*)" ++ filterd ++ close
+        functionDoc(d"$f(*)", filter, window)
       case SpecialFunctions.Operator(op) if parameters.size == 1 =>
         op match {
           case "NOT" =>
@@ -287,9 +290,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
       case SpecialFunctions.NotLike =>
         d"${parameters(0).doc} NOT LIKE ${parameters(1).doc}"
       case SpecialFunctions.CountDistinct =>
-        val filterd = filterDoc(filter)
-        val close = window.fold(Doc.empty) { w => d" " ++ w.doc }
-        d"COUNT(DISTINCT ${parameters(0).doc})" ++filterd ++ close
+        functionDoc(d"count(DISTINCT " ++ parameters(0).doc ++ d")", filter, window)
       case SpecialFunctions.Case =>
         val whens = parameters.dropRight(2).grouped(2).map { case Seq(a, b) =>
           Seq(d"WHEN" +#+ a.doc.align, d"THEN" +#+ b.doc.align).sep.nest(2).group
@@ -302,16 +303,15 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
         }
         (whens ++ otherwise).encloseNesting(d"CASE" flatAlt d"CASE ", d"", d"END" flatAlt d" END")
       case other =>
-        val filterd = filterDoc(filter)
-        val close = window.fold(Doc.empty) { w => d" " ++ w.doc }
-        if(parameters.lengthCompare(1) == 0 && filter.isEmpty) {
-          d"${other.toString}(${parameters(0).doc})$close"
+        if(parameters.lengthCompare(1) == 0 /* && filter.isEmpty */) {
+          functionDoc(Doc(other.toString) ++ d"(" ++ parameters(0).doc ++ d")", filter, window)
         } else {
-          parameters.map(_.doc).encloseNesting(
-            d"${other.toString}(",
-            Doc.Symbols.comma,
-            d")" ++ filterd ++ close
-          )
+           val funDoc = parameters.map(_.doc).encloseNesting(
+        d"${other.toString}(",
+              Doc.Symbols.comma,
+       d")"
+           )
+          functionDoc(funDoc, filter, window)
         }
     }
 

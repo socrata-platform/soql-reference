@@ -119,10 +119,10 @@ class ToStringTest extends FunSpec with MustMatchers {
         "count(*)",
         "count(*) FILTER (WHERE TRUE)",
         "count(*) OVER ()",
-        "COUNT(DISTINCT `c`)",
-        "COUNT(DISTINCT `c`) FILTER (WHERE TRUE)",
-        "COUNT(DISTINCT `c`) OVER ()",
-        "COUNT(DISTINCT `c`) FILTER (WHERE TRUE) OVER ()"
+        "count(DISTINCT `c`)",
+        "count(DISTINCT `c`) FILTER (WHERE TRUE)",
+        "count(DISTINCT `c`) OVER ()",
+        "count(DISTINCT `c`) FILTER (WHERE TRUE) OVER ()"
       )
       expecteds.foreach { expected =>
         val parsed = parser.expression(expected)
