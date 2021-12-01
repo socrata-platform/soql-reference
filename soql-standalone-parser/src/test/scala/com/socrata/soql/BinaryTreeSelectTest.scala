@@ -49,7 +49,7 @@ class BinaryTreeSelectTest extends FunSpec with MustMatchers {
     it ("function filter toString retains") {
       val soql = "SELECT sum(1) filter(where true) over()"
       val select = parser.unchainedSelectStatement(soql)
-      select.toString must be ("SELECT sum(1) FILTER(WHERE TRUE) OVER ()")
+      select.toString must be ("SELECT sum(1) FILTER (WHERE TRUE) OVER ()")
     }
   }
 }

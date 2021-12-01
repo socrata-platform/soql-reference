@@ -218,6 +218,12 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
       case other => other.doc
     }
 
+  private def filterDoc(filter: Option[Expression]) = {
+    filter.fold(Doc.empty) { f =>
+      Seq(doc"WHERE" +#+ f.doc).encloseNesting(doc" FILTER (", Doc.empty, doc")")
+    }
+  }
+
   def doc: Doc[Nothing] =
     functionName match {
       case SpecialFunctions.Parens =>
@@ -225,8 +231,9 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
       case SpecialFunctions.Subscript =>
         parameters(0).doc ++ parameters(1).doc.enclose(d"[", d"]")
       case SpecialFunctions.StarFunc(f) =>
+        val filterd = filterDoc(filter)
         val close = window.fold(Doc.empty) { w => d" " ++ w.doc }
-        d"$f(*)" ++ close
+        d"$f(*)" ++ filterd ++ close
       case SpecialFunctions.Operator(op) if parameters.size == 1 =>
         op match {
           case "NOT" =>
@@ -280,8 +287,9 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
       case SpecialFunctions.NotLike =>
         d"${parameters(0).doc} NOT LIKE ${parameters(1).doc}"
       case SpecialFunctions.CountDistinct =>
+        val filterd = filterDoc(filter)
         val close = window.fold(Doc.empty) { w => d" " ++ w.doc }
-        d"COUNT(DISTINCT ${parameters(0).doc})" ++ close
+        d"COUNT(DISTINCT ${parameters(0).doc})" ++filterd ++ close
       case SpecialFunctions.Case =>
         val whens = parameters.dropRight(2).grouped(2).map { case Seq(a, b) =>
           Seq(d"WHEN" +#+ a.doc.align, d"THEN" +#+ b.doc.align).sep.nest(2).group
@@ -294,18 +302,15 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
         }
         (whens ++ otherwise).encloseNesting(d"CASE" flatAlt d"CASE ", d"", d"END" flatAlt d" END")
       case other =>
-        val filterd = filter.fold(Doc.empty) { f =>
-          Seq(doc"WHERE" +#+ f.doc).encloseNesting(doc"FILTER(", Doc.empty, doc")")
-        }
-
-        val close = window.fold(Doc.empty) { w => w.doc }
-        if(parameters.lengthCompare(1) == 0) {
-          Seq(Doc(other.toString) ++ d"(" ++ parameters(0).doc ++ d")", filterd, close).vsep.hang(2)
+        val filterd = filterDoc(filter)
+        val close = window.fold(Doc.empty) { w => d" " ++ w.doc }
+        if(parameters.lengthCompare(1) == 0 && filter.isEmpty) {
+          d"${other.toString}(${parameters(0).doc})$close"
         } else {
           parameters.map(_.doc).encloseNesting(
             d"${other.toString}(",
             Doc.Symbols.comma,
-            d")" ++ close
+            d")" ++ filterd ++ close
           )
         }
     }
