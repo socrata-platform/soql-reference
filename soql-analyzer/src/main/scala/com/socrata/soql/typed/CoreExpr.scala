@@ -1,9 +1,9 @@
 package com.socrata.soql.typed
 
-import com.socrata.soql.ast.Expression
-
 import scala.util.parsing.input.Position
 import scala.runtime.ScalaRunTime
+
+import com.socrata.soql.ast.Expression
 import com.socrata.soql.functions.MonomorphicFunction
 
 /** A "core expression" -- nothing but literals, column references, and function calls,
