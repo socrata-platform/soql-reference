@@ -218,7 +218,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
       case other => other.doc
     }
 
-  private def functionDoc(funDoc: Doc[Nothing], filter: Option[Expression], window: Option[WindowFunctionInfo]): Doc[Nothing] = {
+  private def functionDoc(funDoc: Doc[Nothing]): Doc[Nothing] = {
     if (filter.isEmpty && window.isEmpty) {
       funDoc
     } else {
@@ -236,7 +236,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
       case SpecialFunctions.Subscript =>
         parameters(0).doc ++ parameters(1).doc.enclose(d"[", d"]")
       case SpecialFunctions.StarFunc(f) =>
-        functionDoc(d"$f(*)", filter, window)
+        functionDoc(d"$f(*)")
       case SpecialFunctions.Operator(op) if parameters.size == 1 =>
         op match {
           case "NOT" =>
@@ -290,7 +290,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
       case SpecialFunctions.NotLike =>
         d"${parameters(0).doc} NOT LIKE ${parameters(1).doc}"
       case SpecialFunctions.CountDistinct =>
-        functionDoc(d"count(DISTINCT " ++ parameters(0).doc ++ d")", filter, window)
+        functionDoc(d"count(DISTINCT " ++ parameters(0).doc ++ d")")
       case SpecialFunctions.Case =>
         val whens = parameters.dropRight(2).grouped(2).map { case Seq(a, b) =>
           Seq(d"WHEN" +#+ a.doc.align, d"THEN" +#+ b.doc.align).sep.nest(2).group
@@ -304,14 +304,14 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
         (whens ++ otherwise).encloseNesting(d"CASE" flatAlt d"CASE ", d"", d"END" flatAlt d" END")
       case other =>
         if(parameters.lengthCompare(1) == 0 /* && filter.isEmpty */) {
-          functionDoc(Doc(other.toString) ++ d"(" ++ parameters(0).doc ++ d")", filter, window)
+          functionDoc(Doc(other.toString) ++ d"(" ++ parameters(0).doc ++ d")")
         } else {
            val funDoc = parameters.map(_.doc).encloseNesting(
         d"${other.toString}(",
               Doc.Symbols.comma,
        d")"
            )
-          functionDoc(funDoc, filter, window)
+          functionDoc(funDoc)
         }
     }
 
