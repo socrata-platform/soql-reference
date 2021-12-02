@@ -190,7 +190,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       readSeq {
         val joinType = JoinType(in.readString())
         val joinAnalysis = readJoinAnalysis()
-        val lateral = if (version >= CurrentVersion || version == TestVersionV5) in.readBool() else false
+        val lateral = in.readBool()
         Join(joinType, joinAnalysis, readExpr(), lateral)
       }
     }
