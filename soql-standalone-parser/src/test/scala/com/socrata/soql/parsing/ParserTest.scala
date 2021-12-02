@@ -23,7 +23,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
   def ident(name: String) = ColumnOrAliasRef(None, ColumnName(name))(NoPosition)
-  def functionCall(name: FunctionName, args: Seq[Expression], window: Option[WindowFunctionInfo]) = FunctionCall(name, args, window)(NoPosition, NoPosition)
+  def functionCall(name: FunctionName, args: Seq[Expression], filter: Option[Expression], window: Option[WindowFunctionInfo]) = FunctionCall(name, args, filter, window)(NoPosition, NoPosition)
   def stringLiteral(s: String) = StringLiteral(s)(NoPosition)
   def numberLiteral(num: BigDecimal) = NumberLiteral(num)(NoPosition)
 
@@ -69,7 +69,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "accept expr.identifier" in {
-      parseExpression("a.b") must equal (functionCall(SpecialFunctions.Subscript, Seq(ident("a"), stringLiteral("b")), None))
+      parseExpression("a.b") must equal (functionCall(SpecialFunctions.Subscript, Seq(ident("a"), stringLiteral("b")), None, None))
     }
 
     "reject expr.identifier." in {
@@ -94,7 +94,7 @@ class ParserTest extends WordSpec with MustMatchers {
               SpecialFunctions.Operator("*"),
               Seq(
                 numberLiteral(2),
-                ident("b")), None)), None))
+                ident("b")), None, None)), None, None))
     }
 
     "reject expr[expr]." in {
@@ -109,8 +109,8 @@ class ParserTest extends WordSpec with MustMatchers {
             ident("a"),
             functionCall(SpecialFunctions.Operator("*"), Seq(
               numberLiteral(2),
-              ident("b")), None)), None),
-        stringLiteral("c")), None))
+              ident("b")), None, None)), None, None),
+        stringLiteral("c")), None, None))
     }
 
     "accept expr[expr].ident[expr]" in {
@@ -124,14 +124,14 @@ class ParserTest extends WordSpec with MustMatchers {
                 ident("a"),
                 functionCall(SpecialFunctions.Operator("*"), Seq(
                   numberLiteral(2),
-                  ident("b")), None)), None),
-            stringLiteral("c")), None),
-        numberLiteral(3)), None))
+                  ident("b")), None, None)), None, None),
+            stringLiteral("c")), None, None),
+        numberLiteral(3)), None, None))
     }
 
     "accept modulo" in {
       parseExpression("11 % 2") must equal (
-        functionCall(SpecialFunctions.Operator("%"), Seq(numberLiteral(11), numberLiteral(2)), None))
+        functionCall(SpecialFunctions.Operator("%"), Seq(numberLiteral(11), numberLiteral(2)), None, None))
     }
 
     "^ has higher precedence than *" in {
@@ -139,8 +139,8 @@ class ParserTest extends WordSpec with MustMatchers {
       expr must equal (
         functionCall(SpecialFunctions.Operator("*"), Seq(
           numberLiteral(10),
-          functionCall(SpecialFunctions.Operator("^"), Seq(numberLiteral(3), numberLiteral(2)), None)
-        ), None)
+          functionCall(SpecialFunctions.Operator("^"), Seq(numberLiteral(3), numberLiteral(2)), None, None)
+        ), None, None)
       )
     }
 
@@ -218,7 +218,7 @@ class ParserTest extends WordSpec with MustMatchers {
       println("test 1")
       val x = parseFull("select count(distinct column)")
       x.selection.expressions.head.expression.asInstanceOf[FunctionCall].functionName.name must be ("count_distinct")
-      x.selection.expressions.head.expression.toString must be ("COUNT(DISTINCT `column`)")
+      x.selection.expressions.head.expression.toString must be ("count(DISTINCT `column`)")
     }
 
     "count(column)" in {

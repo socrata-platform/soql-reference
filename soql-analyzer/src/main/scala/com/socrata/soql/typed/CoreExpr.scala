@@ -1,10 +1,9 @@
 package com.socrata.soql.typed
 
-import com.socrata.soql.ast.Expression
-
 import scala.util.parsing.input.Position
 import scala.runtime.ScalaRunTime
 
+import com.socrata.soql.ast.Expression
 import com.socrata.soql.functions.MonomorphicFunction
 
 /** A "core expression" -- nothing but literals, column references, and function calls,
@@ -63,8 +62,12 @@ case class NullLiteral[Type](typ: Type)(val position: Position) extends TypedLit
   def copy[T](typ: T = typ): NullLiteral[T] = NullLiteral[T](typ)(position)
 }
 
-case class FunctionCall[ColumnId, Type](function: MonomorphicFunction[Type], parameters: Seq[CoreExpr[ColumnId, Type]], window: Option[WindowFunctionInfo[ColumnId, Type]])
-                                       (val position: Position, val functionNamePosition: Position) extends CoreExpr[ColumnId, Type] {
+case class FunctionCall[ColumnId, Type](function: MonomorphicFunction[Type], parameters: Seq[CoreExpr[ColumnId, Type]],
+                                        filter: Option[CoreExpr[ColumnId, Type]],
+                                        window: Option[WindowFunctionInfo[ColumnId, Type]])
+                                       (val position: Position, val functionNamePosition: Position)
+  extends CoreExpr[ColumnId, Type] {
+
   if(function.isVariadic) {
     require(parameters.length >= function.minArity, "parameter/arity mismatch")
   } else {
@@ -83,14 +86,16 @@ case class FunctionCall[ColumnId, Type](function: MonomorphicFunction[Type], par
       WindowFunctionInfo(mp, mo, mf)
     }
 
-    copy(parameters = parameters.map(_.mapColumnIds(f)), window = mw)
+    copy(parameters = parameters.map(_.mapColumnIds(f)), filter = filter.map(_.mapColumnIds(f)), window = mw)
   }
+
   val size = parameters.foldLeft(1) { (acc, param) => acc + param.size }
 
   def copy[C, T](function: MonomorphicFunction[T] = function,
                  parameters: Seq[CoreExpr[C, T]] = parameters,
+                 filter: Option[CoreExpr[C, T]] = filter,
                  window: Option[WindowFunctionInfo[C, T]] = window): FunctionCall[C, T] =
-    FunctionCall(function, parameters, window)(position, functionNamePosition)
+    FunctionCall(function, parameters, filter, window)(position, functionNamePosition)
 }
 
 case class WindowFunctionInfo[ColumnId, Type](partitions: Seq[CoreExpr[ColumnId, Type]],

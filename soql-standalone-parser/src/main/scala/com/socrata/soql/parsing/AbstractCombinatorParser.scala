@@ -464,7 +464,7 @@ abstract class AbstractCombinatorParser(parameters: AbstractParser.Parameters = 
           case Right(r) => r
           case Left(_) => Seq.empty[Expression]
         }
-        FunctionCall(innerFc.functionName, rightParams, Some(wfParams))(identPos, identPos)
+        FunctionCall(innerFc.functionName, rightParams, None, Some(wfParams))(identPos, identPos)
     }
   }
 

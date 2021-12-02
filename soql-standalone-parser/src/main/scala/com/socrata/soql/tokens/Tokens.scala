@@ -33,6 +33,7 @@ case class LIMIT() extends Token
 case class OFFSET() extends Token
 case class SEARCH() extends Token
 case class FROM() extends Token
+case class FILTER() extends Token
 
 // Joins
 case class JOIN() extends Token

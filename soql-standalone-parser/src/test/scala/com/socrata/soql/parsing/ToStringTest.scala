@@ -101,6 +101,35 @@ class ToStringTest extends FunSpec with MustMatchers {
       val rendered = parser.expression(expected).toString
       rendered must equal(expected)
     }
+
+    it("function call with filter and window") {
+      val expecteds = Seq(
+        "sum(`c1`)",
+        "sum(`c1`) FILTER (WHERE TRUE)",
+        "sum(`c1`) OVER ()",
+        "sum(`c1`) FILTER (WHERE TRUE) OVER ()",
+        "sum(`c1`, `c2`)",
+        "sum(`c1`, `c2`) FILTER (WHERE TRUE)",
+        "sum(`c1`, `c2`) OVER ()",
+        "sum(`c1`, `c2`) FILTER (WHERE TRUE) OVER ()",
+        "count(`c1`)",
+        "count(`c1`) FILTER (WHERE TRUE)",
+        "count(`c1`) OVER ()",
+        "count(`c1`) FILTER (WHERE TRUE) OVER ()",
+        "count(*)",
+        "count(*) FILTER (WHERE TRUE)",
+        "count(*) OVER ()",
+        "count(DISTINCT `c`)",
+        "count(DISTINCT `c`) FILTER (WHERE TRUE)",
+        "count(DISTINCT `c`) OVER ()",
+        "count(DISTINCT `c`) FILTER (WHERE TRUE) OVER ()"
+      )
+      expecteds.foreach { expected =>
+        val parsed = parser.expression(expected)
+        val rendered = parsed.toString
+        rendered must equal(expected)
+      }
+    }
   }
 
   describe("non-join") {

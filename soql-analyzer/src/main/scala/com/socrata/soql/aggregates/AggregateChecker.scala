@@ -52,11 +52,11 @@ class AggregateChecker[Type] {
 
   def checkPregroupExpression(clause: String, e: Expr): Unit = {
     e match {
-      case FunctionCall(function, _, None) if function.isAggregate =>
+      case FunctionCall(function, _, _, None) if function.isAggregate =>
         throw AggregateInUngroupedContext(function.name, clause, e.position)
-      case FunctionCall(_, params, None) =>
+      case FunctionCall(_, params, _, None) =>
         params.foreach(checkPregroupExpression(clause, _))
-      case FunctionCall(_, _, Some(_)) => // ok
+      case FunctionCall(_, _, _, Some(_)) => // ok
       case _: ColumnRef[_, _] | _: TypedLiteral[_] =>
         // ok, these are always good
     }
@@ -65,11 +65,11 @@ class AggregateChecker[Type] {
   def checkPostgroupExpression(clause: String, e: Expr, groupExpressions: Iterable[Expr]): Unit = {
     if(!isGroupExpression(e, groupExpressions)) {
       e match {
-        case FunctionCall(function, params, None) if function.isAggregate =>
+        case FunctionCall(function, params, _, None) if function.isAggregate =>
           params.foreach(checkPregroupExpression(clause, _))
-        case FunctionCall(_, params, None) =>
+        case FunctionCall(_, params, _, None) =>
           params.foreach(checkPostgroupExpression(clause, _, groupExpressions))
-        case FunctionCall(_, params, Some(info)) =>
+        case FunctionCall(_, params, _, Some(info)) =>
           params.foreach(checkPostgroupExpression(clause, _, groupExpressions))
           info.partitions.foreach(checkPostgroupExpression(clause, _, groupExpressions))
           info.orderings.foreach(ob => checkPostgroupExpression(clause, ob.expression, groupExpressions))

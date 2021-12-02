@@ -76,7 +76,7 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
     case e: ColumnOrAliasRef =>
       ColumnOrAliasRef(e.qualifier, columnNameMap(e.column))(NoPosition)
     case e: FunctionCall =>
-      FunctionCall(e.functionName, e.parameters map mapExpression, e.window map mapWindow)(NoPosition, NoPosition)
+      FunctionCall(e.functionName, e.parameters map mapExpression, e.filter map mapExpression, e.window map mapWindow)(NoPosition, NoPosition)
   }
 
   def mapOrderBy(o: OrderBy): OrderBy = OrderBy(
