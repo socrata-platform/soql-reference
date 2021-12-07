@@ -703,9 +703,9 @@ SELECT visits, @x2.zx
   }
 
   test("filter") {
-    val analysis = analyzer.analyzeUnchainedQuery("SELECT max(name_first) FILTER(WHERE TRUE) OVER (PARTITION BY name_last) as x WHERE TRUE")
+    val analysis = analyzer.analyzeUnchainedQuery("SELECT max(name_first) FILTER(WHERE TRUE) OVER (PARTITION BY name_last) WHERE TRUE")
     val (cn: ColumnName, fc: FunctionCall[_, _]) = analysis.selection.head
     fc.filter must be(analysis.where)
-    cn.name must be("x")
+    cn.name must be("max_name_first_TRUE_over_partition_by_name_last")
   }
 }

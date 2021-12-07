@@ -50,16 +50,15 @@ object Expression {
         case FunctionCall(SpecialFunctions.NotBetween, Seq(a,b,c), _, _) =>
           findIdentsAndLiterals(a) ++ Vector("not", "between") ++ findIdentsAndLiterals(b) ++ Vector("and") ++ findIdentsAndLiterals(c)
         case FunctionCall(SpecialFunctions.Case, args, _, _) =>
-          val whens = args.dropRight(2).grouped(2)
           val start = Vector("case") ++ args.dropRight(2).grouped(2).flatMap { case Seq(cond, expr) => Vector("when") ++ findIdentsAndLiterals(cond) ++ Vector("then") ++ findIdentsAndLiterals(expr) }
           val sinon = args.takeRight(2) match {
             case Seq(BooleanLiteral(false), _) => Vector.empty
             case Seq(BooleanLiteral(true), e) => Vector("else") ++ findIdentsAndLiterals(e)
           }
           start ++ sinon ++ Vector("end")
-        case FunctionCall(other, args, _, window) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals) ++ findIdentsAndLiterals(window)
+        case FunctionCall(other, args, _, _) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals)
       }
-      ils ++ fc.filter.toSeq.flatMap(findIdentsAndLiterals(_))
+      ils ++ fc.filter.toSeq.flatMap(findIdentsAndLiterals(_)) ++ findIdentsAndLiterals(fc.window)
     case Hole(name) =>
       Vector(name.name)
   }
