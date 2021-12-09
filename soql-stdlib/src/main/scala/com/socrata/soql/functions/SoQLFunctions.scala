@@ -19,6 +19,8 @@ object SoQLFunctions {
 
   val NoDocs = "No documentation available"
 
+  private def experimentalDocs(doc: String) = s"** Experimental, Unsupported and Subject to change or removal **\n$doc"
+
   // helpers to guide type inference (specifically forces SoQLType to be inferred)
   private def mf(
     identity: String,
@@ -598,6 +600,12 @@ object SoQLFunctions {
   // Translate a fixed timestamp to a given time zone and convert it to a floating timestamp.
   val ToFloatingTimestamp = mf("to floating timestamp", FunctionName("to_floating_timestamp"), Seq(SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLFloatingTimestamp)(
     NoDocs
+  )
+
+  val GetUtcDate = mf("get now in UTC fixed_timestamp", FunctionName("get_utc_date"), Seq(), Seq.empty, SoQLFixedTimestamp)(
+    experimentalDocs("Now at UTC time zone with seconds"),
+    Example("Get now", "get_utc_date()", ""),
+    Example("Get records of last month", "floating_date_column between date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'P1M' and date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'PT1S'", "")
   )
 
   val castIdentities = for ((n, t) <- SoQLType.typesByName.toSeq) yield {
