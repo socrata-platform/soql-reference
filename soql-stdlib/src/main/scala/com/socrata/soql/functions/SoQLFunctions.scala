@@ -19,7 +19,7 @@ object SoQLFunctions {
 
   val NoDocs = "No documentation available"
 
-  private def experimentalDocs(doc: String) = s"** Experimental, Unsupported and Subject to change **\n$doc"
+  private def experimentalDocs(doc: String) = s"** Experimental, Unsupported and Subject to change or removal **\n$doc"
 
   // helpers to guide type inference (specifically forces SoQLType to be inferred)
   private def mf(
@@ -602,34 +602,10 @@ object SoQLFunctions {
     NoDocs
   )
 
-  val NowY = mf("now truncated at year", FunctionName("now_y"), Seq(SoQLText), Seq.empty, SoQLFloatingTimestamp)(
-    experimentalDocs("Now at the requested time zone truncated at the year in floating timestamp"),
-    Example("Get records of this year and beyond", "floating_timestamp_column_in_pacific_local_time >= now_y('US/Pacific')", "")
-  )
-
-  val NowYm = mf("now truncated at month", FunctionName("now_ym"), Seq(SoQLText), Seq.empty, SoQLFloatingTimestamp)(
-    experimentalDocs("Now at the requested time zone truncated at the month in floating timestamp"),
-    Example("Get records of this month and beyond", "floating_timestamp_column_in_pacific_local_time >= now_ym('US/Pacific')", "")
-  )
-
-  val NowYmd = mf("now truncated at day", FunctionName("now_ymd"), Seq(SoQLText), Seq.empty, SoQLFloatingTimestamp)(
-    experimentalDocs("Now at the requested time zone truncated at the day in floating timestamp"),
-    Example("Get records of today and beyond", "floating_timestamp_column_in_pacific_local_time >= now_ymd('US/Pacific')", "")
-  )
-
-  val NowYmdhh = mf("now truncated at hour", FunctionName("now_ymdhh"), Seq(SoQLText), Seq.empty, SoQLFloatingTimestamp)(
-    experimentalDocs("Now at the requested time zone truncated at the day in floating timestamp"),
-    Example("Get records of this hour and beyond", "floating_timestamp_column_in_pacific_local_time >= now_ymdhh('US/Pacific')", "")
-  )
-
-  val NowYmdhhmm = mf("now truncated at minute", FunctionName("now_ymdhhmm"), Seq(SoQLText), Seq.empty, SoQLFloatingTimestamp)(
-    experimentalDocs("Now at the requested time zone truncated at the minute in floating timestamp"),
-    Example("Get records of this minute and beyond", "floating_timestamp_column_in_pacific_local_time >= now_ymdhhmm('US/Pacific')", "")
-  )
-
-  val Today = mf("now truncated at day", FunctionName("today"), Seq(SoQLText), Seq.empty, SoQLFloatingTimestamp)(
-    experimentalDocs("Now at the requested time zone truncated at the day in floating timestamp"),
-    Example("Get records of today and beyond", "floating_timestamp_column_in_pacific_local_time >= today('US/Pacific')", "")
+  val GetUtcDate = mf("get now in UTC fixed_timestamp", FunctionName("get_utc_date"), Seq(), Seq.empty, SoQLFixedTimestamp)(
+    experimentalDocs("Now at UTC time zone with seconds"),
+    Example("Get now", "get_utc_date()", ""),
+    Example("Get records of last month", "floating_date_column between date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'P1M' and date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'PT1S'", "")
   )
 
   val castIdentities = for ((n, t) <- SoQLType.typesByName.toSeq) yield {
