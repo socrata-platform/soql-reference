@@ -14,7 +14,7 @@ object BuildSettings {
   def projectSettings(assembly: Boolean = false): Seq[Setting[_]] = buildSettings ++ Seq(
     // Haven't made a stable release of this yet
     mimaPreviousArtifacts := Set(/* "com.socrata" % (name.value + "_" + scalaBinaryVersion.value) % "0.1.0" */),
-    testOptions in Test ++= Seq(
+    Test/testOptions ++= Seq(
       Tests.Argument(TestFrameworks.ScalaTest, "-oFD")
     ),
     scalacOptions ++= Seq(
