@@ -129,6 +129,10 @@ case class HoleIdentifier(value: String) extends ValueToken[String] { // For ?ho
   override def printable = "?" + super.printable
 }
 
+case class Hint(value: String) extends ValueToken[String] { // For block comment style hint
+  override def printable = s"/*+${super.printable}*/"
+}
+
 // Punctuation
 case class COMMA() extends FormattedToken(",")
 case class COLONSTAR() extends FormattedToken(":*")

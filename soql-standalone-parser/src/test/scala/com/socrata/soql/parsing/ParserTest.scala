@@ -157,7 +157,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "allow only limit" in {
-      val x = parseFull("select * limit 32")
+      val x = parseFull("select /* abc */ * limit 32")
       x.limit must be (Some(BigInt(32)))
       x.offset must be (None)
     }

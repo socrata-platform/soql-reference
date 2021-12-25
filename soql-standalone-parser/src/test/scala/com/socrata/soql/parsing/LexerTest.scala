@@ -43,6 +43,10 @@ class LexerTest extends WordSpec with MustMatchers {
       lexTest("`select`", (Identifier("select", true), 1, 1, 0))
     }
 
+    "set positions on hints" in {
+      lexTest("""     /* hint1 hint2=a,b,1 */""", (Hint(" hint1 hint2=a,b,1 "), 1, 6, 5))
+    }
+
     "forbid newlines in java-style strings" in {
       an [UnterminatedString] must be thrownBy { lex("\"\n\"") }
     }

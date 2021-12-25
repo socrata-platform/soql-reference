@@ -152,9 +152,23 @@ TableIdentifier = "@" ("-" | [:jletterdigit:])+
 
   "--" .* { /* comment */ }
 
+  "/*+" { string.setLength(0); stringStart = pos(); yybegin(HINT); }
+
   "/*" { yybegin(BLOCKCOMMENT); }
 
   <<EOF>> { return token(new EOF()); }
+}
+
+<HINT> {
+  "*/" {
+    Token i = new Comment(string.toString());
+    i.setPosition(stringStart);
+    yybegin(YYINITIAL);
+    return i;
+  }
+  <<EOF>> { throw unexpectedEOF(pos()); }
+  . { string.append(yytext()); }
+  [\r\n] { string.append(yytext()); }
 }
 
 <BLOCKCOMMENT> {

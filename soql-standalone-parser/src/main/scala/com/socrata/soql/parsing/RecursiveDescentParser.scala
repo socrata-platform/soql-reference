@@ -279,7 +279,8 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   protected final def select(reader: Reader): ParseResult[Select] = {
     reader.first match {
       case SELECT() =>
-        val ParseResult(r2, d) = distinct(reader.rest)
+        val ParseResult(r1, c) = hint(reader.rest)
+        val ParseResult(r2, d) = distinct(r1)
         val ParseResult(r3, selected) = selectList(r2)
         val ParseResult(r4, fromClause) = from(r3)
         val ParseResult(r5, joinClause) = if(allowJoins) joinList(r4) else ParseResult(r4, Seq.empty)
@@ -840,6 +841,15 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       case _ =>
         reader.addAlternates(DISTINCT_SET)
         ParseResult(reader, false)
+    }
+  }
+
+  protected final def hint(reader: Reader): ParseResult[Option[Hint]] = {
+    reader.first match {
+      case x@Hint(_) =>
+        ParseResult(reader.rest, Some(x))
+      case _ =>
+        ParseResult(reader, None)
     }
   }
 
