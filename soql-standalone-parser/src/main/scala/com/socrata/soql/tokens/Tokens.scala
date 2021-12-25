@@ -133,6 +133,8 @@ case class HoleIdentifier(value: String) extends ValueToken[String] { // For ?ho
 case class COMMA() extends FormattedToken(",")
 case class COLONSTAR() extends FormattedToken(":*")
 
+case class HINT() extends Token
+
 case class EOF() extends Token {
   override def printable = "end of input"
   override def quotedPrintable = printable

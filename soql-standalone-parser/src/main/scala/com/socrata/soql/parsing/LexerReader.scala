@@ -105,6 +105,9 @@ object LexerReader {
     INNER,
     LATERAL,
 
+    // HINT
+    HINT,
+
     // Boolean operators
     AND,
     OR,

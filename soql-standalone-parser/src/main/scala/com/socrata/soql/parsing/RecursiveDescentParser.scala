@@ -143,6 +143,9 @@ object RecursiveDescentParser {
   val FOLLOWING = new Keyword("FOLLOWING")
   val FILTER = new Keyword("FILTER")
 
+  // Hints
+  val MATERIALIZED = new Keyword("MATERIALIZED")
+
   sealed abstract class NullPlacement
   case object First extends NullPlacement
   case object Last extends NullPlacement
@@ -215,7 +218,7 @@ object RecursiveDescentParser {
   private val OR_SET = s(OR())
 }
 
-abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = AbstractParser.defaultParameters) extends AbstractParser {
+abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = AbstractParser.defaultParameters) extends AbstractParser with RecursiveDescentHintParser {
   import parameters._
   import RecursiveDescentParser._
 
@@ -240,6 +243,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   def limit(soql: String): BigInt = parseFull(integerLiteral, soql)
   def offset(soql: String): BigInt = parseFull(integerLiteral, soql)
   def search(soql: String): String = parseFull(stringLiteral, soql)
+  def hints(soql: String): Seq[Hint] = parseFull(hints, soql)
 
   protected final def fail(reader: Reader, expectation: Expectation, expectations: Expectation*): Nothing = {
     val ls = ListSet.newBuilder[Expectation]
@@ -279,7 +283,8 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   protected final def select(reader: Reader): ParseResult[Select] = {
     reader.first match {
       case SELECT() =>
-        val ParseResult(r2, d) = distinct(reader.rest)
+        val ParseResult(r1, h) = hints(reader.rest)
+        val ParseResult(r2, d) = distinct(r1)
         val ParseResult(r3, selected) = selectList(r2)
         val ParseResult(r4, fromClause) = from(r3)
         val ParseResult(r5, joinClause) = if(allowJoins) joinList(r4) else ParseResult(r4, Seq.empty)
@@ -288,7 +293,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r8, havingClause) = having(r7)
         val ParseResult(r9, (orderByClause, searchClause)) = orderByAndSearch(r8)
         val ParseResult(r10, (limitClause, offsetClause)) = limitOffset(r9)
-        ParseResult(r10, Select(d, selected, fromClause, joinClause, whereClause, groupByClause, havingClause, orderByClause, limitClause, offsetClause, searchClause))
+        ParseResult(r10, Select(d, selected, fromClause, joinClause, whereClause, groupByClause, havingClause, orderByClause, limitClause, offsetClause, searchClause, h))
       case _ =>
         fail(reader, SELECT())
     }

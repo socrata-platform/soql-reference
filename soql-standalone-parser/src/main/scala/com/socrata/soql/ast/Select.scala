@@ -124,7 +124,7 @@ case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position:
                                                                Some((ColumnName(holeName.name), NoPosition)))
                                         }.toList),
                   from = singleRowFrom,
-                  joins = Nil, where = None, groupBys = Nil, having = None, orderBys = Nil, limit = None, offset = None, search = None)),
+                  joins = Nil, where = None, groupBys = Nil, having = None, orderBys = Nil, limit = None, offset = None, search = None, hints = Seq.empty)),
               vars),
             on = BooleanLiteral(true)(NoPosition),
             lateral = false),
@@ -136,7 +136,7 @@ case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position:
               expr),
             on = BooleanLiteral(true)(NoPosition),
             lateral = true)),
-        where = None, groupBys = Nil, having = None, orderBys = Nil, limit = None, offset = None, search = None)
+        where = None, groupBys = Nil, having = None, orderBys = Nil, limit = None, offset = None, search = None, hints = Seq.empty)
 
     JoinQuery(Leaf(labelledJoin), tableName.alias.getOrElse(tableName.name))
   }
@@ -148,12 +148,12 @@ trait AliasProvider {
 
 object Select {
   def itrToString(prefix: String, l: Iterable[_], sep: String = " "): Option[String] = {
-    itrToString(Some(prefix), l, sep)
+    itrToString(Some(prefix), l, sep, None)
   }
 
-  def itrToString(prefix: Option[String], l: Iterable[_], sep: String): Option[String] = {
+  def itrToString(prefix: Option[String], l: Iterable[_], sep: String, suffix: Option[String]): Option[String] = {
     if (l.nonEmpty) {
-      Some(l.mkString(prefix.map(p => s"$p ").getOrElse(""), sep, ""))
+      Some(l.mkString(prefix.map(p => s"$p ").getOrElse(""), sep, suffix.getOrElse("")))
     } else {
       None
     }
@@ -249,7 +249,8 @@ case class Select(
   orderBys: Seq[OrderBy],
   limit: Option[BigInt],
   offset: Option[BigInt],
-  search: Option[String]) {
+  search: Option[String],
+  hints: Seq[Hint]) {
 
   private def docOneCondition(e: Expression): Doc[Nothing] =
     e match {
@@ -343,7 +344,8 @@ case class Select(
            orderBys,
            limit,
            offset,
-           search)
+           search,
+           hints)
 
   def replaceHoles(f: Hole => Expression): Select =
     Select(distinct,
@@ -356,7 +358,8 @@ case class Select(
            orderBys.map(_.replaceHoles(f)),
            limit,
            offset,
-           search)
+           search,
+           hints)
 
   override def toString: String = {
     if(AST.pretty) {

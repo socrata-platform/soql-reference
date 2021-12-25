@@ -214,6 +214,12 @@ class ParserTest extends WordSpec with MustMatchers {
       y must be (x)
     }
 
+    "allow hints" in {
+      val soql = "select hint(materialized) * limit 32"
+      val x = parseFull(soql)
+      x.hints must be (Vector(Materialized(SoQLPosition(1, 13, soql, 12))))
+    }
+
     "count(disinct column)" in {
       println("test 1")
       val x = parseFull("select count(distinct column)")

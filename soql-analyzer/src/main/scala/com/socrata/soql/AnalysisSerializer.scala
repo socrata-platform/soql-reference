@@ -2,9 +2,9 @@ package com.socrata.soql
 
 import scala.util.parsing.input.{NoPosition, Position}
 import java.io.{ByteArrayOutputStream, OutputStream}
-
 import com.google.protobuf.CodedOutputStream
 import com.socrata.NonEmptySeq
+import com.socrata.soql.typed.{Hint, Materialized}
 import gnu.trove.impl.Constants
 import gnu.trove.map.hash.TObjectIntHashMap
 import com.socrata.soql.parsing.SoQLPosition
@@ -28,6 +28,7 @@ trait UnchainedAnalysisSerializerProvider[C, T] {
 class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => String) extends ((OutputStream, NonEmptySeq[SoQLAnalysis[C, T]]) => Unit) with UnchainedAnalysisSerializerProvider[C, T] {
   type Expr = CoreExpr[C, T]
   type Order = OrderBy[C, T]
+  type THint = Hint[C, T]
 
   private class SerializationDictionaryImpl extends SerializationDictionary[C, T] {
     private def makeMap[A] = new TObjectIntHashMap[A](Constants.DEFAULT_CAPACITY, Constants.DEFAULT_LOAD_FACTOR, -1)
@@ -313,6 +314,17 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
         writeTableName(tableName)
       }
 
+    private def writeHint(hint: Seq[THint]) =
+      writeSeq(hint)(writeSingleHint)
+
+    private def writeSingleHint(hint: THint): Unit = {
+      hint match {
+        case m: Materialized =>
+          writePosition(m.position)
+          out.writeRawByte(1)
+      }
+    }
+
     def writeAnalysis(analysis: SoQLAnalysis[C, T]): Unit = {
       val SoQLAnalysis(isGrouped,
                        distinct,
@@ -325,7 +337,8 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
                        orderBy,
                        limit,
                        offset,
-                       search) = analysis
+                       search,
+                       hint) = analysis
       writeGrouped(isGrouped)
       writeDistinct(analysis.distinct)
       writeSelection(selection)
@@ -338,6 +351,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       writeLimit(limit)
       writeOffset(offset)
       writeSearch(search)
+      writeHint(hint)
     }
 
     def write(analyses: NonEmptySeq[SoQLAnalysis[C, T]]): Unit = {
