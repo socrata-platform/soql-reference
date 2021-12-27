@@ -44,7 +44,7 @@ class LexerTest extends WordSpec with MustMatchers {
     }
 
     "set positions on hints" in {
-      lexTest("""     /* hint1 hint2=a,b,1 */""", (Hint(" hint1 hint2=a,b,1 "), 1, 6, 5))
+      lexTest("""/*+ hint1 hint2=a,b,1 */""", (Hint(" hint1 hint2=a,b,1 "), 1, 1, 0))
     }
 
     "forbid newlines in java-style strings" in {

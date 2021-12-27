@@ -157,7 +157,7 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "allow only limit" in {
-      val x = parseFull("select /* abc */ * limit 32")
+      val x = parseFull("select * limit 32")
       x.limit must be (Some(BigInt(32)))
       x.offset must be (None)
     }
@@ -212,6 +212,11 @@ class ParserTest extends WordSpec with MustMatchers {
       val x = parseFull("select * search 'weather'")
       val y = parseFull(x.toString)
       y must be (x)
+    }
+
+    "allow hints" in {
+      val x = parseFull("select /*+ materialized x=a,b,1,2 */ * limit 32")
+      x.hint must be (Some(" materialized x=a,b,1,2 "))
     }
 
     "count(disinct column)" in {

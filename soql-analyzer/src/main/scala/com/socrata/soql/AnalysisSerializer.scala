@@ -313,6 +313,11 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
         writeTableName(tableName)
       }
 
+    private def writeHint(hint: Option[String]) =
+      maybeWrite(hint) { s =>
+        out.writeUInt32NoTag(registerString(s))
+      }
+
     def writeAnalysis(analysis: SoQLAnalysis[C, T]): Unit = {
       val SoQLAnalysis(isGrouped,
                        distinct,
@@ -325,7 +330,8 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
                        orderBy,
                        limit,
                        offset,
-                       search) = analysis
+                       search,
+                       hint) = analysis
       writeGrouped(isGrouped)
       writeDistinct(analysis.distinct)
       writeSelection(selection)
@@ -338,6 +344,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       writeLimit(limit)
       writeOffset(offset)
       writeSearch(search)
+      writeHint(hint)
     }
 
     def write(analyses: NonEmptySeq[SoQLAnalysis[C, T]]): Unit = {

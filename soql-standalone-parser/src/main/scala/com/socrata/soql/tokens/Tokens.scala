@@ -130,7 +130,7 @@ case class HoleIdentifier(value: String) extends ValueToken[String] { // For ?ho
 }
 
 case class Hint(value: String) extends ValueToken[String] { // For block comment style hint
-  override def printable = s"/*+${super.printable}*/"
+  override def printable = super.printable
 }
 
 // Punctuation

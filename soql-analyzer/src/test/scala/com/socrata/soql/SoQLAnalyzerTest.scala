@@ -138,12 +138,12 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
   }
 
   test("Giving no values to the split-query analyzer returns the equivalent of `SELECT *'") {
-    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, None, None, None, None, None, None)(Map(TableName.PrimaryTable.qualifier -> datasetCtx))
+    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, None, None, None, None, None, None, None)(Map(TableName.PrimaryTable.qualifier -> datasetCtx))
     analysis must equal (analyzer.analyzeUnchainedQuery("SELECT *"))
   }
 
   test("Putting an aggregate in the order-by slot causes aggregation to occur") {
-    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, None, None, Some("max(visits)"), None, None, None)
+    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, None, None, Some("max(visits)"), None, None, None, None)
     analysis must equal (analyzer.analyzeUnchainedQuery("SELECT count(*) ORDER BY max(visits)"))
   }
 
@@ -151,7 +151,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
     val computed = "name_first || ' ' || name_last"
     val sep = ", "
     val uncomputed = "visits"
-    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, Some(computed + sep + uncomputed), None, None, None, None, None)
+    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, Some(computed + sep + uncomputed), None, None, None, None, None, None)
     analysis must equal (analyzer.analyzeUnchainedQuery("SELECT "+computed+", "+uncomputed+", count(*) GROUP BY "+computed+", "+uncomputed))
     analysis.selection(ColumnName("visits")).position.column must equal (1 + computed.length + sep.length)
   }
@@ -707,5 +707,12 @@ SELECT visits, @x2.zx
     val (cn: ColumnName, fc: FunctionCall[_, _]) = analysis.selection.head
     fc.filter must be(analysis.where)
     cn.name must be("max_name_first_TRUE_over_partition_by_name_last")
+  }
+
+  test("hint and comment") {
+    val analysis = analyzer.analyzeUnchainedQuery("select /*+ materialized */ /* comment */ null :: number as x")
+    analysis.hint must be (Some(" materialized "))
+    analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestNumber)).get.monomorphic.get,
+      Seq(typed.NullLiteral(TestNumber.t)(NoPosition)), None, None)(NoPosition, NoPosition))
   }
 }

@@ -27,8 +27,7 @@ private trait DeserializationDictionary[C, T] {
 }
 
 object AnalysisDeserializer {
-  val CurrentVersion = 9
-  val LastVersion = 8
+  val CurrentVersion = 10
   val NonEmptySeqVersion = 6
 
   // This is odd and for smooth deploy transition.
@@ -142,8 +141,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
           val functionNamePosition = readPosition()
           val func = dictionary.functions(in.readUInt32())
           val params = readSeq { readExpr() }
-          val filter = if (this.version != CurrentVersion - 1) maybeRead { readExpr() }
-                       else None
+          val filter = maybeRead { readExpr() }
           val window = readWindowFunctionInfo()
           FunctionCall(func, params, filter, window)(pos, functionNamePosition)
       }
@@ -281,6 +279,11 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         readTableName()
       }
 
+    def readHint(): Option[String] =
+      maybeRead {
+        dictionary.strings(in.readUInt32())
+      }
+
     def readAnalysis(): SoQLAnalysis[C, T] = {
       val ig = readIsGrouped()
       val d = readDistinct()
@@ -294,8 +297,9 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val l = readLimit()
       val o = readOffset()
       val search = readSearch()
+      val hi = if (this.version != (CurrentVersion - 1)) readHint() else None
 
-      SoQLAnalysis(ig, d, s, f, j, w, gb, h, ob, l, o, search)
+      SoQLAnalysis(ig, d, s, f, j, w, gb, h, ob, l, o, search, hi)
     }
 
     def read(): NonEmptySeq[SoQLAnalysis[C, T]] = {
@@ -328,7 +332,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         val seq: NonEmptySeq[SoQLAnalysis[C, T]] = deserializer.read()
         val bt: BinaryTree[SoQLAnalysis[C, T]] = toBinaryTree(seq.seq)
         bt
-      case v if v >= LastVersion =>
+      case v if v > NonEmptySeqVersion =>
         val dictionary = DeserializationDictionaryImpl.fromInput(cis)
         val deserializer = new Deserializer(cis, dictionary, v)
         val bt: BinaryTree[SoQLAnalysis[C, T]] = deserializer.readBinaryTree(deserializer.readAnalysis())

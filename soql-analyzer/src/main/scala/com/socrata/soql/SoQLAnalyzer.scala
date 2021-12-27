@@ -151,7 +151,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                  orderBys = Nil,
                  limit = None,
                  offset = None,
-                 search = None)
+                 search = None,
+                 hint = None)
   }
 
   /** Turn framents of a SoQL SELECT statement into a typed `Analysis` object.  If no `selection` is provided,
@@ -182,6 +183,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                         limit: Option[String],
                         offset: Option[String],
                         search: Option[String],
+                        hint: Option[String],
                         sourceFrom: Seq[Analysis] = Nil)(implicit ctx: AnalysisContext): Analysis = {
     log.debug("analyzing split query")
 
@@ -193,10 +195,11 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
     def dispatch(distinct: Boolean, selection: Option[Selection],
                  joins: List[Join],
-                 where: Option[Expression], groupBys: List[Expression], having: Option[Expression], orderBys: List[OrderBy], limit: Option[BigInt], offset: Option[BigInt], search: Option[String]) =
+                 where: Option[Expression], groupBys: List[Expression], having: Option[Expression], orderBys: List[OrderBy],
+                 limit: Option[BigInt], offset: Option[BigInt], search: Option[String], hint: Option[String]) =
       selection match {
-        case None => analyzeNoSelectionInOuterSelectionContext(lastQuery, distinct, joins, where, groupBys, having, orderBys, limit, offset, search)
-        case Some(s) => analyzeInOuterSelectionContext(ctx)(lastQuery, Select(distinct, s, None, joins, where, groupBys, having, orderBys, limit, offset, search))
+        case None => analyzeNoSelectionInOuterSelectionContext(lastQuery, distinct, joins, where, groupBys, having, orderBys, limit, offset, search, hint)
+        case Some(s) => analyzeInOuterSelectionContext(ctx)(lastQuery, Select(distinct, s, None, joins, where, groupBys, having, orderBys, limit, offset, search, hint))
       }
 
     dispatch(
@@ -209,7 +212,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       orderBys.map(p.orderings).toList.flatten,
       limit.map(p.limit),
       offset.map(p.offset),
-      search.map(p.search)
+      search.map(p.search),
+      hint.map(p.hint)
     )
   }
 
@@ -222,9 +226,10 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                                                 orderBys: List[OrderBy],
                                                 limit: Option[BigInt],
                                                 offset: Option[BigInt],
-                                                search: Option[String]): Analysis = {
+                                                search: Option[String],
+                                                hint: Option[String]): Analysis = {
     implicit val fakeCtx = contextFromAnalysis(lastQuery)
-    analyzeNoSelection(distinct, joins, where, groupBys, having, orderBys, limit, offset, search)
+    analyzeNoSelection(distinct, joins, where, groupBys, having, orderBys, limit, offset, search, hint)
   }
 
   private def validateAlias(alias: String): Unit = {
@@ -264,7 +269,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                          orderBys: List[OrderBy],
                          limit: Option[BigInt],
                          offset: Option[BigInt],
-                         search: Option[String])(implicit ctx: AnalysisContext): Analysis = {
+                         search: Option[String],
+                         hint: Option[String])(implicit ctx: AnalysisContext): Analysis = {
     log.debug("No selection; doing typechecking of the other parts then deciding what to make the selection")
 
     val ctxFromJoins = joinCtx(joins, Map.empty)
@@ -344,7 +350,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       checkedOrderBy,
       limit,
       offset,
-      search)
+      search,
+      hint)
   }
 
   def analyzeInOuterSelectionContext(initialCtx: AnalysisContext)(lastQuery: Analysis, query: Select): Analysis = {
@@ -463,7 +470,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                    outputs,
                    query.from,
                    checkedJoin, checkedWhere, checkedGroupBy, checkedHaving, checkedOrderBy,
-                   query.limit, query.offset, query.search)
+                   query.limit, query.offset, query.search, query.hint)
   }
 
   def finishAnalysis(isGrouped: Boolean,
@@ -477,7 +484,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
                      orderBys: Seq[(OrderBy, Expr)],
                      limit: Option[BigInt],
                      offset: Option[BigInt],
-                     search: Option[String]): Analysis =
+                     search: Option[String],
+                     hint: Option[String]): Analysis =
   {
     def check(items: Iterable[Expr], pred: Type => Boolean, onError: (TypeName, Position) => Throwable): Unit = {
       for(item <- items if !pred(item.typ)) throw onError(typeInfo.typeNameFor(item.typ), item.position)
@@ -500,7 +508,8 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       orderBys.map { case (ob, e) => typed.OrderBy(e, ob.ascending, ob.nullLast) },
       limit,
       offset,
-      search)
+      search,
+      hint)
   }
 }
 
@@ -616,7 +625,8 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                         orderBys: Seq[typed.OrderBy[ColumnId, Type]],
                                         limit: Option[BigInt],
                                         offset: Option[BigInt],
-                                        search: Option[String]) {
+                                        search: Option[String],
+                                        hint: Option[String]) {
 
   /**
    * This version of mapColumnsId is incomplete and for rollup/rewrite in soda fountain
@@ -773,8 +783,8 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   // for a query that contains a search.
   private def tryMerge(a: Analysis, b: Analysis): Option[Analysis] = (a, b) match {
     case (a, _) if (hasWindowFunction(a)) => None
-    case (SoQLAnalysis(aIsGroup, false, aSelect, aFrom, Nil, aWhere, aGroup, aHaving, aOrder, aLim, aOff, None),
-          SoQLAnalysis(false,    false, bSelect, None, bJoins, None,   Nil,   None,    Nil,   bLim, bOff, None)) if
+    case (SoQLAnalysis(aIsGroup, false, aSelect, aFrom, Nil, aWhere, aGroup, aHaving, aOrder, aLim, aOff, None, None),
+          SoQLAnalysis(false,    false, bSelect, None, bJoins, None,   Nil,   None,    Nil,   bLim, bOff, None, None)) if
           // Do not merge when the previous soql is grouped and the next soql has joins
           // select g, count(x) as cx group by g |> select g, cx, @b.a join @b on @b.g=g
           // Newly introduced columns from joins cannot be merged and brought in w/o grouping and aggregate functions.
@@ -794,9 +804,10 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         orderBys = aOrder,
                         limit = newLim,
                         offset = newOff,
-                        search = None))
-    case (SoQLAnalysis(false, false, aSelect, aFrom, Nil, aWhere, Nil, None, aOrder, None, None, aSearch),
-          SoQLAnalysis(false, false, bSelect, None, bJoins, bWhere, Nil, None, bOrder, bLim, bOff, None)) =>
+                        search = None,
+                        hint = None))
+    case (SoQLAnalysis(false, false, aSelect, aFrom, Nil, aWhere, Nil, None, aOrder, None, None, aSearch, None),
+          SoQLAnalysis(false, false, bSelect, None, bJoins, bWhere, Nil, None, bOrder, bLim, bOff, None, None)) =>
       // Can merge a change of filter or order only if no window was specified on the left
       Some(SoQLAnalysis(isGrouped = false,
                         distinct = false,
@@ -809,9 +820,10 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         orderBys = mergeOrderBy(aSelect, aOrder, bOrder),
                         limit = bLim,
                         offset = bOff,
-                        search = aSearch))
-    case (SoQLAnalysis(false, false, aSelect, aFrom, Nil, aWhere, Nil,     None,    _,      None, None, None),
-          SoQLAnalysis(true, false, bSelect, None, bJoins, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None)) =>
+                        search = aSearch,
+                        hint = None))
+    case (SoQLAnalysis(false, false, aSelect, aFrom, Nil, aWhere, Nil,     None,    _,      None, None, None, None),
+          SoQLAnalysis(true, false, bSelect, None, bJoins, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, None)) =>
       // an aggregate on a non-aggregate
       Some(SoQLAnalysis(isGrouped = true,
                         distinct = false,
@@ -824,9 +836,10 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         orderBys = mergeOrderBy(aSelect, Nil, bOrder),
                         limit = bLim,
                         offset = bOff,
-                        search = None))
-    case (SoQLAnalysis(true,  false, aSelect, aFrom, Nil, aWhere, aGroup, aHaving, aOrder, None, None, None),
-          SoQLAnalysis(false, false, bSelect, None, Nil, bWhere, Nil,      None,    bOrder, bLim, bOff, None))
+                        search = None,
+                        hint = None))
+    case (SoQLAnalysis(true,  false, aSelect, aFrom, Nil, aWhere, aGroup, aHaving, aOrder, None, None, None, None),
+          SoQLAnalysis(false, false, bSelect, None, Nil, bWhere, Nil,      None,    bOrder, bLim, bOff, None, None))
           if !aGroup.exists(hasLiteral)
           =>
       // a non-aggregate on an aggregate -- merge the WHERE of the second with the HAVING of the first
@@ -841,7 +854,8 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         orderBys = mergeOrderBy(aSelect, aOrder, bOrder),
                         limit = bLim,
                         offset = bOff,
-                        search = None))
+                        search = None,
+                        hint = None))
     case (_, _) =>
       None
   }

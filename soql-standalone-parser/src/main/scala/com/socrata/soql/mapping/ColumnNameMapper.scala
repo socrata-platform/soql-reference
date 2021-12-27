@@ -39,7 +39,8 @@ class ColumnNameMapper(columnNameMap: Map[ColumnName, ColumnName]) {
           orderBys = h.orderBys.map(mapOrderBy),
           limit = h.limit,
           offset = h.offset,
-          search = h.search
+          search = h.search,
+          hint = h.hint
         ))
     }
   }

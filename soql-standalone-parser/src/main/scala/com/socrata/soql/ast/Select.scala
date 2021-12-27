@@ -124,7 +124,7 @@ case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position:
                                                                Some((ColumnName(holeName.name), NoPosition)))
                                         }.toList),
                   from = singleRowFrom,
-                  joins = Nil, where = None, groupBys = Nil, having = None, orderBys = Nil, limit = None, offset = None, search = None)),
+                  joins = Nil, where = None, groupBys = Nil, having = None, orderBys = Nil, limit = None, offset = None, search = None, hint = None)),
               vars),
             on = BooleanLiteral(true)(NoPosition),
             lateral = false),
@@ -136,7 +136,7 @@ case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position:
               expr),
             on = BooleanLiteral(true)(NoPosition),
             lateral = true)),
-        where = None, groupBys = Nil, having = None, orderBys = Nil, limit = None, offset = None, search = None)
+        where = None, groupBys = Nil, having = None, orderBys = Nil, limit = None, offset = None, search = None, hint = None)
 
     JoinQuery(Leaf(labelledJoin), tableName.alias.getOrElse(tableName.name))
   }
@@ -249,7 +249,8 @@ case class Select(
   orderBys: Seq[OrderBy],
   limit: Option[BigInt],
   offset: Option[BigInt],
-  search: Option[String]) {
+  search: Option[String],
+  hint: Option[String]) {
 
   private def docOneCondition(e: Expression): Doc[Nothing] =
     e match {
@@ -343,7 +344,8 @@ case class Select(
            orderBys,
            limit,
            offset,
-           search)
+           search,
+           hint)
 
   def replaceHoles(f: Hole => Expression): Select =
     Select(distinct,
@@ -356,7 +358,8 @@ case class Select(
            orderBys.map(_.replaceHoles(f)),
            limit,
            offset,
-           search)
+           search,
+           hint)
 
   override def toString: String = {
     if(AST.pretty) {

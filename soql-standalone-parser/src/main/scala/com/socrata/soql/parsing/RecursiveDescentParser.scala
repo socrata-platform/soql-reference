@@ -240,6 +240,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   def limit(soql: String): BigInt = parseFull(integerLiteral, soql)
   def offset(soql: String): BigInt = parseFull(integerLiteral, soql)
   def search(soql: String): String = parseFull(stringLiteral, soql)
+  def hint(soql: String): String = parseFull(stringLiteral, soql)
 
   protected final def fail(reader: Reader, expectation: Expectation, expectations: Expectation*): Nothing = {
     val ls = ListSet.newBuilder[Expectation]
@@ -279,7 +280,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   protected final def select(reader: Reader): ParseResult[Select] = {
     reader.first match {
       case SELECT() =>
-        val ParseResult(r1, c) = hint(reader.rest)
+        val ParseResult(r1, h) = hint(reader.rest)
         val ParseResult(r2, d) = distinct(r1)
         val ParseResult(r3, selected) = selectList(r2)
         val ParseResult(r4, fromClause) = from(r3)
@@ -289,7 +290,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r8, havingClause) = having(r7)
         val ParseResult(r9, (orderByClause, searchClause)) = orderByAndSearch(r8)
         val ParseResult(r10, (limitClause, offsetClause)) = limitOffset(r9)
-        ParseResult(r10, Select(d, selected, fromClause, joinClause, whereClause, groupByClause, havingClause, orderByClause, limitClause, offsetClause, searchClause))
+        ParseResult(r10, Select(d, selected, fromClause, joinClause, whereClause, groupByClause, havingClause, orderByClause, limitClause, offsetClause, searchClause, h.map(_.value)))
       case _ =>
         fail(reader, SELECT())
     }

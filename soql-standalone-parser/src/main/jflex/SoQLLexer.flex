@@ -76,6 +76,7 @@ TableIdentifier = "@" ("-" | [:jletterdigit:])+
 %state ESCAPEDUNICODE6
 %state PARTIALESCAPEDUNICODE
 %state BLOCKCOMMENT
+%state HINT
 
 %%
 
@@ -161,7 +162,7 @@ TableIdentifier = "@" ("-" | [:jletterdigit:])+
 
 <HINT> {
   "*/" {
-    Token i = new Comment(string.toString());
+    Token i = new Hint(string.toString());
     i.setPosition(stringStart);
     yybegin(YYINITIAL);
     return i;
