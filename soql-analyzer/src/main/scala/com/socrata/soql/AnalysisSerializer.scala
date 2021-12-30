@@ -2,16 +2,16 @@ package com.socrata.soql
 
 import scala.util.parsing.input.{NoPosition, Position}
 import java.io.{ByteArrayOutputStream, OutputStream}
-import com.google.protobuf.CodedOutputStream
-import com.socrata.NonEmptySeq
-import com.socrata.soql.typed.{Hint, Materialized}
+
 import gnu.trove.impl.Constants
 import gnu.trove.map.hash.TObjectIntHashMap
-import com.socrata.soql.parsing.SoQLPosition
-import com.socrata.soql.typed._
-import com.socrata.soql.functions.MonomorphicFunction
+import com.google.protobuf.CodedOutputStream
+import com.socrata.NonEmptySeq
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ColumnName, TableName}
+import com.socrata.soql.functions.MonomorphicFunction
+import com.socrata.soql.parsing.SoQLPosition
+import com.socrata.soql.typed._
 
 private trait SerializationDictionary[C,T] {
   def registerType(typ: T): Int

@@ -710,8 +710,7 @@ SELECT visits, @x2.zx
   }
 
   test("hint and comment") {
-    //val soql = "select /*+ materialized */ /* comment */ null :: number as x"
-    val soql = "select hint(materialized) null :: number as x"
+    val soql = "select hint(materialized) /* comment */ null :: number as x"
     val analysis = analyzer.analyzeUnchainedQuery(soql)
     analysis.hints.headOption match {
       case Some(_: typed.Materialized) => // pass

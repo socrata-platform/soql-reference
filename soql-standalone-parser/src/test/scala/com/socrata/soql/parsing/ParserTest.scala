@@ -221,7 +221,6 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "count(disinct column)" in {
-      println("test 1")
       val x = parseFull("select count(distinct column)")
       x.selection.expressions.head.expression.asInstanceOf[FunctionCall].functionName.name must be ("count_distinct")
       x.selection.expressions.head.expression.toString must be ("count(DISTINCT `column`)")

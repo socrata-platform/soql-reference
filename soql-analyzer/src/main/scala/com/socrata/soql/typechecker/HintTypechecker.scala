@@ -1,12 +1,9 @@
 package com.socrata.soql.typechecker
 
 import com.socrata.soql.ast.{Hint, Materialized}
-import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
+import com.socrata.soql.environment.{ColumnName, TableName}
 import com.socrata.soql.exceptions.TypecheckException
 import com.socrata.soql.typed
-
-import scala.util.parsing.input.NoPosition
-
 
 trait HintTypechecker[Type] { this: Typechecker[Type] =>
 

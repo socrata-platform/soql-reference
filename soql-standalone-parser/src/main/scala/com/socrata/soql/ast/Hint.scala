@@ -1,6 +1,7 @@
 package com.socrata.soql.ast
 
 import scala.util.parsing.input.Position
+
 import com.socrata.prettyprint.prelude._
 
 sealed abstract class Hint

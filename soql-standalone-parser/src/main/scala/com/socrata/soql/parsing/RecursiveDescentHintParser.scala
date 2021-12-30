@@ -1,11 +1,11 @@
 package com.socrata.soql.parsing
 
-import com.socrata.soql.ast.{Hint, Materialized}
-import com.socrata.soql.parsing.RecursiveDescentParser.{AHint, AnIdentifier, ParseResult, Reader}
-import com.socrata.soql.tokens.{COMMA, LPAREN, RPAREN}
-
 import scala.annotation.tailrec
 import scala.util.parsing.input.Position
+
+import com.socrata.soql.ast.{Hint, Materialized}
+import com.socrata.soql.parsing.RecursiveDescentParser.{AHint, ParseResult, Reader}
+import com.socrata.soql.tokens.{COMMA, LPAREN, RPAREN}
 
 trait RecursiveDescentHintParser { this: RecursiveDescentParser =>
 

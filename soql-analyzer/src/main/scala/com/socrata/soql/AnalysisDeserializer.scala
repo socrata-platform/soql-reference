@@ -1,6 +1,8 @@
 package com.socrata.soql
 
 import java.io.InputStream
+
+import gnu.trove.map.hash.TIntObjectHashMap
 import com.google.protobuf.CodedInputStream
 import com.socrata.NonEmptySeq
 import com.socrata.soql.ast.JoinType
@@ -9,7 +11,6 @@ import com.socrata.soql.environment.{ColumnName, TableName}
 import com.socrata.soql.functions.{Function, MonomorphicFunction}
 import com.socrata.soql.parsing.SoQLPosition
 import com.socrata.soql.typed._
-import gnu.trove.map.hash.TIntObjectHashMap
 
 import scala.util.parsing.input.{NoPosition, Position}
 
