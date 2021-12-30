@@ -1,8 +1,8 @@
 package com.socrata.soql.parsing
 
 import com.socrata.soql.ast.{Hint, Materialized}
-import com.socrata.soql.parsing.RecursiveDescentParser.{AnIdentifier, ParseResult, Reader}
-import com.socrata.soql.tokens.{COMMA, HINT, LPAREN, RPAREN}
+import com.socrata.soql.parsing.RecursiveDescentParser.{AHint, AnIdentifier, ParseResult, Reader}
+import com.socrata.soql.tokens.{COMMA, LPAREN, RPAREN}
 
 import scala.annotation.tailrec
 import scala.util.parsing.input.Position
@@ -11,10 +11,12 @@ trait RecursiveDescentHintParser { this: RecursiveDescentParser =>
 
   protected final def hints(reader: Reader): ParseResult[Seq[Hint]] = {
     reader.first match {
-      case HINT() =>
+      case RecursiveDescentParser.HINT() =>
         reader.rest.first match {
           case LPAREN() =>
             parseHintList(reader.rest.rest)
+          case _ =>
+            fail(reader.rest, LPAREN())
         }
       case _ =>
         ParseResult(reader, Seq.empty)
@@ -25,7 +27,7 @@ trait RecursiveDescentHintParser { this: RecursiveDescentParser =>
     reader.first match {
       case x@RecursiveDescentParser.MATERIALIZED() =>
         ParseResult(reader.rest, (Materialized(x.position), x.position))
-      case _ => fail(reader, AnIdentifier)
+      case _ => fail(reader, AHint)
     }
 
   private def parseHintList(reader: Reader): ParseResult[Seq[Hint]] = {
@@ -43,6 +45,8 @@ trait RecursiveDescentHintParser { this: RecursiveDescentParser =>
               r2.rest
             case COMMA() =>
               loop(r2.rest)
+            case _ =>
+              fail(r2, COMMA(), RPAREN())
           }
         }
 

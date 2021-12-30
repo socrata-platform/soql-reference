@@ -92,6 +92,9 @@ object RecursiveDescentParser {
   case object AnOperator extends Expectation {
     def printable = "an operator"
   }
+  case object AHint extends Expectation {
+    def printable = "a hint"
+  }
 
   implicit def tokenAsTokenLike(t: Token): Expectation = ActualToken(t)
 
@@ -144,6 +147,7 @@ object RecursiveDescentParser {
   val FILTER = new Keyword("FILTER")
 
   // Hints
+  val HINT = new Keyword("HINT")
   val MATERIALIZED = new Keyword("MATERIALIZED")
 
   sealed abstract class NullPlacement
