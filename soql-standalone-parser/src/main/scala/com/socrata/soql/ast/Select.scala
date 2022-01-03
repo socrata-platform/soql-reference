@@ -271,9 +271,21 @@ case class Select(
     }
 
   private def docWithFrom(from: Option[TableName]): Doc[Nothing] = {
-    def selectClause = {
-      ((d"SELECT" ++ (if(distinct) d" DISTINCT" else Doc.empty)) +: selection.docs.punctuate(d",")).sep.hang(2)
-    }
+
+    def hintClause =
+      if (hints.nonEmpty) {
+        Seq(((Doc("HINT(") +: hints.map(_.doc).punctuate(Doc(","))) :+ Doc(")")).sep.hang(2))
+      } else {
+        Nil
+      }
+
+    val selectClause = Seq(
+      Seq(d"SELECT"),
+      hintClause,
+      if(distinct) Seq(d"DISTINCT") else Nil,
+      selection.docs.punctuate(d",")
+    ).flatten.sep.hang(2)
+
     def fromJoinClause =
       (this.from.orElse(from), joins) match {
         case (None, Seq()) => None
