@@ -723,9 +723,9 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
   }
 
   private def toString(from: Option[TableName]): String = {
-    val distinctStr = if (distinct) "DISTINCT " else ""
-    val selectStr = Some(s"SELECT $distinctStr$selection")
     val hintStr = itrToString(Some("HINT("), hints, ", ", Some(")"))
+    val distinctStr = if (distinct) Some("DISTINCT") else None
+    val selectionStr = if (selection.nonEmpty) Some(selection.toString) else None
     val fromStr = this.from.orElse(from).map(t => s"FROM $t")
     val joinsStr = itrToString(None, joins.map(_.toString), " ", None)
     val whereStr = itrToString("WHERE", where)
@@ -736,7 +736,8 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
     val offsetStr = itrToString("OFFSET", offset)
     val searchStr = itrToString("SEARCH", search.map(Expression.escapeString))
 
-    val parts = List(selectStr, hintStr, fromStr, joinsStr, whereStr, groupByStr, havingStr, obStr, limitStr, offsetStr, searchStr)
+    val parts = List(Some("SELECT"), hintStr, distinctStr, selectionStr,
+      fromStr, joinsStr, whereStr, groupByStr, havingStr, obStr, limitStr, offsetStr, searchStr)
     parts.flatString
   }
 
