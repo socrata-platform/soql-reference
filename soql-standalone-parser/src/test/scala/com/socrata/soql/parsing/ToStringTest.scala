@@ -176,8 +176,8 @@ class ToStringTest extends FunSpec with MustMatchers {
     }
 
     it("hint") {
-      val query = "select hint(materialized, materialized) balance"
-      val expected = "SELECT HINT( materialized, materialized ) `balance`"
+      val query = "select hint(materialized, unique_order) balance ORDER BY balance"
+      val expected = "SELECT HINT( materialized, unique_order ) `balance` ORDER BY `balance` ASC NULL LAST"
       val parsed = parser.binaryTreeSelect(query)
       val toString = parsed.outputSchema.leaf.toString
       toString must equal(expected)

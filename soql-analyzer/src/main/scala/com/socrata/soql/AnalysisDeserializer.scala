@@ -286,6 +286,8 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         in.readRawByte() match {
           case 1 =>
             Materialized(pos)
+          case 2 =>
+            UniqueOrder(pos)
         }
       }
 
