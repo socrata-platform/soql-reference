@@ -698,6 +698,11 @@ object SoQLFunctions {
   val PointToLatitude = field(SoQLPoint, "latitude", SoQLNumber)
   val PointToLongitude = field(SoQLPoint, "longitude", SoQLNumber)
 
+  val Reproject = f("reproject", FunctionName("reproject"), Map("a" -> GeospatialLike), Seq(VariableType("a"), FixedType(SoQLText), FixedType(SoQLText)), Seq.empty, VariableType("a"))(
+    "Reproject the incoming geometry from the incoming PROJ.4 spatial reference to an outgoing spatial reference", 
+    Example("Reproject Point", "reproject('POINT (372728.3308536674 69825.24782297359)'::point, '+init=epsg:3627', '+init=epsg:4326')", "")
+  )
+
   val PhoneToPhoneNumber = field(SoQLPhone, "phone_number", SoQLText)
   val PhoneToPhoneType = field(SoQLPhone, "phone_type", SoQLText)
 
