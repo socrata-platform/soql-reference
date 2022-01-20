@@ -2,9 +2,8 @@ package com.socrata.soql.parsing
 
 import scala.annotation.tailrec
 import scala.util.parsing.input.Position
-
-import com.socrata.soql.ast.{Hint, Materialized}
-import com.socrata.soql.parsing.RecursiveDescentParser.{AHint, ParseResult, Reader}
+import com.socrata.soql.ast.{Hint, Materialized, UniqueOrder}
+import com.socrata.soql.parsing.RecursiveDescentParser.{AHint, ParseResult, Reader, UNIQUE_ORDER}
 import com.socrata.soql.tokens.{COMMA, LPAREN, RPAREN}
 
 trait RecursiveDescentHintParser { this: RecursiveDescentParser =>
@@ -27,6 +26,8 @@ trait RecursiveDescentHintParser { this: RecursiveDescentParser =>
     reader.first match {
       case x@RecursiveDescentParser.MATERIALIZED() =>
         ParseResult(reader.rest, (Materialized(x.position), x.position))
+      case x@RecursiveDescentParser.UNIQUE_ORDER() =>
+        ParseResult(reader.rest, (UniqueOrder(x.position), x.position))
       case _ => fail(reader, AHint)
     }
 
