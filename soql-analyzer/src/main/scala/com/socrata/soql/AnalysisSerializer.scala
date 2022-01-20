@@ -322,6 +322,9 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
         case m: Materialized =>
           writePosition(m.position)
           out.writeRawByte(1)
+        case h: UniqueOrder =>
+          writePosition(h.position)
+          out.writeRawByte(2)
       }
     }
 

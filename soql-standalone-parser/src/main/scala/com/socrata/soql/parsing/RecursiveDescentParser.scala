@@ -149,6 +149,7 @@ object RecursiveDescentParser {
   // Hints
   val HINT = new Keyword("HINT")
   val MATERIALIZED = new Keyword("MATERIALIZED")
+  val UNIQUE_ORDER = new Keyword("UNIQUE_ORDER")
 
   sealed abstract class NullPlacement
   case object First extends NullPlacement
