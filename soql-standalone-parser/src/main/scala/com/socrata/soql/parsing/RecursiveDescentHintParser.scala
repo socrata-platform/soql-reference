@@ -2,7 +2,7 @@ package com.socrata.soql.parsing
 
 import scala.annotation.tailrec
 import scala.util.parsing.input.Position
-import com.socrata.soql.ast.{Hint, Materialized, NoRollup}
+import com.socrata.soql.ast.{Hint, Materialized, NoChainMerge, NoRollup}
 import com.socrata.soql.parsing.RecursiveDescentParser.{AHint, ParseResult, Reader}
 import com.socrata.soql.tokens.{COMMA, LPAREN, RPAREN}
 
@@ -28,6 +28,8 @@ trait RecursiveDescentHintParser { this: RecursiveDescentParser =>
         ParseResult(reader.rest, (Materialized(x.position), x.position))
       case x@RecursiveDescentParser.NO_ROLLUP() =>
         ParseResult(reader.rest, (NoRollup(x.position), x.position))
+      case x@RecursiveDescentParser.NO_CHAIN_MERGE() =>
+        ParseResult(reader.rest, (NoChainMerge(x.position), x.position))
       case _ => fail(reader, AHint)
     }
 
