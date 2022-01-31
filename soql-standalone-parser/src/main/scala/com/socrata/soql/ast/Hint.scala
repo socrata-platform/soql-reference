@@ -14,8 +14,14 @@ case class Materialized(pos: Position) extends Hint {
   override def toString(): String = "materialized"
 }
 
-case class UniqueOrder(pos: Position) extends Hint {
+case class NoRollup(pos: Position) extends Hint {
   def doc = Doc(toString)
 
-  override def toString(): String = "unique_order"
+  override def toString(): String = "no_rollup"
+}
+
+case class NoChainMerge(pos: Position) extends Hint {
+  def doc = Doc(toString)
+
+  override def toString(): String = "no_chain_merge"
 }
