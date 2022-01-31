@@ -287,7 +287,9 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
           case 1 =>
             Materialized(pos)
           case 2 =>
-            UniqueOrder(pos)
+            NoRollup(pos)
+          case 3 =>
+            NoChainMerge(pos)
         }
       }
 

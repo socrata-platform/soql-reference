@@ -14,10 +14,18 @@ case class Materialized(position: Position) extends Hint[Nothing, Nothing] {
   override def toString: String = "materialized"
 }
 
-case class UniqueOrder(position: Position) extends Hint[Nothing, Nothing] {
+case class NoRollup(position: Position) extends Hint[Nothing, Nothing] {
   def typ = None
 
   def mapColumnIds[NewColumnId](f: (Nothing, Qualifier) => NewColumnId) = this
 
-  override def toString: String = "unique_order"
+  override def toString: String = "no_rollup"
+}
+
+case class NoChainMerge(position: Position) extends Hint[Nothing, Nothing] {
+  def typ = None
+
+  def mapColumnIds[NewColumnId](f: (Nothing, Qualifier) => NewColumnId) = this
+
+  override def toString: String = "no_chain_merge"
 }
