@@ -75,7 +75,12 @@ case class FunctionCall[ColumnId, Type](function: MonomorphicFunction[Type], par
   }
 
   // require((function.parameters, parameters).zipped.forall { (formal, actual) => formal == actual.typ })
-  protected def asString = parameters.mkString(function.name.toString + "(", ",", ")")
+  protected def asString = {
+    val seq = parameters.mkString(function.name.toString + "(", ",", ")") +:
+      (filter.map(f => s"FILTER(WHERE ${f})").toSeq ++ window.map(_.toString).toSeq)
+    seq.mkString(" ")
+  }
+
   def typ = function.result
 
   def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId) = {
