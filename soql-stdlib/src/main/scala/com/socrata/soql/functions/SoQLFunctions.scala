@@ -231,10 +231,6 @@ object SoQLFunctions {
                      FunctionName("snap_to_grid"),
                      Map("a" -> GeospatialLike, "b" -> NumLike),
                      Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(NoDocs)
-  val SnapForZoom = f("snap_for_zoom",
-                      FunctionName("snap_for_zoom"),
-                      Map("a" -> GeospatialLike, "b" -> NumLike),
-                      Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(NoDocs)
   val CuratedRegionTest = f("curated_region_test", FunctionName("curated_region_test"), Map("a" -> GeospatialLike, "b" -> NumLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))(NoDocs)
   val VisibleAt = f("visible_at",
