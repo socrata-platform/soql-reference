@@ -599,7 +599,7 @@ object SoQLFunctions {
   )
 
   val GetUtcDate = mf("get now in UTC fixed_timestamp", FunctionName("get_utc_date"), Seq(), Seq.empty, SoQLFixedTimestamp)(
-    experimentalDocs("Now at UTC time zone with seconds"),
+    "Now at UTC time zone with seconds",
     Example("Get now", "get_utc_date()", ""),
     Example("Get records of last month", "floating_date_column between date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'P1M' and date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'PT1S'", "")
   )
