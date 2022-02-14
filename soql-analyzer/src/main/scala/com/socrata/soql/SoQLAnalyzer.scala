@@ -7,6 +7,7 @@ import scala.util.parsing.input.{NoPosition, Position}
 import com.socrata.soql.aliases.AliasAnalysis
 import com.socrata.soql.aggregates.AggregateChecker
 import com.socrata.soql.ast._
+import com.socrata.soql.typed
 import com.socrata.soql.parsing.{AbstractParser, Parser}
 import com.socrata.soql.typechecker._
 import com.socrata.soql.environment._
@@ -794,6 +795,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   // dataset".  Unfortunately this means "select :*,*" isn't a left-identity of merge
   // for a query that contains a search.
   private def tryMerge(a: Analysis, b: Analysis): Option[Analysis] = (a, b) match {
+    case (_, b) if b.hints.exists(_.isInstanceOf[typed.NoChainMerge]) => None
     case (a, _) if (hasWindowFunction(a)) => None
     case (SoQLAnalysis(aIsGroup, false, aSelect, aFrom, Nil, aWhere, aGroup, aHaving, aOrder, aLim, aOff, None, Nil),
           SoQLAnalysis(false,    false, bSelect, None, bJoins, None,   Nil,   None,    Nil,   bLim, bOff, None, Nil)) if
