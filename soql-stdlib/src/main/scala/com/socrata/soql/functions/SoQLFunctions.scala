@@ -275,10 +275,10 @@ object SoQLFunctions {
     "Return the largest of its arguments, ignoring nulls"
   )
 
-  val Min = f("min", FunctionName("min"), Map("a" -> Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
+  val Min = f("min", FunctionName("min"), Map("a" -> (Ordered - SoQLBoolean)), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
     "Return the minimum of a given set of values"
   )
-  val Max = f("max", FunctionName("max"), Map("a" -> Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
+  val Max = f("max", FunctionName("max"), Map("a" -> (Ordered - SoQLBoolean)), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
     "Return the maximum of a given set of values"
   )
   val CountStar = mf("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, SoQLNumber, isAggregate = true)(
