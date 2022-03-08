@@ -21,6 +21,10 @@ lazy val soqlStdlib = (project in file("soql-stdlib")).
   settings(SoqlStdlib.settings).
   dependsOn(soqlAnalyzer, soqlTypes)
 
+lazy val soqlStdlibCodec = (project in file("soql-stdlib-codecs")).
+  settings(SoqlStdlibCodecs.settings).
+  dependsOn(soqlTypes)
+
 lazy val soqlToy = (project in file("soql-toy")).
   settings(SoqlToy.settings).
   dependsOn(soqlStdlib)
