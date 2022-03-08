@@ -599,9 +599,9 @@ object SoQLFunctions {
   )
 
   val GetUtcDate = mf("get now in UTC fixed_timestamp", FunctionName("get_utc_date"), Seq(), Seq.empty, SoQLFixedTimestamp)(
-    "Now at UTC time zone with seconds",
-    Example("Get now", "get_utc_date()", ""),
-    Example("Get records of last month", "floating_date_column between date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'P1M' and date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'PT1S'", "")
+    "Return the current date/time as a fixed timestamp displayed in Coordinated Universal Time (UTC+00:00).",
+    Example("Get the current datetime (displayed as UTC+00:00)", "get_utc_date()", ""),
+    Example("Get records of last month converted into US/Pacific time", "floating_date_column between date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'P1M' and date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'PT1S'", "")
   )
 
   val castIdentities = for ((n, t) <- SoQLType.typesByName.toSeq) yield {
