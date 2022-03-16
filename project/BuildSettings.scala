@@ -25,17 +25,11 @@ object BuildSettings {
     libraryDependencies ++= Seq(
       "org.slf4j" % "slf4j-api" % slf4jVersion,
       "org.slf4j" % "jcl-over-slf4j" % slf4jVersion,
-      "org.scalatest" %% "scalatest" % "3.0.8" % "test"
-    ),
-    libraryDependencies ++= {
-      scalaVersion.value match {
-        case _ => Seq(
-          "org.scala-lang.modules" %% "scala-parser-combinators" % "2.1.0",
-          "org.scala-lang.modules" %% "scala-xml"                % "2.0.1",
-          "org.scala-lang.modules" %% "scala-collection-compat"  % "2.5.0"
-        )
-      }
-    }
+      "org.scalatest" %% "scalatest" % "3.0.8" % "test",
+      "org.scala-lang.modules" %% "scala-parser-combinators" % "2.1.0",
+      "org.scala-lang.modules" %% "scala-xml"                % "2.0.1",
+      "org.scala-lang.modules" %% "scala-collection-compat"  % "2.5.0"
+    )
   )
 
   val slf4jVersion = "1.7.5"
