@@ -7,7 +7,6 @@ object SoqlDocs {
     publish/skip := true,
     libraryDependencies ++= Seq(
       "com.rojoma" %% "rojoma-json-v3" % "3.13.0",
-      "com.rojoma" %% "simple-arm-v2" % "2.3.1"
     )
   )
 }
