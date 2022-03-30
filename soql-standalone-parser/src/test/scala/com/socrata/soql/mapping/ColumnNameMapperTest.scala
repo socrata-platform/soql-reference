@@ -11,18 +11,18 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
 
   val columnIdMap =
     Map("_" -> Map(ColumnName("name") -> ColumnName("MAP_name"),
-      ColumnName("crime_date") -> ColumnName("MAP_crime_date"),
-      ColumnName("ward") -> ColumnName("MAP_ward"),
-      ColumnName("arrest") -> ColumnName("MAP_arrest"),
-      ColumnName("crime_type") -> ColumnName("MAP_crime_type")),
-      "_cat" -> Map(ColumnName("name") -> ColumnName("MAP_name"),
-        ColumnName("cat") -> ColumnName("MAP_cat")),
-      "_dog" -> Map(ColumnName("name") -> ColumnName("MAP_name"),
-        ColumnName("dog") -> ColumnName("MAP_dog")),
-      "_bird" -> Map(ColumnName("name") -> ColumnName("MAP_name"),
-        ColumnName("bird") -> ColumnName("MAP_bird")),
-      "_fish" -> Map(ColumnName("name") -> ColumnName("MAP_name"),
-        ColumnName("fish") -> ColumnName("MAP_fish")))
+                   ColumnName("crime_date") -> ColumnName("MAP_crime_date"),
+                   ColumnName("ward") -> ColumnName("MAP_ward"),
+                   ColumnName("arrest") -> ColumnName("MAP_arrest"),
+                   ColumnName("crime_type") -> ColumnName("MAP_crime_type")),
+        "_cat" -> Map(ColumnName("name") -> ColumnName("MAP_name"),
+                      ColumnName("cat") -> ColumnName("MAP_cat")),
+        "_dog" -> Map(ColumnName("name") -> ColumnName("MAP_name"),
+                      ColumnName("dog") -> ColumnName("MAP_dog")),
+        "_bird" -> Map(ColumnName("name") -> ColumnName("MAP_name"),
+                       ColumnName("bird") -> ColumnName("MAP_bird")),
+        "_fish" -> Map(ColumnName("name") -> ColumnName("MAP_name"),
+                       ColumnName("fish") -> ColumnName("MAP_fish")))
 
   val mapper = new ColumnNameMapper(columnIdMap)
 
