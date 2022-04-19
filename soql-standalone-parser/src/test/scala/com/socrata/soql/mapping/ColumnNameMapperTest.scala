@@ -117,7 +117,7 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
                SELECT @cat.name, @cat.cat FROM @cat) as j4 ON TRUE
       """
 
-    val expected         = "SELECT `MAP_name`, @dog.`MAP_name` AS `dogname`, @j2.`MAP_name` AS `j2catname`, @j4.`name` AS `j4name`, @dog.`MAP_dog`, @j2.`MAP_cat` AS `j2cat`, @j3.`MAP_cat` AS `j3cat`, @j4.`bird` AS `j4bird` JOIN @dog ON TRUE JOIN @cat AS @j2 ON TRUE JOIN @cat AS @j3 ON TRUE JOIN (SELECT @b1.`MAP_name` AS `name`, @b1.`MAP_bird` AS `bird` FROM @bird AS @b1 UNION (SELECT `MAP_name` AS `name`, `MAP_fish` AS `fish`, @c2.`MAP_cat` AS `cat2` FROM @fish JOIN @cat AS @c2 ON TRUE |> SELECT `name`, `cat2`) UNION ALL SELECT @cat.`MAP_name`, @cat.`MAP_cat` FROM @cat) AS @j4 ON TRUE"
+    val expected         = "SELECT `MAP_name`, @dog.`MAP_name` AS `dogname`, @j2.`MAP_name` AS `j2catname`, @j4.`name` AS `j4name`, @dog.`MAP_dog`, @j2.`MAP_cat` AS `j2cat`, @j3.`MAP_cat` AS `j3cat`, @j4.`bird` AS `j4bird` JOIN @dog ON TRUE JOIN @cat AS @j2 ON TRUE JOIN @cat AS @j3 ON TRUE JOIN (SELECT @b1.`MAP_name` AS `name`, @b1.`MAP_bird` AS `bird` FROM @bird AS @b1 UNION (SELECT `MAP_name` AS `name`, `MAP_fish` AS `fish`, @c2.`MAP_cat` AS `cat2` FROM @fish JOIN @cat AS @c2 ON TRUE |> SELECT `name`, `cat2`) UNION ALL SELECT @cat.`MAP_name` AS `name`, @cat.`MAP_cat` AS `cat` FROM @cat) AS @j4 ON TRUE"
     val s = parser.binaryTreeSelect(soql)
     val actual = mapper.mapSelects(s)
 
@@ -125,7 +125,7 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
     // But mapSelect should not raise exception because of that.
     assert(Select.toString(actual) === expected)
 
-    val reverseExpected = "SELECT `name`, @dog.`name` AS `dogname`, @j2.`name` AS `j2catname`, @j4.`name` AS `j4name`, @dog.`dog`, @j2.`cat` AS `j2cat`, @j3.`cat` AS `j3cat`, @j4.`bird` AS `j4bird` JOIN @dog ON TRUE JOIN @cat AS @j2 ON TRUE JOIN @cat AS @j3 ON TRUE JOIN (SELECT @b1.`name` AS `name`, @b1.`bird` AS `bird` FROM @bird AS @b1 UNION (SELECT `name` AS `name`, `fish` AS `fish`, @c2.`cat` AS `cat2` FROM @fish JOIN @cat AS @c2 ON TRUE |> SELECT `name`, `cat2`) UNION ALL SELECT @cat.`name`, @cat.`cat` FROM @cat) AS @j4 ON TRUE"
+    val reverseExpected = "SELECT `name`, @dog.`name` AS `dogname`, @j2.`name` AS `j2catname`, @j4.`name` AS `j4name`, @dog.`dog`, @j2.`cat` AS `j2cat`, @j3.`cat` AS `j3cat`, @j4.`bird` AS `j4bird` JOIN @dog ON TRUE JOIN @cat AS @j2 ON TRUE JOIN @cat AS @j3 ON TRUE JOIN (SELECT @b1.`name` AS `name`, @b1.`bird` AS `bird` FROM @bird AS @b1 UNION (SELECT `name` AS `name`, `fish` AS `fish`, @c2.`cat` AS `cat2` FROM @fish JOIN @cat AS @c2 ON TRUE |> SELECT `name`, `cat2`) UNION ALL SELECT @cat.`name` AS `name`, @cat.`cat` AS `cat` FROM @cat) AS @j4 ON TRUE"
     val reverseParsed = parser.binaryTreeSelect(Select.toString(actual))
     val reverseActual = reverseMapper.mapSelects(reverseParsed)
     assert(Select.toString(reverseActual) === reverseExpected)
