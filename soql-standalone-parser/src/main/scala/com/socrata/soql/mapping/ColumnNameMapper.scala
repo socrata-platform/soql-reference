@@ -26,7 +26,7 @@ class ColumnNameMapper(rootSchemas: Map[String, Map[ColumnName, ColumnName]]) {
         PipeQuery(nl, r)
       case Compound(op, l, r) =>
         val nl = mapSelects(l, generateAliases)
-        val nr = mapSelects(r, false)
+        val nr = mapSelects(r, generateAliases)
         Compound(op, nl, nr)
       case Leaf(select) =>
         Leaf(mapSelect(select, generateAliases))
