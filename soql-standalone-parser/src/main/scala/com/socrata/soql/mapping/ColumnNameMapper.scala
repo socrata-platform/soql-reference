@@ -77,13 +77,29 @@ class ColumnNameMapper(rootSchemas: Map[String, Map[ColumnName, ColumnName]]) {
     }
 
     val selection = mapSelection(select.selection, ss, generateAliases)
+    val aliases = selection.expressions.foldLeft(Map.empty[ColumnName, ColumnName]) { (acc, selectedExpr) =>
+      selectedExpr.name match  {
+        case Some((columnName, _)) =>
+          acc + (columnName -> columnName)
+        case None =>
+          acc
+      }
+    }
+    val ssWithAliases: Map[String, Map[ColumnName, ColumnName]] =
+      if (aliases.nonEmpty) {
+        val withAliases = ss.getOrElse(TableName.PrimaryTable.qualifier, Map.empty) ++ aliases
+        ss + (TableName.PrimaryTable.qualifier -> withAliases)
+      } else {
+        ss
+      }
+
     select.copy(
       selection = selection,
-      joins = select.joins.map(j => mapJoin(j, ss)),
-      where = select.where map(mapExpression(_, ss)),
-      groupBys = select.groupBys.map(mapExpression(_, ss)),
-      having = select.having.map(mapExpression(_, ss)),
-      orderBys = select.orderBys.map(mapOrderBy(_, ss)),
+      joins = select.joins.map(j => mapJoin(j, ssWithAliases)),
+      where = select.where map(mapExpression(_, ssWithAliases)),
+      groupBys = select.groupBys.map(mapExpression(_, ssWithAliases)),
+      having = select.having.map(mapExpression(_, ssWithAliases)),
+      orderBys = select.orderBys.map(mapOrderBy(_, ssWithAliases)),
     )
   }
 
