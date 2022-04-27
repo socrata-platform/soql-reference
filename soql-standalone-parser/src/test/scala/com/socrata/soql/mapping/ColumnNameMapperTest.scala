@@ -62,7 +62,7 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
     assert(ob.map(o => mapper.mapOrderBy(o, columnIdMap)).toString === expOb.toString)
   }
 
-  test("Select mapped") {
+  test("Select mapped - it is tricky that the alias is the same as the original field name.  But here we are.") {
     def s = parser.binaryTreeSelect(
       """
         |SELECT
@@ -92,9 +92,50 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
         |  NULL
         |WHERE
         | (MAP_crime_type = "HOMICIDE" OR MAP_crime_type = "CLOWNICIDE") AND MAP_arrest=true
-        |GROUP BY date_trunc_ym(MAP_crime_date), MAP_ward, count(*)
+        |GROUP BY date_trunc_ym(crime_date), MAP_ward, count(*)
         |HAVING MAP_ward > '01'
-        |ORDER BY date_trunc_ym(MAP_crime_date), MAP_ward DESC
+        |ORDER BY date_trunc_ym(crime_date), MAP_ward DESC
+        |LIMIT 12
+        |OFFSET 11
+      """.stripMargin
+    )
+
+    assert(mapper.mapSelects(s).toString === expS.toString)
+  }
+
+  test("Select mapped with alias") {
+    def s = parser.binaryTreeSelect(
+      """
+        |SELECT
+        |  date_trunc_ym(crime_date) AS crime_date_ym,
+        |  ward,
+        |  count(*),
+        |  23,
+        |  "purple",
+        |  NULL
+        |WHERE
+        | (crime_type = "HOMICIDE" OR crime_type = "CLOWNICIDE") AND arrest=true
+        |GROUP BY crime_date_ym, ward, count(*)
+        |HAVING ward > '01'
+        |ORDER BY crime_date_ym, ward DESC
+        |LIMIT 12
+        |OFFSET 11
+      """.stripMargin)
+
+    def expS = parser.binaryTreeSelect(
+      """
+        |SELECT
+        |  date_trunc_ym(MAP_crime_date) AS crime_date_ym,
+        |  MAP_ward,
+        |  count(*),
+        |  23,
+        |  "purple",
+        |  NULL
+        |WHERE
+        | (MAP_crime_type = "HOMICIDE" OR MAP_crime_type = "CLOWNICIDE") AND MAP_arrest=true
+        |GROUP BY crime_date_ym, MAP_ward, count(*)
+        |HAVING MAP_ward > '01'
+        |ORDER BY crime_date_ym, MAP_ward DESC
         |LIMIT 12
         |OFFSET 11
       """.stripMargin
@@ -135,10 +176,22 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
     val soql = "SELECT name WHERE name='c1' GROUP BY name UNION SELECT name FROM @dog WHERE name='d1' GROUP BY name"
     val s = parser.binaryTreeSelect(soql)
     val expectedNoAliases = "SELECT `MAP_name` WHERE `MAP_name` = 'c1' GROUP BY `MAP_name` UNION SELECT `MAP_name` FROM @dog WHERE `MAP_name` = 'd1' GROUP BY `MAP_name`"
-    val expectedWithAliases = "SELECT `MAP_name` AS `name` WHERE `MAP_name` = 'c1' GROUP BY `MAP_name` UNION SELECT `MAP_name` AS `name` FROM @dog WHERE `MAP_name` = 'd1' GROUP BY `MAP_name`"
+    val expectedWithAliases = "SELECT `MAP_name` AS `name` WHERE `name` = 'c1' GROUP BY `name` UNION SELECT `MAP_name` AS `name` FROM @dog WHERE `name` = 'd1' GROUP BY `name`"
     val actualNoAliases = Select.toString(mapper.mapSelects(s, false))
     val actualWithAliases = Select.toString(mapper.mapSelects(s, true))
     actualNoAliases must be(expectedNoAliases)
     actualWithAliases must be(expectedWithAliases)
+  }
+
+  test("Group by alias") {
+    val soql =  "SELECT crime_type as ct, count(*) GROUP BY ct"
+    val expected         = "SELECT `MAP_crime_type` AS `ct`, count(*) GROUP BY `ct`"
+    val s = parser.binaryTreeSelect(soql)
+    val actual = mapper.mapSelects(s)
+    assert(Select.toString(actual) === expected)
+    val reverseExpected = "SELECT `crime_type` AS `ct`, count(*) GROUP BY `ct`"
+    val reverseParsed = parser.binaryTreeSelect(Select.toString(actual))
+    val reverseActual = reverseMapper.mapSelects(reverseParsed)
+    assert(Select.toString(reverseActual) === reverseExpected)
   }
 }
