@@ -131,7 +131,8 @@ class ColumnNameMapper(rootSchemas: Map[String, Map[ColumnName, ColumnName]]) {
       case StringLiteral(v) => StringLiteral(v)(NoPosition)
       case BooleanLiteral(v) => BooleanLiteral(v)(NoPosition)
       case NullLiteral() => NullLiteral()(NoPosition)
-      case Hole(name) => Hole(name)(NoPosition)
+      case Hole.UDF(name) => Hole.UDF(name)(NoPosition)
+      case Hole.SavedQuery(name, typ) => Hole.SavedQuery(name, typ)(NoPosition)
       case e: ColumnOrAliasRef =>
         val qualifier = e.qualifier.getOrElse("_")
         schemas.get(qualifier) match {

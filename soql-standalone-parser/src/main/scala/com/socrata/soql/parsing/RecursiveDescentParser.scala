@@ -222,6 +222,10 @@ object RecursiveDescentParser {
   private val LIKE_BETWEEN_IN_SET = s(IS(), AnIsNot, LIKE(), ANotLike, BETWEEN(), ANotBetween, IN(), ANotIn)
   private val NOT_SET = s(NOT())
   private val OR_SET = s(OR())
+
+  private object ParameterType {
+    def unapply(ident: Identifier): Option[Hole.SavedQuery.Type] = Hole.SavedQuery.typesOfName.get(FunctionName(ident.value))
+  }
 }
 
 abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = AbstractParser.defaultParameters) extends AbstractParser with RecursiveDescentHintParser {
@@ -1159,6 +1163,20 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
+  private def param(reader: Reader, typ: Hole.SavedQuery.Type): ParseResult[Expression] = {
+    reader.first match {
+      case s: tokens.StringLiteral =>
+        reader.rest.first match {
+          case RPAREN() =>
+            ParseResult(reader.rest.rest, Hole.SavedQuery(HoleName(s.value), typ)(s.position))
+          case _ =>
+            fail(reader.rest.rest, RPAREN())
+        }
+      case _ =>
+        fail(reader.rest, AStringLiteral)
+    }
+  }
+
   private def identifierOrFuncall(reader: Reader, ident: Identifier): ParseResult[Expression] = {
     // we want to match
     //    id
@@ -1264,6 +1282,8 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       // original parser.  This would accept all kinds of nonsense like
       // `@gfdsg.:gsdfg(DISTINCT bleh)` and then mangle that into
       // `gsdfg_distinct(bleh)`
+      case ParameterType(t) if allowParamSpecialForms && reader.rest.first == LPAREN() =>
+        param(reader.rest.rest, t)
       case ident: Identifier =>
         identifierOrFuncall(reader.rest, ident)
       case ident: SystemIdentifier =>
@@ -1272,7 +1292,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         joinedColumn(reader.rest, table)
 
       case hole: HoleIdentifier if allowHoles =>
-        ParseResult(reader.rest, Hole(HoleName(hole.value))(hole.position))
+        ParseResult(reader.rest, Hole.UDF(HoleName(hole.value))(hole.position))
 
       case _ =>
         reader.resetAlternates()

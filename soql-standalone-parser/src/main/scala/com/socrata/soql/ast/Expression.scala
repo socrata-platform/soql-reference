@@ -59,8 +59,8 @@ object Expression {
         case FunctionCall(other, args, _, _) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals)
       }
       ils ++ fc.filter.toSeq.flatMap(findIdentsAndLiterals(_)) ++ findIdentsAndLiterals(fc.window)
-    case Hole(name) =>
-      Vector(name.name)
+    case h: Hole =>
+      Vector(h.name.name)
   }
 
   private def findIdentsAndLiterals(windowFunctionInfo: Option[WindowFunctionInfo]): Seq[String] =  {
@@ -372,10 +372,41 @@ case class WindowFunctionInfo(partitions: Seq[Expression], orderings: Seq[OrderB
   }
 }
 
-case class Hole(name: HoleName)(val position: Position) extends Expression {
-  def allColumnRefs = Set.empty
+sealed abstract class Hole extends Expression {
+  val name: HoleName
+  final def allColumnRefs = Set.empty
+  final def replaceHoles(f: Hole => Expression) =
+    f match {
+      case pf: PartialFunction[Hole, Expression] => pf.applyOrElse(this, Function.const(this))
+      case tf => f(this)
+    }
+}
 
-  def replaceHoles(f: Hole => Expression) = f(this)
+object Hole {
+  case class UDF(name: HoleName)(val position: Position) extends Hole {
+    def doc = Doc("?" + name)
+  }
 
-  def doc = Doc("?" + name)
+  case class SavedQuery(name: HoleName, typ: SavedQuery.Type)(val position: Position) extends Hole {
+    def doc = FunctionCall(SavedQuery.nameOfType(typ), Seq(StringLiteral(name.name)(position)))(position, position).doc
+  }
+
+  object SavedQuery {
+    sealed abstract class Type
+    case object Text extends Type
+    case object Number extends Type
+    case object Boolean extends Type
+    case object FixedTimestamp extends Type
+    case object FloatingTimestamp extends Type
+
+    val typesOfName = Map[FunctionName, Type](
+      FunctionName("text_parameter") -> Hole.SavedQuery.Text,
+      FunctionName("number_paramter") -> Hole.SavedQuery.Number,
+      FunctionName("boolean_paramter") -> Hole.SavedQuery.Boolean,
+      FunctionName("fixed_timestamp_parameter") -> Hole.SavedQuery.FixedTimestamp,
+      FunctionName("floating_timestamp_parameter") -> Hole.SavedQuery.FloatingTimestamp
+    )
+
+    val nameOfType: Type => FunctionName = typesOfName.map { case (a, b) => (b, a) }.toMap
+  }
 }

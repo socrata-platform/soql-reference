@@ -1,5 +1,6 @@
 package com.socrata.soql.types
 
+import com.socrata.soql.ast.Hole
 import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.typechecker.TypeInfo
@@ -38,6 +39,15 @@ object TestTypeInfo extends TypeInfo[TestType] {
 
   def typeFor(name: TypeName) =
     TestType.typesByName.get(name)
+
+  def typeFor(typ: Hole.SavedQuery.Type) =
+    typ match {
+      case Hole.SavedQuery.Text => TestText
+      case Hole.SavedQuery.Number => TestNumber
+      case Hole.SavedQuery.Boolean => TestBoolean
+      case Hole.SavedQuery.FixedTimestamp => TestFixedTimestamp
+      case Hole.SavedQuery.FloatingTimestamp => TestFloatingTimestamp
+    }
 
   def typeNameFor(typ: TestType): TypeName = typ.name
 

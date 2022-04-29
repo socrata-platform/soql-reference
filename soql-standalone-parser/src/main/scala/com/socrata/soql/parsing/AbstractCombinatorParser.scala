@@ -363,7 +363,7 @@ abstract class AbstractCombinatorParser(parameters: AbstractParser.Parameters = 
     accept[tokens.StringLiteral] ^^ (_.value)
 
   val hole =
-    accept[HoleIdentifier] ^^ { n => ast.Hole(HoleName(n.value))(n.position) }
+    accept[HoleIdentifier] ^^ { n => ast.Hole.UDF(HoleName(n.value))(n.position) }
 
   /*
    *               ***************

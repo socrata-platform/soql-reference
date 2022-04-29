@@ -1,5 +1,6 @@
 package com.socrata.soql.typechecker
 
+import com.socrata.soql.ast.Hole
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.typed.CoreExpr
@@ -13,6 +14,7 @@ trait TypeInfo[Type] {
   def nullLiteralExpr(pos: Position): Seq[CoreExpr[Nothing, Type]]
 
   def typeFor(name: TypeName): Option[Type]
+  def typeFor(paramType: Hole.SavedQuery.Type): Type
 
   def typeNameFor(typ: Type): TypeName
 
