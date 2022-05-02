@@ -23,6 +23,7 @@ sealed abstract class Expression extends Product {
     com.socrata.soql.brita.IdentifierFilter(Expression.findIdentsAndLiterals(this))
 
   def replaceHoles(f: Hole => Expression): Expression
+  def collectHoles(f: PartialFunction[Hole, Expression]): Expression
 
   def doc: Doc[Nothing]
 }
@@ -169,11 +170,13 @@ case class ColumnOrAliasRef(qualifier: Option[String], column: ColumnName)(val p
   }
   def allColumnRefs = Set(this)
   def replaceHoles(f: Hole => Expression): this.type = this
+  def collectHoles(f: PartialFunction[Hole, Expression]): this.type = this
 }
 
 sealed abstract class Literal extends Expression {
   def allColumnRefs = Set.empty
   def replaceHoles(f: Hole => Expression): this.type = this
+  def collectHoles(f: PartialFunction[Hole, Expression]): this.type = this
 }
 case class NumberLiteral(value: BigDecimal)(val position: Position) extends Literal {
   def doc = Doc(value.toString)
@@ -335,6 +338,13 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
                  filter.map(_.replaceHoles(f)),
                  window.map(_.replaceHoles(f)))(position, functionNamePosition)
   }
+
+  def collectHoles(f: PartialFunction[Hole, Expression]): FunctionCall = {
+    FunctionCall(functionName,
+                 parameters.map(_.collectHoles(f)),
+                 filter.map(_.collectHoles(f)),
+                 window.map(_.collectHoles(f)))(position, functionNamePosition)
+  }
 }
 
 case class WindowFunctionInfo(partitions: Seq[Expression], orderings: Seq[OrderBy], frames: Seq[Expression]) {
@@ -370,16 +380,17 @@ case class WindowFunctionInfo(partitions: Seq[Expression], orderings: Seq[OrderB
   def replaceHoles(f: Hole => Expression): WindowFunctionInfo = {
     WindowFunctionInfo(partitions.map(_.replaceHoles(f)), orderings.map(_.replaceHoles(f)), frames.map(_.replaceHoles(f)))
   }
+
+  def collectHoles(f: PartialFunction[Hole, Expression]): WindowFunctionInfo = {
+    WindowFunctionInfo(partitions.map(_.collectHoles(f)), orderings.map(_.collectHoles(f)), frames.map(_.collectHoles(f)))
+  }
 }
 
 sealed abstract class Hole extends Expression {
   val name: HoleName
   final def allColumnRefs = Set.empty
-  final def replaceHoles(f: Hole => Expression) =
-    f match {
-      case pf: PartialFunction[Hole, Expression] => pf.applyOrElse(this, Function.const(this))
-      case tf => f(this)
-    }
+  final def replaceHoles(f: Hole => Expression) = f(this)
+  final def collectHoles(f: PartialFunction[Hole, Expression]) = f.applyOrElse(this, Function.const(this))
 }
 
 object Hole {

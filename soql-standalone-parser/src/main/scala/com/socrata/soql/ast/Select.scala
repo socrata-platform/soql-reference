@@ -25,6 +25,7 @@ sealed trait JoinSelect {
   val alias: Option[String]
   def allTableNames: Set[String]
   def replaceHoles(f: Hole => Expression): JoinSelect
+  def collectHoles(f: PartialFunction[Hole, Expression]): JoinSelect
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): JoinSelect
   def directlyReferencedJoinFuncs: Set[TableName]
   def doc: Doc[Nothing]
@@ -34,6 +35,7 @@ case class JoinTable(tableName: TableName) extends JoinSelect {
   override def toString = tableName.toString
   override def doc = Doc(tableName.toString)
   def replaceHoles(f: Hole => Expression): this.type = this
+  def collectHoles(f: PartialFunction[Hole, Expression]): this.type = this
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): this.type = this
   def directlyReferencedJoinFuncs = Set.empty
 
@@ -50,6 +52,8 @@ case class JoinQuery(selects: BinaryTree[Select], definiteAlias: String) extends
   override def doc = Seq(Select.toDoc(selects)).encloseNesting(d"(", d"", d") AS @${TableName.removeValidPrefix(definiteAlias)}")
   def replaceHoles(f: Hole => Expression): JoinQuery =
     copy(Select.walkTreeReplacingHoles(selects, f))
+  def collectHoles(f: PartialFunction[Hole, Expression]): JoinQuery =
+    copy(Select.walkTreeCollectingHoles(selects, f))
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): JoinQuery =
     copy(selects = Select.rewriteJoinFuncs(selects, f)(aliasProvider))
   def directlyReferencedJoinFuncs = Select.findDirectlyReferencedJoinFuncs(selects)
@@ -76,6 +80,8 @@ case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position:
 
   def replaceHoles(f: Hole => Expression): JoinFunc =
     copy(params = params.map(_.replaceHoles(f)))(position)
+  def collectHoles(f: PartialFunction[Hole, Expression]): JoinFunc =
+    copy(params = params.map(_.collectHoles(f)))(position)
 
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): JoinQuery = {
     val aliasless = tableName.copy(alias=None)
@@ -188,6 +194,10 @@ object Select {
 
   def walkTreeReplacingHoles(node: BinaryTree[Select], f: Hole => Expression): BinaryTree[Select] = {
     node.map(_.replaceHoles(f))
+  }
+
+  def walkTreeCollectingHoles(node: BinaryTree[Select], f: PartialFunction[Hole, Expression]): BinaryTree[Select] = {
+    node.map(_.collectHoles(f))
   }
 
   def findDirectlyReferencedJoinFuncs(node: BinaryTree[Select]): Set[TableName] = {
@@ -373,6 +383,20 @@ case class Select(
            search,
            hints)
 
+  def collectHoles(f: PartialFunction[Hole, Expression]): Select =
+    Select(distinct,
+           selection.collectHoles(f),
+           from,
+           joins.map(_.collectHoles(f)),
+           where.map(_.collectHoles(f)),
+           groupBys.map(_.collectHoles(f)),
+           having.map(_.collectHoles(f)),
+           orderBys.map(_.collectHoles(f)),
+           limit,
+           offset,
+           search,
+           hints)
+
   override def toString: String = {
     if(AST.pretty) {
       doc.layoutSmart(LayoutOptions(pageWidth = PageWidth.Unbounded)).toString
@@ -405,6 +429,8 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[
 
   def replaceHoles(f: Hole => Expression) =
     copy(expressions = expressions.map(_.replaceHoles(f)))
+  def collectHoles(f: PartialFunction[Hole, Expression]) =
+    copy(expressions = expressions.map(_.collectHoles(f)))
 
   def doc = docs.punctuate(d",").hsep
 
@@ -466,6 +492,8 @@ case class SelectedExpression(expression: Expression, name: Option[(ColumnName, 
 
   def replaceHoles(f: Hole => Expression): SelectedExpression =
     copy(expression = expression.replaceHoles(f))
+  def collectHoles(f: PartialFunction[Hole, Expression]): SelectedExpression =
+    copy(expression = expression.collectHoles(f))
 
   // SoQL ASTs ignore positions, so define equals and hashcode to honor that
   override def equals(that: Any) =
@@ -489,6 +517,8 @@ case class OrderBy(expression: Expression, ascending: Boolean, nullLast: Boolean
 
   def replaceHoles(f: Hole => Expression) =
     copy(expression = expression.replaceHoles(f))
+  def collectHoles(f: PartialFunction[Hole, Expression]) =
+    copy(expression = expression.collectHoles(f))
 
   def doc = {
     val direction = if(ascending) d"ASC" else d"DESC"
