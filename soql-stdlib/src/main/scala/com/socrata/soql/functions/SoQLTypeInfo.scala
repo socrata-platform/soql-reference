@@ -116,15 +116,6 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
   def typeFor(name: TypeName) =
     SoQLType.typesByName.get(name)
 
-  def typeFor(typ: Hole.SavedQuery.Type) =
-    typ match {
-      case Hole.SavedQuery.Text => SoQLText.t
-      case Hole.SavedQuery.Number => SoQLNumber.t
-      case Hole.SavedQuery.Boolean => SoQLBoolean.t
-      case Hole.SavedQuery.FixedTimestamp => SoQLFixedTimestamp.t
-      case Hole.SavedQuery.FloatingTimestamp => SoQLFloatingTimestamp.t
-    }
-
   def typeNameFor(typ: SoQLType): TypeName = typ.name
 
   def isOrdered(typ: SoQLType): Boolean = SoQLTypeClasses.Ordered(typ)

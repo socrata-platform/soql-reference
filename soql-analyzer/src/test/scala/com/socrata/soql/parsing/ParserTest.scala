@@ -27,8 +27,8 @@ class ParserTest extends WordSpec with MustMatchers {
   def numberLiteral(num: BigDecimal) = NumberLiteral(num)(NoPosition)
   def booleanLiteral(bool: Boolean) = BooleanLiteral(bool)(NoPosition)
   def nullLiteral = NullLiteral()(NoPosition)
-  def param(name: String, typ: Hole.SavedQuery.Type) = Hole.SavedQuery(HoleName(name), None, typ)(NoPosition)
-  def param(name: String, qualifier: String, typ: Hole.SavedQuery.Type) = Hole.SavedQuery(HoleName(name), Some(qualifier), typ)(NoPosition)
+  def param(name: String) = Hole.SavedQuery(HoleName(name), None)(NoPosition)
+  def param(name: String, qualifier: String) = Hole.SavedQuery(HoleName(name), Some(qualifier))(NoPosition)
 
   "Parsing" should {
     "require a full `between' clause" in {
@@ -180,15 +180,8 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "accept the various parameter synaxes" in {
-      parseParamExpression("""text_parameter("a")""") must equal (param("a", Hole.SavedQuery.Text))
-      parseParamExpression("""number_parameter("a")""") must equal (param("a", Hole.SavedQuery.Number))
-      parseParamExpression("""fixed_timestamp_parameter("a")""") must equal (param("a", Hole.SavedQuery.FixedTimestamp))
-      parseParamExpression("""floating_timestamp_parameter("a")""") must equal (param("a", Hole.SavedQuery.FloatingTimestamp))
-
-      parseParamExpression("""text_parameter("a", @aaaa-aaaa)""") must equal (param("a", "aaaa-aaaa", Hole.SavedQuery.Text))
-      parseParamExpression("""number_parameter("a", @aaaa-aaaa)""") must equal (param("a", "aaaa-aaaa", Hole.SavedQuery.Number))
-      parseParamExpression("""fixed_timestamp_parameter("a", @aaaa-aaaa)""") must equal (param("a", "aaaa-aaaa", Hole.SavedQuery.FixedTimestamp))
-      parseParamExpression("""floating_timestamp_parameter("a", @aaaa-aaaa)""") must equal (param("a", "aaaa-aaaa", Hole.SavedQuery.FloatingTimestamp))
+      parseParamExpression("""param("a")""") must equal (param("a"))
+      parseParamExpression("""param(@aaaa-aaaa, "a")""") must equal (param("a", "aaaa-aaaa"))
     }
 
   // def show[T](x: => T) {

@@ -398,27 +398,8 @@ object Hole {
     def doc = Doc("?" + name)
   }
 
-  case class SavedQuery(name: HoleName, view: Option[String], typ: SavedQuery.Type)(val position: Position) extends Hole {
-    def doc = (StringLiteral(name.name)(NoPosition).doc +: view.toSeq.map { table => d"@$table" }).
-      encloseNesting(d"${SavedQuery.nameOfType(typ).toString}(", Doc.Symbols.comma, d")")
-  }
-
-  object SavedQuery {
-    sealed abstract class Type
-    case object Text extends Type
-    case object Number extends Type
-    case object Boolean extends Type
-    case object FixedTimestamp extends Type
-    case object FloatingTimestamp extends Type
-
-    val typesOfName = Map[FunctionName, Type](
-      FunctionName("text_parameter") -> Hole.SavedQuery.Text,
-      FunctionName("number_parameter") -> Hole.SavedQuery.Number,
-      FunctionName("boolean_parameter") -> Hole.SavedQuery.Boolean,
-      FunctionName("fixed_timestamp_parameter") -> Hole.SavedQuery.FixedTimestamp,
-      FunctionName("floating_timestamp_parameter") -> Hole.SavedQuery.FloatingTimestamp
-    )
-
-    val nameOfType: Type => FunctionName = typesOfName.map { case (a, b) => (b, a) }.toMap
+  case class SavedQuery(name: HoleName, view: Option[String])(val position: Position) extends Hole {
+    def doc = (view.toSeq.map { table => d"@$table" } :+ StringLiteral(name.name)(NoPosition).doc).
+      encloseNesting(d"param(", Doc.Symbols.comma, d")")
   }
 }

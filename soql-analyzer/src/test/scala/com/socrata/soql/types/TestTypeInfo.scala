@@ -40,15 +40,6 @@ object TestTypeInfo extends TypeInfo[TestType] {
   def typeFor(name: TypeName) =
     TestType.typesByName.get(name)
 
-  def typeFor(typ: Hole.SavedQuery.Type) =
-    typ match {
-      case Hole.SavedQuery.Text => TestText
-      case Hole.SavedQuery.Number => TestNumber
-      case Hole.SavedQuery.Boolean => TestBoolean
-      case Hole.SavedQuery.FixedTimestamp => TestFixedTimestamp
-      case Hole.SavedQuery.FloatingTimestamp => TestFloatingTimestamp
-    }
-
   def typeNameFor(typ: TestType): TypeName = typ.name
 
   def isOrdered(typ: TestType) = typ.isOrdered

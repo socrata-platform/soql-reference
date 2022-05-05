@@ -14,7 +14,6 @@ trait TypeInfo[Type] {
   def nullLiteralExpr(pos: Position): Seq[CoreExpr[Nothing, Type]]
 
   def typeFor(name: TypeName): Option[Type]
-  def typeFor(paramType: Hole.SavedQuery.Type): Type
 
   def typeNameFor(typ: Type): TypeName
 
