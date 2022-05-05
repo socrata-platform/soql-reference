@@ -1163,14 +1163,28 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
+  // param_type("var") or param_type("var", @table)
   private def param(reader: Reader, typ: Hole.SavedQuery.Type): ParseResult[Expression] = {
     reader.first match {
       case s: tokens.StringLiteral =>
         reader.rest.first match {
+          case COMMA() =>
+            val r2 = reader.rest.rest
+            r2.first match {
+              case TableIdentifier(ti) =>
+                r2.rest.first match {
+                  case RPAREN() =>
+                    ParseResult(r2.rest.rest, Hole.SavedQuery(HoleName(s.value), Some(ti.drop(1)), typ)(s.position))
+                  case _ =>
+                    fail(r2.rest, RPAREN())
+                }
+              case _ =>
+                fail(r2, ATableIdentifier)
+            }
           case RPAREN() =>
-            ParseResult(reader.rest.rest, Hole.SavedQuery(HoleName(s.value), typ)(s.position))
+            ParseResult(reader.rest.rest, Hole.SavedQuery(HoleName(s.value), None, typ)(s.position))
           case _ =>
-            fail(reader.rest.rest, RPAREN())
+            fail(reader.rest.rest, RPAREN(), COMMA())
         }
       case _ =>
         fail(reader.rest, AStringLiteral)

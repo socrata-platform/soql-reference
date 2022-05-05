@@ -398,8 +398,9 @@ object Hole {
     def doc = Doc("?" + name)
   }
 
-  case class SavedQuery(name: HoleName, typ: SavedQuery.Type)(val position: Position) extends Hole {
-    def doc = FunctionCall(SavedQuery.nameOfType(typ), Seq(StringLiteral(name.name)(position)))(position, position).doc
+  case class SavedQuery(name: HoleName, view: Option[String], typ: SavedQuery.Type)(val position: Position) extends Hole {
+    def doc = (StringLiteral(name.name)(NoPosition).doc +: view.toSeq.map { table => d"@$table" }).
+      encloseNesting(d"${SavedQuery.nameOfType(typ).toString}(", Doc.Symbols.comma, d")")
   }
 
   object SavedQuery {
@@ -412,8 +413,8 @@ object Hole {
 
     val typesOfName = Map[FunctionName, Type](
       FunctionName("text_parameter") -> Hole.SavedQuery.Text,
-      FunctionName("number_paramter") -> Hole.SavedQuery.Number,
-      FunctionName("boolean_paramter") -> Hole.SavedQuery.Boolean,
+      FunctionName("number_parameter") -> Hole.SavedQuery.Number,
+      FunctionName("boolean_parameter") -> Hole.SavedQuery.Boolean,
       FunctionName("fixed_timestamp_parameter") -> Hole.SavedQuery.FixedTimestamp,
       FunctionName("floating_timestamp_parameter") -> Hole.SavedQuery.FloatingTimestamp
     )
