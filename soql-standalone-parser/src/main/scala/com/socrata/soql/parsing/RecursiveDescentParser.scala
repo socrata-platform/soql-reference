@@ -1187,7 +1187,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             fail(reader.rest, RPAREN())
         }
       case _ =>
-        fail(reader.rest.rest, ATableIdentifier, AStringLiteral)
+        fail(reader, ATableIdentifier, AStringLiteral)
     }
   }
 
