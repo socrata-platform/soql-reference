@@ -179,7 +179,7 @@ class ParserTest extends WordSpec with MustMatchers {
       x.selection.expressions.head.expression.toString must be (largeNumber)
     }
 
-    "accept the various parameter synaxes" in {
+    "accept the various parameter syntaxes" in {
       parseParamExpression("""param("a")""") must equal (param("a"))
       parseParamExpression("""param(@aaaa-aaaa, "a")""") must equal (param("a", "aaaa-aaaa"))
     }

@@ -1,6 +1,5 @@
 package com.socrata.soql.functions
 
-import com.socrata.soql.ast.Hole
 import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.typed
