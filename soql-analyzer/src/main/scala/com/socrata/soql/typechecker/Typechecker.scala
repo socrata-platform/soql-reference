@@ -94,7 +94,7 @@ class Typechecker[Type](val typeInfo: TypeInfo[Type], functionInfo: FunctionInfo
       Right(numberLiteralExpr(n, nl.position))
     case nl@NullLiteral() =>
       Right(nullLiteralExpr(nl.position))
-    case Hole(_) =>
+    case _ : Hole =>
       throw new UnexpectedHole()
   }
 

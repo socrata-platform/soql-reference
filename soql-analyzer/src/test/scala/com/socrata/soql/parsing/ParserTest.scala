@@ -5,10 +5,11 @@ import org.scalatest._
 import org.scalatest.MustMatchers
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions.BadParse
-import com.socrata.soql.environment.{ColumnName, FunctionName}
+import com.socrata.soql.environment.{ColumnName, FunctionName, HoleName}
 
 class ParserTest extends WordSpec with MustMatchers {
   def parseExpression(soql: String) = new Parser().expression(soql)
+  def parseParamExpression(soql: String) = new Parser(AbstractParser.Parameters(allowParamSpecialForms = true)).expression(soql)
 
   def parseFull(soql: String) = new Parser().unchainedSelectStatement(soql)
 
@@ -26,6 +27,8 @@ class ParserTest extends WordSpec with MustMatchers {
   def numberLiteral(num: BigDecimal) = NumberLiteral(num)(NoPosition)
   def booleanLiteral(bool: Boolean) = BooleanLiteral(bool)(NoPosition)
   def nullLiteral = NullLiteral()(NoPosition)
+  def param(name: String) = Hole.SavedQuery(HoleName(name), None)(NoPosition)
+  def param(name: String, qualifier: String) = Hole.SavedQuery(HoleName(name), Some(qualifier))(NoPosition)
 
   "Parsing" should {
     "require a full `between' clause" in {
@@ -174,6 +177,11 @@ class ParserTest extends WordSpec with MustMatchers {
         "10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002"
       val x = parseFull(s"select $largeNumber")
       x.selection.expressions.head.expression.toString must be (largeNumber)
+    }
+
+    "accept the various parameter syntaxes" in {
+      parseParamExpression("""param("a")""") must equal (param("a"))
+      parseParamExpression("""param(@aaaa-aaaa, "a")""") must equal (param("a", "aaaa-aaaa"))
     }
 
   // def show[T](x: => T) {

@@ -1159,6 +1159,38 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
+  // param("var") or param(@table, "var")
+  private def param(reader: Reader, pos: Position): ParseResult[Expression] = {
+    reader.first match {
+      case TableIdentifier(ti) =>
+        reader.rest.first match {
+          case COMMA() =>
+            reader.rest.rest.first match {
+              case tokens.StringLiteral(varName) =>
+                reader.rest.rest.rest.first match {
+                  case RPAREN() =>
+                    ParseResult(reader.rest.rest.rest.rest, Hole.SavedQuery(HoleName(varName), Some(ti.drop(1)))(pos))
+                  case _ =>
+                    fail(reader.rest.rest.rest, RPAREN())
+                }
+              case _ =>
+                fail(reader.rest.rest, AStringLiteral)
+            }
+          case _ =>
+            fail(reader.rest, COMMA())
+        }
+      case tokens.StringLiteral(varName) =>
+        reader.rest.first match {
+          case RPAREN() =>
+            ParseResult(reader.rest.rest, Hole.SavedQuery(HoleName(varName), None)(pos))
+          case _ =>
+            fail(reader.rest, RPAREN())
+        }
+      case _ =>
+        fail(reader, ATableIdentifier, AStringLiteral)
+    }
+  }
+
   private def identifierOrFuncall(reader: Reader, ident: Identifier): ParseResult[Expression] = {
     // we want to match
     //    id
@@ -1264,6 +1296,8 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       // original parser.  This would accept all kinds of nonsense like
       // `@gfdsg.:gsdfg(DISTINCT bleh)` and then mangle that into
       // `gsdfg_distinct(bleh)`
+      case ident@Identifier("param", false) if allowParamSpecialForms && reader.rest.first == LPAREN() =>
+        param(reader.rest.rest, ident.pos)
       case ident: Identifier =>
         identifierOrFuncall(reader.rest, ident)
       case ident: SystemIdentifier =>
@@ -1272,7 +1306,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         joinedColumn(reader.rest, table)
 
       case hole: HoleIdentifier if allowHoles =>
-        ParseResult(reader.rest, Hole(HoleName(hole.value))(hole.position))
+        ParseResult(reader.rest, Hole.UDF(HoleName(hole.value))(hole.position))
 
       case _ =>
         reader.resetAlternates()

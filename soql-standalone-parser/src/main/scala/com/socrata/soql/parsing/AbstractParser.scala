@@ -10,7 +10,8 @@ object AbstractParser {
   case class Parameters(allowJoins: Boolean = true,
                         systemColumnAliasesAllowed: Set[ColumnName] = Set.empty,
                         allowJoinFunctions: Boolean = true,
-                        allowHoles: Boolean = false)
+                        allowHoles: Boolean = false,
+                        allowParamSpecialForms: Boolean = false)
   val defaultParameters = new Parameters()
 }
 
