@@ -113,6 +113,7 @@ case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position:
     val labelledJoin =
       Select(
         distinct = false,
+        distinctOn = Nil,
         selection = Selection(None,
                               Seq(StarSelection(Some(expr), Nil)),
                               Nil),
@@ -123,6 +124,7 @@ case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position:
               Leaf(
                 Select(
                   distinct = false,
+                  distinctOn = Nil,
                   selection = Selection(None, Nil,
                                         udf.arguments.zip(params).map {
                                           case ((holeName, typ), expression) =>
@@ -250,6 +252,7 @@ case class UDF(arguments: Seq[(HoleName, TypeName)], body: BinaryTree[Select])
   */
 case class Select(
   distinct: Boolean,
+  distinctOn: Seq[Expression],
   selection: Selection,
   from: Option[TableName],
   joins: Seq[Join],
@@ -289,10 +292,18 @@ case class Select(
         Nil
       }
 
+    def distinctOnClause =
+      if (distinctOn.nonEmpty) {
+        Seq(((Doc("DISTINCT ON(") +: distinctOn.map(_.doc).punctuate(Doc(","))) :+ Doc(")")).sep.hang(2))
+      } else {
+        Nil
+      }
+
     val selectClause = Seq(
       Seq(d"SELECT"),
       hintClause,
       if(distinct) Seq(d"DISTINCT") else Nil,
+      distinctOnClause,
       selection.docs.punctuate(d",")
     ).flatten.sep.hang(2)
 
@@ -302,6 +313,7 @@ case class Select(
         case (Some(f), js) => Some((d"FROM ${f.toString}" +: js.map(_.doc)).sep.hang(2))
         case (None, js) => Some(js.map(_.doc).sep.hang(2))
       }
+
     def whereClause = where.map { w => Seq(d"WHERE", docCondition(w)).sep.hang(2) }
     def groupByClause =
       if(groupBys.nonEmpty) {
@@ -357,6 +369,7 @@ case class Select(
 
   def rewriteJoinFuncs(funcs: Map[TableName, UDF])(implicit aliasProvider: AliasProvider): Select =
     Select(distinct,
+           distinctOn,
            selection,
            from,
            joins.map(_.rewriteJoinFuncs(funcs, aliasProvider)),
@@ -371,6 +384,7 @@ case class Select(
 
   def replaceHoles(f: Hole => Expression): Select =
     Select(distinct,
+           distinctOn.map(_.replaceHoles(f)),
            selection.replaceHoles(f),
            from,
            joins.map(_.replaceHoles(f)),
@@ -385,6 +399,7 @@ case class Select(
 
   def collectHoles(f: PartialFunction[Hole, Expression]): Select =
     Select(distinct,
+           distinctOn.map(_.collectHoles(f)),
            selection.collectHoles(f),
            from,
            joins.map(_.collectHoles(f)),

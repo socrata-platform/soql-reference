@@ -118,7 +118,7 @@ abstract class AbstractCombinatorParser(parameters: AbstractParser.Parameters = 
             }
             tn
         }
-        Select(d, s, optTableName, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr, Seq.empty /* hint not supported */)
+        Select(d, Nil, s, optTableName, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr, Seq.empty /* hint not supported */)
     }
   }
 

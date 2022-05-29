@@ -27,7 +27,7 @@ private trait DeserializationDictionary[C, T] {
 }
 
 object AnalysisDeserializer {
-  val CurrentVersion = 10
+  val CurrentVersion = 11
   val NonEmptySeqVersion = 6
 
   // This is odd and for smooth deploy transition.
@@ -218,6 +218,8 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         OrderBy(expr, ascending, nullsLast)
       }
 
+    def readDistinctOn(): Seq[Expr] = readSeq { readExpr() }
+
     def readLimit(): Option[BigInt] =
       maybeRead {
         BigInt(dictionary.strings(in.readUInt32()))
@@ -306,9 +308,11 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val l = readLimit()
       val o = readOffset()
       val search = readSearch()
-      val hi = if (this.version != (CurrentVersion - 1)) readHint() else Seq.empty
+      val hi = readHint()
+      val don = if (this.version != (CurrentVersion - 1)) readDistinctOn() else Seq.empty
 
-      SoQLAnalysis(ig, d, s, f, j, w, gb, h, ob, l, o, search, hi)
+
+      SoQLAnalysis(ig, d, don, s, f, j, w, gb, h, ob, l, o, search, hi)
     }
 
     def read(): NonEmptySeq[SoQLAnalysis[C, T]] = {

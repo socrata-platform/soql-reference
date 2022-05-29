@@ -299,6 +299,22 @@ class ParserTest extends WordSpec with MustMatchers {
       x.joins(1).lateral must be (true)
     }
 
+    "distinct on" in {
+      val x = parseFull("select distinct on (col1, col2) col3, col4")
+      x.distinctOn must be (List(ident("col1"), ident("col2")))
+      x.selection.expressions.map(_.expression) must be (Vector(ident("col3"), ident("col4")))
+      x.distinct must be (false)
+      x.toString must be ("SELECT DISTINCT ON( `col1`, `col2` ) `col3`, `col4`")
+    }
+
+    "distinct" in {
+      val x = parseFull("select distinct col1, col2")
+      x.distinct must be (true)
+      x.distinctOn must be (Nil)
+      x.selection.expressions.map(_.expression) must be (Vector(ident("col1"), ident("col2")))
+      x.toString must be ("SELECT DISTINCT `col1`, `col2`")
+    }
+
     "select empty" in {
       val x = parseFull("select")
       val s = x.selection

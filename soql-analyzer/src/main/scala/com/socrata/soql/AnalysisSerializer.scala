@@ -331,9 +331,13 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       }
     }
 
+    private def writeDistinctOn(distinctOn: Seq[Expr]) =
+      writeSeq(distinctOn)(writeExpr)
+
     def writeAnalysis(analysis: SoQLAnalysis[C, T]): Unit = {
       val SoQLAnalysis(isGrouped,
                        distinct,
+                       distinctOn,
                        selection,
                        from,
                        join,
@@ -358,6 +362,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       writeOffset(offset)
       writeSearch(search)
       writeHint(hint)
+      writeDistinctOn(distinctOn)
     }
 
     def write(analyses: NonEmptySeq[SoQLAnalysis[C, T]]): Unit = {
