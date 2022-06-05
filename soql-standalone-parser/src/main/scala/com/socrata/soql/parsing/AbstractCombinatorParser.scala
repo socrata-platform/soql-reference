@@ -118,7 +118,8 @@ abstract class AbstractCombinatorParser(parameters: AbstractParser.Parameters = 
             }
             tn
         }
-        Select(d, Nil, s, optTableName, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr, Seq.empty /* hint not supported */)
+        val distinctiveness = if (d) FullyDistinct else Indistinct
+        Select(distinctiveness, s, optTableName, j, w, gb.getOrElse(Nil), h, ord, lim, off, sr, Seq.empty /* hint not supported */)
     }
   }
 

@@ -2,13 +2,12 @@ package com.socrata.soql.ast
 
 import scala.util.parsing.input.{NoPosition, Position}
 import scala.collection.immutable.VectorBuilder
-
-import java.util.UUID;
-
+import java.util.UUID
 import com.socrata.soql.environment._
 import Select._
-import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, UnionQuery, UnionAllQuery, IntersectQuery, MinusQuery}
+import com.socrata.soql.{BinaryTree, Compound, IntersectQuery, Leaf, MinusQuery, PipeQuery, UnionAllQuery, UnionQuery}
 import com.socrata.prettyprint.prelude._
+import com.socrata.soql.parsing.standalone_exceptions.BadParse
 
 /**
   * All joins must select from another table. A join may also join on sub-select. A join on a sub-select requires an
@@ -112,8 +111,7 @@ case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position:
     val singleRowFrom = Some(TableName(TableName.SingleRow))
     val labelledJoin =
       Select(
-        distinct = false,
-        distinctOn = Nil,
+        distinct = Indistinct,
         selection = Selection(None,
                               Seq(StarSelection(Some(expr), Nil)),
                               Nil),
@@ -123,8 +121,7 @@ case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position:
             JoinQuery(
               Leaf(
                 Select(
-                  distinct = false,
-                  distinctOn = Nil,
+                  distinct = Indistinct,
                   selection = Selection(None, Nil,
                                         udf.arguments.zip(params).map {
                                           case ((holeName, typ), expression) =>
@@ -251,8 +248,7 @@ case class UDF(arguments: Seq[(HoleName, TypeName)], body: BinaryTree[Select])
   *   List(select_id_a, select_id)
   */
 case class Select(
-  distinct: Boolean,
-  distinctOn: Seq[Expression],
+  distinct: Distinctiveness,
   selection: Selection,
   from: Option[TableName],
   joins: Seq[Join],
@@ -292,18 +288,18 @@ case class Select(
         Nil
       }
 
-    def distinctOnClause =
-      if (distinctOn.nonEmpty) {
-        Seq(((Doc("DISTINCT ON(") +: distinctOn.map(_.doc).punctuate(Doc(","))) :+ Doc(")")).sep.hang(2))
-      } else {
-        Nil
+    def distinctClause =
+      distinct match {
+        case Indistinct => Nil
+        case FullyDistinct => Seq(d"DISTINCT")
+        case DistinctOn(exprs) =>
+          Seq(((Doc("DISTINCT ON(") +: exprs.map(_.doc).punctuate(Doc(","))) :+ Doc(")")).sep.hang(2))
       }
 
     val selectClause = Seq(
       Seq(d"SELECT"),
       hintClause,
-      if(distinct) Seq(d"DISTINCT") else Nil,
-      distinctOnClause,
+      distinctClause,
       selection.docs.punctuate(d",")
     ).flatten.sep.hang(2)
 
@@ -369,7 +365,6 @@ case class Select(
 
   def rewriteJoinFuncs(funcs: Map[TableName, UDF])(implicit aliasProvider: AliasProvider): Select =
     Select(distinct,
-           distinctOn,
            selection,
            from,
            joins.map(_.rewriteJoinFuncs(funcs, aliasProvider)),
@@ -382,9 +377,22 @@ case class Select(
            search,
            hints)
 
+  def collectHoles(distinct: Distinctiveness, f: PartialFunction[Hole, Expression]): Distinctiveness = {
+    distinct match {
+      case DistinctOn(exprs) => DistinctOn(exprs.map(_.collectHoles(f)))
+      case _ => distinct
+    }
+  }
+
+  def replaceHoles(distinct: Distinctiveness, f: Hole => Expression): Distinctiveness = {
+    distinct match {
+      case DistinctOn(exprs) => DistinctOn(exprs.map(_.replaceHoles(f)))
+      case _ => distinct
+    }
+  }
+
   def replaceHoles(f: Hole => Expression): Select =
-    Select(distinct,
-           distinctOn.map(_.replaceHoles(f)),
+    Select(replaceHoles(distinct, f),
            selection.replaceHoles(f),
            from,
            joins.map(_.replaceHoles(f)),
@@ -398,8 +406,7 @@ case class Select(
            hints)
 
   def collectHoles(f: PartialFunction[Hole, Expression]): Select =
-    Select(distinct,
-           distinctOn.map(_.collectHoles(f)),
+    Select(collectHoles(distinct, f),
            selection.collectHoles(f),
            from,
            joins.map(_.collectHoles(f)),
@@ -422,6 +429,20 @@ case class Select(
 
   def toStringWithFrom(fromTable: TableName): String = {
     docWithFrom(Some(fromTable)).layoutSmart(LayoutOptions(pageWidth = PageWidth.Unbounded)).toString
+  }
+
+  def validate(): Select = {
+    distinct match {
+      case DistinctOn(exprs) if orderBys.nonEmpty =>
+        val orderBySet = orderBys.map(_.expression).toSet
+        val distinctNotInOrderBy = (exprs.toSet -- orderBySet)
+        if (distinctNotInOrderBy.nonEmpty) {
+          throw new BadParse("SELECT DISTINCT ON expressions must match initial ORDER BY expressions", distinctNotInOrderBy.head.position)
+        } else {
+          this
+        }
+      case _ => this
+    }
   }
 }
 

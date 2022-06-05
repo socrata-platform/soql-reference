@@ -29,6 +29,7 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
   type Expr = CoreExpr[C, T]
   type Order = OrderBy[C, T]
   type THint = Hint[C, T]
+  type TDistinctiveness = Distinctiveness[C, T]
 
   private class SerializationDictionaryImpl extends SerializationDictionary[C, T] {
     private def makeMap[A] = new TObjectIntHashMap[A](Constants.DEFAULT_CAPACITY, Constants.DEFAULT_LOAD_FACTOR, -1)
@@ -207,9 +208,6 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
     private def writeGrouped(isGrouped: Boolean) =
       out.writeBoolNoTag(isGrouped)
 
-    private def writeDistinct(distinct: Boolean) =
-      out.writeBoolNoTag(distinct)
-
     private def writeSelection(selection: OrderedMap[ColumnName, Expr]): Unit = {
       writeSeq(selection) { case (col, expr) =>
         out.writeUInt32NoTag(dictionary.registerLabel(col))
@@ -331,13 +329,21 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       }
     }
 
-    private def writeDistinctOn(distinctOn: Seq[Expr]) =
-      writeSeq(distinctOn)(writeExpr)
+    private def writeDistinct(distinct: TDistinctiveness): Unit = {
+      distinct match {
+        case _: Indistinct[_, _] =>
+          out.writeUInt32NoTag(1)
+        case _: FullyDistinct[_, _] =>
+          out.writeUInt32NoTag(2)
+        case DistinctOn(exprs) =>
+          out.writeUInt32NoTag(3)
+          writeSeq(exprs)(writeExpr)
+      }
+    }
 
     def writeAnalysis(analysis: SoQLAnalysis[C, T]): Unit = {
       val SoQLAnalysis(isGrouped,
                        distinct,
-                       distinctOn,
                        selection,
                        from,
                        join,
@@ -362,7 +368,6 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
       writeOffset(offset)
       writeSearch(search)
       writeHint(hint)
-      writeDistinctOn(distinctOn)
     }
 
     def write(analyses: NonEmptySeq[SoQLAnalysis[C, T]]): Unit = {

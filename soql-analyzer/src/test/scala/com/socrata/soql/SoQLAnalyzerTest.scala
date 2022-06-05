@@ -14,7 +14,7 @@ import com.socrata.soql.parsing.{Parser, StandaloneParser}
 import com.socrata.soql.typechecker.Typechecker
 import com.socrata.soql.types._
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.typed.{ColumnRef, FunctionCall}
+import com.socrata.soql.typed.{ColumnRef, FullyDistinct, FunctionCall, Indistinct}
 
 class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropertyChecks {
   val datasetCtx = new DatasetContext[TestType] {
@@ -89,7 +89,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
     analysis.limit must be (None)
     analysis.offset must be (None)
     analysis.isGrouped must be (false)
-    analysis.distinct must be (false)
+    analysis.distinct.isInstanceOf[Indistinct[_, _]] must be (true)
   }
 
   test("analysis succeeds in a maximal group-by query") {
@@ -138,12 +138,12 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
   }
 
   test("Giving no values to the split-query analyzer returns the equivalent of `SELECT *'") {
-    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, None, None, None, None, None, None, None, None)(Map(TableName.PrimaryTable.qualifier -> datasetCtx))
+    val analysis = analyzer.analyzeSplitQuery(None, None, None, None, None, None, None, None, None, None, None)(Map(TableName.PrimaryTable.qualifier -> datasetCtx))
     analysis must equal (analyzer.analyzeUnchainedQuery("SELECT *"))
   }
 
   test("Putting an aggregate in the order-by slot causes aggregation to occur") {
-    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, None, None, None, Some("max(visits)"), None, None, None, None)
+    val analysis = analyzer.analyzeSplitQuery(None, None, None, None, None, None, Some("max(visits)"), None, None, None, None)
     analysis must equal (analyzer.analyzeUnchainedQuery("SELECT count(*) ORDER BY max(visits)"))
   }
 
@@ -151,7 +151,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
     val computed = "name_first || ' ' || name_last"
     val sep = ", "
     val uncomputed = "visits"
-    val analysis = analyzer.analyzeSplitQuery(false, None, None, None, None, Some(computed + sep + uncomputed), None, None, None, None, None, None)
+    val analysis = analyzer.analyzeSplitQuery(None, None, None, None, Some(computed + sep + uncomputed), None, None, None, None, None, None)
     analysis must equal (analyzer.analyzeUnchainedQuery("SELECT "+computed+", "+uncomputed+", count(*) GROUP BY "+computed+", "+uncomputed))
     analysis.selection(ColumnName("visits")).position.column must equal (1 + computed.length + sep.length)
   }
@@ -405,7 +405,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
       ColumnName("name_last") -> typedExpression("name_last"),
       ColumnName("visits") -> typedExpression("visits")
     ))
-    analysis.distinct must be (true)
+    analysis.distinct.isInstanceOf[FullyDistinct[_, _]] must be (true)
   }
 
   test("alias reuse") {

@@ -22,6 +22,14 @@ class ParserTest extends WordSpec with MustMatchers {
       case e: BadParse => e.message must equal (expectedMsg)
     }
 
+  def expectParseFullFailure(expectedMsg: String, soql: String) =
+    try {
+      new StandaloneParser().binaryTreeSelect(soql)
+      fail("Unexpected success")
+    } catch {
+      case e: BadParse => e.message must equal (expectedMsg)
+    }
+
   def ident(name: String) = ColumnOrAliasRef(None, ColumnName(name))(NoPosition)
   def functionCall(name: FunctionName, args: Seq[Expression], filter: Option[Expression], window: Option[WindowFunctionInfo]) = FunctionCall(name, args, filter, window)(NoPosition, NoPosition)
   def stringLiteral(s: String) = StringLiteral(s)(NoPosition)
@@ -301,18 +309,27 @@ class ParserTest extends WordSpec with MustMatchers {
 
     "distinct on" in {
       val x = parseFull("select distinct on (col1, col2) col3, col4")
-      x.distinctOn must be (List(ident("col1"), ident("col2")))
+      x.distinct must be (DistinctOn(List(ident("col1"), ident("col2"))))
       x.selection.expressions.map(_.expression) must be (Vector(ident("col3"), ident("col4")))
-      x.distinct must be (false)
       x.toString must be ("SELECT DISTINCT ON( `col1`, `col2` ) `col3`, `col4`")
+    }
+
+    "distinct on order by" in {
+      val x = parseFull("select distinct on (col1, col2) col3, col4 order by col2, col1")
+      x.distinct must be (DistinctOn(List(ident("col1"), ident("col2"))))
+      x.selection.expressions.map(_.expression) must be (Vector(ident("col3"), ident("col4")))
+      x.toString must be ("SELECT DISTINCT ON( `col1`, `col2` ) `col3`, `col4` ORDER BY `col2` ASC NULL LAST, `col1` ASC NULL LAST")
     }
 
     "distinct" in {
       val x = parseFull("select distinct col1, col2")
-      x.distinct must be (true)
-      x.distinctOn must be (Nil)
+      x.distinct must be (FullyDistinct)
       x.selection.expressions.map(_.expression) must be (Vector(ident("col1"), ident("col2")))
       x.toString must be ("SELECT DISTINCT `col1`, `col2`")
+    }
+
+    "reject distinct on not in order by." in {
+      expectParseFullFailure("SELECT DISTINCT ON expressions must match initial ORDER BY expressions", "SELECT DISTINCT ON(col1) col2 ORDER BY col2")
     }
 
     "select empty" in {

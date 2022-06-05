@@ -40,6 +40,7 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
   type Expr = CoreExpr[C, T]
   type Order = OrderBy[C, T]
   type THint = Hint[C, T]
+  type TDistinctiveness = Distinctiveness[C, T]
 
   private class DeserializationDictionaryImpl(typesRegistry: TIntObjectHashMap[T],
                                       stringsRegistry: TIntObjectHashMap[String],
@@ -150,7 +151,8 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
     def readIsGrouped(): Boolean = in.readBool()
 
-    def readDistinct(): Boolean = in.readBool()
+    // TODO: temporarily for backward compatibility.  to be removed
+    def readSimpleDistinct(): Boolean = in.readBool()
 
     def maybeRead[A](f: => A): Option[A] = {
       if (in.readBool()) Some(f)
@@ -218,7 +220,17 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
         OrderBy(expr, ascending, nullsLast)
       }
 
-    def readDistinctOn(): Seq[Expr] = readSeq { readExpr() }
+    def readDistinct(): TDistinctiveness = {
+      in.readUInt32() match {
+        case 1 =>
+          new Indistinct[C, T]
+        case 2 =>
+          new FullyDistinct[C, T]
+        case 3 =>
+          val exprs = readSeq { readExpr() }
+          DistinctOn(exprs)
+      }
+    }
 
     def readLimit(): Option[BigInt] =
       maybeRead {
@@ -297,7 +309,13 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
 
     def readAnalysis(): SoQLAnalysis[C, T] = {
       val ig = readIsGrouped()
-      val d = readDistinct()
+      val d =
+        if (this.version != (CurrentVersion - 1)) {
+          readDistinct()
+        } else {
+          if (readSimpleDistinct()) FullyDistinct[C, T]()
+          else Indistinct[C, T]()
+        }
       val s = readSelection()
       val f = if (this.version > NonEmptySeqVersion || this.version == TestVersionV5) readFrom() else None
       val j = readJoins()
@@ -309,10 +327,10 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
       val o = readOffset()
       val search = readSearch()
       val hi = readHint()
-      val don = if (this.version != (CurrentVersion - 1)) readDistinctOn() else Seq.empty
 
 
-      SoQLAnalysis(ig, d, don, s, f, j, w, gb, h, ob, l, o, search, hi)
+
+      SoQLAnalysis(ig, d, s, f, j, w, gb, h, ob, l, o, search, hi)
     }
 
     def read(): NonEmptySeq[SoQLAnalysis[C, T]] = {
