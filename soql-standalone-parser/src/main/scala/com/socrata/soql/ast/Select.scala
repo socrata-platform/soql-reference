@@ -434,7 +434,7 @@ case class Select(
   def validate(): Select = {
     distinct match {
       case DistinctOn(exprs) if orderBys.nonEmpty =>
-        val orderBySet = orderBys.map(_.expression).toSet
+        val orderBySet = orderBys.take(exprs.size).map(_.expression).toSet
         val distinctNotInOrderBy = (exprs.toSet -- orderBySet)
         if (distinctNotInOrderBy.nonEmpty) {
           throw new BadParse("SELECT DISTINCT ON expressions must match initial ORDER BY expressions", distinctNotInOrderBy.head.position)
