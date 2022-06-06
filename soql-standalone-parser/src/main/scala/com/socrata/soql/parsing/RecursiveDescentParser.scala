@@ -242,6 +242,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   def expression(soql: String): Expression = parseFull(topLevelExpr, soql)
   def orderings(soql: String): Seq[OrderBy] = parseFull(orderingList, soql)
   def groupBys(soql: String): Seq[Expression] = parseFull(commaSeparatedExprs, soql)
+  def distinct(soql: String): Distinctiveness = parseFull(distinctiveness, soql)
 
   def selectStatement(soql: String): NonEmptySeq[Select] = parseFull(pipedSelect, soql)
   def unchainedSelectStatement(soql: String): Select = parseFull(select, soql)
@@ -290,7 +291,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     reader.first match {
       case SELECT() =>
         val ParseResult(r1, h) = hints(reader.rest)
-        val ParseResult(r2, d) = distinct(r1)
+        val ParseResult(r2, distinct) = distinctiveness(r1)
         val ParseResult(r3, selected) = selectList(r2)
         val ParseResult(r4, fromClause) = from(r3)
         val ParseResult(r5, joinClause) = if(allowJoins) joinList(r4) else ParseResult(r4, Seq.empty)
@@ -299,7 +300,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r8, havingClause) = having(r7)
         val ParseResult(r9, (orderByClause, searchClause)) = orderByAndSearch(r8)
         val ParseResult(r10, (limitClause, offsetClause)) = limitOffset(r9)
-        ParseResult(r10, Select(d, selected, fromClause, joinClause, whereClause, groupByClause, havingClause, orderByClause, limitClause, offsetClause, searchClause, h))
+        ParseResult(r10, Select(distinct, selected, fromClause, joinClause, whereClause, groupByClause, havingClause, orderByClause, limitClause, offsetClause, searchClause, h).validate())
       case _ =>
         fail(reader, SELECT())
     }
@@ -493,6 +494,33 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       case _ =>
         reader.addAlternates(LPAREN_SET)
         ParseResult(reader, Nil)
+    }
+  }
+
+  protected final def distinctiveness(reader: Reader): ParseResult[Distinctiveness] = {
+    reader.first match {
+      case DISTINCT() =>
+        reader.rest.first match {
+          case ON() =>
+            reader.rest.rest.first match {
+              case LPAREN() =>
+                val pr = commaSeparatedExprs(reader.rest.rest.rest)
+                pr.reader.first match {
+                  case RPAREN() =>
+                    DistinctOn(pr.value)
+                    ParseResult(pr.reader.rest, DistinctOn(pr.value))
+                  case _ =>
+                    fail(reader, RPAREN())
+                }
+              case _ =>
+                fail(reader, LPAREN())
+            }
+          case _ =>
+            ParseResult(reader.rest, FullyDistinct)
+        }
+      case _ =>
+        reader.addAlternates(DISTINCT_SET)
+        ParseResult(reader, Indistinct)
     }
   }
 

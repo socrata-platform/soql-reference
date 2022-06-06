@@ -7,7 +7,6 @@ import scala.util.parsing.input.{NoPosition, Position}
 import com.socrata.soql.aliases.AliasAnalysis
 import com.socrata.soql.aggregates.AggregateChecker
 import com.socrata.soql.ast._
-import com.socrata.soql.typed
 import com.socrata.soql.parsing.{AbstractParser, Parser}
 import com.socrata.soql.typechecker._
 import com.socrata.soql.environment._
@@ -32,6 +31,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   type THint = typed.Hint[ColumnName, Type]
   type Qualifier = String
   type AnalysisContext = Map[Qualifier, DatasetContext[Type]]
+  type TDistinctiveness = typed.Distinctiveness[ColumnName, Type]
 
   val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLAnalyzer[_]])
 
@@ -143,7 +143,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     // TODO: Enhance resolution of column name conflict from different tables in chained SoQLs
     val mergedSelection = selections.reduce(_ ++ _)
     SoQLAnalysis(isGrouped = false,
-                 distinct = false,
+                 distinct = typed.Indistinct[ColumnName, Type](),
                  selection = mergedSelection,
                  from = None,
                  joins = Nil,
@@ -163,7 +163,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     * If it is an aggregate query, a selection list made up of the expressions from `groupBy` (if provided) together
     * with "`count(*)`" is generated.
     *
-    * @param distinct   Reduce identical tuples into one.
+    * @param distinctive   Reduce identical tuples into one.
     * @param selection  A selection list.
     * @param joins       A join list.
     * @param where      An expression to be used as the query's WHERE clause.
@@ -175,7 +175,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     * @param sourceFrom The analysis-chain of the query this query is based upon, if applicable.
     * @throws com.socrata.soql.exceptions.SoQLException if the query is syntactically or semantically erroneous.
     * @return The analysis of the query.  Note this should be appended to `sourceFrom` to form a full query-chain. */
-  def analyzeSplitQuery(distinct: Boolean,
+  def analyzeSplitQuery(distinct: Option[String],
                         selection: Option[String],
                         joins: Option[String],
                         where: Option[String],
@@ -195,7 +195,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       if(sourceFrom.isEmpty) baseAnalysis
       else sourceFrom.last
 
-    def dispatch(distinct: Boolean, selection: Option[Selection],
+    def dispatch(distinct: Distinctiveness, selection: Option[Selection],
                  joins: List[Join],
                  where: Option[Expression], groupBys: List[Expression], having: Option[Expression], orderBys: List[OrderBy],
                  limit: Option[BigInt], offset: Option[BigInt], search: Option[String], hints: List[Hint]) =
@@ -205,7 +205,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       }
 
     dispatch(
-      distinct,
+      distinct.map(p.distinct).getOrElse(Indistinct),
       selection.map(p.selection),
       joins.map(p.joins).toList.flatten,
       where.map(p.expression),
@@ -220,7 +220,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   }
 
   def analyzeNoSelectionInOuterSelectionContext(lastQuery: Analysis,
-                                                distinct: Boolean,
+                                                distinct: Distinctiveness,
                                                 joins: List[Join],
                                                 where: Option[Expression],
                                                 groupBys: List[Expression],
@@ -263,7 +263,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   }
 
   // TODO: do we need this? wat
-  def analyzeNoSelection(distinct: Boolean,
+  def analyzeNoSelection(distinct: Distinctiveness,
                          joins: List[Join],
                          where: Option[Expression],
                          groupBys: List[Expression],
@@ -296,6 +296,12 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     val t4 = System.nanoTime()
     val isGrouped = aggregateChecker(Nil, checkedWhere, checkedGroupBy, checkedHaving, checkedOrderBy.map(_._2))
     val t5 = System.nanoTime()
+    val checkedDistinct = distinct match {
+      case Indistinct => typed.Indistinct[ColumnName, Type]()
+      case FullyDistinct => typed.FullyDistinct[ColumnName, Type]()
+      case DistinctOn(exprs) => typed.DistinctOn(exprs.map(typecheck))
+    }
+    val t6 = System.nanoTime()
 
     if(log.isTraceEnabled) {
       log.trace("typechecking WHERE took {}ms", ns2ms(t1 - t0))
@@ -303,6 +309,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       log.trace("typechecking HAVING took {}ms", ns2ms(t3 - t2))
       log.trace("typechecking ORDER BY took {}ms", ns2ms(t4 - t3))
       log.trace("checking for aggregation took {}ms", ns2ms(t5 - t4))
+      log.trace("typechecking for DISTINCT took {}ms", ns2ms(t6 - t5))
     }
 
     val (names, typedSelectedExpressions) = if(isGrouped) {
@@ -346,7 +353,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
 
     finishAnalysis(
       isGrouped,
-      distinct,
+      checkedDistinct,
       OrderedMap(names.zip(typedSelectedExpressions): _*),
       None,
       checkedJoin,
@@ -463,6 +470,12 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
     val t7 = System.nanoTime()
     val checkedHint = query.hints.map { h => typechecker.typecheckHint(h, typedAliases, query.from) }
     val t8 = System.nanoTime()
+    val checkedDistinctOn = query.distinct match {
+      case DistinctOn(exprs) => typed.DistinctOn(exprs.map(typecheck))
+      case Indistinct => typed.Indistinct[ColumnName, Type]()
+      case FullyDistinct => typed.FullyDistinct[ColumnName, Type]()
+    }
+    val t9 = System.nanoTime()
 
     if(log.isTraceEnabled) {
       log.trace("alias analysis took {}ms", ns2ms(t1 - t0))
@@ -473,9 +486,10 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
       log.trace("typechecking ORDER BY took {}ms", ns2ms(t6 - t5))
       log.trace("checking for aggregation took {}ms", ns2ms(t7 - t6))
       log.trace("typechecking OPTION took {}ms", ns2ms(t8 - t7))
+      log.trace("typechecking DISTINCT ON took {}ms", ns2ms(t9 - t8))
     }
 
-    finishAnalysis(isGrouped, query.distinct,
+    finishAnalysis(isGrouped, checkedDistinctOn,
                    outputs,
                    query.from,
                    checkedJoin, checkedWhere, checkedGroupBy, checkedHaving, checkedOrderBy,
@@ -483,7 +497,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   }
 
   def finishAnalysis(isGrouped: Boolean,
-                     distinct: Boolean,
+                     distinct: TDistinctiveness,
                      output: OrderedMap[ColumnName, Expr],
                      from: Option[TableName],
                      joins: Seq[typed.Join[ColumnName, Type]],
@@ -624,7 +638,7 @@ case class JoinAnalysis[ColumnId, Type](subAnalysis: Either[TableName, SubAnalys
   *                  and the groupBy
   */
 case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
-                                        distinct: Boolean,
+                                        distinct: typed.Distinctiveness[ColumnId, Type],
                                         selection: OrderedMap[ColumnName, typed.CoreExpr[ColumnId, Type]],
                                         from: Option[TableName],
                                         joins: Seq[typed.Join[ColumnId, Type]],
@@ -643,6 +657,14 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
    * Normally, the version that takes 4 parameters should be used
    */
   def mapColumnIds[NewColumnId](f: (ColumnId, Qualifier) => NewColumnId): SoQLAnalysis[NewColumnId, Type] = {
+
+    val mappedDistinct = distinct match {
+      case typed.DistinctOn(exprs: Seq[typed.CoreExpr[ColumnId, Type]]) =>
+        typed.DistinctOn(exprs.map(_.mapColumnIds(f)))
+      case _: typed.Indistinct[_, _] => typed.Indistinct[NewColumnId, Type]()
+      case _: typed.FullyDistinct[_, _] => typed.FullyDistinct[NewColumnId, Type]()
+    }
+
     copy(
       selection = selection.withValuesMapped(_.mapColumnIds(f)),
       joins = joins.map(_.mapColumnIds(f)),
@@ -650,6 +672,7 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
       groupBys = groupBys.map(_.mapColumnIds(f)),
       having = having.map(_.mapColumnIds(f)),
       orderBys = orderBys.map(_.mapColumnIds(f)),
+      distinct = mappedDistinct,
       hints = hints.map(_.mapColumnIds(f))
     )
   }
@@ -712,6 +735,13 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
       (nextAccQColumnIdNewColumnIdMap, accJoins :+ mappedJoin)
     }
 
+    val mappedDistinct = distinct match {
+      case typed.DistinctOn(expr) =>
+        typed.DistinctOn(expr.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))))
+      case _: typed.Indistinct[_, _] => typed.Indistinct[NewColumnId, Type]()
+      case _: typed.FullyDistinct[_, _] => typed.FullyDistinct[NewColumnId, Type]()
+    }
+
     copy(
       selection = selection.withValuesMapped(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
       joins = mappedJoins,
@@ -719,13 +749,19 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
       groupBys = groupBys.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
       having = having.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
       orderBys = orderBys.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap))),
+      distinct = mappedDistinct,
       hints = hints.map(_.mapColumnIds(Function.untupled(qColumnIdNewColumnIdWithJoinsMap)))
     )
   }
 
   private def toString(from: Option[TableName]): String = {
     val hintStr = itrToString(Some("HINT("), hints, ", ", Some(")"))
-    val distinctStr = if (distinct) Some("DISTINCT") else None
+    val distinctStr = distinct match {
+      case _: typed.Indistinct[_, _] => None
+      case _: typed.FullyDistinct[_, _] => Some("DISTINCT")
+      case typed.DistinctOn(exprs) =>
+        itrToString(Some("DISTINCT ON ("), exprs, ", ", Some(")"))
+    }
     val selectionStr = if (selection.nonEmpty) Some(selection.toString) else None
     val fromStr = this.from.orElse(from).map(t => s"FROM $t")
     val joinsStr = itrToString(None, joins.map(_.toString), " ", None)
@@ -797,8 +833,8 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   private def tryMerge(a: Analysis, b: Analysis): Option[Analysis] = (a, b) match {
     case (_, b) if b.hints.exists(_.isInstanceOf[typed.NoChainMerge]) => None
     case (a, _) if (hasWindowFunction(a)) => None
-    case (SoQLAnalysis(aIsGroup, false, aSelect, aFrom, Nil, aWhere, aGroup, aHaving, aOrder, aLim, aOff, None, Nil),
-          SoQLAnalysis(false,    false, bSelect, None, bJoins, None,   Nil,   None,    Nil,   bLim, bOff, None, Nil)) if
+    case (SoQLAnalysis(aIsGroup, aIndistinct: typed.Indistinct[_, _], aSelect, aFrom, Nil, aWhere, aGroup, aHaving, aOrder, aLim, aOff, None, Nil),
+          SoQLAnalysis(false, _: typed.Indistinct[_, _], bSelect, None, bJoins, None,   Nil,   None,    Nil,   bLim, bOff, None, Nil)) if
           // Do not merge when the previous soql is grouped and the next soql has joins
           // select g, count(x) as cx group by g |> select g, cx, @b.a join @b on @b.g=g
           // Newly introduced columns from joins cannot be merged and brought in w/o grouping and aggregate functions.
@@ -808,7 +844,7 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
       // we can merge a change of only selection and limit + offset onto anything
       val (newLim, newOff) = Merger.combineLimits(aLim, aOff, bLim, bOff)
       Some(SoQLAnalysis(isGrouped = aIsGroup,
-                        distinct = false,
+                        distinct = aIndistinct,
                         selection = mergeSelection(aSelect, bSelect),
                         from = aFrom,
                         joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on), lateral = join.lateral)),
@@ -820,11 +856,11 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         offset = newOff,
                         search = None,
                         hints = Seq.empty))
-    case (SoQLAnalysis(false, false, aSelect, aFrom, Nil, aWhere, Nil, None, aOrder, None, None, aSearch, Nil),
-          SoQLAnalysis(false, false, bSelect, None, bJoins, bWhere, Nil, None, bOrder, bLim, bOff, None, Nil)) =>
+    case (SoQLAnalysis(false, aindis: typed.Indistinct[_, _], aSelect, aFrom, Nil, aWhere, Nil, None, aOrder, None, None, aSearch, Nil),
+          SoQLAnalysis(false, _: typed.Indistinct[_, _], bSelect, None, bJoins, bWhere, Nil, None, bOrder, bLim, bOff, None, Nil)) =>
       // Can merge a change of filter or order only if no window was specified on the left
       Some(SoQLAnalysis(isGrouped = false,
-                        distinct = false,
+                        distinct = aindis,
                         selection = mergeSelection(aSelect, bSelect),
                         from = aFrom,
                         joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on), lateral = join.lateral)),
@@ -836,11 +872,11 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         offset = bOff,
                         search = aSearch,
                         hints = Seq.empty))
-    case (SoQLAnalysis(false, false, aSelect, aFrom, Nil, aWhere, Nil,     None,    _,      None, None, None, Nil),
-          SoQLAnalysis(true, false, bSelect, None, bJoins, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, Nil)) =>
+    case (SoQLAnalysis(false, aIndistinct: typed.Indistinct[_, _], aSelect, aFrom, Nil, aWhere, Nil,     None,    _,      None, None, None, Nil),
+          SoQLAnalysis(true, _: typed.Indistinct[_, _], bSelect, None, bJoins, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, Nil)) =>
       // an aggregate on a non-aggregate
       Some(SoQLAnalysis(isGrouped = true,
-                        distinct = false,
+                        distinct = aIndistinct,
                         selection = mergeSelection(aSelect, bSelect),
                         from = aFrom,
                         joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on), lateral = join.lateral)),
@@ -852,13 +888,13 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         offset = bOff,
                         search = None,
                         hints = Seq.empty))
-    case (SoQLAnalysis(true,  false, aSelect, aFrom, Nil, aWhere, aGroup, aHaving, aOrder, None, None, None, Nil),
-          SoQLAnalysis(false, false, bSelect, None, Nil, bWhere, Nil,      None,    bOrder, bLim, bOff, None, Nil))
+    case (SoQLAnalysis(true, aIndistinct: typed.Indistinct[_, _], aSelect, aFrom, Nil, aWhere, aGroup, aHaving, aOrder, None, None, None, Nil),
+          SoQLAnalysis(false, _: typed.Indistinct[_, _], bSelect, None, Nil, bWhere, Nil,      None,    bOrder, bLim, bOff, None, Nil))
           if !aGroup.exists(hasLiteral)
           =>
       // a non-aggregate on an aggregate -- merge the WHERE of the second with the HAVING of the first
       Some(SoQLAnalysis(isGrouped = true,
-                        distinct = false,
+                        distinct = aIndistinct,
                         selection = mergeSelection(aSelect, bSelect),
                         from = aFrom,
                         joins = Nil,
