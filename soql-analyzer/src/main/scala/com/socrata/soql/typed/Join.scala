@@ -36,22 +36,35 @@ sealed trait Join[ColumnId, Type] {
   // joins are simple if there is no subAnalysis, e.g. "join @aaaa-aaaa[ as a]"
   def isSimple: Boolean = from.subAnalysis.isLeft
 
+  def mapExpressions(f: CoreExpr[ColumnId, Type] => CoreExpr[ColumnId, Type]): Join[ColumnId, Type]
 }
 
 case class InnerJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type], lateral: Boolean) extends Join[ColumnId, Type] {
   val typ: JoinType = InnerJoinType
+
+  def mapExpressions(f: CoreExpr[ColumnId, Type] => CoreExpr[ColumnId, Type]) =
+    InnerJoin(from.mapExpressions(f), f(on), lateral)
 }
 
 case class LeftOuterJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type], lateral: Boolean) extends Join[ColumnId, Type] {
   val typ: JoinType = LeftOuterJoinType
+
+  def mapExpressions(f: CoreExpr[ColumnId, Type] => CoreExpr[ColumnId, Type]) =
+    LeftOuterJoin(from.mapExpressions(f), f(on), lateral)
 }
 
 case class RightOuterJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type], lateral: Boolean) extends Join[ColumnId, Type] {
   val typ: JoinType = RightOuterJoinType
+
+  def mapExpressions(f: CoreExpr[ColumnId, Type] => CoreExpr[ColumnId, Type]) =
+    RightOuterJoin(from.mapExpressions(f), f(on), lateral)
 }
 
 case class FullOuterJoin[ColumnId, Type](from: JoinAnalysis[ColumnId, Type], on: CoreExpr[ColumnId, Type], lateral: Boolean) extends Join[ColumnId, Type] {
   val typ: JoinType = FullOuterJoinType
+
+  def mapExpressions(f: CoreExpr[ColumnId, Type] => CoreExpr[ColumnId, Type]) =
+    FullOuterJoin(from.mapExpressions(f), f(on), lateral)
 }
 
 object Join {
