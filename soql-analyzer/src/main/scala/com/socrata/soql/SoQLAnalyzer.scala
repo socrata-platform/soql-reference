@@ -542,7 +542,10 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   * A SubAnalysis represents (potentially chained) soql that is required to have an alias
   * (because subqueries need aliases)
   */
-case class SubAnalysis[ColumnId, Type](analyses: BinaryTree[SoQLAnalysis[ColumnId, Type]], alias: String)
+case class SubAnalysis[ColumnId, Type](analyses: BinaryTree[SoQLAnalysis[ColumnId, Type]], alias: String) {
+  def mapExpressions(f: CoreExpr[ColumnId, Type] => CoreExpr[ColumnId, Type]) =
+    SubAnalysis(this.analyses.map(_.mapExpressions(f)), alias)
+}
 
 /**
   * The typed version of [[com.socrata.soql.ast.JoinSelect]]
@@ -606,6 +609,12 @@ case class JoinAnalysis[ColumnId, Type](subAnalysis: Either[TableName, SubAnalys
     JoinAnalysis(mappedSubAnalysis)
   }
 
+  def mapExpressions(f: CoreExpr[ColumnId, Type] => CoreExpr[ColumnId, Type]): JoinAnalysis[ColumnId, Type] =
+    this match {
+      case JoinAnalysis(Left(_)) => this
+      case JoinAnalysis(Right(subana)) => JoinAnalysis(Right(subana.mapExpressions(f)))
+    }
+
   override def toString: String = {
     val (subAnasStr, aliasStrOpt) = subAnalysis match {
       case Right(SubAnalysis(subAnalysis, subAlias)) =>
@@ -650,6 +659,23 @@ case class SoQLAnalysis[ColumnId, Type](isGrouped: Boolean,
                                         offset: Option[BigInt],
                                         search: Option[String],
                                         hints: Seq[typed.Hint[ColumnId, Type]]) {
+  def mapExpressions(f: typed.CoreExpr[ColumnId, Type] => typed.CoreExpr[ColumnId, Type]): SoQLAnalysis[ColumnId, Type] = {
+    SoQLAnalysis(
+      this.isGrouped,
+      this.distinct.mapExpressions(f),
+      this.selection.withValuesMapped(f),
+      this.from,
+      this.joins.map(_.mapExpressions(f)),
+      this.where.map(f),
+      this.groupBys.map(f),
+      this.having.map(f),
+      this.orderBys.map(_.mapExpressions(f)),
+      this.limit,
+      this.offset,
+      this.search,
+      this.hints
+    )
+  }
 
   /**
    * This version of mapColumnsId is incomplete and for rollup/rewrite in soda fountain
