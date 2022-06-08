@@ -911,10 +911,10 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   }
 
   private def joinAliases(a: Analysis): Seq[String] = {
-    a.joins.flatMap {
+    a.joins.flatMap { join => join.from match {
       case JoinAnalysis(Left(table)) => table.alias
       case JoinAnalysis(Right(analysis)) => Seq(analysis.alias)
-    }
+    }}
   }
 
   private def joinAliasCollision(a:Analysis, b: Analysis): Boolean = {
