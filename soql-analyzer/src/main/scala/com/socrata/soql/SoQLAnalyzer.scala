@@ -882,11 +882,11 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         offset = newOff,
                         search = None,
                         hints = Seq.empty))
-    case (SoQLAnalysis(false, aindis: typed.Indistinct[_, _], aSelect, aFrom, Nil, aWhere, Nil, None, aOrder, None, None, aSearch, Nil),
+    case (SoQLAnalysis(false, aIndistinct: typed.Indistinct[_, _], aSelect, aFrom, Nil, aWhere, Nil, None, aOrder, None, None, aSearch, Nil),
           SoQLAnalysis(false, _: typed.Indistinct[_, _], bSelect, None, bJoins, bWhere, Nil, None, bOrder, bLim, bOff, None, Nil)) =>
       // Can merge a change of filter or order only if no window was specified on the left
       Some(SoQLAnalysis(isGrouped = false,
-                        distinct = aindis,
+                        distinct = aIndistinct,
                         selection = mergeSelection(aSelect, bSelect),
                         from = aFrom,
                         joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on), lateral = join.lateral)),
@@ -898,14 +898,14 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         offset = bOff,
                         search = aSearch,
                         hints = Seq.empty))
-    case (SoQLAnalysis(false, aIndistinct: typed.Indistinct[_, _], aSelect, aFrom, Nil, aWhere, Nil,     None,    _,      None, None, None, Nil),
-          SoQLAnalysis(true, _: typed.Indistinct[_, _], bSelect, None, bJoins, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, Nil)) =>
+    case (SoQLAnalysis(false, aIndistinct: typed.Indistinct[_, _], aSelect, aFrom, aJoins, aWhere, Nil, None, _, None, None, None, Nil),
+          SoQLAnalysis(true, _: typed.Indistinct[_, _], bSelect, None, bJoins, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, Nil)) if !joinAliasCollision(a, b) =>
       // an aggregate on a non-aggregate
       Some(SoQLAnalysis(isGrouped = true,
                         distinct = aIndistinct,
                         selection = mergeSelection(aSelect, bSelect),
                         from = aFrom,
-                        joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on), lateral = join.lateral)),
+                        joins = aJoins ++ bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on), lateral = join.lateral)),
                         where = mergeWhereLike(aSelect, aWhere, bWhere),
                         groupBys = mergeGroupBy(aSelect, bGroup),
                         having = mergeWhereLike(aSelect, None, bHaving),
@@ -934,6 +934,19 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
                         hints = Seq.empty))
     case (_, _) =>
       None
+  }
+
+  private def joinAliases(a: Analysis): Seq[String] = {
+    a.joins.flatMap { join => join.from match {
+      case JoinAnalysis(Left(table)) => table.alias
+      case JoinAnalysis(Right(analysis)) => Seq(analysis.alias)
+    }}
+  }
+
+  private def joinAliasCollision(a:Analysis, b: Analysis): Boolean = {
+    val aJoinAliases = joinAliases(a).toSet
+    val bJoinAliases = joinAliases(b).toSet
+    bJoinAliases.exists(aJoinAliases.contains)
   }
 
   private def hasWindowFunction(a: Analysis): Boolean = {
