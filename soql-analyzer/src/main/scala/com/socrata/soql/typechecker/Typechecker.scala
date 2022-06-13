@@ -23,17 +23,17 @@ class Typechecker[Type](val typeInfo: TypeInfo[Type], functionInfo: FunctionInfo
   // never returns an empty value
   private def typecheck(e: Expression, aliases: Map[ColumnName, Expr], from: Option[TableName]): Either[TypecheckException, Seq[Expr]] = e match {
     case r@ColumnOrAliasRef(qual, col) =>
-      aliases.get(col) match {
-        case Some(typed.ColumnRef(aQual, name, typ)) if name == col && qual == aQual =>
+      (qual, aliases.get(col)) match {
+        case (None, Some(typed.ColumnRef(aQual, name, typ))) if name == col && qual == aQual =>
           // special case: if this is an alias that refers directly to itself, position the typed tree _here_
           // (as if there were no alias at all) to make error messages that much clearer.  This will only catch
           // semi-implicitly assigned aliases, so it's better anyway.
           Right(Seq(typed.ColumnRef(aQual, col, typ)(r.position)))
-        case Some(typed.ColumnRef(aQual, name, typ)) if name == col && qual != aQual =>
+        case (None, Some(typed.ColumnRef(aQual, name, typ))) if name == col && qual != aQual =>
           typecheck(e, Map.empty, from) // TODO: Revisit aliases from multiple schemas
-        case Some(tree) =>
+        case (None, Some(tree)) =>
           Right(Seq(tree))
-        case None =>
+        case (_, None) | (Some(_), _) =>
           val (theQual, implicitQual) = (qual, from) match {
             case (Some(q), _) => (q, Some(q))
             case (None, Some(TableName(_, Some(a)))) => (TableName.PrimaryTable.qualifier, Some(a))
