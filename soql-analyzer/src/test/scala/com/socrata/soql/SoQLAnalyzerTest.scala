@@ -720,4 +720,27 @@ SELECT visits, @x2.zx
     analysis.selection(ColumnName("x")) must equal (typed.FunctionCall(TestFunctions.castIdentities.find(_.result == functions.FixedType(TestNumber)).get.monomorphic.get,
       Seq(typed.NullLiteral(TestNumber.t)(NoPosition)), None, None)(NoPosition, NoPosition))
   }
+
+  test("alias is column ref of joined column analyzeBinary") {
+    val soql = "select `name_first` as name_last, @a1.`name_last` as a1_name_last join @aaaa-aaaa as @a1 ON `name_last` = @a1.`name_last`"
+    val parsed = new StandaloneParser().binaryTreeSelect(soql)
+    val typechecked = analyzer.analyzeBinary(parsed)(datasetCtxMap + (TableName.PrimaryTable.qualifier -> joinAliasCtx))
+    val selection = typechecked.leftMost.leaf.selection
+    val firstSelect = selection.get(ColumnName("name_last"))
+    val secondSelect = selection.get(ColumnName("a1_name_last"))
+
+    firstSelect match {
+      case Some(ColumnRef(qualifier, column, _)) =>
+        qualifier.mustBe(None)
+        column.mustEqual(ColumnName("name_first"))
+      case _ => throw new Exception("First selection should have been a column ref")
+    }
+
+    secondSelect match {
+      case Some(ColumnRef(qualifier, column, _)) =>
+        qualifier.mustBe(Some("_a1"))
+        column.mustEqual(ColumnName("name_last"))
+      case _ => throw new Exception("Second selection should have been a column ref")
+    }
+  }
 }
