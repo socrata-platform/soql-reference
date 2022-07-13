@@ -1324,7 +1324,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       // original parser.  This would accept all kinds of nonsense like
       // `@gfdsg.:gsdfg(DISTINCT bleh)` and then mangle that into
       // `gsdfg_distinct(bleh)`
-      case ident@Identifier("param", false) if allowParamSpecialForms && reader.rest.first == LPAREN() =>
+      case ident@Identifier("param", false) if reader.rest.first == LPAREN() =>
         param(reader.rest.rest, ident.pos)
       case ident: Identifier =>
         identifierOrFuncall(reader.rest, ident)

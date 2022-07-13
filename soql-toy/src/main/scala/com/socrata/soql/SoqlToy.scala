@@ -51,7 +51,7 @@ object SoqlToy extends (Array[String] => Unit) {
   def apply(args: Array[String]): Unit = {
     menu()
 
-    val analyzer = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo, AbstractParser.defaultParameters.copy(allowParamSpecialForms = true))
+    val analyzer = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo)
 
     val stored_procs = Map(
       TableName("_is_admin") -> UDF(
@@ -74,7 +74,7 @@ object SoqlToy extends (Array[String] => Unit) {
         return
       } else {
         try {
-          val parsed = new Parser(AbstractParser.defaultParameters.copy(allowJoinFunctions = true, allowParamSpecialForms = true)).binaryTreeSelect(selection)
+          val parsed = new Parser(AbstractParser.defaultParameters.copy(allowJoinFunctions = true)).binaryTreeSelect(selection)
           val substituted = Select.rewriteJoinFuncs(parsed, stored_procs)
           println(substituted)
           val analyses = analyzer.analyzeFullQuery(substituted.toString)
