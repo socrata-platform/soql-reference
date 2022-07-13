@@ -7,7 +7,7 @@ import com.socrata.soql.typed.CoreExpr
 
 import scala.util.parsing.input.Position
 
-trait TypeInfo[Type] {
+trait TypeInfo[Type, Value] {
   def booleanLiteralExpr(b: Boolean, pos: Position): Seq[CoreExpr[Nothing, Type]]
   def stringLiteralExpr(s: String, pos: Position): Seq[CoreExpr[Nothing, Type]]
   def numberLiteralExpr(n: BigDecimal, pos: Position): Seq[CoreExpr[Nothing, Type]]

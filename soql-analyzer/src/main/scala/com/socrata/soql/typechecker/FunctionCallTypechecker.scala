@@ -9,8 +9,8 @@ case class TypeMismatchFailure[Type](expected: Set[Type], found: Set[Type], idx:
 }
 case class Passed[Type](function: MonomorphicFunction[Type]) extends CandidateEvaluation[Type]
 
-class FunctionCallTypechecker[Type](typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type]) {
-  val log = org.slf4j.LoggerFactory.getLogger(classOf[FunctionCallTypechecker[_]])
+class FunctionCallTypechecker[Type, Value](typeInfo: TypeInfo[Type, Value], functionInfo: FunctionInfo[Type]) {
+  val log = org.slf4j.LoggerFactory.getLogger(classOf[FunctionCallTypechecker[_, _]])
 
   type Func = Function[Type]
   type MFunc = MonomorphicFunction[Type]

@@ -21,9 +21,9 @@ import com.socrata.soql.mapping.ColumnIdMapper
   * Lists of Analysis objects (soql ast), while using type information about the tables to typecheck all
   * expressions.
   */
-class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
-                         functionInfo: FunctionInfo[Type],
-                         parserParameters: AbstractParser.Parameters = AbstractParser.defaultParameters)
+class SoQLAnalyzer[Type, Value](typeInfo: TypeInfo[Type, Value],
+                                functionInfo: FunctionInfo[Type],
+                                parserParameters: AbstractParser.Parameters = AbstractParser.defaultParameters)
 {
   /** The typed version of [[com.socrata.soql.ast.Select]] */
   type Analysis = SoQLAnalysis[ColumnName, Type]
@@ -33,7 +33,7 @@ class SoQLAnalyzer[Type](typeInfo: TypeInfo[Type],
   type AnalysisContext = Map[Qualifier, DatasetContext[Type]]
   type TDistinctiveness = typed.Distinctiveness[ColumnName, Type]
 
-  val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLAnalyzer[_]])
+  val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLAnalyzer[_, _]])
 
   def ns2ms(ns: Long) = ns / 1000000
 

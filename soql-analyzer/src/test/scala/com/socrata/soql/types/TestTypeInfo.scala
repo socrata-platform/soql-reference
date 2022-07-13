@@ -5,10 +5,11 @@ import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.typechecker.TypeInfo
 import com.socrata.soql.typed
+import com.socrata.soql.types.SoQLValue
 
 import scala.util.parsing.input.Position
 
-object TestTypeInfo extends TypeInfo[TestType] {
+object TestTypeInfo extends TypeInfo[TestType, SoQLValue] {
   val typeParameterUniverse: OrderedSet[TestType] = OrderedSet(
     TestText,
     TestNumber,

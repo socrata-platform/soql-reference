@@ -8,7 +8,7 @@ import com.socrata.soql.typechecker.TypeInfo
 
 import scala.util.parsing.input.Position
 
-object SoQLTypeInfo extends TypeInfo[SoQLType] {
+object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] {
   val typeParameterUniverse = OrderedSet(SoQLType.typePreferences : _*)
 
   def booleanLiteralExpr(b: Boolean, pos: Position) = Seq(typed.BooleanLiteral(b, SoQLBoolean.t)(pos))

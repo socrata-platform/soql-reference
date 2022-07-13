@@ -5,10 +5,10 @@ import com.socrata.soql.exceptions._
 import com.socrata.soql.typed
 import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
 
-class Typechecker[Type](val typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])
-                       (implicit ctx: Map[String, DatasetContext[Type]]) extends
+class Typechecker[Type, Value](val typeInfo: TypeInfo[Type, Value], functionInfo: FunctionInfo[Type])
+                              (implicit ctx: Map[String, DatasetContext[Type]]) extends
   ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]], Option[TableName]) => typed.CoreExpr[ColumnName, Type])
-  with HintTypechecker[Type] { self =>
+  with HintTypechecker[Type, Value] { self =>
   import typeInfo._
 
   type Expr = typed.CoreExpr[ColumnName, Type]
