@@ -108,6 +108,8 @@ object SoQLException {
       and("non-groupable-group-by", AutomaticJsonCodecBuilder[NonGroupableGroupBy]).
       and("non-boolean-having", AutomaticJsonCodecBuilder[NonBooleanHaving]).
       and("unorderable-order-by", AutomaticJsonCodecBuilder[UnorderableOrderBy]).
+      and("unknown-parameter", AutomaticJsonCodecBuilder[UnknownParameter]).
+      and("unrepresentable-parameter", AutomaticJsonCodecBuilder[UnrepresentableParameter]).
       // QueryOperationException
       and("right-side-of-chain-query-must-be-leaf", AutomaticJsonCodecBuilder[RightSideOfChainQueryMustBeLeaf]).
       build
