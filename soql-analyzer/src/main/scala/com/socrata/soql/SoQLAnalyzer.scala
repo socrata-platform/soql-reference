@@ -16,15 +16,19 @@ import Select._
 import com.socrata.NonEmptySeq
 import com.socrata.soql.mapping.ColumnIdMapper
 
-case class AnalysisContext[Type, Value](schemas: Map[String, DatasetContext[Type]], parameters: ParameterSpec[Value]) {
+case class AnalysisContext[Type, Value](schemas: Map[String, DatasetContext[Type]], parameters: ParameterSpec[Type, Value]) {
   def withUpdatedSchemas(f: Map[String, DatasetContext[Type]] => Map[String, DatasetContext[Type]]) =
     copy(schemas = f(schemas))
 }
 
-case class ParameterSpec[+Value](parameters: Map[String, Map[HoleName, Value]], default: String)
+case class ParameterSpec[+Type, +Value](parameters: Map[String, Map[HoleName, ParameterValue[Type, Value]]], default: String)
 object ParameterSpec {
   def empty = ParameterSpec(Map.empty, "")
 }
+
+sealed abstract trait ParameterValue[+Type, +Value]
+case class MissingParameter[+Type](t: Type) extends ParameterValue[Type, Nothing]
+case class PresentParameter[+Value](v: Value) extends ParameterValue[Nothing, Value]
 
 /**
   * The type-checking version of [[com.socrata.soql.parsing.AbstractParser]]. Turns string soql statements into

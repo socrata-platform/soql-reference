@@ -37,7 +37,10 @@ object SoqlToy extends (Array[String] => Unit) {
                     )
                   }),
       parameters = ParameterSpec(
-        parameters = Map("aaaa-aaaa" -> Map(HoleName("hello") -> SoQLText("world"))),
+        parameters = Map("aaaa-aaaa" -> Map(
+                           HoleName("hello") -> PresentParameter(SoQLText("world")),
+                           HoleName("goodbye") -> MissingParameter(SoQLNumber.t)
+                         )),
         default = "aaaa-aaaa"
       )
   )

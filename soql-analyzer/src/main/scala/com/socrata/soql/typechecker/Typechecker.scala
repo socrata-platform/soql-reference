@@ -6,7 +6,7 @@ import com.socrata.soql.ast._
 import com.socrata.soql.exceptions._
 import com.socrata.soql.typed
 import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, HoleName}
-import com.socrata.soql.AnalysisContext
+import com.socrata.soql.{AnalysisContext, ParameterValue, PresentParameter, MissingParameter}
 
 class Typechecker[Type, Value](val typeInfo: TypeInfo[Type, Value], functionInfo: FunctionInfo[Type])
                               (implicit ctx: AnalysisContext[Type, Value]) extends
@@ -98,16 +98,20 @@ class Typechecker[Type, Value](val typeInfo: TypeInfo[Type, Value], functionInfo
     case nl@NullLiteral() =>
       Right(nullLiteralExpr(nl.position))
     case p@Hole.SavedQuery(name, view) =>
-      val value = valueFor(name, view, p.position)
-      typeInfo.literalExprFor(value, p.position) match {
-        case Some(expr) => Right(Seq(expr))
-        case None => throw UnrepresentableParameter(typeInfo.typeNameFor(typeInfo.typeOf(value)), p.position)
+      valueFor(name, view, p.position) match {
+        case PresentParameter(value) =>
+          typeInfo.literalExprFor(value, p.position) match {
+            case Some(expr) => Right(Seq(expr))
+            case None => throw UnrepresentableParameter(typeInfo.typeNameFor(typeInfo.typeOf(value)), p.position)
+          }
+        case MissingParameter(typ) =>
+          Right(Seq(typed.NullLiteral(typ)(p.position)))
       }
     case _ : Hole =>
       throw new UnexpectedHole()
   }
 
-  def valueFor(name: HoleName, view: Option[String], pos: Position): Value = {
+  def valueFor(name: HoleName, view: Option[String], pos: Position): ParameterValue[Type, Value] = {
     val actualView = view.getOrElse(ctx.parameters.default)
     ctx.parameters.parameters.get(actualView).flatMap(_.get(name)).getOrElse {
       throw UnknownParameter(actualView, name.name, pos)
