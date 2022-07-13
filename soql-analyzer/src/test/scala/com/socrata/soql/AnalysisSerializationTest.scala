@@ -3,6 +3,7 @@ package com.socrata.soql
 import org.scalatest.{FunSpec, MustMatchers}
 import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, TypeName}
 import com.socrata.soql.types._
+import com.socrata.soql.typechecker.ParameterSpec
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.util.Base64
 
@@ -34,10 +35,13 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
     )
   }
 
-  implicit val datasetCtxMap = Map(
-    TableName.PrimaryTable.qualifier -> datasetCtx,
-    "_aaaa-aaaa" -> joinCtx,
-    "_a" -> joinCtx
+  implicit val datasetCtxMap = AnalysisContext[TestType, SoQLValue](
+    schemas = Map(
+      TableName.PrimaryTable.qualifier -> datasetCtx,
+      "_aaaa-aaaa" -> joinCtx,
+      "_a" -> joinCtx
+    ),
+    parameters = ParameterSpec.empty
   )
 
   val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo)

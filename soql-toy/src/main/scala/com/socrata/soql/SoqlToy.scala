@@ -7,6 +7,7 @@ import environment.{ColumnName, DatasetContext, TableName, HoleName}
 import com.socrata.soql.functions.{SoQLFunctionInfo, SoQLTypeInfo}
 import com.rojoma.json.v3.util.JsonUtil
 import com.socrata.soql.parsing.{Parser, AbstractParser}
+import com.socrata.soql.typechecker.ParameterSpec
 import scala.io.StdIn.readLine
 
 object SoqlToy extends (Array[String] => Unit) {
@@ -15,36 +16,42 @@ object SoqlToy extends (Array[String] => Unit) {
     sys.exit(1)
   }
 
-  implicit val datasetCtx = Map(TableName.PrimaryTable.qualifier -> new DatasetContext[SoQLType] {
-    private implicit def ctx = this
-    val locale = com.ibm.icu.util.ULocale.ENGLISH
-    val schema = com.socrata.soql.collection.OrderedMap(
-      ColumnName(":id") -> SoQLID,
-      ColumnName(":updated_at") -> SoQLFixedTimestamp,
-      ColumnName(":created_at") -> SoQLFixedTimestamp,
-      ColumnName(":version") -> SoQLVersion,
-      ColumnName("name_last") -> SoQLText,
-      ColumnName("name_first") -> SoQLText,
-      ColumnName("visits") -> SoQLNumber,
-      ColumnName("last_visit") -> SoQLFixedTimestamp,
-      ColumnName("address") -> SoQLLocation,
-      ColumnName("balance") -> SoQLMoney,
-      ColumnName("object") -> SoQLObject,
-      ColumnName("array") -> SoQLArray,
-      ColumnName("dbl") -> SoQLDouble,
-      ColumnName(":@meta") -> SoQLObject
-    )
-  })
+  implicit val datasetCtx = AnalysisContext[SoQLType, SoQLValue](
+    schemas = Map(TableName.PrimaryTable.qualifier -> new DatasetContext[SoQLType] {
+                    private implicit def ctx = this
+                    val locale = com.ibm.icu.util.ULocale.ENGLISH
+                    val schema = com.socrata.soql.collection.OrderedMap(
+                      ColumnName(":id") -> SoQLID,
+                      ColumnName(":updated_at") -> SoQLFixedTimestamp,
+                      ColumnName(":created_at") -> SoQLFixedTimestamp,
+                      ColumnName(":version") -> SoQLVersion,
+                      ColumnName("name_last") -> SoQLText,
+                      ColumnName("name_first") -> SoQLText,
+                      ColumnName("visits") -> SoQLNumber,
+                      ColumnName("last_visit") -> SoQLFixedTimestamp,
+                      ColumnName("address") -> SoQLLocation,
+                      ColumnName("balance") -> SoQLMoney,
+                      ColumnName("object") -> SoQLObject,
+                      ColumnName("array") -> SoQLArray,
+                      ColumnName("dbl") -> SoQLDouble,
+                      ColumnName(":@meta") -> SoQLObject
+                    )
+                  }),
+      parameters = ParameterSpec(
+        parameters = Map("aaaa-aaaa" -> Map(HoleName("hello") -> SoQLText("world"))),
+        default = "aaaa-aaaa"
+      )
+  )
 
   def menu(): Unit = {
     println("Columns:")
-    Util.printList(datasetCtx(TableName.PrimaryTable.qualifier).schema)
+    Util.printList(datasetCtx.schemas(TableName.PrimaryTable.qualifier).schema)
   }
 
   def apply(args: Array[String]): Unit = {
     menu()
 
-    val analyzer = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo)
+    val analyzer = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo, AbstractParser.defaultParameters.copy(allowParamSpecialForms = true))
 
     val stored_procs = Map(
       TableName("_is_admin") -> UDF(
@@ -67,7 +74,7 @@ object SoqlToy extends (Array[String] => Unit) {
         return
       } else {
         try {
-          val parsed = new Parser(AbstractParser.defaultParameters.copy(allowJoinFunctions = true)).binaryTreeSelect(selection)
+          val parsed = new Parser(AbstractParser.defaultParameters.copy(allowJoinFunctions = true, allowParamSpecialForms = true)).binaryTreeSelect(selection)
           val substituted = Select.rewriteJoinFuncs(parsed, stored_procs)
           println(substituted)
           val analyses = analyzer.analyzeFullQuery(substituted.toString)

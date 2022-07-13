@@ -7,7 +7,7 @@ import org.scalatest.MustMatchers
 import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
 import com.socrata.soql.mapping.ColumnIdMapper
 import com.socrata.soql.parsing.{Parser, StandaloneParser}
-import com.socrata.soql.typechecker.Typechecker
+import com.socrata.soql.typechecker.{Typechecker, ParameterSpec}
 import com.socrata.soql.typed.Qualifier
 import com.socrata.soql.types._
 
@@ -38,12 +38,14 @@ class SoQLAnalyzerQueryOperatorTest extends FunSuite with MustMatchers with Scal
     val schema = commonColumns + (ColumnName("fish") -> TestText)
   }
 
-  implicit val datasetCtxMap =
-    Map(TableName.PrimaryTable.qualifier -> catCtx,
-        TableName("_cat", None).qualifier -> catCtx,
-        TableName("_dog", None).qualifier -> dogCtx,
-        TableName("_bird", None).qualifier -> birdCtx,
-        TableName("_fish", None).qualifier -> fishCtx)
+  implicit val datasetCtxMap = AnalysisContext[TestType, SoQLValue](
+    schemas = Map(TableName.PrimaryTable.qualifier -> catCtx,
+                  TableName("_cat", None).qualifier -> catCtx,
+                  TableName("_dog", None).qualifier -> dogCtx,
+                  TableName("_bird", None).qualifier -> birdCtx,
+                  TableName("_fish", None).qualifier -> fishCtx),
+    parameters = ParameterSpec.empty
+  )
 
   val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo)
 
