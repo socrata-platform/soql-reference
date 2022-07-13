@@ -9,7 +9,7 @@ import scala.util.parsing.input.NoPosition
 import org.scalatest.FunSuite
 import org.scalatest.MustMatchers
 import com.socrata.soql.ast.JoinQuery
-import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
+import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, HoleName}
 import com.socrata.soql.parsing.{Parser, StandaloneParser}
 import com.socrata.soql.typechecker.Typechecker
 import com.socrata.soql.types._
@@ -65,13 +65,23 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
   def asContext(schemas: Map[String, DatasetContext[TestType]]) =
     AnalysisContext[TestType, SoQLValue](schemas, ParameterSpec.empty)
 
-  implicit val datasetCtxMap = asContext(
+  implicit val datasetCtxMap: AnalysisContext[TestType, SoQLValue] = asContext(
     Map(TableName.PrimaryTable.qualifier -> datasetCtx,
         TableName("_aaaa-aaaa", None).qualifier -> joinCtx,
         TableName("_aaaa-aaab", Some("_a1")).qualifier -> joinAliasCtx,
         TableName("_aaaa-aaax", Some("_x1")).qualifier -> joinAliasWoOverlapCtx,
         TableName("_aaaa-aaab", None).qualifier -> joinAliasCtx,
         TableName("_aaaa-aaax", None).qualifier -> joinAliasWoOverlapCtx)
+  ).copy(parameters =
+           ParameterSpec(
+             parameters = Map(
+               "aaaa-aaaa" -> Map(
+                 HoleName("hello") -> PresentParameter(SoQLText("world")),
+                 HoleName("goodbye") -> MissingParameter(TestNumber.t)
+               )
+             ),
+             default = "aaaa-aaaa"
+           )
   )
 
   val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo)
@@ -166,6 +176,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
       ColumnName("c1") -> typedExpression("name_last::number"),
       ColumnName("c2") -> typedExpression("'123'::number"),
       ColumnName("c3") -> typedExpression("456::text")
+    ))
+  }
+
+  test("analysis succeeds in parameter") {
+    val analysis = analyzer.analyzeUnchainedQuery("select param(@aaaa-aaaa, 'hello') as c1, param(@aaaa-aaaa, 'goodbye') as c2")
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName("c1") -> typedExpression("'world'"),
+      ColumnName("c2") -> typed.NullLiteral(TestNumber)(NoPosition) // a parameter is actually the only way to get a bare null number literal as an expression
     ))
   }
 

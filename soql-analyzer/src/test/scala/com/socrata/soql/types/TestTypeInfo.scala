@@ -5,7 +5,7 @@ import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.typechecker.TypeInfo
 import com.socrata.soql.typed
-import com.socrata.soql.types.SoQLValue
+import com.socrata.soql.types.{SoQLValue, SoQLText}
 
 import scala.util.parsing.input.Position
 
@@ -56,5 +56,9 @@ object TestTypeInfo extends TypeInfo[TestType, SoQLValue] {
       case SoQLFloatingTimestamp => TestFloatingTimestamp
       case _ => throw new Exception("Need to add a case to TestTypeInfo#typeOf") // ick but whatever, if you run into this just add your case
     }
-  def literalExprFor(value: SoQLValue, pos: Position) = None
+  def literalExprFor(value: SoQLValue, pos: Position) =
+    value match {
+      case SoQLText(s) => Some(typed.StringLiteral(s, TestText.t)(pos))
+      case _ => None
+    }
 }
