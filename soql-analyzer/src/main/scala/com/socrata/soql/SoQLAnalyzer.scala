@@ -21,6 +21,11 @@ case class AnalysisContext[Type, Value](schemas: Map[String, DatasetContext[Type
     copy(schemas = f(schemas))
 }
 
+case class ParameterSpec[+Value](parameters: Map[String, Map[HoleName, Value]], default: String)
+object ParameterSpec {
+  def empty = ParameterSpec(Map.empty, "")
+}
+
 /**
   * The type-checking version of [[com.socrata.soql.parsing.AbstractParser]]. Turns string soql statements into
   * Lists of Analysis objects (soql ast), while using type information about the tables to typecheck all

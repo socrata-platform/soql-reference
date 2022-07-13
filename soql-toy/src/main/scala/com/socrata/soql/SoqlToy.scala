@@ -7,7 +7,6 @@ import environment.{ColumnName, DatasetContext, TableName, HoleName}
 import com.socrata.soql.functions.{SoQLFunctionInfo, SoQLTypeInfo}
 import com.rojoma.json.v3.util.JsonUtil
 import com.socrata.soql.parsing.{Parser, AbstractParser}
-import com.socrata.soql.typechecker.ParameterSpec
 import scala.io.StdIn.readLine
 
 object SoqlToy extends (Array[String] => Unit) {

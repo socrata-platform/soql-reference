@@ -7,7 +7,7 @@ import org.scalatest.MustMatchers
 import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
 import com.socrata.soql.mapping.ColumnIdMapper
 import com.socrata.soql.parsing.{Parser, StandaloneParser}
-import com.socrata.soql.typechecker.{Typechecker, ParameterSpec}
+import com.socrata.soql.typechecker.Typechecker
 import com.socrata.soql.typed.Qualifier
 import com.socrata.soql.types._
 

@@ -3,7 +3,6 @@ package com.socrata.soql
 import org.scalatest.{FunSpec, MustMatchers}
 import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, TypeName}
 import com.socrata.soql.types._
-import com.socrata.soql.typechecker.ParameterSpec
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.util.Base64
 

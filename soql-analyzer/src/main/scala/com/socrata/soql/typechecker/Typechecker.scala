@@ -8,11 +8,6 @@ import com.socrata.soql.typed
 import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, HoleName}
 import com.socrata.soql.AnalysisContext
 
-case class ParameterSpec[+Value](parameters: Map[String, Map[HoleName, Value]], default: String)
-object ParameterSpec {
-  def empty = ParameterSpec(Map.empty, "")
-}
-
 class Typechecker[Type, Value](val typeInfo: TypeInfo[Type, Value], functionInfo: FunctionInfo[Type])
                               (implicit ctx: AnalysisContext[Type, Value]) extends
   ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]], Option[TableName]) => typed.CoreExpr[ColumnName, Type])

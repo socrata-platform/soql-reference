@@ -11,7 +11,7 @@ import org.scalatest.MustMatchers
 import com.socrata.soql.ast.JoinQuery
 import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
 import com.socrata.soql.parsing.{Parser, StandaloneParser}
-import com.socrata.soql.typechecker.{Typechecker, ParameterSpec}
+import com.socrata.soql.typechecker.Typechecker
 import com.socrata.soql.types._
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typed.{ColumnRef, FullyDistinct, FunctionCall, Indistinct}
