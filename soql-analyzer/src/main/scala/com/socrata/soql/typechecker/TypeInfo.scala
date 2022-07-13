@@ -25,4 +25,6 @@ trait TypeInfo[Type, Value] {
     * every real type except null.  It should be ordered by most-preferred
     * to least-preferred for null-disambiguation purposes. */
   def typeParameterUniverse: OrderedSet[Type]
+
+  def literalExprFor(value: Value, pos: Position): Option[CoreExpr[Nothing, Type]]
 }

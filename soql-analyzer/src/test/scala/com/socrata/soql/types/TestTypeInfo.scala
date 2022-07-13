@@ -46,4 +46,6 @@ object TestTypeInfo extends TypeInfo[TestType, SoQLValue] {
   def isOrdered(typ: TestType) = typ.isOrdered
   def isGroupable(typ: TestType) = typ != TestArray
   def isBoolean(typ: TestType) = typ == TestBoolean
+
+  def literalExprFor(value: SoQLValue, pos: Position) = None
 }
