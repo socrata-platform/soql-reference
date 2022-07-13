@@ -26,5 +26,6 @@ trait TypeInfo[Type, Value] {
     * to least-preferred for null-disambiguation purposes. */
   def typeParameterUniverse: OrderedSet[Type]
 
+  def typeOf(value: Value): Type
   def literalExprFor(value: Value, pos: Position): Option[CoreExpr[Nothing, Type]]
 }

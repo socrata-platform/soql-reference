@@ -121,6 +121,8 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] {
   def isBoolean(typ: SoQLType): Boolean = typ == SoQLBoolean
   def isGroupable(typ: SoQLType): Boolean = SoQLTypeClasses.Equatable(typ)
 
+  def typeOf(value: SoQLValue) = value.typ
+
   def literalExprFor(value: SoQLValue, pos: Position) =
     value match {
       case SoQLText(s) =>

@@ -47,5 +47,14 @@ object TestTypeInfo extends TypeInfo[TestType, SoQLValue] {
   def isGroupable(typ: TestType) = typ != TestArray
   def isBoolean(typ: TestType) = typ == TestBoolean
 
+  def typeOf(value: SoQLValue) =
+    value.typ match { // hmph, annoying that this code uses SoQLValue instead of a TestValue
+      case SoQLText => TestText
+      case SoQLNumber => TestNumber
+      case SoQLBoolean => TestBoolean
+      case SoQLFixedTimestamp => TestFixedTimestamp
+      case SoQLFloatingTimestamp => TestFloatingTimestamp
+      case _ => throw new Exception("Need to add a case to TestTypeInfo#typeOf") // ick but whatever, if you run into this just add your case
+    }
   def literalExprFor(value: SoQLValue, pos: Position) = None
 }
