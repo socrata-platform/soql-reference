@@ -105,6 +105,9 @@ class Typechecker[Type, Value](val typeInfo: TypeInfo[Type, Value], functionInfo
             case None => throw UnrepresentableParameter(typeInfo.typeNameFor(typeInfo.typeOf(value)), p.position)
           }
         case MissingParameter(typ) =>
+          // not using nullLiteralExpr here because that produces a
+          // nondeterministically-typed null literal, but this one
+          // knows its specific type.
           Right(Seq(typed.NullLiteral(typ)(p.position)))
       }
     case _ : Hole =>
