@@ -8,7 +8,7 @@ import com.socrata.soql.typechecker.TypeInfo
 
 import scala.util.parsing.input.Position
 
-object SoQLTypeInfo extends TypeInfo[SoQLType] {
+object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] {
   val typeParameterUniverse = OrderedSet(SoQLType.typePreferences : _*)
 
   def booleanLiteralExpr(b: Boolean, pos: Position) = Seq(typed.BooleanLiteral(b, SoQLBoolean.t)(pos))
@@ -120,4 +120,34 @@ object SoQLTypeInfo extends TypeInfo[SoQLType] {
   def isOrdered(typ: SoQLType): Boolean = SoQLTypeClasses.Ordered(typ)
   def isBoolean(typ: SoQLType): Boolean = typ == SoQLBoolean
   def isGroupable(typ: SoQLType): Boolean = SoQLTypeClasses.Equatable(typ)
+
+  def typeOf(value: SoQLValue) = value.typ
+
+  def literalExprFor(value: SoQLValue, pos: Position) =
+    value match {
+      case SoQLText(s) =>
+        Some(typed.StringLiteral(s, SoQLText.t)(pos))
+      case SoQLNumber(n) =>
+        Some(typed.NumberLiteral(n, SoQLNumber.t)(pos))
+      case SoQLBoolean(b) =>
+        Some(typed.BooleanLiteral(b, SoQLBoolean.t)(pos))
+      case SoQLFixedTimestamp(ts) =>
+        Some(
+          typed.FunctionCall(
+            textToFixedTimestampFunc,
+            Seq(typed.StringLiteral(SoQLFixedTimestamp.StringRep(ts), SoQLText.t)(pos)),
+            None, None
+          )(pos, pos)
+        )
+      case SoQLFloatingTimestamp(ts) =>
+        Some(
+          typed.FunctionCall(
+            textToFloatingTimestampFunc,
+            Seq(typed.StringLiteral(SoQLFloatingTimestamp.StringRep(ts), SoQLText.t)(pos)),
+            None, None
+          )(pos, pos)
+        )
+      case _ =>
+        None
+    }
 }

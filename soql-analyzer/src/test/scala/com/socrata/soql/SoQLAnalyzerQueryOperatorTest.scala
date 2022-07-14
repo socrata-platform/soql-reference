@@ -38,12 +38,14 @@ class SoQLAnalyzerQueryOperatorTest extends FunSuite with MustMatchers with Scal
     val schema = commonColumns + (ColumnName("fish") -> TestText)
   }
 
-  implicit val datasetCtxMap =
-    Map(TableName.PrimaryTable.qualifier -> catCtx,
-        TableName("_cat", None).qualifier -> catCtx,
-        TableName("_dog", None).qualifier -> dogCtx,
-        TableName("_bird", None).qualifier -> birdCtx,
-        TableName("_fish", None).qualifier -> fishCtx)
+  implicit val datasetCtxMap = AnalysisContext[TestType, SoQLValue](
+    schemas = Map(TableName.PrimaryTable.qualifier -> catCtx,
+                  TableName("_cat", None).qualifier -> catCtx,
+                  TableName("_dog", None).qualifier -> dogCtx,
+                  TableName("_bird", None).qualifier -> birdCtx,
+                  TableName("_fish", None).qualifier -> fishCtx),
+    parameters = ParameterSpec.empty
+  )
 
   val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo)
 

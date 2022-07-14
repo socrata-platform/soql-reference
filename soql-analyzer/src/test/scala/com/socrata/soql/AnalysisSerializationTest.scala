@@ -34,10 +34,13 @@ class AnalysisSerializationTest extends FunSpec with MustMatchers {
     )
   }
 
-  implicit val datasetCtxMap = Map(
-    TableName.PrimaryTable.qualifier -> datasetCtx,
-    "_aaaa-aaaa" -> joinCtx,
-    "_a" -> joinCtx
+  implicit val datasetCtxMap = AnalysisContext[TestType, SoQLValue](
+    schemas = Map(
+      TableName.PrimaryTable.qualifier -> datasetCtx,
+      "_aaaa-aaaa" -> joinCtx,
+      "_a" -> joinCtx
+    ),
+    parameters = ParameterSpec.empty
   )
 
   val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo)

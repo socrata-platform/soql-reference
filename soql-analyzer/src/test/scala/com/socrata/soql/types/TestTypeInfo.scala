@@ -5,10 +5,11 @@ import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.typechecker.TypeInfo
 import com.socrata.soql.typed
+import com.socrata.soql.types.{SoQLValue, SoQLText}
 
 import scala.util.parsing.input.Position
 
-object TestTypeInfo extends TypeInfo[TestType] {
+object TestTypeInfo extends TypeInfo[TestType, SoQLValue] {
   val typeParameterUniverse: OrderedSet[TestType] = OrderedSet(
     TestText,
     TestNumber,
@@ -45,4 +46,19 @@ object TestTypeInfo extends TypeInfo[TestType] {
   def isOrdered(typ: TestType) = typ.isOrdered
   def isGroupable(typ: TestType) = typ != TestArray
   def isBoolean(typ: TestType) = typ == TestBoolean
+
+  def typeOf(value: SoQLValue) =
+    value.typ match { // hmph, annoying that this code uses SoQLValue instead of a TestValue
+      case SoQLText => TestText
+      case SoQLNumber => TestNumber
+      case SoQLBoolean => TestBoolean
+      case SoQLFixedTimestamp => TestFixedTimestamp
+      case SoQLFloatingTimestamp => TestFloatingTimestamp
+      case _ => throw new Exception("Need to add a case to TestTypeInfo#typeOf") // ick but whatever, if you run into this just add your case
+    }
+  def literalExprFor(value: SoQLValue, pos: Position) =
+    value match {
+      case SoQLText(s) => Some(typed.StringLiteral(s, TestText.t)(pos))
+      case _ => None
+    }
 }

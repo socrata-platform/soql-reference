@@ -1,14 +1,17 @@
 package com.socrata.soql.typechecker
 
+import scala.util.parsing.input.Position
+
 import com.socrata.soql.ast._
 import com.socrata.soql.exceptions._
 import com.socrata.soql.typed
-import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
+import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, HoleName}
+import com.socrata.soql.{AnalysisContext, ParameterValue, PresentParameter, MissingParameter}
 
-class Typechecker[Type](val typeInfo: TypeInfo[Type], functionInfo: FunctionInfo[Type])
-                       (implicit ctx: Map[String, DatasetContext[Type]]) extends
+class Typechecker[Type, Value](val typeInfo: TypeInfo[Type, Value], functionInfo: FunctionInfo[Type])
+                              (implicit ctx: AnalysisContext[Type, Value]) extends
   ((Expression, Map[ColumnName, typed.CoreExpr[ColumnName, Type]], Option[TableName]) => typed.CoreExpr[ColumnName, Type])
-  with HintTypechecker[Type] { self =>
+  with HintTypechecker[Type, Value] { self =>
   import typeInfo._
 
   type Expr = typed.CoreExpr[ColumnName, Type]
@@ -39,7 +42,7 @@ class Typechecker[Type](val typeInfo: TypeInfo[Type], functionInfo: FunctionInfo
             case (None, Some(TableName(_, Some(a)))) => (TableName.PrimaryTable.qualifier, Some(a))
             case (None, _) => (TableName.PrimaryTable.qualifier, None)
           }
-          val columns = ctx.getOrElse(theQual, throw NoSuchTable(theQual, r.position)).schema
+          val columns = ctx.schemas.getOrElse(theQual, throw NoSuchTable(theQual, r.position)).schema
           columns.get(col) match {
             case Some(typ) =>
               Right(Seq(typed.ColumnRef(implicitQual, col, typ)(r.position)))
@@ -94,8 +97,28 @@ class Typechecker[Type](val typeInfo: TypeInfo[Type], functionInfo: FunctionInfo
       Right(numberLiteralExpr(n, nl.position))
     case nl@NullLiteral() =>
       Right(nullLiteralExpr(nl.position))
+    case p@Hole.SavedQuery(name, view) =>
+      valueFor(name, view, p.position) match {
+        case PresentParameter(value) =>
+          typeInfo.literalExprFor(value, p.position) match {
+            case Some(expr) => Right(Seq(expr))
+            case None => throw UnrepresentableParameter(typeInfo.typeNameFor(typeInfo.typeOf(value)), p.position)
+          }
+        case MissingParameter(typ) =>
+          // not using nullLiteralExpr here because that produces a
+          // nondeterministically-typed null literal, but this one
+          // knows its specific type.
+          Right(Seq(typed.NullLiteral(typ)(p.position)))
+      }
     case _ : Hole =>
       throw new UnexpectedHole()
+  }
+
+  def valueFor(name: HoleName, view: Option[String], pos: Position): ParameterValue[Type, Value] = {
+    val actualView = view.getOrElse(ctx.parameters.default)
+    ctx.parameters.parameters.get(actualView).flatMap(_.get(name)).getOrElse {
+      throw UnknownParameter(actualView, name.name, pos)
+    }
   }
 
   def typecheckFuncall(fc: FunctionCall, aliases: Map[ColumnName, Expr], from: Option[TableName]): Either[TypecheckException, Seq[Expr]] = {

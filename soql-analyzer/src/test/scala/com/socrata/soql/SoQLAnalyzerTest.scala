@@ -9,7 +9,7 @@ import scala.util.parsing.input.NoPosition
 import org.scalatest.FunSuite
 import org.scalatest.MustMatchers
 import com.socrata.soql.ast.JoinQuery
-import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName}
+import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, HoleName}
 import com.socrata.soql.parsing.{Parser, StandaloneParser}
 import com.socrata.soql.typechecker.Typechecker
 import com.socrata.soql.types._
@@ -62,13 +62,27 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
     )
   }
 
-  implicit val datasetCtxMap =
+  def asContext(schemas: Map[String, DatasetContext[TestType]]) =
+    AnalysisContext[TestType, SoQLValue](schemas, ParameterSpec.empty)
+
+  implicit val datasetCtxMap: AnalysisContext[TestType, SoQLValue] = asContext(
     Map(TableName.PrimaryTable.qualifier -> datasetCtx,
         TableName("_aaaa-aaaa", None).qualifier -> joinCtx,
         TableName("_aaaa-aaab", Some("_a1")).qualifier -> joinAliasCtx,
         TableName("_aaaa-aaax", Some("_x1")).qualifier -> joinAliasWoOverlapCtx,
         TableName("_aaaa-aaab", None).qualifier -> joinAliasCtx,
         TableName("_aaaa-aaax", None).qualifier -> joinAliasWoOverlapCtx)
+  ).copy(parameters =
+           ParameterSpec(
+             parameters = Map(
+               "aaaa-aaaa" -> Map(
+                 HoleName("hello") -> PresentParameter(SoQLText("world")),
+                 HoleName("goodbye") -> MissingParameter(TestNumber.t)
+               )
+             ),
+             default = "aaaa-aaaa"
+           )
+  )
 
   val analyzer = new SoQLAnalyzer(TestTypeInfo, TestFunctionInfo)
 
@@ -138,7 +152,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
   }
 
   test("Giving no values to the split-query analyzer returns the equivalent of `SELECT *'") {
-    val analysis = analyzer.analyzeSplitQuery(None, None, None, None, None, None, None, None, None, None, None)(Map(TableName.PrimaryTable.qualifier -> datasetCtx))
+    val analysis = analyzer.analyzeSplitQuery(None, None, None, None, None, None, None, None, None, None, None)(asContext(Map(TableName.PrimaryTable.qualifier -> datasetCtx)))
     analysis must equal (analyzer.analyzeUnchainedQuery("SELECT *"))
   }
 
@@ -162,6 +176,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
       ColumnName("c1") -> typedExpression("name_last::number"),
       ColumnName("c2") -> typedExpression("'123'::number"),
       ColumnName("c3") -> typedExpression("456::text")
+    ))
+  }
+
+  test("analysis succeeds in parameter") {
+    val analysis = analyzer.analyzeUnchainedQuery("select param(@aaaa-aaaa, 'hello') as c1, param(@aaaa-aaaa, 'goodbye') as c2")
+    analysis.selection.toSeq must equal (Seq(
+      ColumnName("c1") -> typedExpression("'world'"),
+      ColumnName("c2") -> typed.NullLiteral(TestNumber)(NoPosition) // a parameter is actually the only way to get a bare null number literal as an expression
     ))
   }
 
@@ -521,7 +543,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
   test("join with sub-query") {
     val joinSubSoqlInner = "select * from @aaaa-aaab where name_first = 'xxx'"
     val joinSubSoql = s"($joinSubSoqlInner) as a1"
-    val subAnalyses = parseJoin(joinSubSoql)(datasetCtxMap + (TableName.PrimaryTable.qualifier -> joinAliasCtx))
+    val subAnalyses = parseJoin(joinSubSoql)(datasetCtxMap.withUpdatedSchemas(_ + (TableName.PrimaryTable.qualifier -> joinAliasCtx)))
     val analysis = analyzer.analyzeUnchainedQuery(s"select visits, @a1.name_first join $joinSubSoql on name_first = @a1.name_first")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> typedExpression("visits"),
@@ -534,7 +556,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
   test("join with sub-chained-query") {
     val joinSubSoqlInner = "select * from @aaaa-aaab where name_first = 'aaa' |> select * where name_first = 'bbb'"
     val joinSubSoql = s"($joinSubSoqlInner) as a1"
-    val subAnalyses = parseJoin(joinSubSoql)(datasetCtxMap + (TableName.PrimaryTable.qualifier -> joinAliasCtx))
+    val subAnalyses = parseJoin(joinSubSoql)(datasetCtxMap.withUpdatedSchemas(_ + (TableName.PrimaryTable.qualifier -> joinAliasCtx)))
     val analysis = analyzer.analyzeUnchainedQuery(s"select visits, @a1.name_first join $joinSubSoql on name_first = @a1.name_first")
     analysis.selection.toSeq must equal (Seq(
       ColumnName("visits") -> typedExpression("visits"),
@@ -724,7 +746,7 @@ SELECT visits, @x2.zx
   test("alias is column ref of joined column analyzeBinary") {
     val soql = "select `name_first` as name_last, @a1.`name_last` as a1_name_last join @aaaa-aaaa as @a1 ON `name_last` = @a1.`name_last`"
     val parsed = new StandaloneParser().binaryTreeSelect(soql)
-    val typechecked = analyzer.analyzeBinary(parsed)(datasetCtxMap + (TableName.PrimaryTable.qualifier -> joinAliasCtx))
+    val typechecked = analyzer.analyzeBinary(parsed)(datasetCtxMap.withUpdatedSchemas(_ + (TableName.PrimaryTable.qualifier -> joinAliasCtx)))
     val selection = typechecked.leftMost.leaf.selection
     val firstSelect = selection.get(ColumnName("name_last"))
     val secondSelect = selection.get(ColumnName("a1_name_last"))

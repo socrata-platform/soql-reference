@@ -9,7 +9,6 @@ import com.socrata.soql.environment.{ColumnName, FunctionName, HoleName}
 
 class ParserTest extends WordSpec with MustMatchers {
   def parseExpression(soql: String) = new Parser().expression(soql)
-  def parseParamExpression(soql: String) = new Parser(AbstractParser.Parameters(allowParamSpecialForms = true)).expression(soql)
 
   def parseFull(soql: String) = new Parser().unchainedSelectStatement(soql)
 
@@ -180,8 +179,8 @@ class ParserTest extends WordSpec with MustMatchers {
     }
 
     "accept the various parameter syntaxes" in {
-      parseParamExpression("""param("a")""") must equal (param("a"))
-      parseParamExpression("""param(@aaaa-aaaa, "a")""") must equal (param("a", "aaaa-aaaa"))
+      parseExpression("""param("a")""") must equal (param("a"))
+      parseExpression("""param(@aaaa-aaaa, "a")""") must equal (param("a", "aaaa-aaaa"))
     }
 
   // def show[T](x: => T) {

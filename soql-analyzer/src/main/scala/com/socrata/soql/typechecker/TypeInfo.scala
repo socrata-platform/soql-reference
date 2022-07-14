@@ -7,7 +7,7 @@ import com.socrata.soql.typed.CoreExpr
 
 import scala.util.parsing.input.Position
 
-trait TypeInfo[Type] {
+trait TypeInfo[Type, Value] {
   def booleanLiteralExpr(b: Boolean, pos: Position): Seq[CoreExpr[Nothing, Type]]
   def stringLiteralExpr(s: String, pos: Position): Seq[CoreExpr[Nothing, Type]]
   def numberLiteralExpr(n: BigDecimal, pos: Position): Seq[CoreExpr[Nothing, Type]]
@@ -25,4 +25,7 @@ trait TypeInfo[Type] {
     * every real type except null.  It should be ordered by most-preferred
     * to least-preferred for null-disambiguation purposes. */
   def typeParameterUniverse: OrderedSet[Type]
+
+  def typeOf(value: Value): Type
+  def literalExprFor(value: Value, pos: Position): Option[CoreExpr[Nothing, Type]]
 }

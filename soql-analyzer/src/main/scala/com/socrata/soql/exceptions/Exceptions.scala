@@ -108,6 +108,8 @@ object SoQLException {
       and("non-groupable-group-by", AutomaticJsonCodecBuilder[NonGroupableGroupBy]).
       and("non-boolean-having", AutomaticJsonCodecBuilder[NonBooleanHaving]).
       and("unorderable-order-by", AutomaticJsonCodecBuilder[UnorderableOrderBy]).
+      and("unknown-parameter", AutomaticJsonCodecBuilder[UnknownParameter]).
+      and("unrepresentable-parameter", AutomaticJsonCodecBuilder[UnrepresentableParameter]).
       // QueryOperationException
       and("right-side-of-chain-query-must-be-leaf", AutomaticJsonCodecBuilder[RightSideOfChainQueryMustBeLeaf]).
       build
@@ -210,6 +212,8 @@ case class NonBooleanWhere(typ: TypeName, position: Position) extends SoQLExcept
 case class NonGroupableGroupBy(typ: TypeName, position: Position) extends SoQLException("Cannot group by an expression of type `" + typ + "'", position) with TypecheckException
 case class NonBooleanHaving(typ: TypeName, position: Position) extends SoQLException("Cannot filter by an expression of type `" + typ + "'", position) with TypecheckException
 case class UnorderableOrderBy(typ: TypeName, position: Position) extends SoQLException("Cannot order by an expression of type `" + typ + "'", position) with TypecheckException
+case class UnknownParameter(view: String, hole: String, position: Position) extends SoQLException("Unknown parameter " + JString(hole), position) with TypecheckException
+case class UnrepresentableParameter(typ: TypeName, position: Position) extends SoQLException("Unrepresentable parameter of type `" + typ + "'", position) with TypecheckException
 
 sealed trait QueryOperationException extends SoQLException
 case class RightSideOfChainQueryMustBeLeaf(position: Position) extends SoQLException("Right side of a chain query must be a leaf query.", position) with QueryOperationException

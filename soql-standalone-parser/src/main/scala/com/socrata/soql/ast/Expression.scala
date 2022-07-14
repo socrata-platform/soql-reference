@@ -60,8 +60,12 @@ object Expression {
         case FunctionCall(other, args, _, _) => Vector(other.name) ++ args.flatMap(findIdentsAndLiterals)
       }
       ils ++ fc.filter.toSeq.flatMap(findIdentsAndLiterals(_)) ++ findIdentsAndLiterals(fc.window)
-    case h: Hole =>
-      Vector(h.name.name)
+    case Hole.UDF(name) =>
+      Vector(name.name)
+    case Hole.SavedQuery(name, None) =>
+      Vector("param", name.name)
+    case Hole.SavedQuery(name, Some(v)) =>
+      Vector("param", v, name.name)
   }
 
   private def findIdentsAndLiterals(windowFunctionInfo: Option[WindowFunctionInfo]): Seq[String] =  {

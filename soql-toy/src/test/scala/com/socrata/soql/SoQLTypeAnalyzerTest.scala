@@ -56,13 +56,15 @@ class SoQLTypeAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPro
     )
   }
 
-  implicit val datasetCtxMap =
-    Map(TableName.PrimaryTable.qualifier -> datasetCtx,
-      TableName("_aaaa-aaaa", None).qualifier -> joinCtx,
-      TableName("_aaaa-aaab", Some("_a1")).qualifier -> joinAliasCtx,
-      TableName("_aaaa-aaax", Some("_x1")).qualifier -> joinAliasWoOverlapCtx,
-      TableName("_aaaa-aaab", None).qualifier -> joinAliasCtx,
-      TableName("_aaaa-aaax", None).qualifier -> joinAliasWoOverlapCtx)
+  implicit val datasetCtxMap = AnalysisContext[SoQLType, SoQLValue](
+    schemas = Map(TableName.PrimaryTable.qualifier -> datasetCtx,
+                  TableName("_aaaa-aaaa", None).qualifier -> joinCtx,
+                  TableName("_aaaa-aaab", Some("_a1")).qualifier -> joinAliasCtx,
+                  TableName("_aaaa-aaax", Some("_x1")).qualifier -> joinAliasWoOverlapCtx,
+                  TableName("_aaaa-aaab", None).qualifier -> joinAliasCtx,
+                  TableName("_aaaa-aaax", None).qualifier -> joinAliasWoOverlapCtx),
+    parameters = ParameterSpec.empty
+  )
 
   val analyzer = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo)
 
