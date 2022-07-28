@@ -3,7 +3,7 @@ package com.socrata.soql.functions
 import scala.collection.compat.immutable.LazyList
 import com.socrata.soql.environment.FunctionName
 
-case class MonomorphicFunction[Type](function: Function[Type], bindings: Map[String, Type]) {
+case class MonomorphicFunction[+Type](function: Function[Type], bindings: Map[String, Type]) {
   def this(identity: String, name: FunctionName, parameters: Seq[Type], repeated: Seq[Type], result: Type, isAggregate: Boolean = false, needsWindow: Boolean = false)(documentation: String, examples: Example*) =
     this(Function(
       identity,

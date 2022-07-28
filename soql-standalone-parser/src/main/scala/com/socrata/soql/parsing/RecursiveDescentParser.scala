@@ -674,7 +674,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           r2.first match {
             case AS() =>
               // now we must see an identifier...
-              val ParseResult(r3, identPos) = alias(r2.rest)
+              val ParseResult(r3, identPos) = alias(r2.rest, e)
               result += SelectedExpression(e, Some(identPos))
               loop(r3, commaFirst = true)
             case _ =>
@@ -692,11 +692,13 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     ParseResult(finalReader, result.result())
   }
 
-  private def alias(reader: Reader): ParseResult[(ColumnName, Position)] = {
-    reader.first match {
-      case i: Identifier =>
+  private def alias(reader: Reader, forExpr: Expression): ParseResult[(ColumnName, Position)] = {
+    (reader.first, forExpr) match {
+      case (i: Identifier, _) =>
         ParseResult(reader.rest, (ColumnName(i.value), i.position))
-      case si: SystemIdentifier =>
+      case (si: SystemIdentifier, ColumnOrAliasRef(_, cn)) if ColumnName(si.value) == cn =>
+        ParseResult(reader.rest, (ColumnName(si.value), si.position))
+      case (si: SystemIdentifier, _) =>
         val cn = ColumnName(si.value)
         if(parameters.systemColumnAliasesAllowed.contains(cn)) {
           ParseResult(reader.rest, (cn, si.position))

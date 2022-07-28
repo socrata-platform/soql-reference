@@ -15,7 +15,7 @@ object SoQLFunctions {
   private val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLFunctions])
 
   import SoQLTypeClasses.{Ordered, Equatable, NumLike, RealNumLike, GeospatialLike, TimestampLike}
-  private val AllTypes = SoQLType.typesByName.values.toSet
+  private val AllTypes = CovariantSet.from(SoQLType.typesByName.values.toSet)
 
   val NoDocs = "No documentation available"
 
@@ -34,7 +34,7 @@ object SoQLFunctions {
   private def f(
     identity: String,
     name: FunctionName,
-    constraints: Map[String, Set[SoQLType]],
+    constraints: Map[String, CovariantSet[SoQLType]],
     params: Seq[TypeLike[SoQLType]],
     varargs: Seq[TypeLike[SoQLType]],
     result: TypeLike[SoQLType],
@@ -169,11 +169,11 @@ object SoQLFunctions {
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
     "Return the rows that where the locations 'spatially overlap', meaning they intersect, but one does not completely contain another and they share interior points")
   
-  val Intersection = f("polygon_intersection", FunctionName("polygon_intersection"), Map("a" -> Set(SoQLMultiPolygon, SoQLPolygon), "b" -> Set(SoQLMultiPolygon, SoQLPolygon)),
+  val Intersection = f("polygon_intersection", FunctionName("polygon_intersection"), Map("a" -> CovariantSet(SoQLMultiPolygon, SoQLPolygon), "b" -> CovariantSet(SoQLMultiPolygon, SoQLPolygon)),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon))(
     "Returns the geometry of the overlapping multipolygon intersection between two polygon or multipolygon geometries")
   
-  val Area = f("area", FunctionName("area"), Map("a" -> Set(SoQLMultiPolygon, SoQLPolygon)),
+  val Area = f("area", FunctionName("area"), Map("a" -> CovariantSet(SoQLMultiPolygon, SoQLPolygon)),
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber))(
     "Returns the area of a polygon or multipolygon geometry")
 
@@ -581,15 +581,15 @@ object SoQLFunctions {
     NoDocs
   )
 
-  val TimeStampAdd = f("timestamp add", FunctionName("date_add"), Map("a" -> TimestampLike, "b" -> Set(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
+  val TimeStampAdd = f("timestamp add", FunctionName("date_add"), Map("a" -> TimestampLike, "b" -> CovariantSet(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
     "Add interval (ISO period format) to timestamp"
   )
 
-  val TimeStampPlus = f("timestamp +", SpecialFunctions.Operator("+"), Map("a" -> TimestampLike, "b" -> Set(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
+  val TimeStampPlus = f("timestamp +", SpecialFunctions.Operator("+"), Map("a" -> TimestampLike, "b" -> CovariantSet(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
     "Add interval (ISO period format) to timestamp"
   )
 
-  val TimeStampMinus = f("timestamp -", SpecialFunctions.Operator("-"), Map("a" -> TimestampLike, "b" -> Set(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
+  val TimeStampMinus = f("timestamp -", SpecialFunctions.Operator("-"), Map("a" -> TimestampLike, "b" -> CovariantSet(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
     "Subtract interval (ISO period format) from timestamp"
   )
 

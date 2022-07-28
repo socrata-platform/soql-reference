@@ -5,7 +5,6 @@ import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.typechecker.TypeInfo
 import com.socrata.soql.typed
-import com.socrata.soql.types.{SoQLValue, SoQLText}
 
 import scala.util.parsing.input.Position
 
