@@ -16,7 +16,7 @@ class TableFinderTest extends FunSuite with MustMatchers {
   case class Q(scope: Int, soql: String) extends Thing
   case class U(scope: Int, soql: String) extends Thing
 
-  class MockTableFinder(raw: Map[(Int, String), Thing]) extends TableFinder[String] {
+  class MockTableFinder(raw: Map[(Int, String), Thing]) extends TableFinder {
     private val tables = raw.iterator.map { case ((scope, rawResourceName), thing) =>
       val converted = thing match {
         case D(rawSchema) =>
@@ -26,13 +26,14 @@ class TableFinderTest extends FunSuite with MustMatchers {
         case Q(scope, soql) =>
           Query(scope, soql, Map.empty)
         case U(scope, soql) =>
-          TableQuery(scope, soql, OrderedMap.empty)
+          TableFunction(scope, soql, OrderedMap.empty)
       }
       (scope, ResourceName(rawResourceName)) -> converted
     }.toMap
 
     type ResourceNameScope = Int
     type ParseError = LexerParserException
+    type ColumnType = String
 
     protected def lookup(scope: Int, name: ResourceName): Either[LookupError, TableDescription] = {
       tables.get((scope, name)) match {
@@ -57,9 +58,9 @@ class TableFinderTest extends FunSuite with MustMatchers {
 
     private def parsed(thing: TableDescription) = {
       thing match {
-        case d: Dataset => d
-        case Query(scope, soql, params) => ParsedQuery(scope, parse(soql, false).getOrElse(fail("broken soql fixture 1")), params)
-        case TableQuery(scope, soql, params) => ParsedTableQuery(scope, parse(soql, false).getOrElse(fail("broken soql fixture 2")), params)
+        case Dataset(d) => ParsedTableDescription.Dataset(d)
+        case Query(scope, soql, params) => ParsedTableDescription.Query(scope, parse(soql, false).getOrElse(fail("broken soql fixture 1")), params)
+        case TableFunction(scope, soql, params) => ParsedTableDescription.TableFunction(scope, parse(soql, false).getOrElse(fail("broken soql fixture 2")), params)
       }
     }
 
