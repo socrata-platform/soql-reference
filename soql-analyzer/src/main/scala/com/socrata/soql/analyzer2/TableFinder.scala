@@ -44,7 +44,7 @@ trait TableFinder[CT] {
   /** A saved table query ("UDF"), with any parameters it defines for itself. */
   case class TableQuery(scope: ResourceNameScope, soql: String, parameters: OrderedMap[HoleName, CT]) extends TableDescription
 
-  case class ScopedResourceName(scope: ResourceNameScope, name: ResourceName)
+  type ScopedResourceName = (ResourceNameScope, ResourceName)
 
   sealed trait LookupError
   object LookupError {
@@ -97,12 +97,12 @@ trait TableFinder[CT] {
 
   /** Find all tables referenced from the given name. */
   final def findTables(scope: ResourceNameScope, resourceName: ResourceName): Result[TableMap] = {
-    walkFromName(ScopedResourceName(scope, resourceName), Map.empty)
+    walkFromName((scope, resourceName), Map.empty)
   }
 
   // A pair of helpers that lift the abstract functions into the Result world
   private def doLookup(scopedName: ScopedResourceName): Result[ParsedTableDescription] = {
-    lookup(scopedName.scope, scopedName.name) match {
+    lookup(scopedName._1, scopedName._2) match {
       case Right(d: Dataset) => Success(d)
       case Right(Query(scope, text, params)) => doParse(Some(scopedName), text, false).map(ParsedQuery(scope, _, params))
       case Right(TableQuery(scope, text, params)) => doParse(Some(scopedName), text, true).map(ParsedTableQuery(scope, _, params))
@@ -179,7 +179,7 @@ trait TableFinder[CT] {
     var acc = acc0
 
     for(tn <- from) {
-      val scopedName = ScopedResourceName(scope, ResourceName(tn.nameWithoutPrefix))
+      val scopedName = (scope, ResourceName(tn.nameWithoutPrefix))
       walkFromName(scopedName, acc) match {
         case Success(newAcc) =>
           acc = newAcc
@@ -192,11 +192,11 @@ trait TableFinder[CT] {
       val newAcc =
         join.from match {
           case ast.JoinTable(tn) =>
-            walkFromName(ScopedResourceName(scope, ResourceName(tn.nameWithoutPrefix)), acc)
+            walkFromName((scope, ResourceName(tn.nameWithoutPrefix)), acc)
           case ast.JoinQuery(q, _) =>
             walkTree(scope, q, acc)
           case ast.JoinFunc(f, _) =>
-            walkFromName(ScopedResourceName(scope, ResourceName(f.nameWithoutPrefix)), acc)
+            walkFromName((scope, ResourceName(f.nameWithoutPrefix)), acc)
         }
 
       newAcc match {

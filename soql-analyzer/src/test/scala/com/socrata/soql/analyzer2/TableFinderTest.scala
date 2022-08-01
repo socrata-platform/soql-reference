@@ -66,7 +66,7 @@ class TableFinderTest extends FunSuite with MustMatchers {
     def apply(names: (Int, String)*): Success[TableMap] = {
       val r = names.map { case (scope, n) =>
         val name = ResourceName(n)
-        ScopedResourceName(scope, name) -> parsed(tables((scope, name)))
+        (scope, name) -> parsed(tables((scope, name)))
       }.toMap
 
       r.size must equal (names.length)
@@ -75,7 +75,7 @@ class TableFinderTest extends FunSuite with MustMatchers {
     }
 
     def notFound(scope: Int, name: String) =
-      Error.NotFound(ScopedResourceName(scope, ResourceName(name)))
+      Error.NotFound((scope, ResourceName(name)))
   }
 
   val tables = new MockTableFinder(
