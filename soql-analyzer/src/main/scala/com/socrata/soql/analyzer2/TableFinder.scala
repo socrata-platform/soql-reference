@@ -22,6 +22,26 @@ object ParsedTableDescription {
   ) extends ParsedTableDescription[ResourceNameScope, ColumnType]
 }
 
+class TableMap[ResourceNameScope, +ColumnType](private val underlying: Map[(ResourceNameScope, ResourceName), ParsedTableDescription[ResourceNameScope, ColumnType]]) extends AnyVal {
+  type ScopedResourceName = (ResourceNameScope, ResourceName)
+
+  def contains(scopedName: ScopedResourceName) = underlying.contains(scopedName)
+  def get(name: ScopedResourceName) = underlying.get(name)
+
+  def +[CT2 >: ColumnType](kv: (ScopedResourceName, ParsedTableDescription[ResourceNameScope, CT2])): TableMap[ResourceNameScope, CT2] =
+    new TableMap(underlying + kv)
+}
+object TableMap {
+  def empty[ResourceNameScope] = new TableMap[ResourceNameScope, Nothing](Map.empty)
+}
+
+case class FoundTables[ResourceNameScope, +ColumnType](
+  tableMap: TableMap[ResourceNameScope, ColumnType],
+  initialScope: ResourceNameScope,
+  context: Option[ResourceName], // this name is relative to the initialScope
+  soql: Option[BinaryTree[ast.Select]]
+)
+
 trait TableFinder {
   // These are the things that need to be implemented by subclasses.
   // The "TableMap" representation will have to become more complex if
@@ -86,7 +106,7 @@ trait TableFinder {
     case class PermissionDenied(name: ScopedResourceName) extends Error
   }
 
-  type TableMap = Map[ScopedResourceName, ParsedTableDescription[ResourceNameScope, ColumnType]]
+  type TableMap = com.socrata.soql.analyzer2.TableMap[ResourceNameScope, ColumnType]
 
   case class Success[T](value: T) extends Result[T] {
     override def map[U](f: T => U): Success[U] = Success(f(value))
@@ -94,21 +114,23 @@ trait TableFinder {
   }
 
   /** Find all tables referenced from the given SoQL.  No implicit context is assumed. */
-  final def findTables(scope: ResourceNameScope, text: String): Result[(BinaryTree[ast.Select], TableMap)] = {
-    walkSoQL(scope, text, Map.empty)
+  final def findTables(scope: ResourceNameScope, text: String): Result[FoundTables[ResourceNameScope, ColumnType]] = {
+    walkSoQL(scope, None, text, TableMap.empty)
   }
 
   /** Find all tables referenced from the given SoQL on name that provides an implicit context. */
-  final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String): Result[(BinaryTree[ast.Select], TableMap)] = {
-    findTables(scope, resourceName) match {
-      case Success(acc) => walkSoQL(scope, text, acc)
+  final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String): Result[FoundTables[ResourceNameScope, ColumnType]] = {
+    walkFromName((scope, resourceName), TableMap.empty) match {
+      case Success(acc) => walkSoQL(scope, Some(resourceName), text, acc)
       case err: Error => err
     }
   }
 
   /** Find all tables referenced from the given name. */
-  final def findTables(scope: ResourceNameScope, resourceName: ResourceName): Result[TableMap] = {
-    walkFromName((scope, resourceName), Map.empty)
+  final def findTables(scope: ResourceNameScope, resourceName: ResourceName): Result[FoundTables[ResourceNameScope, ColumnType]] = {
+    walkFromName((scope, resourceName), TableMap.empty).map { acc =>
+      FoundTables(acc, scope, Some(resourceName), None)
+    }
   }
 
   // A pair of helpers that lift the abstract functions into the Result world
@@ -153,11 +175,13 @@ trait TableFinder {
   }
 
   // This walks anonymous soql.  Named soql gets parsed in doLookup
-  private def walkSoQL(scope: ResourceNameScope, text: String, acc: TableMap): Result[(BinaryTree[ast.Select], TableMap)] = {
+  private def walkSoQL(scope: ResourceNameScope, context: Option[ResourceName], text: String, acc: TableMap): Result[FoundTables[ResourceNameScope, ColumnType]] = {
     for {
       tree <- doParse(None, text, udfParamsAllowed = false)
       acc <- walkTree(scope, tree, acc)
-    } yield (tree, acc)
+    } yield {
+      FoundTables(acc, scope, context, Some(tree))
+    }
   }
 
   private def walkTree(scope: ResourceNameScope, bt: BinaryTree[ast.Select], acc: TableMap): Result[TableMap] = {
