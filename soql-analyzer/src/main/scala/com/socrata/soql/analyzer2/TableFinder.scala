@@ -83,12 +83,12 @@ trait TableFinder[CT] {
   case class ParsedTableQuery(scope: ResourceNameScope, parsed: BinaryTree[ast.Select], parameters: OrderedMap[HoleName, CT]) extends ParsedTableDescription
 
   /** Find all tables referenced from the given SoQL.  No implicit context is assumed. */
-  final def findTables(scope: ResourceNameScope, text: String): Result[TableMap] = {
+  final def findTables(scope: ResourceNameScope, text: String): Result[(BinaryTree[ast.Select], TableMap)] = {
     walkSoQL(scope, text, Map.empty)
   }
 
   /** Find all tables referenced from the given SoQL on name that provides an implicit context. */
-  final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String): Result[TableMap] = {
+  final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String): Result[(BinaryTree[ast.Select], TableMap)] = {
     findTables(scope, resourceName) match {
       case Success(acc) => walkSoQL(scope, text, acc)
       case err: Error => err
@@ -142,11 +142,11 @@ trait TableFinder[CT] {
   }
 
   // This walks anonymous soql.  Named soql gets parsed in doLookup
-  private def walkSoQL(scope: ResourceNameScope, text: String, acc: TableMap): Result[TableMap] = {
+  private def walkSoQL(scope: ResourceNameScope, text: String, acc: TableMap): Result[(BinaryTree[ast.Select], TableMap)] = {
     for {
       tree <- doParse(None, text, udfParamsAllowed = false)
       acc <- walkTree(scope, tree, acc)
-    } yield acc
+    } yield (tree, acc)
   }
 
   private def walkTree(scope: ResourceNameScope, bt: BinaryTree[ast.Select], acc: TableMap): Result[TableMap] = {
