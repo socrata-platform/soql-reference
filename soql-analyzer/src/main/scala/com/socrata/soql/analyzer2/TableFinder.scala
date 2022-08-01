@@ -38,9 +38,15 @@ object TableMap {
 case class FoundTables[ResourceNameScope, +ColumnType](
   tableMap: TableMap[ResourceNameScope, ColumnType],
   initialScope: ResourceNameScope,
-  context: Option[ResourceName], // this name is relative to the initialScope
-  soql: Option[BinaryTree[ast.Select]]
+  query: FoundTables.Query
 )
+
+object FoundTables {
+  sealed abstract class Query
+  case class Saved(name: ResourceName) extends Query
+  case class InContext(name: ResourceName, soql: BinaryTree[ast.Select]) extends Query
+  case class Standalone(soql: BinaryTree[ast.Select]) extends Query
+}
 
 trait TableFinder {
   // These are the things that need to be implemented by subclasses.
@@ -115,13 +121,13 @@ trait TableFinder {
 
   /** Find all tables referenced from the given SoQL.  No implicit context is assumed. */
   final def findTables(scope: ResourceNameScope, text: String): Result[FoundTables[ResourceNameScope, ColumnType]] = {
-    walkSoQL(scope, None, text, TableMap.empty)
+    walkSoQL(scope, FoundTables.Standalone, text, TableMap.empty)
   }
 
   /** Find all tables referenced from the given SoQL on name that provides an implicit context. */
   final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String): Result[FoundTables[ResourceNameScope, ColumnType]] = {
     walkFromName((scope, resourceName), TableMap.empty) match {
-      case Success(acc) => walkSoQL(scope, Some(resourceName), text, acc)
+      case Success(acc) => walkSoQL(scope, FoundTables.InContext(resourceName, _), text, acc)
       case err: Error => err
     }
   }
@@ -129,7 +135,7 @@ trait TableFinder {
   /** Find all tables referenced from the given name. */
   final def findTables(scope: ResourceNameScope, resourceName: ResourceName): Result[FoundTables[ResourceNameScope, ColumnType]] = {
     walkFromName((scope, resourceName), TableMap.empty).map { acc =>
-      FoundTables(acc, scope, Some(resourceName), None)
+      FoundTables(acc, scope, FoundTables.Saved(resourceName))
     }
   }
 
@@ -175,12 +181,12 @@ trait TableFinder {
   }
 
   // This walks anonymous soql.  Named soql gets parsed in doLookup
-  private def walkSoQL(scope: ResourceNameScope, context: Option[ResourceName], text: String, acc: TableMap): Result[FoundTables[ResourceNameScope, ColumnType]] = {
+  private def walkSoQL(scope: ResourceNameScope, context: BinaryTree[ast.Select] => FoundTables.Query, text: String, acc: TableMap): Result[FoundTables[ResourceNameScope, ColumnType]] = {
     for {
       tree <- doParse(None, text, udfParamsAllowed = false)
       acc <- walkTree(scope, tree, acc)
     } yield {
-      FoundTables(acc, scope, context, Some(tree))
+      FoundTables(acc, scope, context(tree))
     }
   }
 
