@@ -13,7 +13,7 @@ import com.socrata.soql.parsing.{StandaloneParser, AbstractParser}
 class TableFinderTest extends FunSuite with MustMatchers {
   sealed abstract class Thing
   case class D(schema: Map[String, String]) extends Thing
-  case class Q(scope: Int, soql: String) extends Thing
+  case class Q(scope: Int, parent: ResourceName, soql: String) extends Thing
   case class U(scope: Int, soql: String) extends Thing
 
   class MockTableFinder(raw: Map[(Int, String), Thing]) extends TableFinder {
@@ -23,8 +23,8 @@ class TableFinderTest extends FunSuite with MustMatchers {
           Dataset(rawSchema.iterator.map {case (rawColumnName, ct) =>
                     ColumnName(rawColumnName) -> ct
                   }.toMap)
-        case Q(scope, soql) =>
-          Query(scope, soql, Map.empty)
+        case Q(scope, parent, soql) =>
+          Query(scope, parent, soql, Map.empty)
         case U(scope, soql) =>
           TableFunction(scope, soql, OrderedMap.empty)
       }
@@ -59,7 +59,7 @@ class TableFinderTest extends FunSuite with MustMatchers {
     private def parsed(thing: TableDescription) = {
       thing match {
         case Dataset(d) => ParsedTableDescription.Dataset(d)
-        case Query(scope, soql, params) => ParsedTableDescription.Query(scope, parse(soql, false).getOrElse(fail("broken soql fixture 1")), params)
+        case Query(scope, parent, soql, params) => ParsedTableDescription.Query(scope, parent, parse(soql, false).getOrElse(fail("broken soql fixture 1")), params)
         case TableFunction(scope, soql, params) => ParsedTableDescription.TableFunction(scope, parse(soql, false).getOrElse(fail("broken soql fixture 2")), params)
       }
     }
@@ -89,10 +89,10 @@ class TableFinderTest extends FunSuite with MustMatchers {
         "key" -> "integer",
         "value" -> "otherthing"
       )),
-      (0, "t3") -> Q(0, "select * from @t2"),
+      (0, "t3") -> Q(0, ResourceName("t2"), "select *"),
       (0, "t4") -> U(0, "select * from @t2"),
-      (0, "t5") -> Q(1, "select * from @t1"),
-      (0, "t6") -> Q(1, "select * from @t2"), // t2 exists in scope 0 but not in scope 1
+      (0, "t5") -> Q(1, ResourceName("t1"), "select *"),
+      (0, "t6") -> Q(1, ResourceName("t2"), "select *"), // t2 exists in scope 0 but not in scope 1
       (1, "t1") -> D(Map())
     )
   )
