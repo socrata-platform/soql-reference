@@ -2,7 +2,7 @@ package com.socrata.soql.parsing.standalone_exceptions
 
 import scala.util.parsing.input.Position
 
-sealed abstract class StandaloneLexerException(m: String, p: Position) extends RuntimeException(m + ":\n" + p.longString) {
+sealed abstract class StandaloneLexerException(m: String, p: Position) extends LexerParserException(m + ":\n" + p.longString) {
   def position: Position
 }
 

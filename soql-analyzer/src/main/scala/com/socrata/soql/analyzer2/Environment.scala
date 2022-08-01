@@ -44,14 +44,18 @@ class Scope[+CT] private (
   def relabelled(newLabel: TableLabel) = new Scope(name, schemaByName, schemaByLabel, newLabel)
 }
 
-sealed abstract class LookupResult[+A];
-object LookupResult {
-  case object NotFound extends LookupResult[Nothing]
-  case class Found[+A](a: A) extends LookupResult[A]
-  case object Ambiguous extends LookupResult[Nothing]
+object Environment {
+  sealed abstract class LookupResult[+A];
+  object LookupResult {
+    case object NotFound extends LookupResult[Nothing]
+    case class Found[+A](a: A) extends LookupResult[A]
+    case object Ambiguous extends LookupResult[Nothing]
+  }
 }
 
 class Environment[+CT] private (scopes: List[Scope[CT]]) {
+  import Environment._
+
   def this() = this(Nil)
 
   def extend[CT2 >: CT](scope: Scope[CT2]): Environment[CT2] = {

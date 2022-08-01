@@ -60,7 +60,7 @@ case class OrderBy[+CT, +CV, +Ctx <: Windowed](expr: Expr[CT, CV, Ctx], ascendin
 
 sealed abstract class From[+CT, +CV] {
   // extend the given environment with names introduced by this FROM clause
-  def extendEnvironment[CT2 >: CT](base: Environment[CT2]): Environment[CT2]
+  private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]): Environment[CT2]
 }
 case class Join[+CT, +CV](joinType: JoinType, joinDirection: JoinDirection, lateral: Boolean, left: AtomicFrom[CT, CV], right: From[CT, CV], on: Expr[CT, CV, Normal]) extends From[CT, CV] {
   // The difference between a lateral and a non-lateral join is the
@@ -75,7 +75,7 @@ case class Join[+CT, +CV](joinType: JoinType, joinDirection: JoinDirection, late
   //    val nextFromEnv = checkedRight.extendEnvironment(checkedLeft.extendEnvironment(previousFromEnv))
   // which is what this `extendEnvironment` function does, rewritten
   // as a loop so that a lot of joins don't use a lot of stack.
-  def extendEnvironment[CT2 >: CT](base: Environment[CT2]) = {
+  private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]) = {
     @tailrec
     def loop(acc: Environment[CT2], self: From[CT2, CV]): Environment[CT2] = {
       self match {
@@ -101,17 +101,17 @@ sealed abstract class JoinDirection {
 }
 
 sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
-  val scope: Scope[CT]
-  def extendEnvironment[CT2 >: CT](base: Environment[CT2]) = base.extend(scope)
+  protected val scope: Scope[CT]
+  private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]) = base.extend(scope)
 
   val label: TableLabel
 }
 case class FromTable[+CT](resourceName: ResourceName, alias: Option[ResourceName], label: TableLabel, columns: OrderedMap[ColumnLabel, NameEntry[CT]]) extends AtomicFrom[CT, Nothing] {
-  lazy val scope: Scope[CT] =
+  protected val scope: Scope[CT] =
     new Scope(Some(alias.getOrElse(resourceName)), columns, label)
 }
 case class FromStatement[+CT, +CV](statement: Statement[CT, CV], label: TableLabel, alias: ResourceName) extends AtomicFrom[CT, CV] {
-  lazy val scope: Scope[CT] =
+  protected val scope: Scope[CT] =
     new Scope(Some(alias), statement.schema, label)
 }
 
@@ -128,10 +128,14 @@ sealed abstract class Normal extends Aggregate
 sealed abstract class Expr[+CT, +CV, +Ctx <: Windowed] {
   val typ: CT
 }
-case class Column[+CT](label: TableLabel, field: ColumnLabel, typ: CT) extends Expr[CT, Nothing, Normal]
-case class Literal[+CT, +CV](value: CV)(implicit ev: HasType[CV, CT]) extends Expr[CT, CV, Normal] {
+case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT) extends Expr[CT, Nothing, Normal]
+
+sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV, Normal]
+case class LiteralValue[+CT, +CV](value: CV)(implicit ev: HasType[CV, CT]) extends Literal[CT, CV] {
   val typ = ev.typeOf(value)
 }
+case class NullLiteral[+CT](typ: CT) extends Literal[CT, Nothing]
+
 case class FunctionCall[+CT, +CV, +Ctx <: Windowed](
   function: MonomorphicFunction[CT],
   args: Seq[Expr[CT, CV, Ctx]] // a normal function call does not change the current context, so things like `1 + sum(xs)` is legal
