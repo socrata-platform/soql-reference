@@ -31,7 +31,7 @@ class Scope[+CT] private (
     require(schemaByName.size == schemaByLabel.size, "Duplicate labels in schema")
   }
 
-  def this(name: Option[ResourceName], schema: Map[ColumnLabel, NameEntry[CT]], label: TableLabel)(implicit erasureWorkaround: ErasureWorkaround) = {
+  def this(name: Option[ResourceName], schema: OrderedMap[ColumnLabel, NameEntry[CT]], label: TableLabel)(implicit erasureWorkaround: ErasureWorkaround) = {
     this(
       name,
       OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (name, Entry(name, label, typ)) },
