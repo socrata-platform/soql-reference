@@ -4,7 +4,7 @@ import scala.annotation.tailrec
 
 import com.socrata.soql.ast
 import com.socrata.soql.collection.OrderedMap
-import com.socrata.soql.environment.{ResourceName, ColumnName, HoleName}
+import com.socrata.soql.environment.{ResourceName, ColumnName, HoleName, TableName}
 import com.socrata.soql.{BinaryTree, Leaf, Compound}
 
 sealed trait ParsedTableDescription[+ResourceNameScope, +ColumnType]
@@ -185,7 +185,7 @@ trait TableFinder {
   //   Things which are called "convert" may not.
 
   private def walkFromName(scopedName: ScopedResourceName, acc: TableMap): Result[TableMap] = {
-    if(acc.contains(scopedName)) {
+    if(acc.contains(scopedName) || isSpecialTableName(scopedName)) {
       Success(acc)
     } else {
       for {
@@ -193,6 +193,12 @@ trait TableFinder {
         acc <- walkDesc(desc, acc + (scopedName -> desc))
       } yield acc
     }
+  }
+
+  private def isSpecialTableName(scopedName: ScopedResourceName): Boolean = {
+    val (_, name) = scopedName
+    val prefixedName = TableName.SodaFountainPrefix + name.caseFolded
+    TableName.reservedNames.contains(prefixedName)
   }
 
   def walkDesc(desc: ParsedTableDescription[ResourceNameScope, ColumnType], acc: TableMap): Result[TableMap] = {
