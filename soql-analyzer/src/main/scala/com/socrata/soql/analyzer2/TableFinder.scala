@@ -9,12 +9,15 @@ import com.socrata.soql.{BinaryTree, Leaf, Compound}
 
 sealed trait ParsedTableDescription[+ResourceNameScope, +ColumnType]
 object ParsedTableDescription {
-  case class Dataset[+ColumnType](schema: Map[ColumnName, ColumnType]) extends ParsedTableDescription[Nothing, ColumnType]
+  case class Dataset[+ColumnType](
+    canonicalName: DatabaseTableName,
+    schema: OrderedMap[ColumnName, ColumnType]
+  ) extends ParsedTableDescription[Nothing, ColumnType]
   case class Query[+ResourceNameScope, +ColumnType](
     scope: ResourceNameScope, // This scope is to resolve both basedOn and any tables referenced within the text of soql
     basedOn: ResourceName,
     parsed: BinaryTree[ast.Select],
-    parameters: Map[HoleName, ColumnType]
+    parameters: Option[ParameterInfo[ColumnType]]
   ) extends ParsedTableDescription[ResourceNameScope, ColumnType]
   case class TableFunction[+ResourceNameScope, +ColumnType](
     scope: ResourceNameScope,
@@ -23,14 +26,23 @@ object ParsedTableDescription {
   ) extends ParsedTableDescription[ResourceNameScope, ColumnType]
 }
 
+case class ParameterInfo[+CT](namespace: String, params: Map[HoleName, CT])
+
 class TableMap[ResourceNameScope, +ColumnType](private val underlying: Map[(ResourceNameScope, ResourceName), ParsedTableDescription[ResourceNameScope, ColumnType]]) extends AnyVal {
   type ScopedResourceName = (ResourceNameScope, ResourceName)
 
-  def contains(scopedName: ScopedResourceName) = underlying.contains(scopedName)
+  def contains(name: ScopedResourceName) = underlying.contains(name)
   def get(name: ScopedResourceName) = underlying.get(name)
+  def getOrElse[CT2 >: ColumnType](name: ScopedResourceName)(orElse: => ParsedTableDescription[ResourceNameScope, CT2]) = underlying.getOrElse(name, orElse)
 
   def +[CT2 >: ColumnType](kv: (ScopedResourceName, ParsedTableDescription[ResourceNameScope, CT2])): TableMap[ResourceNameScope, CT2] =
     new TableMap(underlying + kv)
+
+  def find(scope: ResourceNameScope, name: ResourceName): ParsedTableDescription[ResourceNameScope, ColumnType] = {
+    getOrElse((scope, name)) {
+      throw new NoSuchElementException(s"TableMap: No such key: $scope:$name")
+    }
+  }
 }
 object TableMap {
   def empty[ResourceNameScope] = new TableMap[ResourceNameScope, Nothing](Map.empty)
@@ -82,13 +94,13 @@ trait TableFinder {
   /** The result of looking up a name, containing only the values relevant to analysis. */
   sealed trait TableDescription
   /** A base dataset, or a saved query which is being analyzed opaquely. */
-  case class Dataset(schema: Map[ColumnName, ColumnType]) extends TableDescription
+  case class Dataset(databaseName: DatabaseTableName, schema: OrderedMap[ColumnName, ColumnType]) extends TableDescription
   /** A saved query, with any parameters it (non-transitively!) defines. */
   case class Query(
     scope: ResourceNameScope,
     basedOn: ResourceName,
     soql: String,
-    parameters: Map[HoleName, ColumnType]
+    parameters: Option[ParameterInfo[ColumnType]]
   ) extends TableDescription
   /** A saved table query ("UDF"), with any parameters it defines for itself. */
   case class TableFunction(
@@ -152,7 +164,7 @@ trait TableFinder {
   // A pair of helpers that lift the abstract functions into the Result world
   private def doLookup(scopedName: ScopedResourceName): Result[ParsedTableDescription[ResourceNameScope, ColumnType]] = {
     lookup(scopedName._1, scopedName._2) match {
-      case Right(Dataset(schema)) => Success(ParsedTableDescription.Dataset(schema))
+      case Right(Dataset(name, schema)) => Success(ParsedTableDescription.Dataset(name, schema))
       case Right(Query(scope, basedOn, text, params)) =>
         doParse(Some(scopedName), text, false).map(ParsedTableDescription.Query(scope, basedOn, _, params))
       case Right(TableFunction(scope, text, params)) => doParse(Some(scopedName), text, true).map(ParsedTableDescription.TableFunction(scope, _, params))
@@ -185,7 +197,7 @@ trait TableFinder {
 
   def walkDesc(desc: ParsedTableDescription[ResourceNameScope, ColumnType], acc: TableMap): Result[TableMap] = {
     desc match {
-      case ParsedTableDescription.Dataset(_) => Success(acc)
+      case ParsedTableDescription.Dataset(_, _) => Success(acc)
       case ParsedTableDescription.Query(scope, basedOn, tree, _params) =>
         for {
           acc <- walkFromName((scope, basedOn), acc)

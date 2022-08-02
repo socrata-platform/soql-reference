@@ -100,15 +100,19 @@ sealed abstract class JoinDirection {
   case object Full extends JoinDirection
 }
 
+case class DatabaseTableName(name: String) {
+  def asResourceName = ResourceName(name)
+}
+
 sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
   protected val scope: Scope[CT]
   private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]) = base.extend(scope)
 
   val label: TableLabel
 }
-case class FromTable[+CT](resourceName: ResourceName, alias: Option[ResourceName], label: TableLabel, columns: OrderedMap[ColumnLabel, NameEntry[CT]]) extends AtomicFrom[CT, Nothing] {
+case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceName], label: TableLabel, columns: OrderedMap[ColumnLabel, NameEntry[CT]]) extends AtomicFrom[CT, Nothing] {
   protected val scope: Scope[CT] =
-    new Scope(Some(alias.getOrElse(resourceName)), columns, label)
+    new Scope(Some(alias.getOrElse(tableName.asResourceName)), columns, label)
 }
 case class FromStatement[+CT, +CV](statement: Statement[CT, CV], label: TableLabel, alias: ResourceName) extends AtomicFrom[CT, CV] {
   protected val scope: Scope[CT] =

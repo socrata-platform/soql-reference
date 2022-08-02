@@ -20,11 +20,14 @@ class TableFinderTest extends FunSuite with MustMatchers {
     private val tables = raw.iterator.map { case ((scope, rawResourceName), thing) =>
       val converted = thing match {
         case D(rawSchema) =>
-          Dataset(rawSchema.iterator.map {case (rawColumnName, ct) =>
-                    ColumnName(rawColumnName) -> ct
-                  }.toMap)
+          Dataset(
+            DatabaseTableName(rawResourceName),
+            OrderedMap() ++ rawSchema.iterator.map {case (rawColumnName, ct) =>
+              ColumnName(rawColumnName) -> ct
+            }
+          )
         case Q(scope, parent, soql) =>
-          Query(scope, parent, soql, Map.empty)
+          Query(scope, parent, soql, None)
         case U(scope, soql) =>
           TableFunction(scope, soql, OrderedMap.empty)
       }
@@ -58,7 +61,7 @@ class TableFinderTest extends FunSuite with MustMatchers {
 
     private def parsed(thing: TableDescription) = {
       thing match {
-        case Dataset(d) => ParsedTableDescription.Dataset(d)
+        case Dataset(tn, d) => ParsedTableDescription.Dataset(tn, d)
         case Query(scope, parent, soql, params) => ParsedTableDescription.Query(scope, parent, parse(soql, false).getOrElse(fail("broken soql fixture 1")), params)
         case TableFunction(scope, soql, params) => ParsedTableDescription.TableFunction(scope, parse(soql, false).getOrElse(fail("broken soql fixture 2")), params)
       }
