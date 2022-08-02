@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2
 import scala.annotation.tailrec
 
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.{ColumnName, ResourceName}
+import com.socrata.soql.environment.{ColumnName, ResourceName, TableName}
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.NonEmptySeq
 
@@ -95,7 +95,7 @@ sealed abstract class From[+CT, +CV] {
     columnName: (DatabaseTableName, ColumnName) => ColumnName
   ): From[CT, CV]
 }
-case class Join[+CT, +CV](joinType: JoinType, joinDirection: JoinDirection, lateral: Boolean, left: AtomicFrom[CT, CV], right: From[CT, CV], on: Expr[CT, CV, Normal]) extends From[CT, CV] {
+case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom[CT, CV], right: From[CT, CV], on: Expr[CT, CV, Normal]) extends From[CT, CV] {
   // The difference between a lateral and a non-lateral join is the
   // environment assumed while typechecking; in a non-lateral join
   // it's something like:
@@ -112,7 +112,7 @@ case class Join[+CT, +CV](joinType: JoinType, joinDirection: JoinDirection, late
     @tailrec
     def loop(acc: Environment[CT2], self: From[CT2, CV]): Environment[CT2] = {
       self match {
-        case j@Join(_, _, _, left, right, _) =>
+        case j@Join(_, _, left, right, _) =>
           loop(left.extendEnvironment(acc), right)
         case other =>
           other.extendEnvironment(acc)
@@ -133,12 +133,9 @@ case class Join[+CT, +CV](joinType: JoinType, joinDirection: JoinDirection, late
 sealed abstract class JoinType
 object JoinType {
   case object Inner extends JoinType
-  case object Outer extends JoinType
-}
-sealed abstract class JoinDirection {
-  case object Left extends JoinDirection
-  case object Right extends JoinDirection
-  case object Full extends JoinDirection
+  case object LeftOuter extends JoinType
+  case object RightOuter extends JoinType
+  case object FullOuter extends JoinType
 }
 
 case class DatabaseTableName(name: String) {
@@ -155,6 +152,8 @@ sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
     tableName: DatabaseTableName => DatabaseTableName,
     columnName: (DatabaseTableName, ColumnName) => ColumnName
   ): AtomicFrom[CT, CV]
+
+  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): AtomicFrom[CT, CV]
 }
 case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceName], label: TableLabel, columns: OrderedMap[ColumnLabel, NameEntry[CT]]) extends AtomicFrom[CT, Nothing] {
   protected val scope: Scope[CT] =
@@ -168,16 +167,43 @@ case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceNa
       tableName = tableName(this.tableName),
       columns = columns.withValuesMapped { case ne => ne.copy(name = columnName(this.tableName, ne.name)) }
     )
+
+  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromTable[CT] =
+    copy(alias = newAlias)
 }
-case class FromStatement[+CT, +CV](statement: Statement[CT, CV], label: TableLabel, alias: ResourceName) extends AtomicFrom[CT, CV] {
+// "alias" is optional here because of chained soql; actually having a
+// real subselect syntactically requires an alias, but `select ... |>
+// select ...` does not.  The alias is just for name-resolution during
+// analysis anyway...
+case class FromStatement[+CT, +CV](statement: Statement[CT, CV], label: TableLabel, alias: Option[ResourceName]) extends AtomicFrom[CT, CV] {
   protected val scope: Scope[CT] =
-    new Scope(Some(alias), statement.schema, label)
+    new Scope(alias, statement.schema, label)
 
   private[analyzer2] def rewriteDatabaseNames(
     tableName: DatabaseTableName => DatabaseTableName,
     columnName: (DatabaseTableName, ColumnName) => ColumnName
   ) =
     copy(statement = statement.rewriteDatabaseNames(tableName, columnName))
+
+  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromStatement[CT, CV] =
+    copy(alias = newAlias)
+}
+case class FromSingleRow(label: TableLabel, alias: Option[ResourceName]) extends AtomicFrom[Nothing, Nothing] {
+  protected val scope: Scope[Nothing] =
+    new Scope(
+      Some(alias.getOrElse(ResourceName(TableName(TableName.SingleRow).nameWithoutPrefix))),
+      OrderedMap.empty[ColumnLabel, NameEntry[Nothing]],
+      label
+    )
+
+  private[analyzer2] def rewriteDatabaseNames(
+    tableName: DatabaseTableName => DatabaseTableName,
+    columnName: (DatabaseTableName, ColumnName) => ColumnName
+  ) =
+    this
+
+  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromSingleRow =
+    copy(alias = newAlias)
 }
 
 // Expressions
