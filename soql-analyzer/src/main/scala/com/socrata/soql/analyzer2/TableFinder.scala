@@ -180,10 +180,6 @@ trait TableFinder {
     }
   }
 
-  // Naming convention:
-  //   Things which are called "walk" may end up making calls to "lookup" want will populate a TableMap
-  //   Things which are called "convert" may not.
-
   private def walkFromName(scopedName: ScopedResourceName, acc: TableMap): Result[TableMap] = {
     if(acc.contains(scopedName) || isSpecialTableName(scopedName)) {
       Success(acc)
