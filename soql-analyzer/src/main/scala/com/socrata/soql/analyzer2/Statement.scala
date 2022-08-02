@@ -13,6 +13,10 @@ trait HasType[-CV, +CT] {
 
 sealed abstract class Statement[+CT, +CV] {
   val schema: OrderedMap[ColumnLabel, NameEntry[CT]]
+  def rewriteDatabaseNames(
+    tableName: DatabaseTableName => DatabaseTableName,
+    columnName: (DatabaseTableName, ColumnName) => ColumnName
+  ): Statement[CT, CV]
 }
 
 sealed abstract class TableFunc
@@ -26,6 +30,15 @@ case object DifferenceAll extends TableFunc
 case class CombinedTables[+CT, +CV](op: TableFunc, left: Statement[CT, CV], right: Statement[CT, CV]) extends Statement[CT, CV] {
   require(left.schema.values.map(_.typ) == right.schema.values.map(_.typ))
   val schema = left.schema
+
+  def rewriteDatabaseNames(
+    tableName: DatabaseTableName => DatabaseTableName,
+    columnName: (DatabaseTableName, ColumnName) => ColumnName
+  ) =
+    copy(
+      left = left.rewriteDatabaseNames(tableName, columnName),
+      right = right.rewriteDatabaseNames(tableName, columnName)
+    )
 }
 
 sealed abstract class MaterializedHint
@@ -39,6 +52,15 @@ case class CTE[+CT, +CV](
   useQuery: Statement[CT, CV]
 ) extends Statement[CT, CV] {
   val schema = useQuery.schema
+
+  def rewriteDatabaseNames(
+    tableName: DatabaseTableName => DatabaseTableName,
+    columnName: (DatabaseTableName, ColumnName) => ColumnName
+  ) =
+    copy(
+      definitionQuery = definitionQuery.rewriteDatabaseNames(tableName, columnName),
+      useQuery = useQuery.rewriteDatabaseNames(tableName, columnName)
+    )
 }
 
 case class NamedExpr[+CT, +CV, +Ctx <: Windowed](expr: Expr[CT, CV, Ctx], name: ColumnName)
@@ -54,6 +76,12 @@ case class Select[+CT, +CV](
   offset: Option[BigInt]
 ) extends Statement[CT, CV] {
   val schema = selectList.withValuesMapped { case NamedExpr(expr, name) => NameEntry(name, expr.typ) }
+
+  def rewriteDatabaseNames(
+    tableName: DatabaseTableName => DatabaseTableName,
+    columnName: (DatabaseTableName, ColumnName) => ColumnName
+  ) =
+    copy(from = from.rewriteDatabaseNames(tableName, columnName))
 }
 
 case class OrderBy[+CT, +CV, +Ctx <: Windowed](expr: Expr[CT, CV, Ctx], ascending: Boolean, nullLast: Boolean)
@@ -61,6 +89,11 @@ case class OrderBy[+CT, +CV, +Ctx <: Windowed](expr: Expr[CT, CV, Ctx], ascendin
 sealed abstract class From[+CT, +CV] {
   // extend the given environment with names introduced by this FROM clause
   private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]): Environment[CT2]
+
+  private[analyzer2] def rewriteDatabaseNames(
+    tableName: DatabaseTableName => DatabaseTableName,
+    columnName: (DatabaseTableName, ColumnName) => ColumnName
+  ): From[CT, CV]
 }
 case class Join[+CT, +CV](joinType: JoinType, joinDirection: JoinDirection, lateral: Boolean, left: AtomicFrom[CT, CV], right: From[CT, CV], on: Expr[CT, CV, Normal]) extends From[CT, CV] {
   // The difference between a lateral and a non-lateral join is the
@@ -87,6 +120,14 @@ case class Join[+CT, +CV](joinType: JoinType, joinDirection: JoinDirection, late
     }
     loop(base, this)
   }
+
+  private[analyzer2] def rewriteDatabaseNames(
+    tableName: DatabaseTableName => DatabaseTableName,
+    columnName: (DatabaseTableName, ColumnName) => ColumnName
+  ): From[CT, CV] = {
+    // annoying...
+    copy(left = left.rewriteDatabaseNames(tableName, columnName), right = right.rewriteDatabaseNames(tableName, columnName))
+  }
 }
 
 sealed abstract class JoinType
@@ -109,14 +150,34 @@ sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
   private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]) = base.extend(scope)
 
   val label: TableLabel
+
+  private[analyzer2] def rewriteDatabaseNames(
+    tableName: DatabaseTableName => DatabaseTableName,
+    columnName: (DatabaseTableName, ColumnName) => ColumnName
+  ): AtomicFrom[CT, CV]
 }
 case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceName], label: TableLabel, columns: OrderedMap[ColumnLabel, NameEntry[CT]]) extends AtomicFrom[CT, Nothing] {
   protected val scope: Scope[CT] =
     new Scope(Some(alias.getOrElse(tableName.asResourceName)), columns, label)
+
+  private[analyzer2] def rewriteDatabaseNames(
+    tableName: DatabaseTableName => DatabaseTableName,
+    columnName: (DatabaseTableName, ColumnName) => ColumnName
+  ) =
+    copy(
+      tableName = tableName(this.tableName),
+      columns = columns.withValuesMapped { case ne => ne.copy(name = columnName(this.tableName, ne.name)) }
+    )
 }
 case class FromStatement[+CT, +CV](statement: Statement[CT, CV], label: TableLabel, alias: ResourceName) extends AtomicFrom[CT, CV] {
   protected val scope: Scope[CT] =
     new Scope(Some(alias), statement.schema, label)
+
+  private[analyzer2] def rewriteDatabaseNames(
+    tableName: DatabaseTableName => DatabaseTableName,
+    columnName: (DatabaseTableName, ColumnName) => ColumnName
+  ) =
+    copy(statement = statement.rewriteDatabaseNames(tableName, columnName))
 }
 
 // Expressions
