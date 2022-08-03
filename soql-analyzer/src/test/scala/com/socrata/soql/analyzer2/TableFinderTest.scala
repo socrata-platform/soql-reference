@@ -61,7 +61,7 @@ class TableFinderTest extends FunSuite with MustMatchers {
 
     private def parsed(thing: TableDescription) = {
       thing match {
-        case Dataset(tn, d) => ParsedTableDescription.Dataset(tn, d)
+        case ds: Dataset => ds.toParsed
         case Query(scope, parent, soql, params) => ParsedTableDescription.Query(scope, parent, parse(soql, false).getOrElse(fail("broken soql fixture 1")), params)
         case TableFunction(scope, soql, params) => ParsedTableDescription.TableFunction(scope, parse(soql, false).getOrElse(fail("broken soql fixture 2")), params)
       }

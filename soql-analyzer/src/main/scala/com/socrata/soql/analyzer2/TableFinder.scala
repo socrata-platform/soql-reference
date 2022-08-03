@@ -97,14 +97,28 @@ trait TableFinder {
   case class Dataset(
     databaseName: DatabaseTableName,
     schema: OrderedMap[ColumnName, ColumnType]
-  ) extends TableDescription
+  ) extends TableDescription {
+    private[analyzer2] def toParsed =
+      ParsedTableDescription.Dataset(
+        databaseName,
+        schema.map { case (cn, ct) =>
+          // This is a little icky...?  But at this point we're in
+          // the user-provided names world, so this is at least a
+          // _predictable_ key to use as a "database column name"
+          // before we get to the point of moving over to the
+          // actual-database-names world.
+          DatabaseColumnName(cn.caseFolded) -> NameEntry(cn, ct)
+        }
+      )
+  }
   /** A saved query, with any parameters it (non-transitively!) defines. */
   case class Query(
     scope: ResourceNameScope,
     basedOn: ResourceName,
     soql: String,
     parameters: Option[ParameterInfo[ColumnType]]
-  ) extends TableDescription
+  ) extends TableDescription {
+  }
   /** A saved table query ("UDF"), with any parameters it defines for itself. */
   case class TableFunction(
     scope: ResourceNameScope,
@@ -167,20 +181,8 @@ trait TableFinder {
   // A pair of helpers that lift the abstract functions into the Result world
   private def doLookup(scopedName: ScopedResourceName): Result[ParsedTableDescription[ResourceNameScope, ColumnType]] = {
     lookup(scopedName._1, scopedName._2) match {
-      case Right(Dataset(name, schema)) =>
-        Success(
-          ParsedTableDescription.Dataset(
-            name,
-            schema.map { case (cn, ct) =>
-              // This is a little icky...?  But at this point we're in
-              // the user-provided names world, so this is at least a
-              // _predictable_ key to use as a "database column name"
-              // before we get to the point of moving over to the
-              // actual-database-names world.
-              DatabaseColumnName(cn.caseFolded) -> NameEntry(cn, ct)
-            }
-          )
-        )
+      case Right(ds: Dataset) =>
+        Success(ds.toParsed)
       case Right(Query(scope, basedOn, text, params)) =>
         doParse(Some(scopedName), text, false).map(ParsedTableDescription.Query(scope, basedOn, _, params))
       case Right(TableFunction(scope, text, params)) => doParse(Some(scopedName), text, true).map(ParsedTableDescription.TableFunction(scope, _, params))

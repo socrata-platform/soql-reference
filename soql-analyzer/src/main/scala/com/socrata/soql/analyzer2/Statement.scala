@@ -106,7 +106,7 @@ case class OrderBy[+CT, +CV, +Ctx <: Windowed](expr: Expr[CT, CV, Ctx], ascendin
 
 sealed abstract class From[+CT, +CV] {
   // extend the given environment with names introduced by this FROM clause
-  private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]): Environment[CT2]
+  private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]): Either[AddScopeError, Environment[CT2]]
 
   private[analyzer2] def rewriteDatabaseNames(
     tableName: DatabaseTableName => DatabaseTableName,
@@ -130,15 +130,18 @@ case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom
   // as a loop so that a lot of joins don't use a lot of stack.
   private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]) = {
     @tailrec
-    def loop(acc: Environment[CT2], self: From[CT2, CV]): Environment[CT2] = {
+    def loop(acc: Environment[CT2], self: From[CT2, CV]): Either[AddScopeError, Environment[CT2]] = {
       self match {
         case j@Join(_, _, left, right, _) =>
-          loop(left.extendEnvironment(acc), right)
-        case other =>
-          other.extendEnvironment(acc)
+          acc.addScope(left.alias, left.scope) match {
+            case Right(env) => loop(env, right)
+            case Left(err) => Left(err)
+          }
+        case other: AtomicFrom[CT2, CV] =>
+          other.addToEnvironment(acc)
       }
     }
-    loop(base, this)
+    loop(base.extend, this)
   }
 
   private[analyzer2] def realTables: Map[TableLabel, DatabaseTableName] = {
@@ -176,10 +179,17 @@ case class DatabaseTableName(name: String) {
 }
 
 sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
-  protected val scope: Scope[CT]
-  private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]) = base.extend(scope)
-
+  val alias: Option[ResourceName]
   val label: TableLabel
+
+  private[analyzer2] val scope: Scope[CT]
+
+  private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]) = {
+    addToEnvironment(base.extend)
+  }
+  private[analyzer2] def addToEnvironment[CT2 >: CT](env: Environment[CT2]) = {
+    env.addScope(alias, scope)
+  }
 
   private[analyzer2] def rewriteDatabaseNames(
     tableName: DatabaseTableName => DatabaseTableName,
@@ -189,8 +199,7 @@ sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
   private[analyzer2] def reAlias(newAlias: Option[ResourceName]): AtomicFrom[CT, CV]
 }
 case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceName], label: TableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends AtomicFrom[CT, Nothing] {
-  protected val scope: Scope[CT] =
-    Scope(Some(alias.getOrElse(tableName.asResourceName)), columns, label)
+  private[analyzer2] val scope: Scope[CT] = Scope(columns, label)
 
   private[analyzer2] def rewriteDatabaseNames(
     tableName: DatabaseTableName => DatabaseTableName,
@@ -211,8 +220,7 @@ case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceNa
 // select ...` does not.  The alias is just for name-resolution during
 // analysis anyway...
 case class FromStatement[+CT, +CV](statement: Statement[CT, CV], label: TableLabel, alias: Option[ResourceName]) extends AtomicFrom[CT, CV] {
-  protected val scope: Scope[CT] =
-    Scope(alias, statement.schema, label)
+  private[analyzer2] val scope: Scope[CT] = Scope(statement.schema, label)
 
   private[analyzer2] def rewriteDatabaseNames(
     tableName: DatabaseTableName => DatabaseTableName,
@@ -226,9 +234,8 @@ case class FromStatement[+CT, +CV](statement: Statement[CT, CV], label: TableLab
   private[analyzer2] def realTables = Map.empty
 }
 case class FromSingleRow(label: TableLabel, alias: Option[ResourceName]) extends AtomicFrom[Nothing, Nothing] {
-  protected val scope: Scope[Nothing] =
+  private[analyzer2] val scope: Scope[Nothing] =
     Scope(
-      Some(alias.getOrElse(ResourceName(TableName(TableName.SingleRow).nameWithoutPrefix))),
       OrderedMap.empty[ColumnLabel, NameEntry[Nothing]],
       label
     )

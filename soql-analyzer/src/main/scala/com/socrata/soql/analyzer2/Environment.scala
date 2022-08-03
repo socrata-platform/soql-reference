@@ -1,5 +1,7 @@
 package com.socrata.soql.analyzer2
 
+import scala.annotation.tailrec
+
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName}
 
@@ -13,8 +15,14 @@ object ErasureWorkaround {
   implicit val erasureWorkaround: ErasureWorkaround = null
 }
 
+sealed abstract class ScopeName
+object ScopeName {
+  case object Anonymous extends ScopeName
+  case class Implicit(name: ResourceName) extends ScopeName
+  case class Explicit(name: ResourceName) extends ScopeName
+}
+
 class Scope[+CT] private (
-  val name: Option[ResourceName],
   val schemaByName: OrderedMap[ColumnName, Entry[CT]],
   val schemaByLabel: OrderedMap[ColumnLabel, Entry[CT]],
   val label: TableLabel
@@ -22,78 +30,119 @@ class Scope[+CT] private (
   require(schemaByName.size == schemaByLabel.size, "Duplicate labels in schema")
 
   def types = schemaByName.iterator.map { case (_, e) => e.typ }.toSeq
-  def relabelled(newLabel: TableLabel) = new Scope(name, schemaByName, schemaByLabel, newLabel)
+  def relabelled(newLabel: TableLabel) = new Scope(schemaByName, schemaByLabel, newLabel)
 }
 
 object Scope {
-  def apply[CT](name: Option[ResourceName], schema: OrderedMap[ColumnName, LabelEntry[CT]], label: TableLabel) = {
+  def apply[CT](schema: OrderedMap[ColumnName, LabelEntry[CT]], label: TableLabel) = {
     new Scope(
-      name,
       OrderedMap() ++ schema.iterator.map { case (name, LabelEntry(label, typ)) => (name, Entry(name, label, typ)) },
       OrderedMap() ++ schema.iterator.map { case (name, LabelEntry(label, typ)) => (label, Entry(name, label, typ)) },
       label
     )
   }
 
-  def apply[L <: ColumnLabel, CT](name: Option[ResourceName], schema: OrderedMap[L, NameEntry[CT]], label: TableLabel)(implicit erasureWorkaround: ErasureWorkaround) = {
+  def apply[L <: ColumnLabel, CT](schema: OrderedMap[L, NameEntry[CT]], label: TableLabel)(implicit erasureWorkaround: ErasureWorkaround) = {
     new Scope(
-      name,
       OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (name, Entry(name, label, typ)) },
       OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (label, Entry(name, label, typ)) },
       label
     )
   }
+}
 
+// SQL naming rules:
+//   You cannot have the same table alias more than once in a FROM clause
+//   Unqualified names seek out the nearest definition
+//     - all names in a FROM are equally near
+//     - lateral subqueries introduce a step of distance
+
+//
+// SoQL naming rules:
+//  You cannot have the same table alias more than once in a FROM clause
+//     - unqualified-names are resolved relative to the first entry in the current query's FROM list
+//     - qualified names find the nearest qualifier
+
+sealed abstract class Environment[+CT](parent: Option[Environment[CT]]) {
+  final def lookup(name: ColumnName): Option[Column[CT]] = {
+    lookupHere(name)
+  }
+
+  @tailrec
+  final def lookup(resource: ResourceName, name: ColumnName): Option[Column[CT]] = {
+    val candidate = lookupHere(resource, name)
+    if(candidate.isDefined) return candidate
+    parent match {
+      case Some(p) => p.lookup(resource, name)
+      case None => None
+    }
+  }
+
+  protected def lookupHere(name: ColumnName): Option[Column[CT]]
+  protected def lookupHere(resource: ResourceName, name: ColumnName): Option[Column[CT]]
+
+  def extend: Environment[CT]
+
+  def addScope[CT2 >: CT](name: Option[ResourceName], scope: Scope[CT2]): Either[AddScopeError, Environment[CT2]]
 }
 
 object Environment {
-  sealed abstract class LookupResult[+A];
-  object LookupResult {
-    case object NotFound extends LookupResult[Nothing]
-    case class Found[+A](a: A) extends LookupResult[A]
-    case object Ambiguous extends LookupResult[Nothing]
+  private val empty: Environment[Nothing] = new EmptyEnvironment(None)
+
+  private class EmptyEnvironment[CT](parent: Option[Environment[CT]]) extends Environment(parent) {
+    override def lookupHere(name: ColumnName) = None
+    override def lookupHere(resource: ResourceName, name: ColumnName) = None
+
+    override def extend: Environment[CT] = this
+
+    override def addScope[CT2 >: CT](name: Option[ResourceName], scope: Scope[CT2]): Either[AddScopeError, Environment[CT2]] =
+      Right(new NonEmptyEnvironment(
+        scope,
+        name.fold(Map.empty[ResourceName, Scope[CT2]]) { n => Map(n -> scope) },
+        parent
+      ))
+  }
+
+  private class NonEmptyEnvironment[+CT](
+    implicitScope: Scope[CT],
+    explicitScopes: Map[ResourceName, Scope[CT]],
+    parent: Option[Environment[CT]]
+  ) extends Environment(parent) {
+    override def lookupHere(name: ColumnName) =
+      implicitScope.schemaByName.get(name).map { entry =>
+        Column(implicitScope.label, entry.label, entry.typ)
+      }
+
+    override def extend: Environment[CT] = new EmptyEnvironment(Some(this))
+
+    override def lookupHere(resource: ResourceName, name: ColumnName) =
+      for {
+        scope <- explicitScopes.get(resource)
+        entry <- scope.schemaByName.get(name)
+      } yield {
+        Column(scope.label, entry.label, entry.typ)
+      }
+
+    override def addScope[CT2 >: CT](name: Option[ResourceName], scope: Scope[CT2]): Either[AddScopeError, Environment[CT2]] = {
+      name match {
+        case Some(rn) =>
+          if(explicitScopes.contains(rn)) {
+            return Left(AddScopeError.NameExists(rn))
+          }
+          Right(new NonEmptyEnvironment(
+            implicitScope,
+            explicitScopes + (rn -> scope),
+            parent
+          ))
+        case None =>
+          Left(AddScopeError.MultipleImplicit)
+      }
+    }
   }
 }
 
-class Environment[+CT] private (scopes: List[Scope[CT]]) {
-  import Environment._
-
-  def this() = this(Nil)
-
-  def extend[CT2 >: CT](scope: Scope[CT2]): Environment[CT2] = {
-    new Environment(scope :: scopes)
-  }
-
-  def lookup(name: ColumnName): LookupResult[Column[CT]] = {
-    lookupImpl(name, Function.const(true))
-  }
-
-  def lookup(resource: ResourceName, name: ColumnName): LookupResult[Column[CT]] = {
-    lookupImpl(name, _.name == Some(resource))
-  }
-
-  def lookup(resource: Option[ResourceName], name: ColumnName): LookupResult[Column[CT]] = {
-    resource match {
-      case None => lookup(name)
-      case Some(r) => lookup(r, name)
-    }
-  }
-
-  private def lookupImpl(name: ColumnName, filter: Scope[CT] => Boolean): LookupResult[Column[CT]] = {
-    val candidates = scopes.flatMap { scope =>
-      if(filter(scope)) {
-        scope.schemaByName.get(name).map { entry =>
-          Column(scope.label, entry.label, entry.typ)
-        }
-      } else {
-        None
-      }
-    }
-
-    candidates match {
-      case Seq() => LookupResult.NotFound
-      case Seq(item) => LookupResult.Found(item)
-      case _ => LookupResult.Ambiguous
-    }
-  }
+sealed trait AddScopeError
+object AddScopeError {
+  case class NameExists(resourceName: ResourceName) extends AddScopeError
+  case object MultipleImplicit extends AddScopeError
 }
