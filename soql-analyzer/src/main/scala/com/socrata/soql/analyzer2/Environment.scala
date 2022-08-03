@@ -19,29 +19,31 @@ class Scope[+CT] private (
   val schemaByLabel: OrderedMap[ColumnLabel, Entry[CT]],
   val label: TableLabel
 ) {
-  def types = schemaByName.iterator.map { case (_, e) => e.typ }.toSeq
+  require(schemaByName.size == schemaByLabel.size, "Duplicate labels in schema")
 
-  def this(name: Option[ResourceName], schema: OrderedMap[ColumnName, LabelEntry[CT]], label: TableLabel) = {
-    this(
+  def types = schemaByName.iterator.map { case (_, e) => e.typ }.toSeq
+  def relabelled(newLabel: TableLabel) = new Scope(name, schemaByName, schemaByLabel, newLabel)
+}
+
+object Scope {
+  def apply[CT](name: Option[ResourceName], schema: OrderedMap[ColumnName, LabelEntry[CT]], label: TableLabel) = {
+    new Scope(
       name,
       OrderedMap() ++ schema.iterator.map { case (name, LabelEntry(label, typ)) => (name, Entry(name, label, typ)) },
       OrderedMap() ++ schema.iterator.map { case (name, LabelEntry(label, typ)) => (label, Entry(name, label, typ)) },
       label
     )
-    require(schemaByName.size == schemaByLabel.size, "Duplicate labels in schema")
   }
 
-  def this(name: Option[ResourceName], schema: OrderedMap[ColumnLabel, NameEntry[CT]], label: TableLabel)(implicit erasureWorkaround: ErasureWorkaround) = {
-    this(
+  def apply[L <: ColumnLabel, CT](name: Option[ResourceName], schema: OrderedMap[L, NameEntry[CT]], label: TableLabel)(implicit erasureWorkaround: ErasureWorkaround) = {
+    new Scope(
       name,
       OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (name, Entry(name, label, typ)) },
       OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (label, Entry(name, label, typ)) },
       label
     )
-    require(schemaByName.size == schemaByLabel.size, "Duplicate name in schema")
   }
 
-  def relabelled(newLabel: TableLabel) = new Scope(name, schemaByName, schemaByLabel, newLabel)
 }
 
 object Environment {

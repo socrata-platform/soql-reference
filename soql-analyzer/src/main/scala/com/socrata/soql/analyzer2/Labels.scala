@@ -10,13 +10,24 @@ class LabelProvider {
   }
   def columnLabel(): ColumnLabel = {
     columns += 1
-    new ColumnLabel(columns)
+    new AutoColumnLabel(columns)
   }
 }
 
 final class TableLabel private[analyzer2] (private val n: Int) extends AnyVal {
   override def toString = s"t$n"
 }
-final class ColumnLabel private[analyzer2] (private val n: Int) extends AnyVal {
-  override def toString = s"c$n"
+sealed abstract class ColumnLabel
+final class AutoColumnLabel private[analyzer2] (private val n: Int) extends ColumnLabel {
+  override def toString = "c$n"
+
+  override def hashCode = n
+  override def equals(that: Any) =
+    that match {
+      case acl: AutoColumnLabel => this.n == acl.n
+      case _ => false
+    }
+}
+final case class DatabaseColumnName(name: String) extends ColumnLabel {
+  override def toString = name
 }
