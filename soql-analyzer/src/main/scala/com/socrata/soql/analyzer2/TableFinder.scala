@@ -10,7 +10,7 @@ import com.socrata.soql.{BinaryTree, Leaf, Compound}
 sealed trait ParsedTableDescription[+ResourceNameScope, +ColumnType]
 object ParsedTableDescription {
   case class Dataset[+ColumnType](
-    canonicalName: DatabaseTableName,
+    name: DatabaseTableName,
     schema: OrderedMap[DatabaseColumnName, NameEntry[ColumnType]]
   ) extends ParsedTableDescription[Nothing, ColumnType]
   case class Query[+ResourceNameScope, +ColumnType](
