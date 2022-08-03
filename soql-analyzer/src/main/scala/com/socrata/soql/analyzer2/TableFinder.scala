@@ -11,7 +11,7 @@ sealed trait ParsedTableDescription[+ResourceNameScope, +ColumnType]
 object ParsedTableDescription {
   case class Dataset[+ColumnType](
     canonicalName: DatabaseTableName,
-    schema: OrderedMap[ColumnName, ColumnType]
+    schema: OrderedMap[DatabaseColumnName, NameEntry[ColumnType]]
   ) extends ParsedTableDescription[Nothing, ColumnType]
   case class Query[+ResourceNameScope, +ColumnType](
     scope: ResourceNameScope, // This scope is to resolve both basedOn and any tables referenced within the text of soql
@@ -94,7 +94,10 @@ trait TableFinder {
   /** The result of looking up a name, containing only the values relevant to analysis. */
   sealed trait TableDescription
   /** A base dataset, or a saved query which is being analyzed opaquely. */
-  case class Dataset(databaseName: DatabaseTableName, schema: OrderedMap[ColumnName, ColumnType]) extends TableDescription
+  case class Dataset(
+    databaseName: DatabaseTableName,
+    schema: OrderedMap[ColumnName, ColumnType]
+  ) extends TableDescription
   /** A saved query, with any parameters it (non-transitively!) defines. */
   case class Query(
     scope: ResourceNameScope,
@@ -164,7 +167,20 @@ trait TableFinder {
   // A pair of helpers that lift the abstract functions into the Result world
   private def doLookup(scopedName: ScopedResourceName): Result[ParsedTableDescription[ResourceNameScope, ColumnType]] = {
     lookup(scopedName._1, scopedName._2) match {
-      case Right(Dataset(name, schema)) => Success(ParsedTableDescription.Dataset(name, schema))
+      case Right(Dataset(name, schema)) =>
+        Success(
+          ParsedTableDescription.Dataset(
+            name,
+            schema.map { case (cn, ct) =>
+              // This is a little icky...?  But at this point we're in
+              // the user-provided names world, so this is at least a
+              // _predictable_ key to use as a "database column name"
+              // before we get to the point of moving over to the
+              // actual-database-names world.
+              DatabaseColumnName(cn.caseFolded) -> NameEntry(cn, ct)
+            }
+          )
+        )
       case Right(Query(scope, basedOn, text, params)) =>
         doParse(Some(scopedName), text, false).map(ParsedTableDescription.Query(scope, basedOn, _, params))
       case Right(TableFunction(scope, text, params)) => doParse(Some(scopedName), text, true).map(ParsedTableDescription.TableFunction(scope, _, params))
