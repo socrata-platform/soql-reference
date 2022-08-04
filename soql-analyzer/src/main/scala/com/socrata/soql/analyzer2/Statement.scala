@@ -63,7 +63,6 @@ case object Materialized extends MaterializedHint
 case object NotMaterialized extends MaterializedHint
 
 case class CTE[+CT, +CV](
-  label: TableLabel,
   definitionQuery: Statement[CT, CV],
   materializedHint: Option[MaterializedHint],
   useQuery: Statement[CT, CV]

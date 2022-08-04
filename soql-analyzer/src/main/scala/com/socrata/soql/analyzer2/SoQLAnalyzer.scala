@@ -5,7 +5,7 @@ import scala.util.parsing.input.{Position, NoPosition}
 import com.socrata.soql.{BinaryTree, Leaf, TrueOp, PipeQuery}
 import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, OrderedSet}
-import com.socrata.soql.environment.{ColumnName, ResourceName, TableName, UntypedDatasetContext}
+import com.socrata.soql.environment.{ColumnName, ResourceName, TableName, HoleName, UntypedDatasetContext}
 import com.socrata.soql.typechecker.TypeInfo
 import com.socrata.soql.aliases.AliasAnalysis
 
@@ -93,27 +93,27 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
           // so we want to analyze "basedOn" in the env we're given
           // and then parsed in that env extended with the result of basedOn
           val from = analyzeForContext(tableMap.find(scope, basedOn), env)
-          analyzeInContext(scope, parsed, Some(from), env)
+          analyzeInContext(scope, parsed, Some(from), env, Map.empty)
         case ParsedTableDescription.TableFunction(_, _, _) =>
           tableFunctionInIncorrectPosition()
       }
     }
 
-    def analyzeInContext(scope: RNS, q: BinaryTree[ast.Select], from0: Option[AtomicFrom[CT, CV]], env: Environment[CT]): AtomicFrom[CT, CV] = {
+    def analyzeInContext(scope: RNS, q: BinaryTree[ast.Select], from0: Option[AtomicFrom[CT, CV]], env: Environment[CT], udfParams: Map[HoleName, Expr[CT, CV]]): AtomicFrom[CT, CV] = {
       q match {
         case Leaf(select) =>
-          analyzeSelection(scope, select, from0, env)
+          analyzeSelection(scope, select, from0, env, udfParams)
         case PipeQuery(left, right) =>
-          val newInput = analyzeInContext(scope, left, from0, env)
-          analyzeInContext(scope, right, Some(newInput), env)
+          val newInput = analyzeInContext(scope, left, from0, env, udfParams)
+          analyzeInContext(scope, right, Some(newInput), env, udfParams)
         case other: TrueOp[ast.Select] =>
-          val lhs = analyzeInContext(scope, other.left, from0, env)
-          val rhs = analyzeInContext(scope, other.right, None, env)
+          val lhs = analyzeInContext(scope, other.left, from0, env, udfParams)
+          val rhs = analyzeInContext(scope, other.right, None, env, udfParams)
           ???
       }
     }
 
-    def analyzeSelection(scope: RNS, select: ast.Select, from0: Option[AtomicFrom[CT, CV]], env: Environment[CT]): FromStatement[CT, CV] = {
+    def analyzeSelection(scope: RNS, select: ast.Select, from0: Option[AtomicFrom[CT, CV]], env: Environment[CT], udfParams: Map[HoleName, Expr[CT, CV]]): FromStatement[CT, CV] = {
       val ast.Select(
         distinct,
         selection,
@@ -132,7 +132,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
       // ok, first things first: establish the schema we're operating
       // in, which means rolling up "from" and "joins" into a From
 
-      val completeFrom = queryInputSchema(scope, from0, from, joins, env)
+      val completeFrom = queryInputSchema(scope, from0, from, joins, env, udfParams)
 
       val localEnv = envify(completeFrom.extendEnvironment(env))
 
@@ -154,7 +154,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
           new EvaluationState(env, namedExprs + (name -> expr))
         }
 
-        def typecheck(expr: ast.Expression) = State.this.typecheck(expr, env, namedExprs)
+        def typecheck(expr: ast.Expression) = State.this.typecheck(expr, env, namedExprs, udfParams)
       }
 
       val finalState = aliasAnalysis.evaluationOrder.foldLeft(new EvaluationState(localEnv)) { (state, colName) =>
@@ -258,7 +258,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
       loop(from, Map.empty)
     }
 
-    def queryInputSchema(scope: RNS, input: Option[AtomicFrom[CT, CV]], from: Option[TableName], joins: Seq[ast.Join], enclosingEnv: Environment[CT]): From[CT, CV] = {
+    def queryInputSchema(scope: RNS, input: Option[AtomicFrom[CT, CV]], from: Option[TableName], joins: Seq[ast.Join], enclosingEnv: Environment[CT], udfParams: Map[HoleName, Expr[CT, CV]]): From[CT, CV] = {
       // Ok so:
       //  * @This is special only in From
       //  * It is an error if we have neither an input nor a from
@@ -320,12 +320,12 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
         val augmentedFrom = envify(fromSoFar().extendEnvironment(enclosingEnv))
         val checkedFrom =
           if(join.lateral) {
-            analyzeJoinSelect(join.from, augmentedFrom)
+            analyzeJoinSelect(scope, join.from, augmentedFrom, udfParams)
           } else {
-            analyzeJoinSelect(join.from, enclosingEnv)
+            analyzeJoinSelect(scope, join.from, enclosingEnv, udfParams)
           }
 
-        val checkedOn = typecheck(join.on, envify(checkedFrom.addToEnvironment(augmentedFrom)), Map.empty)
+        val checkedOn = typecheck(join.on, envify(checkedFrom.addToEnvironment(augmentedFrom)), Map.empty, udfParams)
 
         if(!typeInfo.isBoolean(checkedOn.typ)) {
           expectedBoolean(join.on, checkedOn.typ)
@@ -345,8 +345,46 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
         case Left(e) => throw new AddScopeErrorEx(e, ???)
       }
 
-    def analyzeJoinSelect(js: ast.JoinSelect, env: Environment[CT]): AtomicFrom[CT, CV] = ???
-    def typecheck(expr: ast.Expression, env: Environment[CT], namedExprs: Map[ColumnName, Expr[CT, CV]]): Expr[CT, CV] = ???
+    def analyzeJoinSelect(scope: RNS, js: ast.JoinSelect, env: Environment[CT], udfParams: Map[HoleName, Expr[CT, CV]]): AtomicFrom[CT, CV] = {
+      js match {
+        case ast.JoinTable(tn) =>
+          analyzeForContext(tableMap.find(scope, ResourceName(tn.nameWithoutPrefix)), env).reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
+        case ast.JoinQuery(select, alias) =>
+          analyzeInContext(scope, select, None, env, udfParams).reAlias(Some(ResourceName(alias)))
+        case ast.JoinFunc(tn, params) =>
+          analyzeUDF(scope, tn, params, env, udfParams)
+      }
+    }
+
+    def analyzeUDF(scope: RNS, tableName: TableName, params: Seq[ast.Expression], env: Environment[CT], outerUdfParams: Map[HoleName, Expr[CT, CV]]): AtomicFrom[CT, CV] = {
+      tableMap.find(scope, ResourceName(tableName.nameWithoutPrefix)) match {
+        case ParsedTableDescription.TableFunction(udfScope, parsed, paramSpecs) =>
+          if(params.length != paramSpecs.size) {
+            ???
+          }
+          // we're rewriting the UDF from
+          //    @bleh(x, y, z)
+          // to
+          //    with $label (values(x,y,z)) udfexpansion
+          val definitionQuery = Values(labelProvider.tableLabel(), params.map(typecheck(_, env, Map.empty, outerUdfParams)))
+          val innerUdfParams = definitionQuery.values.lazyZip(paramSpecs).map { case (expr, (name, typ)) =>
+            if(expr.typ != typ) {
+              ??? // wrong param type
+            }
+            name -> expr
+          }.toMap
+          val useQuery = intoStatement(analyzeInContext(udfScope, parsed, None, env, innerUdfParams))
+          FromStatement(
+            CTE(definitionQuery, None, useQuery),
+            labelProvider.tableLabel(),
+            Some(ResourceName(tableName.aliasWithoutPrefix.getOrElse(tableName.nameWithoutPrefix)))
+          )
+        case _ =>
+          // Non-UDF
+          ???
+      }
+    }
+    def typecheck(expr: ast.Expression, env: Environment[CT], namedExprs: Map[ColumnName, Expr[CT, CV]], udfParams: Map[HoleName, Expr[CT, CV]]): Expr[CT, CV] = ???
     def expectedBoolean(expr: ast.Expression, got: CT): Nothing = ???
   }
 }
