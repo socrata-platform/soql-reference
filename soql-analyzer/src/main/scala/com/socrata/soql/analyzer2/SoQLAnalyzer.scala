@@ -113,7 +113,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
 
     def analyzeSelection(scope: RNS, select: ast.Select, from0: Option[AtomicFrom[CT, CV]], env: Environment[CT]): FromStatement[CT, CV] = {
       val ast.Select(
-        _distinct,
+        distinct,
         selection,
         from,
         joins,
@@ -121,10 +121,10 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
         groupBys,
         having,
         orderBys,
-        _limit,
-        _offset,
-        _search,
-        _hints
+        limit,
+        offset,
+        search,
+        hints
       ) = select
 
       // ok, first things first: establish the schema we're operating
@@ -151,22 +151,61 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
         def update(name: ColumnName, expr: Expr[CT, CV]): EvaluationState = {
           new EvaluationState(env, namedExprs + (name -> expr))
         }
+
+        def typecheck(expr: ast.Expression) = State.this.typecheck(expr, env, namedExprs)
       }
 
       val finalState = aliasAnalysis.evaluationOrder.foldLeft(new EvaluationState(localEnv)) { (state, colName) =>
         val expression = aliasAnalysis.expressions(colName)
-        val typed = typecheck(expression, state.env, state.namedExprs)
+        val typed = state.typecheck(expression)
         state.update(colName, typed)
       }
 
-      val checkedWhere = where.map(typecheck(_, finalState.env, finalState.namedExprs))
-      val checkedGroupBys = groupBys.map(typecheck(_, finalState.env, finalState.namedExprs))
-      val checkedHaving = having.map(typecheck(_, finalState.env, finalState.namedExprs))
-      val checkedOrderBys = orderBys.map { case ast.OrderBy(expr, ascending, nullLast) =>
-        OrderBy(typecheck(expr, finalState.env, finalState.namedExprs), ascending, nullLast)
+      val checkedDistinct = distinct match {
+        case ast.Indistinct => Distinctiveness.Indistinct
+        case ast.FullyDistinct => Distinctiveness.FullyDistinct
+        case ast.DistinctOn(exprs) =>
+          Distinctiveness.On(exprs.map(finalState.typecheck))
       }
 
-      ???
+      val checkedWhere = where.map(finalState.typecheck)
+      val checkedGroupBys = groupBys.map(finalState.typecheck)
+      for(cgb <- checkedGroupBys) {
+        if(!typeInfo.isGroupable(cgb.typ)) {
+          ???
+        }
+      }
+      val checkedHaving = having.map(finalState.typecheck)
+      val checkedOrderBys = orderBys.map { case ast.OrderBy(expr, ascending, nullLast) =>
+        val checked = finalState.typecheck(expr)
+        if(!typeInfo.isOrdered(checked.typ)) {
+          ???
+        }
+        OrderBy(checked, ascending, nullLast)
+      }
+
+      checkedDistinct match {
+        case Distinctiveness.On(exprs) =>
+          if(!checkedOrderBys.map(_.expr).startsWith(exprs)) {
+            ??? // error
+          }
+        case _ =>
+          // all well
+      }
+
+      val stmt = Select(
+        checkedDistinct,
+        finalState.namedExprs.map { case (cn, expr) => labelProvider.columnLabel() -> NamedExpr(expr, cn) },
+        completeFrom,
+        checkedWhere,
+        checkedGroupBys,
+        checkedHaving,
+        checkedOrderBys,
+        limit,
+        offset
+      )
+
+      FromStatement(stmt, labelProvider.tableLabel(), None)
     }
 
     def collectNamesForAnalysis(from: From[CT, CV]): AliasAnalysis.AnalysisContext = {
