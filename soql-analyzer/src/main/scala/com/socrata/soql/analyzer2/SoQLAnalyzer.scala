@@ -70,7 +70,9 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
         having = None,
         orderBy = Nil,
         limit = None,
-        offset = None
+        offset = None,
+        search = None,
+        hint = Set.empty
       )
     }
 
@@ -202,7 +204,15 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
         checkedHaving,
         checkedOrderBys,
         limit,
-        offset
+        offset,
+        search,
+        hints.map { h =>
+          h match {
+            case ast.Materialized(_) => SelectHint.Materialized
+            case ast.NoRollup(_) => SelectHint.NoRollup
+            case ast.NoChainMerge(_) => SelectHint.NoChainMerge
+          }
+        }.toSet
       )
 
       FromStatement(stmt, labelProvider.tableLabel(), None)

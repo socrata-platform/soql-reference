@@ -120,7 +120,9 @@ case class Select[+CT, +CV](
   having: Option[Expr[CT, CV]],
   orderBy: Seq[OrderBy[CT, CV]],
   limit: Option[BigInt],
-  offset: Option[BigInt]
+  offset: Option[BigInt],
+  search: Option[String],
+  hint: Set[SelectHint]
 ) extends Statement[CT, CV] {
   val schema = selectList.withValuesMapped { case NamedExpr(expr, name) => NameEntry(name, expr.typ) }
 
@@ -140,9 +142,18 @@ case class Select[+CT, +CV](
       having = having.map(_.doRewriteDatabaseNames(realTables, columnName)),
       orderBy = orderBy.map(_.doRewriteDatabaseNames(realTables, columnName)),
       limit = limit,
-      offset = offset
+      offset = offset,
+      search = search,
+      hint = hint
     )
   }
+}
+
+sealed trait SelectHint
+object SelectHint {
+  case object Materialized extends SelectHint
+  case object NoRollup extends SelectHint
+  case object NoChainMerge extends SelectHint
 }
 
 sealed trait Distinctiveness[+CT, +CV] {
