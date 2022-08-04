@@ -64,18 +64,18 @@ case class CTE[+CT, +CV](
     )
 }
 
-case class NamedExpr[+CT, +CV, +Ctx <: Windowed](expr: Expr[CT, CV, Ctx], name: ColumnName) {
+case class NamedExpr[+CT, +CV](expr: Expr[CT, CV], name: ColumnName) {
   private[analyzer2] def rewriteDatabaseNames(schemas: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this.copy(expr = expr.rewriteDatabaseNames(schemas, f))
 }
 
 case class Select[+CT, +CV](
-  selectList: OrderedMap[ColumnLabel, NamedExpr[CT, CV, Windowed]],
+  selectList: OrderedMap[ColumnLabel, NamedExpr[CT, CV]],
   from: From[CT, CV],
-  where: Option[Expr[CT, CV, Normal]],
-  groupBy: Seq[Expr[CT, CV, Normal]],
-  having: Option[Expr[CT, CV, Aggregate]],
-  orderBy: Seq[OrderBy[CT, CV, Windowed]],
+  where: Option[Expr[CT, CV]],
+  groupBy: Seq[Expr[CT, CV]],
+  having: Option[Expr[CT, CV]],
+  orderBy: Seq[OrderBy[CT, CV]],
   limit: Option[BigInt],
   offset: Option[BigInt]
 ) extends Statement[CT, CV] {
@@ -99,7 +99,7 @@ case class Select[+CT, +CV](
   }
 }
 
-case class OrderBy[+CT, +CV, +Ctx <: Windowed](expr: Expr[CT, CV, Ctx], ascending: Boolean, nullLast: Boolean) {
+case class OrderBy[+CT, +CV](expr: Expr[CT, CV], ascending: Boolean, nullLast: Boolean) {
   private[analyzer2] def rewriteDatabaseNames(schemas: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this.copy(expr = expr.rewriteDatabaseNames(schemas, f))
 }
@@ -115,7 +115,7 @@ sealed abstract class From[+CT, +CV] {
 
   private[analyzer2] def realTables: Map[TableLabel, DatabaseTableName]
 }
-case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom[CT, CV], right: From[CT, CV], on: Expr[CT, CV, Normal]) extends From[CT, CV] {
+case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom[CT, CV], right: From[CT, CV], on: Expr[CT, CV]) extends From[CT, CV] {
   // The difference between a lateral and a non-lateral join is the
   // environment assumed while typechecking; in a non-lateral join
   // it's something like:
@@ -252,22 +252,12 @@ case class FromSingleRow(label: TableLabel, alias: Option[ResourceName]) extends
   private[analyzer2] def realTables = Map.empty
 }
 
-// Expressions
-//
-// This is a little icky because I didn't make it as flexible as I
-// would like, but as far as I can tell this subclassing relationship
-// between window/aggregate/other expressions is in fact accurate
-
-sealed abstract class Windowed
-sealed abstract class Aggregate extends Windowed
-sealed abstract class Normal extends Aggregate
-
-sealed abstract class Expr[+CT, +CV, +Ctx <: Windowed] {
+sealed abstract class Expr[+CT, +CV] {
   val typ: CT
 
-  private[analyzer2] def rewriteDatabaseNames(schemas: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName): Expr[CT, CV, Ctx]
+  private[analyzer2] def rewriteDatabaseNames(schemas: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName): Expr[CT, CV]
 }
-case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT) extends Expr[CT, Nothing, Normal] {
+case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT) extends Expr[CT, Nothing] {
   private[analyzer2] def rewriteDatabaseNames(schemas: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     column match {
       case dcn: DatabaseColumnName =>
@@ -277,7 +267,7 @@ case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT) extends 
     }
 }
 
-sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV, Normal] {
+sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
   private[analyzer2] def rewriteDatabaseNames(schemas: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this
 }
@@ -286,10 +276,10 @@ case class LiteralValue[+CT, +CV](value: CV)(implicit ev: HasType[CV, CT]) exten
 }
 case class NullLiteral[+CT](typ: CT) extends Literal[CT, Nothing]
 
-case class FunctionCall[+CT, +CV, +Ctx <: Windowed](
+case class FunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
-  args: Seq[Expr[CT, CV, Ctx]] // a normal function call does not change the current context, so things like `1 + sum(xs)` is legal
-) extends Expr[CT, CV, Ctx] {
+  args: Seq[Expr[CT, CV]]
+) extends Expr[CT, CV] {
   require(!function.isAggregate)
   val typ = function.result
 
@@ -298,10 +288,10 @@ case class FunctionCall[+CT, +CV, +Ctx <: Windowed](
 }
 case class AggregateFunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
-  args: Seq[Expr[CT, CV, Normal]],
+  args: Seq[Expr[CT, CV]],
   distinct: Boolean,
-  filter: Option[Expr[CT, CV, Normal]]
-) extends Expr[CT, CV, Aggregate] {
+  filter: Option[Expr[CT, CV]]
+) extends Expr[CT, CV] {
   require(function.isAggregate)
   val typ = function.result
 
@@ -310,14 +300,14 @@ case class AggregateFunctionCall[+CT, +CV](
 }
 case class WindowedFunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
-  args: Seq[Expr[CT, CV, Aggregate]],
-  partitionBy: Seq[Expr[CT, CV, Normal]], // is normal right here, or should it be aggregate?
-  orderBy: Seq[OrderBy[CT, CV, Normal]], // ditto thus
+  args: Seq[Expr[CT, CV]],
+  partitionBy: Seq[Expr[CT, CV]], // is normal right here, or should it be aggregate?
+  orderBy: Seq[OrderBy[CT, CV]], // ditto thus
   context: FrameContext,
   start: FrameBound,
   end: Option[FrameBound],
   exclusion: Option[FrameExclusion]
-) extends Expr[CT, CV, Windowed] {
+) extends Expr[CT, CV] {
   val typ = function.result
 
   private[analyzer2] def rewriteDatabaseNames(schemas: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =

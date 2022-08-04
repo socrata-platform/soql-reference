@@ -55,7 +55,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
               labelProvider.columnLabel() -> NamedExpr(Column(from.label, label, typ), name)
             }
           case from: FromSingleRow =>
-            OrderedMap.empty[ColumnLabel, NamedExpr[CT, CV, Windowed]]
+            OrderedMap.empty[ColumnLabel, NamedExpr[CT, CV]]
           case from: FromStatement[CT, CV] =>
             // Just short-circuit it and return the underlying Statement
             return from.statement
@@ -146,7 +146,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
       //      too.
 
       case class EvaluationState(env: Environment[CT]) {
-        def update(name: ColumnName, expr: Expr[CT, CV, Windowed]): EvaluationState = ???
+        def update(name: ColumnName, expr: Expr[CT, CV]): EvaluationState = ???
       }
 
       val finalState = aliasAnalysis.evaluationOrder.foldLeft(EvaluationState(localEnv)) { (state, colName) =>
@@ -286,7 +286,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
       }
 
     def analyzeJoinSelect(js: ast.JoinSelect, env: Environment[CT]): AtomicFrom[CT, CV] = ???
-    def typecheck[Ctx <: Windowed](expr: ast.Expression, env: Environment[CT]): Expr[CT, CV, Ctx] = ???
+    def typecheck(expr: ast.Expression, env: Environment[CT]): Expr[CT, CV] = ???
     def expectedBoolean(expr: ast.Expression, got: CT): Nothing = ???
   }
 }
