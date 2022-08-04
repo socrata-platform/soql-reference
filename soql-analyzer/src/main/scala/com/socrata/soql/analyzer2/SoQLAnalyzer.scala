@@ -1,6 +1,6 @@
 package com.socrata.soql.analyzer2
 
-import scala.util.parsing.input.Position
+import scala.util.parsing.input.{Position, NoPosition}
 
 import com.socrata.soql.{BinaryTree, Leaf, TrueOp, PipeQuery}
 import com.socrata.soql.ast
@@ -52,7 +52,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
         from match {
           case from: FromTable[CT] =>
             from.columns.map { case (label, NameEntry(name, typ)) =>
-              labelProvider.columnLabel() -> NamedExpr(Column(from.label, label, typ), name)
+              labelProvider.columnLabel() -> NamedExpr(Column(from.label, label, typ)(NoPosition), name)
             }
           case from: FromSingleRow =>
             OrderedMap.empty[ColumnLabel, NamedExpr[CT, CV]]

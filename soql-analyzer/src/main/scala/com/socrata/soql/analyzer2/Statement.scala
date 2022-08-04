@@ -1,6 +1,7 @@
 package com.socrata.soql.analyzer2
 
 import scala.annotation.tailrec
+import scala.util.parsing.input.Position
 
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName}
@@ -335,14 +336,15 @@ case class FromSingleRow(label: TableLabel, alias: Option[ResourceName]) extends
 
 sealed abstract class Expr[+CT, +CV] {
   val typ: CT
+  val position: Position
 
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName): Expr[CT, CV]
 }
-case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT) extends Expr[CT, Nothing] {
+case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     column match {
       case dcn: DatabaseColumnName =>
-        copy(column = f(realTables(table), dcn))
+        copy(column = f(realTables(table), dcn))(position)
       case _ =>
         this
     }
@@ -352,27 +354,32 @@ sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this
 }
-case class LiteralValue[+CT, +CV](value: CV)(implicit ev: HasType[CV, CT]) extends Literal[CT, CV] {
+case class LiteralValue[+CT, +CV](value: CV)(val position: Position)(implicit ev: HasType[CV, CT]) extends Literal[CT, CV] {
   val typ = ev.typeOf(value)
 }
-case class NullLiteral[+CT](typ: CT) extends Literal[CT, Nothing]
+case class NullLiteral[+CT](typ: CT)(val position: Position) extends Literal[CT, Nothing]
+
+sealed trait FuncallLike[+CT, +CV] extends Expr[CT, CV] {
+  val function: MonomorphicFunction[CT]
+  val functionNamePosition: Position
+}
 
 case class FunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
   args: Seq[Expr[CT, CV]]
-) extends Expr[CT, CV] {
+)(val position: Position, val functionNamePosition: Position) extends Expr[CT, CV] {
   require(!function.isAggregate)
   val typ = function.result
 
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
-    this.copy(args = args.map(_.doRewriteDatabaseNames(realTables, f)))
+    this.copy(args = args.map(_.doRewriteDatabaseNames(realTables, f)))(position, functionNamePosition)
 }
 case class AggregateFunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
   args: Seq[Expr[CT, CV]],
   distinct: Boolean,
   filter: Option[Expr[CT, CV]]
-) extends Expr[CT, CV] {
+)(val position: Position, val functionNamePosition: Position) extends Expr[CT, CV] {
   require(function.isAggregate)
   val typ = function.result
 
@@ -380,7 +387,7 @@ case class AggregateFunctionCall[+CT, +CV](
     this.copy(
       args = args.map(_.doRewriteDatabaseNames(realTables, f)),
       filter = filter.map(_.doRewriteDatabaseNames(realTables, f))
-    )
+    )(position, functionNamePosition)
 }
 case class WindowedFunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
@@ -391,7 +398,7 @@ case class WindowedFunctionCall[+CT, +CV](
   start: FrameBound,
   end: Option[FrameBound],
   exclusion: Option[FrameExclusion]
-) extends Expr[CT, CV] {
+)(val position: Position, val functionNamePosition: Position) extends Expr[CT, CV] {
   val typ = function.result
 
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
@@ -399,7 +406,7 @@ case class WindowedFunctionCall[+CT, +CV](
       args = args.map(_.doRewriteDatabaseNames(realTables, f)),
       partitionBy = partitionBy.map(_.doRewriteDatabaseNames(realTables, f)),
       orderBy = orderBy.map(_.doRewriteDatabaseNames(realTables, f))
-    )
+    )(position, functionNamePosition)
 }
 
 sealed abstract class FrameContext

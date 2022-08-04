@@ -64,12 +64,12 @@ object Scope {
 //     - qualified names find the nearest qualifier
 
 sealed abstract class Environment[+CT](parent: Option[Environment[CT]]) {
-  final def lookup(name: ColumnName): Option[Column[CT]] = {
+  final def lookup(name: ColumnName): Option[Environment.LookupResult[CT]] = {
     lookupHere(name)
   }
 
   @tailrec
-  final def lookup(resource: ResourceName, name: ColumnName): Option[Column[CT]] = {
+  final def lookup(resource: ResourceName, name: ColumnName): Option[Environment.LookupResult[CT]] = {
     val candidate = lookupHere(resource, name)
     if(candidate.isDefined) return candidate
     parent match {
@@ -78,8 +78,8 @@ sealed abstract class Environment[+CT](parent: Option[Environment[CT]]) {
     }
   }
 
-  protected def lookupHere(name: ColumnName): Option[Column[CT]]
-  protected def lookupHere(resource: ResourceName, name: ColumnName): Option[Column[CT]]
+  protected def lookupHere(name: ColumnName): Option[Environment.LookupResult[CT]]
+  protected def lookupHere(resource: ResourceName, name: ColumnName): Option[Environment.LookupResult[CT]]
 
   def extend: Environment[CT]
 
@@ -88,6 +88,8 @@ sealed abstract class Environment[+CT](parent: Option[Environment[CT]]) {
 
 object Environment {
   private val empty: Environment[Nothing] = new EmptyEnvironment(None)
+
+  case class LookupResult[+CT](table: TableLabel, column: ColumnLabel, typ: CT)
 
   private class EmptyEnvironment[CT](parent: Option[Environment[CT]]) extends Environment(parent) {
     override def lookupHere(name: ColumnName) = None
@@ -110,7 +112,7 @@ object Environment {
   ) extends Environment(parent) {
     override def lookupHere(name: ColumnName) =
       implicitScope.schemaByName.get(name).map { entry =>
-        Column(implicitScope.label, entry.label, entry.typ)
+        LookupResult(implicitScope.label, entry.label, entry.typ)
       }
 
     override def extend: Environment[CT] = new EmptyEnvironment(Some(this))
@@ -120,7 +122,7 @@ object Environment {
         scope <- explicitScopes.get(resource)
         entry <- scope.schemaByName.get(name)
       } yield {
-        Column(scope.label, entry.label, entry.typ)
+        LookupResult(scope.label, entry.label, entry.typ)
       }
 
     override def addScope[CT2 >: CT](name: Option[ResourceName], scope: Scope[CT2]): Either[AddScopeError, Environment[CT2]] = {
