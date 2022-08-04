@@ -62,6 +62,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
         }
 
       Select(
+        distinctiveness = Distinctiveness.Indistinct,
         selectList = selectList,
         from = from,
         where = None,
@@ -116,10 +117,10 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
         selection,
         from,
         joins,
-        _where,
-        _groupBys,
-        _having,
-        _orderBys,
+        where,
+        groupBys,
+        having,
+        orderBys,
         _limit,
         _offset,
         _search,
@@ -145,14 +146,24 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
       //      state.  The old analyzer does that in a secondary pass; perhaps we should
       //      too.
 
-      case class EvaluationState(env: Environment[CT]) {
-        def update(name: ColumnName, expr: Expr[CT, CV]): EvaluationState = ???
+      class EvaluationState private (val env: Environment[CT], val namedExprs: OrderedMap[ColumnName, Expr[CT, CV]]) {
+        def this(env: Environment[CT]) = this(env, OrderedMap())
+        def update(name: ColumnName, expr: Expr[CT, CV]): EvaluationState = {
+          new EvaluationState(env, namedExprs + (name -> expr))
+        }
       }
 
-      val finalState = aliasAnalysis.evaluationOrder.foldLeft(EvaluationState(localEnv)) { (state, colName) =>
+      val finalState = aliasAnalysis.evaluationOrder.foldLeft(new EvaluationState(localEnv)) { (state, colName) =>
         val expression = aliasAnalysis.expressions(colName)
-        val typed = typecheck(expression, state.env)
+        val typed = typecheck(expression, state.env, state.namedExprs)
         state.update(colName, typed)
+      }
+
+      val checkedWhere = where.map(typecheck(_, finalState.env, finalState.namedExprs))
+      val checkedGroupBys = groupBys.map(typecheck(_, finalState.env, finalState.namedExprs))
+      val checkedHaving = having.map(typecheck(_, finalState.env, finalState.namedExprs))
+      val checkedOrderBys = orderBys.map { case ast.OrderBy(expr, ascending, nullLast) =>
+        OrderBy(typecheck(expr, finalState.env, finalState.namedExprs), ascending, nullLast)
       }
 
       ???
@@ -265,7 +276,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
             analyzeJoinSelect(join.from, enclosingEnv)
           }
 
-        val checkedOn = typecheck(join.on, envify(checkedFrom.addToEnvironment(augmentedFrom)))
+        val checkedOn = typecheck(join.on, envify(checkedFrom.addToEnvironment(augmentedFrom)), Map.empty)
 
         if(!typeInfo.isBoolean(checkedOn.typ)) {
           expectedBoolean(join.on, checkedOn.typ)
@@ -286,7 +297,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
       }
 
     def analyzeJoinSelect(js: ast.JoinSelect, env: Environment[CT]): AtomicFrom[CT, CV] = ???
-    def typecheck(expr: ast.Expression, env: Environment[CT]): Expr[CT, CV] = ???
+    def typecheck(expr: ast.Expression, env: Environment[CT], namedExprs: Map[ColumnName, Expr[CT, CV]]): Expr[CT, CV] = ???
     def expectedBoolean(expr: ast.Expression, got: CT): Nothing = ???
   }
 }
