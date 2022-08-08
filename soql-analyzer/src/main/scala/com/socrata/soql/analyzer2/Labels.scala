@@ -19,7 +19,7 @@ final class TableLabel private[analyzer2] (private val n: Int) extends AnyVal {
 }
 sealed abstract class ColumnLabel
 final class AutoColumnLabel private[analyzer2] (private val n: Int) extends ColumnLabel {
-  override def toString = "c$n"
+  override def toString = s"c$n"
 
   override def hashCode = n
   override def equals(that: Any) =
