@@ -51,7 +51,7 @@ object TableMap {
 case class FoundTables[ResourceNameScope, +ColumnType](
   tableMap: TableMap[ResourceNameScope, ColumnType],
   initialScope: ResourceNameScope,
-  query: FoundTables.Query
+  initialQuery: FoundTables.Query
 )
 
 object FoundTables {

@@ -2,7 +2,7 @@ package com.socrata.soql.analyzer2
 
 import scala.util.parsing.input.{Position, NoPosition}
 
-import com.socrata.soql.{BinaryTree, Leaf, TrueOp, PipeQuery}
+import com.socrata.soql.{BinaryTree, Leaf, TrueOp, PipeQuery, UnionQuery, UnionAllQuery, IntersectQuery, IntersectAllQuery, MinusQuery, MinusAllQuery}
 import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, OrderedSet}
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName, HoleName, UntypedDatasetContext}
@@ -27,15 +27,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
   def apply(start: FoundTables, userParameters: UserParameters): SoQLAnalysis = {
     val state = new State(start.tableMap, userParameters)
 
-    // start.query match {
-    //   case FoundTables.Saved(rn) =>
-    //     state.analyze(start.tableMap.find(start.initialScope, rn)).finish
-    //   case FoundTables.InContext(rn, q) =>
-    //     val context = state.analyzeForContext(start.tableMap.find(start.initialScope, rn))
-    //     state.analyzeInContext(start.initialScope, Some(context), q).finish
-    //   case FoundTables.Standalone(q) =>
-    //     state.analyzeInContext(start.initialScope, None, q).finish
-    // }
+    state.analyze(start.initialScope, start.initialQuery)
 
     ???
   }
@@ -43,11 +35,19 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
   private class State(tableMap: TableMap, parameters: UserParameters) {
     val labelProvider = new LabelProvider
 
-    def analyze(desc: ParsedTableDescription, env: Environment[CT]): Statement[CT, CV] = {
-      intoStatement(analyzeForContext(desc, env))
+    def analyze(scope: RNS, query: FoundTables.Query): Statement[CT, CV] = {
+      val from =
+        query match {
+          case FoundTables.Saved(rn) =>
+            analyzeForContext(tableMap.find(scope, rn), Environment.empty)
+          case FoundTables.InContext(rn, q) =>
+            val context = analyzeForContext(tableMap.find(scope, rn), Environment.empty)
+            analyzeInContext(scope, q, Some(context), Environment.empty, Map.empty)
+          case FoundTables.Standalone(q) =>
+            analyzeInContext(scope, q, None, Environment.empty, Map.empty)
+        }
+      intoStatement(from)
     }
-
-    class AddScopeErrorEx(ase: AddScopeError, position: Position) extends Exception
 
     def intoStatement(from: AtomicFrom[CT, CV]): Statement[CT, CV] = {
       val selectList =
@@ -109,9 +109,25 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
           val newInput = analyzeInContext(scope, left, from0, env, udfParams)
           analyzeInContext(scope, right, Some(newInput), env, udfParams)
         case other: TrueOp[ast.Select] =>
-          val lhs = analyzeInContext(scope, other.left, from0, env, udfParams)
-          val rhs = analyzeInContext(scope, other.right, None, env, udfParams)
-          ???
+          val lhs = intoStatement(analyzeInContext(scope, other.left, from0, env, udfParams))
+          val rhs = intoStatement(analyzeInContext(scope, other.right, None, env, udfParams))
+
+          if(lhs.schema.values.map(_.typ) != rhs.schema.values.map(_.typ)) {
+            tableOpTypeMismatch()
+          }
+
+          FromStatement(CombinedTables(opify(other), lhs, rhs), labelProvider.tableLabel(), None)
+      }
+    }
+
+    def opify(op: TrueOp[_]): TableFunc = {
+      op match {
+        case UnionQuery(_, _) => TableFunc.Union
+        case UnionAllQuery(_, _) => TableFunc.UnionAll
+        case IntersectQuery(_, _) => TableFunc.Intersect
+        case IntersectAllQuery(_, _) => TableFunc.IntersectAll
+        case MinusQuery(_, _) => TableFunc.Minus
+        case MinusAllQuery(_, _) => TableFunc.MinusAll
       }
     }
 
@@ -401,5 +417,6 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
     def noDataSource(): Nothing = ???
     def chainWithFrom(): Nothing = ???
     def thisWithoutContext(): Nothing = ???
+    def tableOpTypeMismatch(): Nothing = ???
   }
 }

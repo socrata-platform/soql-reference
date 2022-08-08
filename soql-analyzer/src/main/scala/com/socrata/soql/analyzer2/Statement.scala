@@ -33,12 +33,14 @@ sealed abstract class Statement[+CT, +CV] {
 }
 
 sealed abstract class TableFunc
-case object Union extends TableFunc
-case object UnionAll extends TableFunc
-case object Intersect extends TableFunc
-case object IntersectAll extends TableFunc
-case object Difference extends TableFunc
-case object DifferenceAll extends TableFunc
+object TableFunc {
+  case object Union extends TableFunc
+  case object UnionAll extends TableFunc
+  case object Intersect extends TableFunc
+  case object IntersectAll extends TableFunc
+  case object Minus extends TableFunc
+  case object MinusAll extends TableFunc
+}
 
 case class CombinedTables[+CT, +CV](op: TableFunc, left: Statement[CT, CV], right: Statement[CT, CV]) extends Statement[CT, CV] {
   require(left.schema.values.map(_.typ) == right.schema.values.map(_.typ))

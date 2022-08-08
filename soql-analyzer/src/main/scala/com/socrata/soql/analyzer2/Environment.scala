@@ -87,7 +87,7 @@ sealed abstract class Environment[+CT](parent: Option[Environment[CT]]) {
 }
 
 object Environment {
-  private val empty: Environment[Nothing] = new EmptyEnvironment(None)
+  val empty: Environment[Nothing] = new EmptyEnvironment(None)
 
   case class LookupResult[+CT](table: TableLabel, column: ColumnLabel, typ: CT)
 
