@@ -213,6 +213,13 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
           // all well
       }
 
+      for(pos <- checkedGroupBys.collect { case l: Literal[_, _] => l.position }.headOption) {
+        literalNotAllowedInGroupBy(pos)
+      }
+      for(pos <- checkedOrderBys.collect { case OrderBy(l: Literal[_, _], _, _) => l.position }.headOption) {
+        literalNotAllowedInOrderBy(pos)
+      }
+
       val stmt = Select(
         checkedDistinct,
         finalState.namedExprs.map { case (cn, expr) => labelProvider.columnLabel() -> NamedExpr(expr, cn) },
@@ -232,6 +239,8 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
           }
         }.toSet
       )
+
+      verifyAggregatesAndWindowFunctions(stmt)
 
       FromStatement(stmt, labelProvider.tableLabel(), None)
     }
@@ -458,6 +467,43 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
       tc(expr, expectedType)
     }
 
+    def verifyAggregatesAndWindowFunctions(stmt: Select[CT, CV]): Unit = {
+      val isAggregated = stmt.isAggregated
+      for(w <- stmt.where) verifyAggregatesAndWindowFunctions(w, false, false, Set.empty)
+      for(gb <- stmt.groupBy) verifyAggregatesAndWindowFunctions(gb, false, false, Set.empty)
+      val groupBys = stmt.groupBy.toSet
+      for(h <- stmt.having) verifyAggregatesAndWindowFunctions(h, true, false, groupBys)
+      for(ob <- stmt.orderBy) verifyAggregatesAndWindowFunctions(ob.expr, isAggregated, true, groupBys)
+      for((_, s) <- stmt.selectList) verifyAggregatesAndWindowFunctions(s.expr, isAggregated, true, groupBys)
+    }
+    def verifyAggregatesAndWindowFunctions(e: Expr[CT, CV], allowAggregates: Boolean, allowWindow: Boolean, groupBys: Set[Expr[CT, CV]]): Unit = {
+      e match {
+        case _ : Literal[_, _] =>
+          // literals are always ok
+        case AggregateFunctionCall(f, args, _distinct, filter) if allowAggregates =>
+          args.foreach(verifyAggregatesAndWindowFunctions(_, false, false, groupBys))
+        case agg: AggregateFunctionCall[CT, CV] =>
+          aggregateFunctionNotAllowed(agg.position)
+        case WindowedFunctionCall(f, args, partitionBy, orderBy, _context, _start, _end, _exclusion) if allowWindow =>
+          args.foreach(verifyAggregatesAndWindowFunctions(_, allowAggregates, false, groupBys))
+          partitionBy.foreach(verifyAggregatesAndWindowFunctions(_, allowAggregates, false, groupBys))
+          orderBy.foreach { ob => verifyAggregatesAndWindowFunctions(ob.expr, allowAggregates, false, groupBys) }
+        case wfc: WindowedFunctionCall[CT, CV] =>
+          windowFunctionNotAllowed(wfc.functionNamePosition)
+        case e: Expr[CT, CV] if allowAggregates && groupBys.contains(e) =>
+          // ok, we want an aggregate and this is an expression from the GROUP BY clause
+        case FunctionCall(_f, args) =>
+          // This is a valid aggregate if all our arguments are valid aggregates
+          args.foreach(verifyAggregatesAndWindowFunctions(_, allowAggregates, allowWindow, groupBys))
+        case c@Column(_table, _col, _typ) if allowAggregates =>
+          // Column reference, but it's not from the group by clause.
+          // Fail!
+          aggregateRequired(c.position)
+        case _ =>
+          // ok
+      }
+    }
+
     def expectedBoolean(expr: ast.Expression, got: CT): Nothing = ???
     def incorrectNumberOfParameters(forUdf: ResourceName, expected: Int, got: Int): Nothing = ???
     def distinctOnMustBePrefixOfOrderBy(): Nothing = ???
@@ -471,5 +517,10 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
     def chainWithFrom(): Nothing = ???
     def thisWithoutContext(): Nothing = ???
     def tableOpTypeMismatch(): Nothing = ???
-  }
+    def literalNotAllowedInGroupBy(pos: Position): Nothing = ???
+    def literalNotAllowedInOrderBy(pos: Position): Nothing = ???
+    def aggregateFunctionNotAllowed(pos: Position): Nothing = ???
+    def aggregateRequired(pos: Position): Nothing = ???
+    def windowFunctionNotAllowed(pos: Position): Nothing = ???
+ }
 }

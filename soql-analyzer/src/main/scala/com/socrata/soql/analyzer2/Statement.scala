@@ -64,6 +64,8 @@ sealed abstract class Statement[+CT, +CV] {
 
   private[analyzer2] def doRelabel(state: RelabelState): Statement[CT, CV]
 
+  def numericate: Statement[CT, CV]
+
   private[analyzer2] def doRewriteDatabaseNames(
     realTables: Map[TableLabel, DatabaseTableName],
     tableName: DatabaseTableName => DatabaseTableName,
@@ -105,6 +107,8 @@ case class CombinedTables[+CT, +CV](op: TableFunc, left: Statement[CT, CV], righ
   private[analyzer2] def doRelabel(state: RelabelState): CombinedTables[CT, CV] =
     copy(left = left.doRelabel(state), right = right.doRelabel(state))
 
+  def numericate = copy(left = left.numericate, right = right.numericate)
+
   override def debugStr(sb: StringBuilder) = {
     sb.append('(')
     left.debugStr(sb)
@@ -130,6 +134,8 @@ case class CTE[+CT, +CV](
 
   private[analyzer2] def realTables =
     definitionQuery.realTables ++ useQuery.realTables
+
+  def numericate = copy(definitionQuery = definitionQuery.numericate, useQuery = useQuery.numericate)
 
   private[analyzer2] def doRewriteDatabaseNames(
     realTables: Map[TableLabel, DatabaseTableName],
@@ -166,6 +172,8 @@ case class Values[+CT, +CV](
     }
 
   val schema = typeVariedSchema
+
+  def numericate = this
 
   private[analyzer2] def realTables = Map.empty
 
@@ -216,6 +224,12 @@ case class Select[+CT, +CV](
 ) extends Statement[CT, CV] {
   val schema = selectList.withValuesMapped { case NamedExpr(expr, name) => NameEntry(name, expr.typ) }
 
+  def isAggregated =
+    groupBy.nonEmpty ||
+      having.nonEmpty ||
+      selectList.valuesIterator.exists(_.expr.isAggregated) ||
+      orderBy.iterator.exists(_.expr.isAggregated)
+
   private[analyzer2] def realTables = from.realTables
 
   private[analyzer2] def doRewriteDatabaseNames(
@@ -252,6 +266,24 @@ case class Select[+CT, +CV](
       search = search,
       hint = hint
     )
+
+  def numericate: Select[CT, CV] = {
+    def numericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
+      selectList.valuesIterator.map(_.expr).zipWithIndex.find { case (e2, _idx) => e2 == e } match {
+        case Some((expr, idx)) => SelectListReference(idx+1, expr.isAggregated, expr.typ)(expr.position)
+        case None => e
+      }
+    }
+
+    copy(
+      distinctiveness = distinctiveness match {
+        case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
+        case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(numericateExpr))
+      },
+      groupBy = groupBy.map(numericateExpr),
+      orderBy = orderBy.map { ob => ob.copy(expr = numericateExpr(ob.expr)) }
+    )
+  }
 
   def debugStr(sb: StringBuilder) = {
     sb.append("SELECT ")
@@ -536,7 +568,7 @@ sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
 
   private[analyzer2] def reAlias(newAlias: Option[ResourceName]): AtomicFrom[CT, CV]
 }
-sealed trait FromTableLike[+CT] extends AtomicFrom[CT, Nothing] {
+sealed abstract class FromTableLike[+CT] extends AtomicFrom[CT, Nothing] {
   val tableName: TableLabel
   val columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]
 
@@ -650,6 +682,8 @@ sealed abstract class Expr[+CT, +CV] {
 
   val size: Int
 
+  def isAggregated: Boolean
+
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName): Expr[CT, CV]
 
   private[analyzer2] def doRelabel(state: RelabelState): Expr[CT, CV]
@@ -657,6 +691,8 @@ sealed abstract class Expr[+CT, +CV] {
   def debugStr(sb: StringBuilder): StringBuilder
 }
 case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
+  def isAggregated = false
+
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     column match {
       case dcn: DatabaseColumnName =>
@@ -677,7 +713,22 @@ case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val posi
     sb.append(table).append('.').append(column)
 }
 
+case class SelectListReference[+CT](index: Int, isAggregated: Boolean, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
+  val size = 1
+
+  private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
+    this
+
+  private[analyzer2] def doRelabel(state: RelabelState) =
+    this
+
+  override def debugStr(sb: StringBuilder): StringBuilder =
+    sb.append(index)
+}
+
 sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
+  def isAggregated = false
+
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this
 
@@ -719,6 +770,7 @@ case class FunctionCall[+CT, +CV](
   val typ = function.result
 
   val size = 1 + args.iterator.map(_.size).sum
+  def isAggregated = args.exists(_.isAggregated)
 
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this.copy(args = args.map(_.doRewriteDatabaseNames(realTables, f)))(position, functionNamePosition)
@@ -745,6 +797,7 @@ case class AggregateFunctionCall[+CT, +CV](
 )(val position: Position, val functionNamePosition: Position) extends Expr[CT, CV] {
   require(function.isAggregate)
   val typ = function.result
+  def isAggregated = true
 
   val size = 1 + args.iterator.map(_.size).sum + filter.fold(0)(_.size)
 
@@ -788,9 +841,13 @@ case class WindowedFunctionCall[+CT, +CV](
   end: Option[FrameBound],
   exclusion: Option[FrameExclusion]
 )(val position: Position, val functionNamePosition: Position) extends Expr[CT, CV] {
+  require(function.needsWindow)
+
   val typ = function.result
 
   val size = 1 + args.iterator.map(_.size).sum + partitionBy.iterator.map(_.size).sum + orderBy.iterator.map(_.expr.size).sum
+
+  def isAggregated = args.exists(_.isAggregated) || partitionBy.exists(_.isAggregated) || orderBy.exists(_.expr.isAggregated)
 
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this.copy(

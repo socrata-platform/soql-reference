@@ -28,10 +28,24 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
 
     val analysis = analyzer(start, Map("aaaa-aaaa" -> Map(HoleName("gnu") -> Right(SoQLFixedTimestamp(DateTime.now())))))
 
-    println(analysis.statement.debugStr)
-    println(analysis.statement.schema.withValuesMapped(_.name))
+    // println(analysis.statement.debugStr)
+    // println(analysis.statement.schema.withValuesMapped(_.name))
 
-    println(analysis.statement.relabel(new LabelProvider(i => s"tbl$i", c => s"col$c")).debugStr)
-    println(analysis.statement.relabel(new LabelProvider(i => s"tbl$i", c => s"col$c")).schema.withValuesMapped(_.name))
+    // println(analysis.statement.relabel(new LabelProvider(i => s"tbl$i", c => s"col$c")).debugStr)
+    // println(analysis.statement.relabel(new LabelProvider(i => s"tbl$i", c => s"col$c")).schema.withValuesMapped(_.name))
+  }
+
+  test("aggregates - works") {
+    val tf = new MockTableFinder(
+      Map(
+        (0, "aaaa-aaaa") -> D(Map("text" -> SoQLText.t, "num" -> SoQLNumber.t))
+      )
+    )
+
+    val tf.Success(start) = tf.findTables(0, ResourceName("aaaa-aaaa"), "select text, sum(num) as s group by text order by s desc")
+
+    val analysis = analyzer(start, Map.empty)
+    println(analysis.statement.numericate.debugStr)
+    println(analysis.statement.schema.withValuesMapped(_.name))
   }
 }
