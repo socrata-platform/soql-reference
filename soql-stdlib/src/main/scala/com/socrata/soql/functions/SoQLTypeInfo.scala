@@ -4,13 +4,28 @@ import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.typed
 import com.socrata.soql.types._
-import com.socrata.soql.typechecker.TypeInfo
+import com.socrata.soql.typechecker.{TypeInfo, HasType}
+import com.socrata.soql.ast
+import com.socrata.soql.analyzer2
 
 import scala.util.parsing.input.Position
 
 object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] {
   val typeParameterUniverse = OrderedSet(SoQLType.typePreferences : _*)
 
+  implicit object hasType extends HasType[SoQLValue, SoQLType] {
+    def typeOf(cv: SoQLValue) = cv.typ
+  }
+
+  def potentialExprs(l: ast.Literal) =
+    l match {
+      case ast.NullLiteral() => typeParameterUniverse.iterator.map(analyzer2.NullLiteral(_)(l.position)).toVector
+      case ast.BooleanLiteral(b) => Seq(analyzer2.LiteralValue(SoQLBoolean(b))(l.position))
+      case ast.NumberLiteral(n) => Seq(analyzer2.LiteralValue(SoQLNumber(n.bigDecimal))(l.position))
+      case ast.StringLiteral(s) => Seq(analyzer2.LiteralValue(SoQLText(s))(l.position))
+    }
+
+  def boolType = SoQLBoolean.t
   def booleanLiteralExpr(b: Boolean, pos: Position) = Seq(typed.BooleanLiteral(b, SoQLBoolean.t)(pos))
 
   private def getMonomorphically(f: Function[SoQLType]): MonomorphicFunction[SoQLType] =

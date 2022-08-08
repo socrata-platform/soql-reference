@@ -1,9 +1,9 @@
 package com.socrata.soql.types
 
-import com.socrata.soql.ast.Hole
+import com.socrata.soql.ast.{Hole, Literal}
 import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
-import com.socrata.soql.typechecker.TypeInfo
+import com.socrata.soql.typechecker.{TypeInfo, HasType}
 import com.socrata.soql.typed
 
 import scala.util.parsing.input.Position
@@ -22,6 +22,12 @@ object TestTypeInfo extends TypeInfo[TestType, SoQLValue] {
     TestArray
   )
 
+  implicit val hasType = new HasType[SoQLValue, TestType] {
+    def typeOf(v: SoQLValue): TestType = ???
+  }
+  def potentialExprs(l: Literal) = ???
+
+  def boolType = TestBoolean.t
   def booleanLiteralExpr(b: Boolean, pos: Position) = Seq(typed.BooleanLiteral(b, TestBoolean.t)(pos))
 
   def stringLiteralExpr(s: String, pos: Position) = Seq(typed.StringLiteral(s, TestText.t)(pos))

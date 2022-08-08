@@ -10,78 +10,9 @@ import com.socrata.soql.environment.{ColumnName, ResourceName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.{StandaloneParser, AbstractParser}
 
+import mocktablefinder._
+
 class TableFinderTest extends FunSuite with MustMatchers {
-  sealed abstract class Thing
-  case class D(schema: Map[String, String]) extends Thing
-  case class Q(scope: Int, parent: ResourceName, soql: String) extends Thing
-  case class U(scope: Int, soql: String) extends Thing
-
-  class MockTableFinder(raw: Map[(Int, String), Thing]) extends TableFinder {
-    private val tables = raw.iterator.map { case ((scope, rawResourceName), thing) =>
-      val converted = thing match {
-        case D(rawSchema) =>
-          Dataset(
-            DatabaseTableName(rawResourceName),
-            OrderedMap() ++ rawSchema.iterator.map {case (rawColumnName, ct) =>
-              ColumnName(rawColumnName) -> ct
-            }
-          )
-        case Q(scope, parent, soql) =>
-          Query(scope, parent, soql, None)
-        case U(scope, soql) =>
-          TableFunction(scope, soql, OrderedMap.empty)
-      }
-      (scope, ResourceName(rawResourceName)) -> converted
-    }.toMap
-
-    type ResourceNameScope = Int
-    type ParseError = LexerParserException
-    type ColumnType = String
-
-    protected def lookup(scope: Int, name: ResourceName): Either[LookupError, TableDescription] = {
-      tables.get((scope, name)) match {
-        case Some(schema) =>
-          Right(schema)
-        case None =>
-          Left(LookupError.NotFound)
-      }
-    }
-
-    protected def parse(soql: String, udfParamsAllowed: Boolean): Either[ParseError, BinaryTree[Select]] = {
-      try {
-        Right(
-          new StandaloneParser(AbstractParser.defaultParameters.copy(allowHoles = udfParamsAllowed)).
-            binaryTreeSelect(soql)
-        )
-      } catch {
-        case e: ParseError =>
-          Left(e)
-      }
-    }
-
-    private def parsed(thing: TableDescription) = {
-      thing match {
-        case ds: Dataset => ds.toParsed
-        case Query(scope, parent, soql, params) => ParsedTableDescription.Query(scope, parent, parse(soql, false).getOrElse(fail("broken soql fixture 1")), params)
-        case TableFunction(scope, soql, params) => ParsedTableDescription.TableFunction(scope, parse(soql, false).getOrElse(fail("broken soql fixture 2")), params)
-      }
-    }
-
-    def apply(names: (Int, String)*): Success[TableMap] = {
-      val r = names.map { case (scope, n) =>
-        val name = ResourceName(n)
-        (scope, name) -> parsed(tables((scope, name)))
-      }.toMap
-
-      r.size must equal (names.length)
-
-      Success(new TableMap(r))
-    }
-
-    def notFound(scope: Int, name: String) =
-      Error.NotFound((scope, ResourceName(name)))
-  }
-
   val tables = new MockTableFinder(
     Map(
       (0, "t1") -> D(Map(

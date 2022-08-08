@@ -6,11 +6,8 @@ import scala.util.parsing.input.Position
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName}
 import com.socrata.soql.functions.MonomorphicFunction
+import com.socrata.soql.typechecker.HasType
 import com.socrata.NonEmptySeq
-
-trait HasType[-CV, +CT] {
-  def typeOf(cv: CV): CT
-}
 
 sealed abstract class Statement[+CT, +CV] {
   val schema: OrderedMap[ColumnLabel, NameEntry[CT]]
@@ -350,16 +347,23 @@ sealed abstract class Expr[+CT, +CV] {
   val typ: CT
   val position: Position
 
+  val size: Int
+
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName): Expr[CT, CV]
 }
 case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     column match {
       case dcn: DatabaseColumnName =>
-        copy(column = f(realTables(table), dcn))(position)
+        realTables.get(table) match {
+          case Some(table) => copy(column = f(table, dcn))(position)
+          case None => this // This can happen thanks to UDFs, which has DatabaseColumNames but no associated DatabaseTableName.
+        }
       case _ =>
         this
     }
+
+  val size = 1
 }
 
 sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
@@ -368,12 +372,24 @@ sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
 }
 case class LiteralValue[+CT, +CV](value: CV)(val position: Position)(implicit ev: HasType[CV, CT]) extends Literal[CT, CV] {
   val typ = ev.typeOf(value)
+  val size = 1
 }
-case class NullLiteral[+CT](typ: CT)(val position: Position) extends Literal[CT, Nothing]
+case class NullLiteral[+CT](typ: CT)(val position: Position) extends Literal[CT, Nothing] {
+  val size = 1
+}
 
-sealed trait FuncallLike[+CT, +CV] extends Expr[CT, CV] {
+sealed trait FuncallLike[+CT, +CV] extends Expr[CT, CV] with Product {
   val function: MonomorphicFunction[CT]
   val functionNamePosition: Position
+
+  override final def equals(that: Any): Boolean =
+    that match {
+      case null => false
+      case thing: AnyRef if thing eq this => true // short circuit identity
+      case thing if thing.getClass == this.getClass =>
+        this.productIterator.zip(thing.asInstanceOf[Product].productIterator).forall { case (a, b) => a == b }
+      case _ => false
+    }
 }
 
 case class FunctionCall[+CT, +CV](
@@ -382,6 +398,8 @@ case class FunctionCall[+CT, +CV](
 )(val position: Position, val functionNamePosition: Position) extends Expr[CT, CV] {
   require(!function.isAggregate)
   val typ = function.result
+
+  val size = 1 + args.iterator.map(_.size).sum
 
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this.copy(args = args.map(_.doRewriteDatabaseNames(realTables, f)))(position, functionNamePosition)
@@ -394,6 +412,8 @@ case class AggregateFunctionCall[+CT, +CV](
 )(val position: Position, val functionNamePosition: Position) extends Expr[CT, CV] {
   require(function.isAggregate)
   val typ = function.result
+
+  val size = 1 + args.iterator.map(_.size).sum + filter.fold(0)(_.size)
 
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this.copy(
@@ -412,6 +432,8 @@ case class WindowedFunctionCall[+CT, +CV](
   exclusion: Option[FrameExclusion]
 )(val position: Position, val functionNamePosition: Position) extends Expr[CT, CV] {
   val typ = function.result
+
+  val size = 1 + args.iterator.map(_.size).sum + partitionBy.iterator.map(_.size).sum + orderBy.iterator.map(_.expr.size).sum
 
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this.copy(
