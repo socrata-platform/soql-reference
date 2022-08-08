@@ -106,11 +106,15 @@ case class CTE[+CT, +CV](
 case class Values[+CT, +CV](
   values: Seq[Expr[CT, CV]]
 ) extends Statement[CT, CV] {
-  val schema = OrderedMap() ++ values.iterator.zipWithIndex.map { case (expr, idx) =>
-    // I'm not sure if this is a postgresqlism or not, but in any event here we go...
-    val name = s"column${idx+1}"
-    DatabaseColumnName(name) -> NameEntry(ColumnName(name), expr.typ)
-  }
+  // This lets us see the schema with DatabaseColumnNames as keys
+  def typeVariedSchema[T >: DatabaseColumnName]: OrderedMap[T, NameEntry[CT]] =
+    OrderedMap() ++ values.iterator.zipWithIndex.map { case (expr, idx) =>
+      // I'm not sure if this is a postgresqlism or not, but in any event here we go...
+      val name = s"column${idx+1}"
+      DatabaseColumnName(name) -> NameEntry(ColumnName(name), expr.typ)
+    }
+
+  val schema = typeVariedSchema
 
   private[analyzer2] def realTables = Map.empty
 

@@ -412,8 +412,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
                      DatabaseTableName(definitionLabel.toString),
                      None,
                      definitionUseLabel,
-                     // Uggh... but because this definitionQuery is a Values this cast works.
-                     definitionQuery.schema.asInstanceOf[OrderedMap[DatabaseColumnName, NameEntry[CT]]]
+                     definitionQuery.typeVariedSchema
                    )),
               env,
               innerUdfParams
