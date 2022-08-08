@@ -3,15 +3,15 @@ package com.socrata.soql.analyzer2.mocktablefinder
 import com.socrata.soql.BinaryTree
 import com.socrata.soql.ast.Select
 import com.socrata.soql.collection.OrderedMap
-import com.socrata.soql.environment.{ColumnName, ResourceName}
+import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.{StandaloneParser, AbstractParser}
 import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, ParsedTableDescription}
 
 sealed abstract class Thing[+T]
 case class D[+T](schema: Map[String, T]) extends Thing[T]
-case class Q(scope: Int, parent: ResourceName, soql: String) extends Thing[Nothing]
-case class U(scope: Int, soql: String) extends Thing[Nothing]
+case class Q(scope: Int, parent: String, soql: String) extends Thing[Nothing]
+case class U[+T](scope: Int, soql: String, params: OrderedMap[String, T]) extends Thing[T]
 
 class MockTableFinder[T](raw: Map[(Int, String), Thing[T]]) extends TableFinder {
   private val tables = raw.iterator.map { case ((scope, rawResourceName), thing) =>
@@ -24,9 +24,9 @@ class MockTableFinder[T](raw: Map[(Int, String), Thing[T]]) extends TableFinder 
           }
         )
       case Q(scope, parent, soql) =>
-        Query(scope, parent, soql, None)
-      case U(scope, soql) =>
-        TableFunction(scope, soql, OrderedMap.empty)
+        Query(scope, ResourceName(parent), soql, None)
+      case U(scope, soql, params) =>
+        TableFunction(scope, soql, OrderedMap() ++ params.iterator.map { case (k,v) => HoleName(k) -> v })
     }
       (scope, ResourceName(rawResourceName)) -> converted
   }.toMap

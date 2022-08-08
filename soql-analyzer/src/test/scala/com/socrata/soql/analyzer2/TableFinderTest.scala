@@ -23,10 +23,10 @@ class TableFinderTest extends FunSuite with MustMatchers {
         "key" -> "integer",
         "value" -> "otherthing"
       )),
-      (0, "t3") -> Q(0, ResourceName("t2"), "select *"),
-      (0, "t4") -> U(0, "select * from @t2"),
-      (0, "t5") -> Q(1, ResourceName("t1"), "select *"),
-      (0, "t6") -> Q(1, ResourceName("t2"), "select *"), // t2 exists in scope 0 but not in scope 1
+      (0, "t3") -> Q(0, "t2", "select *"),
+      (0, "t4") -> U(0, "select * from @t2", OrderedMap.empty),
+      (0, "t5") -> Q(1, "t1", "select *"),
+      (0, "t6") -> Q(1, "t2", "select *"), // t2 exists in scope 0 but not in scope 1
       (1, "t1") -> D(Map())
     )
   )
