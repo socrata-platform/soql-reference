@@ -56,6 +56,9 @@ sealed abstract class Statement[+CT, +CV] {
   ): Statement[CT, CV] =
     doRewriteDatabaseNames(realTables, tableName, columnName)
 
+  /** The names that the SoQLAnalyzer produces aren't necessarily safe
+    * for use in any particular database.  This lets those
+    * automatically-generated names be systematically replaced. */
   final def relabel(using: LabelProvider): Statement[CT, CV] =
     doRelabel(new RelabelState(using))
 
