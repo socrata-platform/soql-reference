@@ -433,9 +433,17 @@ sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
 
   private[analyzer2] def reAlias(newAlias: Option[ResourceName]): AtomicFrom[CT, CV]
 }
-case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceName], label: TableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends AtomicFrom[CT, Nothing] {
-  private[analyzer2] val scope: Scope[CT] = Scope(columns, label)
+sealed trait FromTableLike[+CT] extends AtomicFrom[CT, Nothing] {
+  val tableName: DatabaseTableName
+  val columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]
 
+  private[analyzer2] override final val scope: Scope[CT] = Scope(columns, label)
+
+  override final def debugStr(sb: StringBuilder): StringBuilder = {
+    sb.append(tableName).append(" AS ").append(label)
+  }
+}
+case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceName], label: TableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[CT] {
   private[analyzer2] def doRewriteDatabaseNames(
     realTables: Map[TableLabel, DatabaseTableName],
     tableName: DatabaseTableName => DatabaseTableName,
@@ -446,14 +454,26 @@ case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceNa
       columns = OrderedMap() ++ columns.iterator.map { case (n, ne) => columnName(this.tableName, n) -> ne }
     )
 
-  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromTable[CT] =
-    copy(alias = newAlias)
-
   private[analyzer2] def realTables = Map(label -> tableName)
 
-  override def debugStr(sb: StringBuilder): StringBuilder = {
-    sb.append(tableName).append(" AS ").append(label)
-  }
+  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromTable[CT] =
+    copy(alias = newAlias)
+}
+case class FromVirtualTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceName], label: TableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[CT] {
+  // This is just like FromTable except it does not participate in the
+  // DatabaseName-renaming system.
+
+  private[analyzer2] def doRewriteDatabaseNames(
+    realTables: Map[TableLabel, DatabaseTableName],
+    tableName: DatabaseTableName => DatabaseTableName,
+    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
+  ) =
+    this
+
+  private[analyzer2] def realTables = Map.empty
+
+  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromVirtualTable[CT] =
+    copy(alias = newAlias)
 }
 // "alias" is optional here because of chained soql; actually having a
 // real subselect syntactically requires an alias, but `select ... |>

@@ -52,7 +52,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
     def intoStatement(from: AtomicFrom[CT, CV]): Statement[CT, CV] = {
       val selectList =
         from match {
-          case from: FromTable[CT] =>
+          case from: FromTableLike[CT] =>
             from.columns.map { case (label, NameEntry(name, typ)) =>
               labelProvider.columnLabel() -> NamedExpr(Column(from.label, label, typ)(NoPosition), name)
             }
@@ -242,7 +242,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
           case _: FromSingleRow => new UntypedDatasetContext {
             val columns = OrderedSet.empty
           }
-          case t: FromTable[CT] => new UntypedDatasetContext {
+          case t: FromTableLike[CT] => new UntypedDatasetContext {
             val columns = OrderedSet() ++ t.columns.valuesIterator.map(_.name)
           }
           case s: FromStatement[CT, CV] => new UntypedDatasetContext {
@@ -408,7 +408,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
               // the databasetablename of the CTE is is _also_ a label
               // (and in fact there is no way to give it a different
               // alias in the sql).
-              Some(FromTable(
+              Some(FromVirtualTable(
                      DatabaseTableName(definitionLabel.toString),
                      None,
                      definitionUseLabel,
