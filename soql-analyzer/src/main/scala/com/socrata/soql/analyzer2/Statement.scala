@@ -27,6 +27,9 @@ sealed abstract class Statement[+CT, +CV] {
     // This is given the _original_ database table name
     columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
   ): Statement[CT, CV]
+
+  final def debugStr: String = debugStr(new StringBuilder).toString
+  def debugStr(sb: StringBuilder): StringBuilder
 }
 
 sealed abstract class TableFunc
@@ -55,6 +58,16 @@ case class CombinedTables[+CT, +CV](op: TableFunc, left: Statement[CT, CV], righ
       left = left.doRewriteDatabaseNames(realTables, tableName, columnName),
       right = right.doRewriteDatabaseNames(realTables, tableName, columnName)
     )
+
+  override def debugStr(sb: StringBuilder) = {
+    sb.append('(')
+    left.debugStr(sb)
+    sb.append(") ")
+    sb.append(op.toString)
+    sb.append(" (")
+    right.debugStr(sb)
+    sb.append(")")
+  }
 }
 
 sealed abstract class MaterializedHint
@@ -80,6 +93,13 @@ case class CTE[+CT, +CV](
       definitionQuery = definitionQuery.doRewriteDatabaseNames(realTables, tableName, columnName),
       useQuery = useQuery.doRewriteDatabaseNames(realTables, tableName, columnName)
     )
+
+  override def debugStr(sb: StringBuilder) = {
+    sb.append( "with (")
+    definitionQuery.debugStr(sb)
+    sb.append(") ")
+    useQuery.debugStr(sb)
+  }
 }
 
 case class Values[+CT, +CV](
@@ -102,6 +122,17 @@ case class Values[+CT, +CV](
     copy(
       values = values.map(_.doRewriteDatabaseNames(realTables, columnName))
     )
+
+  override def debugStr(sb: StringBuilder) = {
+    sb.append( "values (")
+    var didOne = false
+    for(expr <- values) {
+      if(didOne) sb.append(", ")
+      else didOne = true
+      expr.debugStr(sb)
+    }
+    sb.append(")")
+  }
 }
 
 case class NamedExpr[+CT, +CV](expr: Expr[CT, CV], name: ColumnName) {
@@ -145,6 +176,66 @@ case class Select[+CT, +CV](
       hint = hint
     )
   }
+
+  def debugStr(sb: StringBuilder) = {
+    sb.append("SELECT ")
+
+    distinctiveness.debugStr(sb)
+
+    {
+      var didOne = false
+      for((col, expr) <- selectList) {
+        if(didOne) sb.append(", ")
+        else didOne = true
+        expr.expr.debugStr(sb).append(" AS ").append(col)
+      }
+    }
+
+    sb.append(" FROM ")
+    from.debugStr(sb)
+
+    for(w <- where) {
+      sb.append(" WHERE ")
+      w.debugStr(sb)
+    }
+
+    if(groupBy.nonEmpty) {
+      sb.append(" GROUP BY ")
+      var didOne = false
+      for(gb <- groupBy) {
+        if(didOne) sb.append(", ")
+        else didOne = true
+        gb.debugStr(sb)
+      }
+    }
+
+    for(h <- having) {
+      sb.append(" HAVING ")
+      h.debugStr(sb)
+    }
+
+    if(orderBy.nonEmpty) {
+      sb.append(" ORDER BY ")
+      var didOne = false
+      for(ob <- orderBy) {
+        if(didOne) sb.append(", ")
+        else didOne = true
+        ob.debugStr(sb)
+      }
+    }
+
+    for(l <- offset) {
+      sb.append(" OFFSET ").append(l)
+    }
+    for(l <- limit) {
+      sb.append(" LIMIT ").append(l)
+    }
+    for(s <- search) {
+      sb.append(" SEARCH ").append(com.rojoma.json.v3.ast.JString(s))
+    }
+
+    sb
+  }
 }
 
 sealed trait SelectHint
@@ -156,23 +247,50 @@ object SelectHint {
 
 sealed trait Distinctiveness[+CT, +CV] {
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName): Distinctiveness[CT, CV]
+  def debugStr(sb: StringBuilder): StringBuilder
 }
 object Distinctiveness {
   case object Indistinct extends Distinctiveness[Nothing, Nothing] {
     private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) = this
+    def debugStr(sb: StringBuilder): StringBuilder = sb
   }
   case object FullyDistinct extends Distinctiveness[Nothing, Nothing] {
     private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) = this
+    def debugStr(sb: StringBuilder): StringBuilder = sb.append("DISTINCT ")
   }
   case class On[+CT, +CV](exprs: Seq[Expr[CT, CV]]) extends Distinctiveness[CT, CV] {
     private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
       On(exprs.map(_.doRewriteDatabaseNames(realTables, f)))
+    def debugStr(sb: StringBuilder): StringBuilder = {
+      sb.append("DISTINCT ON (")
+      var didOne = false
+      for(expr <- exprs) {
+        if(didOne) sb.append(", ")
+        else didOne = true
+        expr.debugStr(sb)
+      }
+      sb.append(") ")
+    }
   }
 }
 
 case class OrderBy[+CT, +CV](expr: Expr[CT, CV], ascending: Boolean, nullLast: Boolean) {
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this.copy(expr = expr.doRewriteDatabaseNames(realTables, f))
+
+  def debugStr(sb: StringBuilder): StringBuilder = {
+    expr.debugStr(sb)
+    if(ascending) {
+      sb.append(" ASC")
+    } else {
+      sb.append(" DESC")
+    }
+    if(nullLast) {
+      sb.append(" NULLS LAST")
+    } else {
+      sb.append(" NULLS FIRST")
+    }
+  }
 }
 
 sealed abstract class From[+CT, +CV] {
@@ -186,6 +304,8 @@ sealed abstract class From[+CT, +CV] {
   ): From[CT, CV]
 
   private[analyzer2] def realTables: Map[TableLabel, DatabaseTableName]
+
+  def debugStr(sb: StringBuilder): StringBuilder
 }
 case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom[CT, CV], right: From[CT, CV], on: Expr[CT, CV]) extends From[CT, CV] {
   // The difference between a lateral and a non-lateral join is the
@@ -251,6 +371,33 @@ case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom
 
     loop(this, Nil)
   }
+
+  def debugStr(sb: StringBuilder): StringBuilder = {
+    left.debugStr(sb)
+    def loop(prevJoin: Join[CT, CV], from: From[CT, CV]): StringBuilder = {
+      from match {
+        case j: Join[CT, CV] =>
+          sb.
+            append(' ').
+            append(prevJoin.joinType).
+            append(if(prevJoin.lateral) " LATERAL" else "").
+            append(' ')
+          j.left.debugStr(sb).
+            append(" ON ")
+          prevJoin.on.debugStr(sb)
+          loop(j, j.right)
+        case nonJoin =>
+          sb.append(' ').
+            append(prevJoin.joinType).
+            append(if(prevJoin.lateral) " LATERAL" else "").
+            append(' ')
+          nonJoin.debugStr(sb).
+            append(" ON ")
+          prevJoin.on.debugStr(sb)
+      }
+    }
+    loop(this, this.right)
+  }
 }
 
 sealed abstract class JoinType
@@ -303,6 +450,10 @@ case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceNa
     copy(alias = newAlias)
 
   private[analyzer2] def realTables = Map(label -> tableName)
+
+  override def debugStr(sb: StringBuilder): StringBuilder = {
+    sb.append(tableName).append(" AS ").append(label)
+  }
 }
 // "alias" is optional here because of chained soql; actually having a
 // real subselect syntactically requires an alias, but `select ... |>
@@ -322,6 +473,12 @@ case class FromStatement[+CT, +CV](statement: Statement[CT, CV], label: TableLab
     copy(alias = newAlias)
 
   private[analyzer2] def realTables = Map.empty
+
+  override def debugStr(sb: StringBuilder): StringBuilder = {
+    sb.append('(')
+    statement.debugStr(sb)
+    sb.append(") AS ").append(label)
+  }
 }
 case class FromSingleRow(label: TableLabel, alias: Option[ResourceName]) extends AtomicFrom[Nothing, Nothing] {
   private[analyzer2] val scope: Scope[Nothing] =
@@ -341,6 +498,10 @@ case class FromSingleRow(label: TableLabel, alias: Option[ResourceName]) extends
     copy(alias = newAlias)
 
   private[analyzer2] def realTables = Map.empty
+
+  override def debugStr(sb: StringBuilder): StringBuilder = {
+    sb.append("@single_row")
+  }
 }
 
 sealed abstract class Expr[+CT, +CV] {
@@ -350,6 +511,8 @@ sealed abstract class Expr[+CT, +CV] {
   val size: Int
 
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName): Expr[CT, CV]
+
+  def debugStr(sb: StringBuilder): StringBuilder
 }
 case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
@@ -364,6 +527,9 @@ case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val posi
     }
 
   val size = 1
+
+  override def debugStr(sb: StringBuilder): StringBuilder =
+    sb.append(table).append('.').append(column)
 }
 
 sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
@@ -373,9 +539,15 @@ sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
 case class LiteralValue[+CT, +CV](value: CV)(val position: Position)(implicit ev: HasType[CV, CT]) extends Literal[CT, CV] {
   val typ = ev.typeOf(value)
   val size = 1
+
+  override def debugStr(sb: StringBuilder): StringBuilder =
+    sb.append(value)
 }
 case class NullLiteral[+CT](typ: CT)(val position: Position) extends Literal[CT, Nothing] {
   val size = 1
+
+  override def debugStr(sb: StringBuilder): StringBuilder =
+    sb.append("NULL")
 }
 
 sealed trait FuncallLike[+CT, +CV] extends Expr[CT, CV] with Product {
@@ -403,6 +575,17 @@ case class FunctionCall[+CT, +CV](
 
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this.copy(args = args.map(_.doRewriteDatabaseNames(realTables, f)))(position, functionNamePosition)
+
+  override def debugStr(sb: StringBuilder): StringBuilder = {
+    sb.append(function.name).append('(')
+    var didOne = false
+    for(arg <- args) {
+      if(didOne) sb.append(", ")
+      else didOne = true
+      arg.debugStr(sb)
+    }
+    sb.append(')')
+  }
 }
 case class AggregateFunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
@@ -420,6 +603,26 @@ case class AggregateFunctionCall[+CT, +CV](
       args = args.map(_.doRewriteDatabaseNames(realTables, f)),
       filter = filter.map(_.doRewriteDatabaseNames(realTables, f))
     )(position, functionNamePosition)
+
+  override def debugStr(sb: StringBuilder): StringBuilder = {
+    sb.append(function.name).append('(')
+    if(distinct) {
+      sb.append("DISTINCT ")
+    }
+    var didOne = false
+    for(arg <- args) {
+      if(didOne) sb.append(", ")
+      else didOne = true
+      arg.debugStr(sb)
+    }
+    sb.append(')')
+    for(f <- filter) {
+      sb.append(" FILTER (WHERE ")
+      f.debugStr(sb)
+      sb.append(')')
+    }
+    sb
+  }
 }
 case class WindowedFunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
@@ -441,6 +644,10 @@ case class WindowedFunctionCall[+CT, +CV](
       partitionBy = partitionBy.map(_.doRewriteDatabaseNames(realTables, f)),
       orderBy = orderBy.map(_.doRewriteDatabaseNames(realTables, f))
     )(position, functionNamePosition)
+
+  override def debugStr(sb: StringBuilder): StringBuilder = {
+    sb.append("[WINDOW FUNCTION STUFF]")
+  }
 }
 
 sealed abstract class FrameContext
