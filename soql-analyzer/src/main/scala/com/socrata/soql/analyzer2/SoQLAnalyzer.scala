@@ -409,7 +409,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
               // (and in fact there is no way to give it a different
               // alias in the sql).
               Some(FromVirtualTable(
-                     DatabaseTableName(definitionLabel.toString),
+                     definitionLabel,
                      None,
                      definitionUseLabel,
                      definitionQuery.typeVariedSchema

@@ -412,10 +412,6 @@ object JoinType {
   case object FullOuter extends JoinType
 }
 
-case class DatabaseTableName(name: String) {
-  def asResourceName = ResourceName(name)
-}
-
 sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
   val alias: Option[ResourceName]
   val label: TableLabel
@@ -438,7 +434,7 @@ sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
   private[analyzer2] def reAlias(newAlias: Option[ResourceName]): AtomicFrom[CT, CV]
 }
 sealed trait FromTableLike[+CT] extends AtomicFrom[CT, Nothing] {
-  val tableName: DatabaseTableName
+  val tableName: TableLabel
   val columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]
 
   private[analyzer2] override final val scope: Scope[CT] = Scope(columns, label)
@@ -463,7 +459,7 @@ case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceNa
   private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromTable[CT] =
     copy(alias = newAlias)
 }
-case class FromVirtualTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceName], label: TableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[CT] {
+case class FromVirtualTable[+CT](tableName: TableLabel, alias: Option[ResourceName], label: TableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[CT] {
   // This is just like FromTable except it does not participate in the
   // DatabaseName-renaming system.
 

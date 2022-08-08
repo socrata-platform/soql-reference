@@ -6,7 +6,7 @@ class LabelProvider {
 
   def tableLabel(): TableLabel = {
     tables += 1
-    new TableLabel(tables)
+    new AutoTableLabel(tables)
   }
   def columnLabel(): ColumnLabel = {
     columns += 1
@@ -14,8 +14,19 @@ class LabelProvider {
   }
 }
 
-final class TableLabel private[analyzer2] (private val n: Int) extends AnyVal {
+sealed abstract class TableLabel
+final class AutoTableLabel private[analyzer2] (private val n: Int) extends TableLabel {
   override def toString = s"t$n"
+
+  override def hashCode = n
+  override def equals(that: Any) =
+    that match {
+      case atl: AutoTableLabel => this.n == atl.n
+      case _ => false
+    }
+}
+final case class DatabaseTableName(name: String) extends TableLabel {
+  override def toString = name
 }
 sealed abstract class ColumnLabel
 final class AutoColumnLabel private[analyzer2] (private val n: Int) extends ColumnLabel {
