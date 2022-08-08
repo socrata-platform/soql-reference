@@ -14,14 +14,18 @@ class SoQLAnalysis {
   // a Statement
 }
 
+case class TypedNull[+CT](typ: CT)
+
 class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
   type ScopedResourceName = (RNS, ResourceName)
   type TableMap = com.socrata.soql.analyzer2.TableMap[RNS, CT]
   type FoundTables = com.socrata.soql.analyzer2.FoundTables[RNS, CT]
   type ParsedTableDescription = com.socrata.soql.analyzer2.ParsedTableDescription[RNS, CT]
 
-  def apply(start: FoundTables): SoQLAnalysis = {
-    val state = new State(start.tableMap)
+  type UserParameters = Map[String, Map[HoleName, Either[TypedNull[CT], CV]]]
+
+  def apply(start: FoundTables, userParameters: UserParameters): SoQLAnalysis = {
+    val state = new State(start.tableMap, userParameters)
 
     // start.query match {
     //   case FoundTables.Saved(rn) =>
@@ -36,10 +40,8 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
     ???
   }
 
-  private class State(tableMap: TableMap) {
+  private class State(tableMap: TableMap, parameters: UserParameters) {
     val labelProvider = new LabelProvider
-
-    def tableFunctionInIncorrectPosition() = ???
 
     def analyze(desc: ParsedTableDescription, env: Environment[CT]): Statement[CT, CV] = {
       intoStatement(analyzeForContext(desc, env))
@@ -174,14 +176,14 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
       val checkedGroupBys = groupBys.map(finalState.typecheck)
       for(cgb <- checkedGroupBys) {
         if(!typeInfo.isGroupable(cgb.typ)) {
-          ???
+          invalidGroupBy(cgb.typ, cgb.position)
         }
       }
       val checkedHaving = having.map(finalState.typecheck)
       val checkedOrderBys = orderBys.map { case ast.OrderBy(expr, ascending, nullLast) =>
         val checked = finalState.typecheck(expr)
         if(!typeInfo.isOrdered(checked.typ)) {
-          ???
+          unorderedOrderBy(checked.typ, checked.position)
         }
         OrderBy(checked, ascending, nullLast)
       }
@@ -189,7 +191,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
       checkedDistinct match {
         case Distinctiveness.On(exprs) =>
           if(!checkedOrderBys.map(_.expr).startsWith(exprs)) {
-            ??? // error
+            distinctOnMustBePrefixOfOrderBy()
           }
         case _ =>
           // all well
@@ -279,17 +281,17 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
       var mostRecentFrom: AtomicFrom[CT, CV] = (input, from) match {
         case (None, None) =>
           // No context and no from; this is an error
-          ???
+          noDataSource()
         case (Some(prev), Some(tn@TableName(TableName.This, _))) =>
           // chained query: {something} |> select ... from @this [as alias]
           prev.reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
         case (Some(_), Some(_)) =>
           // chained query: {something} |> select ... from somethingThatIsNotThis
           // this is an error
-          ???
+          chainWithFrom()
         case (None, Some(tn@TableName(TableName.This, _))) =>
           // standalone query: select ... from @this.  But it's standalone, so this is an error
-          ???
+          thisWithoutContext()
         case (None, Some(tn@TableName(TableName.SingleRow, _))) =>
           FromSingleRow(labelProvider.tableLabel(), Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
         case (None, Some(tn)) =>
@@ -342,7 +344,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
     def envify[T](result: Either[AddScopeError, T]): T =
       result match {
         case Right(r) => r
-        case Left(e) => throw new AddScopeErrorEx(e, ???)
+        case Left(e) => addScopeError(e)
       }
 
     def analyzeJoinSelect(scope: RNS, js: ast.JoinSelect, env: Environment[CT], udfParams: Map[HoleName, Expr[CT, CV]]): AtomicFrom[CT, CV] = {
@@ -357,10 +359,11 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
     }
 
     def analyzeUDF(scope: RNS, tableName: TableName, params: Seq[ast.Expression], env: Environment[CT], outerUdfParams: Map[HoleName, Expr[CT, CV]]): AtomicFrom[CT, CV] = {
-      tableMap.find(scope, ResourceName(tableName.nameWithoutPrefix)) match {
+      val resource = ResourceName(tableName.nameWithoutPrefix)
+      tableMap.find(scope, resource) match {
         case ParsedTableDescription.TableFunction(udfScope, parsed, paramSpecs) =>
           if(params.length != paramSpecs.size) {
-            ???
+            incorrectNumberOfParameters(resource, expected = params.length, got = paramSpecs.size)
           }
           // we're rewriting the UDF from
           //    @bleh(x, y, z)
@@ -369,7 +372,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
           val definitionQuery = Values(labelProvider.tableLabel(), params.map(typecheck(_, env, Map.empty, outerUdfParams)))
           val innerUdfParams = definitionQuery.values.lazyZip(paramSpecs).map { case (expr, (name, typ)) =>
             if(expr.typ != typ) {
-              ??? // wrong param type
+              udfParameterTypeMismatch(expr.position, expected = typ, got = expr.typ)
             }
             name -> expr
           }.toMap
@@ -381,10 +384,22 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV]) {
           )
         case _ =>
           // Non-UDF
-          ???
+          parametersForNonUdf(resource)
       }
     }
     def typecheck(expr: ast.Expression, env: Environment[CT], namedExprs: Map[ColumnName, Expr[CT, CV]], udfParams: Map[HoleName, Expr[CT, CV]]): Expr[CT, CV] = ???
+
     def expectedBoolean(expr: ast.Expression, got: CT): Nothing = ???
+    def incorrectNumberOfParameters(forUdf: ResourceName, expected: Int, got: Int): Nothing = ???
+    def distinctOnMustBePrefixOfOrderBy(): Nothing = ???
+    def tableFunctionInIncorrectPosition(): Nothing = ???
+    def invalidGroupBy(typ: CT, position: Position): Nothing = ???
+    def unorderedOrderBy(typ: CT, position: Position): Nothing = ???
+    def parametersForNonUdf(name: ResourceName): Nothing = ???
+    def udfParameterTypeMismatch(position: Position, expected: CT, got: CT): Nothing = ???
+    def addScopeError(e: AddScopeError): Nothing = ???
+    def noDataSource(): Nothing = ???
+    def chainWithFrom(): Nothing = ???
+    def thisWithoutContext(): Nothing = ???
   }
 }
