@@ -42,7 +42,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
       )
     )
 
-    val tf.Success(start) = tf.findTables(0, ResourceName("aaaa-aaaa"), "select text, sum(num) as s group by text order by s desc")
+    val tf.Success(start) = tf.findTables(0, ResourceName("aaaa-aaaa"), "select * |> select text, sum(num) as s group by text order by s desc |> select *")
 
     val analysis = analyzer(start, Map.empty)
     println(analysis.statement.numericate.debugStr)

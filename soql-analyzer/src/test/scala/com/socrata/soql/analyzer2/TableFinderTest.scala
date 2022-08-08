@@ -4,7 +4,6 @@ import org.scalatest.FunSuite
 import org.scalatest.MustMatchers
 
 import com.socrata.soql.BinaryTree
-import com.socrata.soql.ast.Select
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ColumnName, ResourceName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException

@@ -280,6 +280,7 @@ case class Select[+CT, +CV](
         case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
         case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(numericateExpr))
       },
+      from = from.numericate,
       groupBy = groupBy.map(numericateExpr),
       orderBy = orderBy.map { ob => ob.copy(expr = numericateExpr(ob.expr)) }
     )
@@ -423,6 +424,8 @@ sealed abstract class From[+CT, +CV] {
 
   private[analyzer2] def realTables: Map[TableLabel, DatabaseTableName]
 
+  def numericate: From[CT, CV]
+
   def debugStr(sb: StringBuilder): StringBuilder
 }
 case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom[CT, CV], right: From[CT, CV], on: Expr[CT, CV]) extends From[CT, CV] {
@@ -509,6 +512,24 @@ case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom
     loop(this, Nil)
   }
 
+  def numericate: From[CT, CV] = {
+    type Stack = List[From[CT, CV] => Join[CT, CV]]
+
+    @tailrec
+    def loop(self: From[CT, CV], stack: Stack): From[CT, CV] =
+      self match {
+        case Join(joinType, lateral, left, right, on) =>
+          val newLeft = left.numericate
+          loop(right, { newRight: From[CT, CV] => Join(joinType, lateral, newLeft, newRight, on) } :: stack)
+        case nonJoin =>
+          stack.foldLeft(nonJoin.numericate) { (acc, f) =>
+            f(acc)
+          }
+      }
+
+    loop(this, Nil)
+  }
+
   def debugStr(sb: StringBuilder): StringBuilder = {
     left.debugStr(sb)
     def loop(prevJoin: Join[CT, CV], from: From[CT, CV]): StringBuilder = {
@@ -549,6 +570,8 @@ sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
   val alias: Option[ResourceName]
   val label: TableLabel
 
+  def numericate: AtomicFrom[CT, CV]
+
   private[analyzer2] val scope: Scope[CT]
 
   private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]) = {
@@ -577,6 +600,8 @@ sealed abstract class FromTableLike[+CT] extends AtomicFrom[CT, Nothing] {
   override final def debugStr(sb: StringBuilder): StringBuilder = {
     sb.append(tableName).append(" AS ").append(label)
   }
+
+  def numericate: this.type = this
 }
 case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceName], label: TableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[CT] {
   private[analyzer2] def doRewriteDatabaseNames(
@@ -632,6 +657,8 @@ case class FromStatement[+CT, +CV](statement: Statement[CT, CV], label: TableLab
   ) =
     copy(statement = statement.doRewriteDatabaseNames(realTables, tableName, columnName))
 
+  def numericate = copy(statement = statement.numericate)
+
   private[analyzer2] def doRelabel(state: RelabelState) = {
     copy(statement = statement.doRelabel(state),
          label = state.convert(label))
@@ -654,6 +681,8 @@ case class FromSingleRow(label: TableLabel, alias: Option[ResourceName]) extends
       OrderedMap.empty[ColumnLabel, NameEntry[Nothing]],
       label
     )
+
+  def numericate = this
 
   private[analyzer2] def doRewriteDatabaseNames(
     realTables: Map[TableLabel, DatabaseTableName],

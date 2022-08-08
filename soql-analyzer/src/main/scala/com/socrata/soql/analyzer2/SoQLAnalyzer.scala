@@ -1,6 +1,7 @@
 package com.socrata.soql.analyzer2
 
 import scala.util.parsing.input.{Position, NoPosition}
+import scala.collection.compat._
 
 import com.socrata.soql.{BinaryTree, Leaf, TrueOp, PipeQuery, UnionQuery, UnionAllQuery, IntersectQuery, IntersectAllQuery, MinusQuery, MinusAllQuery}
 import com.socrata.soql.ast
