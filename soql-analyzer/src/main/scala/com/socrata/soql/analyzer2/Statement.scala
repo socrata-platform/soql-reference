@@ -9,6 +9,41 @@ import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasType
 import com.socrata.NonEmptySeq
 
+private[analyzer2] class RelabelState(provider: LabelProvider) {
+  private val tableLabels = new scala.collection.mutable.HashMap[AutoTableLabel, TableLabel]
+  private val columnLabels = new scala.collection.mutable.HashMap[AutoColumnLabel, ColumnLabel]
+
+  def convert(label: TableLabel): TableLabel =
+    label match {
+      case c: AutoTableLabel =>
+        tableLabels.get(c) match {
+          case Some(rename) =>
+            rename
+          case None =>
+            val fresh = provider.tableLabel()
+            tableLabels += c -> fresh
+            fresh
+        }
+      case db: DatabaseTableName =>
+        db
+    }
+
+  def convert(label: ColumnLabel): ColumnLabel =
+    label match {
+      case c: AutoColumnLabel =>
+        columnLabels.get(c) match {
+          case Some(rename) =>
+            rename
+          case None =>
+            val fresh = provider.columnLabel()
+            columnLabels += c -> fresh
+            fresh
+        }
+      case db: DatabaseColumnName =>
+        db
+    }
+}
+
 sealed abstract class Statement[+CT, +CV] {
   val schema: OrderedMap[ColumnLabel, NameEntry[CT]]
 
@@ -20,6 +55,11 @@ sealed abstract class Statement[+CT, +CV] {
     columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
   ): Statement[CT, CV] =
     doRewriteDatabaseNames(realTables, tableName, columnName)
+
+  final def relabel(using: LabelProvider): Statement[CT, CV] =
+    doRelabel(new RelabelState(using))
+
+  private[analyzer2] def doRelabel(state: RelabelState): Statement[CT, CV]
 
   private[analyzer2] def doRewriteDatabaseNames(
     realTables: Map[TableLabel, DatabaseTableName],
@@ -59,6 +99,9 @@ case class CombinedTables[+CT, +CV](op: TableFunc, left: Statement[CT, CV], righ
       right = right.doRewriteDatabaseNames(realTables, tableName, columnName)
     )
 
+  private[analyzer2] def doRelabel(state: RelabelState): CombinedTables[CT, CV] =
+    copy(left = left.doRelabel(state), right = right.doRelabel(state))
+
   override def debugStr(sb: StringBuilder) = {
     sb.append('(')
     left.debugStr(sb)
@@ -95,6 +138,11 @@ case class CTE[+CT, +CV](
       useQuery = useQuery.doRewriteDatabaseNames(realTables, tableName, columnName)
     )
 
+  private[analyzer2] def doRelabel(state: RelabelState): CTE[CT, CV] =
+    copy(definitionLabel = state.convert(definitionLabel),
+         definitionQuery = definitionQuery.doRelabel(state),
+         useQuery = useQuery.doRelabel(state))
+
   override def debugStr(sb: StringBuilder) = {
     sb.append( "WITH ").append(definitionLabel).append(" AS (")
     definitionQuery.debugStr(sb)
@@ -127,6 +175,9 @@ case class Values[+CT, +CV](
       values = values.map(_.doRewriteDatabaseNames(realTables, columnName))
     )
 
+  private[analyzer2] def doRelabel(state: RelabelState): Values[CT, CV] =
+    copy(values = values.map(_.doRelabel(state)))
+
   override def debugStr(sb: StringBuilder) = {
     sb.append( "values (")
     var didOne = false
@@ -142,6 +193,9 @@ case class Values[+CT, +CV](
 case class NamedExpr[+CT, +CV](expr: Expr[CT, CV], name: ColumnName) {
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this.copy(expr = expr.doRewriteDatabaseNames(realTables, f))
+
+  private[analyzer2] def doRelabel(state: RelabelState) =
+    copy(expr = expr.doRelabel(state))
 }
 
 case class Select[+CT, +CV](
@@ -180,6 +234,21 @@ case class Select[+CT, +CV](
       hint = hint
     )
   }
+
+  private[analyzer2] def doRelabel(state: RelabelState) =
+    Select(
+      distinctiveness = distinctiveness.doRelabel(state),
+      selectList = OrderedMap() ++ selectList.iterator.map { case (k, v) => state.convert(k) -> v.doRelabel(state) },
+      from = from.doRelabel(state),
+      where = where.map(_.doRelabel(state)),
+      groupBy = groupBy.map(_.doRelabel(state)),
+      having = having.map(_.doRelabel(state)),
+      orderBy = orderBy.map(_.doRelabel(state)),
+      limit = limit,
+      offset = offset,
+      search = search,
+      hint = hint
+    )
 
   def debugStr(sb: StringBuilder) = {
     sb.append("SELECT ")
@@ -251,20 +320,25 @@ object SelectHint {
 
 sealed trait Distinctiveness[+CT, +CV] {
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName): Distinctiveness[CT, CV]
+  private[analyzer2] def doRelabel(state: RelabelState): Distinctiveness[CT, CV]
   def debugStr(sb: StringBuilder): StringBuilder
 }
 object Distinctiveness {
   case object Indistinct extends Distinctiveness[Nothing, Nothing] {
     private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) = this
+    private[analyzer2] def doRelabel(state: RelabelState) = this
     def debugStr(sb: StringBuilder): StringBuilder = sb
   }
   case object FullyDistinct extends Distinctiveness[Nothing, Nothing] {
     private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) = this
+    private[analyzer2] def doRelabel(state: RelabelState) = this
     def debugStr(sb: StringBuilder): StringBuilder = sb.append("DISTINCT ")
   }
   case class On[+CT, +CV](exprs: Seq[Expr[CT, CV]]) extends Distinctiveness[CT, CV] {
     private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
       On(exprs.map(_.doRewriteDatabaseNames(realTables, f)))
+    private[analyzer2] def doRelabel(state: RelabelState) =
+      On(exprs.map(_.doRelabel(state)))
     def debugStr(sb: StringBuilder): StringBuilder = {
       sb.append("DISTINCT ON (")
       var didOne = false
@@ -281,6 +355,9 @@ object Distinctiveness {
 case class OrderBy[+CT, +CV](expr: Expr[CT, CV], ascending: Boolean, nullLast: Boolean) {
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this.copy(expr = expr.doRewriteDatabaseNames(realTables, f))
+
+  private[analyzer2] def doRelabel(state: RelabelState) =
+    copy(expr = expr.doRelabel(state))
 
   def debugStr(sb: StringBuilder): StringBuilder = {
     expr.debugStr(sb)
@@ -306,6 +383,8 @@ sealed abstract class From[+CT, +CV] {
     tableName: DatabaseTableName => DatabaseTableName,
     columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
   ): From[CT, CV]
+
+  private[analyzer2] def doRelabel(state: RelabelState): From[CT, CV]
 
   private[analyzer2] def realTables: Map[TableLabel, DatabaseTableName]
 
@@ -376,6 +455,25 @@ case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom
     loop(this, Nil)
   }
 
+  private[analyzer2] def doRelabel(state: RelabelState): From[CT, CV] = {
+    type Stack = List[From[CT, CV] => Join[CT, CV]]
+
+    @tailrec
+    def loop(self: From[CT, CV], stack: Stack): From[CT, CV] =
+      self match {
+        case Join(joinType, lateral, left, right, on) =>
+          val newLeft = left.doRelabel(state)
+          val newOn = on.doRelabel(state)
+          loop(right, { newRight: From[CT, CV] => Join(joinType, lateral, newLeft, newRight, newOn) } :: stack)
+        case nonJoin =>
+          stack.foldLeft(nonJoin.doRelabel(state)) { (acc, f) =>
+            f(acc)
+          }
+      }
+
+    loop(this, Nil)
+  }
+
   def debugStr(sb: StringBuilder): StringBuilder = {
     left.debugStr(sb)
     def loop(prevJoin: Join[CT, CV], from: From[CT, CV]): StringBuilder = {
@@ -431,6 +529,8 @@ sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
     columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
   ): AtomicFrom[CT, CV]
 
+  private[analyzer2] def doRelabel(state: RelabelState): AtomicFrom[CT, CV]
+
   private[analyzer2] def reAlias(newAlias: Option[ResourceName]): AtomicFrom[CT, CV]
 }
 sealed trait FromTableLike[+CT] extends AtomicFrom[CT, Nothing] {
@@ -454,6 +554,10 @@ case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceNa
       columns = OrderedMap() ++ columns.iterator.map { case (n, ne) => columnName(this.tableName, n) -> ne }
     )
 
+  private[analyzer2] def doRelabel(state: RelabelState) = {
+    copy(label = state.convert(label))
+  }
+
   private[analyzer2] def realTables = Map(label -> tableName)
 
   private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromTable[CT] =
@@ -469,6 +573,10 @@ case class FromVirtualTable[+CT](tableName: TableLabel, alias: Option[ResourceNa
     columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
   ) =
     this
+
+  private[analyzer2] def doRelabel(state: RelabelState) = {
+    copy(tableName = state.convert(tableName), label = state.convert(label))
+  }
 
   private[analyzer2] def realTables = Map.empty
 
@@ -488,6 +596,11 @@ case class FromStatement[+CT, +CV](statement: Statement[CT, CV], label: TableLab
     columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
   ) =
     copy(statement = statement.doRewriteDatabaseNames(realTables, tableName, columnName))
+
+  private[analyzer2] def doRelabel(state: RelabelState) = {
+    copy(statement = statement.doRelabel(state),
+         label = state.convert(label))
+  }
 
   private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromStatement[CT, CV] =
     copy(alias = newAlias)
@@ -514,6 +627,10 @@ case class FromSingleRow(label: TableLabel, alias: Option[ResourceName]) extends
   ) =
     this
 
+  private[analyzer2] def doRelabel(state: RelabelState) = {
+    copy(label = state.convert(label))
+  }
+
   private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromSingleRow =
     copy(alias = newAlias)
 
@@ -532,6 +649,8 @@ sealed abstract class Expr[+CT, +CV] {
 
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName): Expr[CT, CV]
 
+  private[analyzer2] def doRelabel(state: RelabelState): Expr[CT, CV]
+
   def debugStr(sb: StringBuilder): StringBuilder
 }
 case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
@@ -546,6 +665,9 @@ case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val posi
         this
     }
 
+  private[analyzer2] def doRelabel(state: RelabelState) =
+    copy(table = state.convert(table), column = state.convert(column))(position)
+
   val size = 1
 
   override def debugStr(sb: StringBuilder): StringBuilder =
@@ -555,6 +677,8 @@ case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val posi
 sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this
+
+  private[analyzer2] def doRelabel(state: RelabelState) = this
 }
 case class LiteralValue[+CT, +CV](value: CV)(val position: Position)(implicit ev: HasType[CV, CT]) extends Literal[CT, CV] {
   val typ = ev.typeOf(value)
@@ -596,6 +720,9 @@ case class FunctionCall[+CT, +CV](
   private[analyzer2] def doRewriteDatabaseNames(realTables: Map[TableLabel, DatabaseTableName], f: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName) =
     this.copy(args = args.map(_.doRewriteDatabaseNames(realTables, f)))(position, functionNamePosition)
 
+  private[analyzer2] def doRelabel(state: RelabelState) =
+    copy(args = args.map(_.doRelabel(state)))(position, functionNamePosition)
+
   override def debugStr(sb: StringBuilder): StringBuilder = {
     sb.append(function.name).append('(')
     var didOne = false
@@ -623,6 +750,10 @@ case class AggregateFunctionCall[+CT, +CV](
       args = args.map(_.doRewriteDatabaseNames(realTables, f)),
       filter = filter.map(_.doRewriteDatabaseNames(realTables, f))
     )(position, functionNamePosition)
+
+  private[analyzer2] def doRelabel(state: RelabelState) =
+    copy(args = args.map(_.doRelabel(state)),
+         filter = filter.map(_.doRelabel(state)))(position, functionNamePosition)
 
   override def debugStr(sb: StringBuilder): StringBuilder = {
     sb.append(function.name).append('(')
@@ -664,6 +795,11 @@ case class WindowedFunctionCall[+CT, +CV](
       partitionBy = partitionBy.map(_.doRewriteDatabaseNames(realTables, f)),
       orderBy = orderBy.map(_.doRewriteDatabaseNames(realTables, f))
     )(position, functionNamePosition)
+
+  private[analyzer2] def doRelabel(state: RelabelState) =
+    copy(args = args.map(_.doRelabel(state)),
+         partitionBy = partitionBy.map(_.doRelabel(state)),
+         orderBy = orderBy.map(_.doRelabel(state)))(position, functionNamePosition)
 
   override def debugStr(sb: StringBuilder): StringBuilder = {
     sb.append("[WINDOW FUNCTION STUFF]")

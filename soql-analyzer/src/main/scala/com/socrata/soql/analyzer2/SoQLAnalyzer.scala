@@ -33,7 +33,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
   }
 
   private class State(tableMap: TableMap, userParameters: UserParameters) {
-    val labelProvider = new LabelProvider
+    val labelProvider = new LabelProvider(t => s"t$t", c => s"c$c")
 
     def analyze(scope: RNS, query: FoundTables.Query): Statement[CT, CV] = {
       val from =

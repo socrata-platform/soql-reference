@@ -30,5 +30,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
 
     println(analysis.statement.debugStr)
     println(analysis.statement.schema.withValuesMapped(_.name))
+
+    println(analysis.statement.relabel(new LabelProvider(i => s"tbl$i", c => s"col$c")).debugStr)
+    println(analysis.statement.relabel(new LabelProvider(i => s"tbl$i", c => s"col$c")).schema.withValuesMapped(_.name))
   }
 }

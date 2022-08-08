@@ -1,27 +1,27 @@
 package com.socrata.soql.analyzer2
 
-class LabelProvider {
+class LabelProvider(tablePattern: Int => String, columnPattern: Int => String) {
   private var tables = 0
   private var columns = 0
 
   def tableLabel(): TableLabel = {
     tables += 1
-    new AutoTableLabel(tables)
+    new AutoTableLabel(tablePattern(tables))
   }
   def columnLabel(): ColumnLabel = {
     columns += 1
-    new AutoColumnLabel(columns)
+    new AutoColumnLabel(columnPattern(columns))
   }
 }
 
 sealed abstract class TableLabel
-final class AutoTableLabel private[analyzer2] (private val n: Int) extends TableLabel {
-  override def toString = s"t$n"
+final class AutoTableLabel private[analyzer2] (private val name: String) extends TableLabel {
+  override def toString = name
 
-  override def hashCode = n
+  override def hashCode = name.hashCode
   override def equals(that: Any) =
     that match {
-      case atl: AutoTableLabel => this.n == atl.n
+      case atl: AutoTableLabel => this.name == atl.name
       case _ => false
     }
 }
@@ -29,13 +29,13 @@ final case class DatabaseTableName(name: String) extends TableLabel {
   override def toString = name
 }
 sealed abstract class ColumnLabel
-final class AutoColumnLabel private[analyzer2] (private val n: Int) extends ColumnLabel {
-  override def toString = s"c$n"
+final class AutoColumnLabel private[analyzer2] (private val name: String) extends ColumnLabel {
+  override def toString = name
 
-  override def hashCode = n
+  override def hashCode = name.hashCode
   override def equals(that: Any) =
     that match {
-      case acl: AutoColumnLabel => this.n == acl.n
+      case acl: AutoColumnLabel => this.name == acl.name
       case _ => false
     }
 }
