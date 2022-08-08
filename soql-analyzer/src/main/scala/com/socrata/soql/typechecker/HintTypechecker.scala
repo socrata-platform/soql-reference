@@ -1,6 +1,6 @@
 package com.socrata.soql.typechecker
 
-import com.socrata.soql.ast.{Hint, Materialized, NoChainMerge, NoRollup}
+import com.socrata.soql.ast.{CompoundRollup, Hint, Materialized, NoChainMerge, NoRollup, RollupAtJoin}
 import com.socrata.soql.environment.{ColumnName, TableName}
 import com.socrata.soql.exceptions.TypecheckException
 import com.socrata.soql.typed
@@ -23,5 +23,9 @@ trait HintTypechecker[Type, Value] { this: Typechecker[Type, Value] =>
       Right(typed.NoRollup(pos))
     case NoChainMerge(pos) =>
       Right(typed.NoChainMerge(pos))
+    case CompoundRollup(pos) =>
+      Right(typed.CompoundRollup(pos))
+    case RollupAtJoin(pos) =>
+      Right(typed.RollupAtJoin(pos))
   }
 }
