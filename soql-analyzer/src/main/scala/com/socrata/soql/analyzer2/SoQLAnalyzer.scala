@@ -387,17 +387,41 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
           //    with $label (values(x,y,z)) udfexpansion
           val definitionQuery =
             Values(
-              labelProvider.tableLabel(),
               params.lazyZip(paramSpecs).map { case (expr, (_name, typ)) =>
                 typecheck(expr, env, Map.empty, outerUdfParams, Some(typ))
               }
             )
+          val definitionLabel = labelProvider.tableLabel()
+          val definitionUseLabel = labelProvider.tableLabel()
           val innerUdfParams = definitionQuery.schema.keys.lazyZip(paramSpecs).map { case (colLabel, (name, typ)) =>
-            name -> { (p: Position) => Column(definitionQuery.label, colLabel, typ)(p) }
+            name -> { (p: Position) => Column(definitionUseLabel, colLabel, typ)(p) }
           }.toMap
-          val useQuery = intoStatement(analyzeInContext(udfScope, parsed, None, env, innerUdfParams))
+          val useQuery = intoStatement(
+            analyzeInContext(
+              udfScope,
+              // For historical reasons, UDF queries were written as
+              // `select blahblah FROM @single_row ...` but we're
+              // providing the definition differently now and it's not
+              // needed anymore, so remove it if it's present.
+              removeSingleRowFrom(parsed),
+              // This is a little ugly; what's happening here is that
+              // the databasetablename of the CTE is is _also_ a label
+              // (and in fact there is no way to give it a different
+              // alias in the sql).
+              Some(FromTable(
+                     DatabaseTableName(definitionLabel.toString),
+                     None,
+                     definitionUseLabel,
+                     // Uggh... but because this definitionQuery a Values this cast works.
+                     definitionQuery.schema.asInstanceOf[OrderedMap[DatabaseColumnName, NameEntry[CT]]]
+                   )),
+              env,
+              innerUdfParams
+            )
+          )
+
           FromStatement(
-            CTE(definitionQuery, None, useQuery),
+            CTE(definitionLabel, definitionQuery, None, useQuery),
             labelProvider.tableLabel(),
             Some(ResourceName(tableName.aliasWithoutPrefix.getOrElse(tableName.nameWithoutPrefix)))
           )
@@ -405,6 +429,23 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
           // Non-UDF
           parametersForNonUdf(resource)
       }
+    }
+
+    def removeSingleRowFrom(select: BinaryTree[ast.Select]): BinaryTree[ast.Select] = {
+      select match {
+        case Leaf(q) => Leaf(q.copy(from = q.from.filter(notSingleRow)))
+        case PipeQuery(l, r) => PipeQuery(removeSingleRowFrom(l), r)
+        case UnionQuery(l, r) => UnionQuery(removeSingleRowFrom(l), r)
+        case UnionAllQuery(l, r) => UnionAllQuery(removeSingleRowFrom(l), r)
+        case IntersectQuery(l, r) => IntersectQuery(removeSingleRowFrom(l), r)
+        case IntersectAllQuery(l, r) => IntersectAllQuery(removeSingleRowFrom(l), r)
+        case MinusQuery(l, r) => MinusQuery(removeSingleRowFrom(l), r)
+        case MinusAllQuery(l, r) => MinusAllQuery(removeSingleRowFrom(l), r)
+      }
+    }
+
+    def notSingleRow(from: TableName): Boolean = {
+      from.name != TableName.SingleRow
     }
 
     def typecheck(

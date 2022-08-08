@@ -75,6 +75,7 @@ case object Materialized extends MaterializedHint
 case object NotMaterialized extends MaterializedHint
 
 case class CTE[+CT, +CV](
+  definitionLabel: TableLabel,
   definitionQuery: Statement[CT, CV],
   materializedHint: Option[MaterializedHint],
   useQuery: Statement[CT, CV]
@@ -95,7 +96,7 @@ case class CTE[+CT, +CV](
     )
 
   override def debugStr(sb: StringBuilder) = {
-    sb.append( "with (")
+    sb.append( "WITH ").append(definitionLabel).append(" AS (")
     definitionQuery.debugStr(sb)
     sb.append(") ")
     useQuery.debugStr(sb)
@@ -103,7 +104,6 @@ case class CTE[+CT, +CV](
 }
 
 case class Values[+CT, +CV](
-  label: TableLabel,
   values: Seq[Expr[CT, CV]]
 ) extends Statement[CT, CV] {
   val schema = OrderedMap() ++ values.iterator.zipWithIndex.map { case (expr, idx) =>
