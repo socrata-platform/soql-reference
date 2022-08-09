@@ -18,76 +18,109 @@ class Typechecker[CT, CV](
   private val funcallTypechecker = new FunctionCallTypechecker(typeInfo, functionInfo)
 
   def apply(expr: ast.Expression, expectedType: Option[CT]): Expr[CT, CV] =
-    disambiguate(check(expr), expectedType, expr.position)
-
-  private def disambiguate(exprs: Seq[Expr[CT, CV]], expectedType: Option[CT], pos: Position): Expr[CT, CV] =
-    expectedType match {
-      case Some(t) =>
-        exprs.find(_.typ == t).getOrElse {
-          typeMismatch(exprs.iterator.map(_.typ).toSet, pos)
-        }
-      case None =>
-        exprs.head
+    check(expr).flatMap(disambiguate(_, expectedType, expr.position)) match {
+      case Right(expr) => expr
+      case Left(err) => throw err
     }
 
-  private def squash(exprs: Seq[Expr[CT, CV]], pos: Position): Seq[Expr[CT, CV]] = {
-    exprs.foldLeft(OrderedMap.empty[CT, Expr[CT, CV]]) { (acc, e) =>
-      acc.get(e.typ) match {
-        case Some(e2) if e2.size < e.size =>
-          acc
-        case Some(e2) if e2.size == e.size =>
-          ambiguousExpression(pos)
-        case Some(_) | None =>
-          acc + (e.typ -> e)
-      }
-    }.valuesIterator.toSeq
+  private def mostPreferredType(types: Set[CT]): CT = {
+    typeInfo.typeParameterUniverse.find(types).get
   }
 
-  private def check(expr: ast.Expression): Seq[Expr[CT, CV]] = {
+  private def disambiguate(exprs: Seq[Expr[CT, CV]], expectedType: Option[CT], pos: Position): Either[TypecheckError, Expr[CT, CV]] =
+    expectedType match {
+      case Some(t) =>
+        exprs.find(_.typ == t).toRight {
+          TypeMismatch(mostPreferredType(exprs.iterator.map(_.typ).toSet), pos)
+        }
+      case None =>
+        Right(exprs.head)
+    }
+
+  private def squash(exprs: Seq[Expr[CT, CV]], pos: Position): Either[TypecheckError, Seq[Expr[CT, CV]]] = {
+    var acc = OrderedMap.empty[CT, Expr[CT, CV]]
+
+    for { e <- exprs } {
+      acc.get(e.typ) match {
+        case Some(e2) if e2.size < e.size =>
+          // the smaller is already chosen
+        case Some(e2) if e2.size == e.size =>
+          return Left(AmbiguousExpression(pos))
+        case Some(_) | None =>
+          acc += e.typ -> e
+      }
+    }
+
+    Right(acc.valuesIterator.toSeq)
+  }
+
+  private def check(expr: ast.Expression): Either[TypecheckError, Seq[Expr[CT, CV]]] = {
     expr match {
       case ast.FunctionCall(ast.SpecialFunctions.Parens, Seq(param), None, None) =>
         check(param)
+      case fc@ast.FunctionCall(ast.SpecialFunctions.Subscript, Seq(base, ast.StringLiteral(prop)), None, None) =>
+        check(base).flatMap { basePossibilities =>
+          val asFieldAccesses = basePossibilities.flatMap { basePossibility =>
+            val typ = basePossibility.typ
+            val fnName = ast.SpecialFunctions.Field(typeInfo.typeNameFor(typ), prop)
+            checkFuncall(fc.copy(functionName = fnName, parameters = Seq(base))(fc.position, fc.functionNamePosition)).
+              getOrElse(Nil) // ignore errors here, it'll make us fall back to a raw subscript
+          }
+
+          val rawSubscript = checkFuncall(fc)
+          if(asFieldAccesses.isEmpty) {
+            rawSubscript
+          } else {
+            rawSubscript match {
+              case Left(_) => Right(asFieldAccesses)
+              case Right(asSubscripts) => squash(asFieldAccesses ++ asSubscripts, fc.position)
+            }
+          }
+        }
       case fc: ast.FunctionCall =>
-        squash(checkFuncall(fc), fc.position)
+        checkFuncall(fc).flatMap(squash(_, fc.position))
       case col@ast.ColumnOrAliasRef(None, name) =>
         namedExprs.get(name) match {
           case Some(prechecked) =>
-            Seq(prechecked)
+            Right(Seq(prechecked))
           case None =>
             env.lookup(name) match {
-              case None => unknownName(name, col.position)
+              case None => Left(NoSuchColumn(name, col.position))
               case Some(Environment.LookupResult(table, column, typ)) =>
-                Seq(Column(table, column, typ)(col.position))
+                Right(Seq(Column(table, column, typ)(col.position)))
             }
         }
       case col@ast.ColumnOrAliasRef(Some(qual), name) =>
         env.lookup(ResourceName(qual.substring(TableName.PrefixIndex)), name) match {
-          case None => unknownName(name, col.position)
+          case None => Left(NoSuchColumn(name, col.position))
           case Some(Environment.LookupResult(table, column, typ)) =>
-            Seq(Column(table, column, typ)(col.position))
+            Right(Seq(Column(table, column, typ)(col.position)))
         }
       case l: ast.Literal =>
         squash(typeInfo.potentialExprs(l), l.position)
       case hole@ast.Hole.UDF(name) =>
         udfParams.get(name) match {
-          case Some(expr) => Seq(expr(hole.position))
-          case None => unknownUdfParam(name, hole.position)
+          case Some(expr) => Right(Seq(expr(hole.position)))
+          case None => Left(UnknownUDFParameter(name, hole.position))
         }
       case hole@ast.Hole.SavedQuery(name, Some(view)) =>
         userParameters.get(view).flatMap(_.get(name)) match {
-          case Some(Left(TypedNull(t))) => Seq(NullLiteral(t)(hole.position))
-          case Some(Right(v)) => Seq(LiteralValue(v)(hole.position)(typeInfo.hasType))
-          case None => unknownUserParam(view, name, hole.position)
+          case Some(Left(TypedNull(t))) => Right(Seq(NullLiteral(t)(hole.position)))
+          case Some(Right(v)) => Right(Seq(LiteralValue(v)(hole.position)(typeInfo.hasType)))
+          case None => Left(UnknownUserParameter(view, name, hole.position))
         }
       case hole@ast.Hole.SavedQuery(name, None) =>
         unqualifiedUserParam(name, hole.position)
     }
   }
 
-  private def checkFuncall(fc: ast.FunctionCall): Seq[Expr[CT, CV]] = {
+  private def checkFuncall(fc: ast.FunctionCall): Either[TypecheckError, Seq[Expr[CT, CV]]] = {
     val ast.FunctionCall(name, parameters, filter, window) = fc
 
-    val typedParameters = parameters.map(check)
+    val typedParameters = parameters.map(check).map {
+      case Left(tm) => return Left(tm)
+      case Right(es) => es
+    }
 
     val typedWindow: Option[(Seq[Expr[CT, CV]], Seq[OrderBy[CT, CV]], Seq[Expr[CT, CV]])] = window.map { w =>
       val typedPartitions = w.partitions.map(apply(_, None))
@@ -101,7 +134,7 @@ class Typechecker[CT, CV](
     val options = functionInfo.functionsWithArity(name, typedParameters.length)
 
     if(options.isEmpty) {
-      noSuchFunction(name, typedParameters.length, fc.functionNamePosition)
+      return Left(NoSuchFunction(name, typedParameters.length, fc.functionNamePosition))
     }
 
     val (failed, resolved) = divide(funcallTypechecker.resolveOverload(options, typedParameters.map(_.map(_.typ).toSet))) {
@@ -111,7 +144,7 @@ class Typechecker[CT, CV](
 
     if(resolved.isEmpty) {
       val TypeMismatchFailure(expected, found, idx) = failed.maxBy(_.idx)
-      typeMismatch(found, parameters(idx).position)
+      return Left(TypeMismatch(mostPreferredType(found), parameters(idx).position))
     }
 
     val potentials = resolved.flatMap { f =>
@@ -137,18 +170,30 @@ class Typechecker[CT, CV](
       }.map { params: Seq[Expr[CT, CV]] =>
         (typedFilter, typedWindow) match {
           case (Some(boolExpr), Some((partitions, orderings, frames))) =>
-            if(f.isAggregate) nonWindowFunction(fc.functionNamePosition)
-            if(f.needsWindow) nonAggregate(fc.functionNamePosition)
-            nonWindowFunction(fc.functionNamePosition)
+            val error =
+              if(f.isAggregate) {
+                NonWindowFunction(fc.functionName, fc.functionNamePosition)
+              } else if(f.needsWindow) {
+                NonAggregate(fc.functionName, fc.functionNamePosition)
+              } else {
+                NonWindowFunction(fc.functionName, fc.functionNamePosition)
+              }
+            return Left(error)
           case (Some(boolExpr), None) =>
-            if(!f.isAggregate) nonAggregate(fc.functionNamePosition)
+            if(!f.isAggregate) {
+              return Left(NonAggregate(fc.functionName, fc.functionNamePosition))
+            }
             AggregateFunctionCall(f, params, false, Some(boolExpr))(fc.position, fc.functionNamePosition)
           case (None, Some((partitions, orderings, frames))) =>
-            if(!f.needsWindow) nonWindowFunction(fc.functionNamePosition)
+            if(!f.needsWindow) {
+              return Left(NonWindowFunction(fc.functionName, fc.functionNamePosition))
+            }
             // TODO: figure out what "frames" actually means
             WindowedFunctionCall(f, params, partitions, orderings, ???, ???, ???, ???)(fc.position, fc.functionNamePosition)
           case (None, None) =>
-            if(f.needsWindow) requiresWindow(fc.functionNamePosition)
+            if(f.needsWindow) {
+              return Left(RequiresWindow(fc.functionName, fc.functionNamePosition))
+            }
             if(f.isAggregate) {
               AggregateFunctionCall(f, params, false, None)(fc.position, fc.functionNamePosition)
             } else {
@@ -173,14 +218,15 @@ class Typechecker[CT, CV](
     (left.result(), right.result())
   }
 
-  private def unknownName(name: ColumnName, pos: Position): Nothing = ???
-  private def unknownUdfParam(name: HoleName, pos: Position): Nothing = ???
-  private def unknownUserParam(view: String, name: HoleName, pos: Position): Nothing = ???
+  sealed abstract class TypecheckError extends Exception
+  case class NoSuchColumn(name: ColumnName, pos: Position) extends TypecheckError
+  case class UnknownUDFParameter(name: HoleName, pos: Position) extends TypecheckError
+  case class UnknownUserParameter(view: String, name: HoleName, pos: Position) extends TypecheckError
   private def unqualifiedUserParam(name: HoleName, pos: Position): Nothing = ???
-  private def ambiguousExpression(pos: Position): Nothing = ???
-  private def noSuchFunction(name: FunctionName, arity: Int, pos: Position): Nothing = ???
-  private def typeMismatch(found: Set[CT], pos: Position): Nothing = ???
-  private def requiresWindow(pos: Position): Nothing = ???
-  private def nonAggregate(pos: Position): Nothing = ???
-  private def nonWindowFunction(pos: Position): Nothing = ???
+  case class AmbiguousExpression(pos: Position) extends TypecheckError
+  case class NoSuchFunction(name: FunctionName, arity: Int, pos: Position) extends TypecheckError
+  case class TypeMismatch(found: CT, pos: Position) extends TypecheckError
+  case class RequiresWindow(name: FunctionName, pos: Position) extends TypecheckError
+  case class NonAggregate(name: FunctionName, pos: Position) extends TypecheckError
+  case class NonWindowFunction(name: FunctionName, pos: Position) extends TypecheckError
 }
