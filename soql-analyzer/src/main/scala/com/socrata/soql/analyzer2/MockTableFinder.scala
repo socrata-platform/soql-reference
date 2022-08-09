@@ -24,9 +24,9 @@ class MockTableFinder[T](raw: Map[(Int, String), Thing[T]]) extends TableFinder 
           }
         )
       case Q(scope, parent, soql) =>
-        Query(scope, ResourceName(parent), soql, None)
+        Query(scope, ResourceName(rawResourceName), ResourceName(parent), soql, None)
       case U(scope, soql, params) =>
-        TableFunction(scope, soql, OrderedMap() ++ params.iterator.map { case (k,v) => HoleName(k) -> v })
+        TableFunction(scope, ResourceName(rawResourceName), soql, OrderedMap() ++ params.iterator.map { case (k,v) => HoleName(k) -> v })
     }
       (scope, ResourceName(rawResourceName)) -> converted
   }.toMap
@@ -59,8 +59,8 @@ class MockTableFinder[T](raw: Map[(Int, String), Thing[T]]) extends TableFinder 
   private def parsed(thing: TableDescription) = {
     thing match {
       case ds: Dataset => ds.toParsed
-      case Query(scope, parent, soql, params) => ParsedTableDescription.Query(scope, parent, parse(soql, false).getOrElse(throw new Exception("broken soql fixture 1")), params)
-      case TableFunction(scope, soql, params) => ParsedTableDescription.TableFunction(scope, parse(soql, false).getOrElse(throw new Exception("broken soql fixture 2")), params)
+      case Query(scope, canonicalName, parent, soql, params) => ParsedTableDescription.Query(scope, canonicalName, parent, parse(soql, false).getOrElse(throw new Exception("broken soql fixture 1")), params)
+      case TableFunction(scope, canonicalName, soql, params) => ParsedTableDescription.TableFunction(scope, canonicalName, parse(soql, false).getOrElse(throw new Exception("broken soql fixture 2")), params)
     }
   }
 

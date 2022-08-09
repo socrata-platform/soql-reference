@@ -14,13 +14,15 @@ object ParsedTableDescription {
     schema: OrderedMap[DatabaseColumnName, NameEntry[ColumnType]]
   ) extends ParsedTableDescription[Nothing, ColumnType]
   case class Query[+ResourceNameScope, +ColumnType](
-    scope: ResourceNameScope, // This scope is to resolve both basedOn and any tables referenced within the text of soql
+    scope: ResourceNameScope, // This scope is to resolve both basedOn and any tables referenced within the soql
+    canonicalName: ResourceName, // This is the canonical name of this query; it also is assumed to be findable within `scope`
     basedOn: ResourceName,
     parsed: BinaryTree[ast.Select],
     parameters: Option[ParameterInfo[ColumnType]]
   ) extends ParsedTableDescription[ResourceNameScope, ColumnType]
   case class TableFunction[+ResourceNameScope, +ColumnType](
-    scope: ResourceNameScope,
+    scope: ResourceNameScope, // This scope is to resolve any tables referenced within the soql
+    canonicalName: ResourceName, // This is the canonical name of this UDF; it also is assumed to be findable within `scope`
     parsed: BinaryTree[ast.Select],
     parameters: OrderedMap[HoleName, ColumnType]
   ) extends ParsedTableDescription[ResourceNameScope, ColumnType]
@@ -114,6 +116,7 @@ trait TableFinder {
   /** A saved query, with any parameters it (non-transitively!) defines. */
   case class Query(
     scope: ResourceNameScope,
+    canonicalName: ResourceName,
     basedOn: ResourceName,
     soql: String,
     parameters: Option[ParameterInfo[ColumnType]]
@@ -122,6 +125,7 @@ trait TableFinder {
   /** A saved table query ("UDF"), with any parameters it defines for itself. */
   case class TableFunction(
     scope: ResourceNameScope,
+    canonicalName: ResourceName,
     soql: String,
     parameters: OrderedMap[HoleName, ColumnType]
   ) extends TableDescription
@@ -183,9 +187,9 @@ trait TableFinder {
     lookup(scopedName._1, scopedName._2) match {
       case Right(ds: Dataset) =>
         Success(ds.toParsed)
-      case Right(Query(scope, basedOn, text, params)) =>
-        doParse(Some(scopedName), text, false).map(ParsedTableDescription.Query(scope, basedOn, _, params))
-      case Right(TableFunction(scope, text, params)) => doParse(Some(scopedName), text, true).map(ParsedTableDescription.TableFunction(scope, _, params))
+      case Right(Query(scope, canonicalName, basedOn, text, params)) =>
+        doParse(Some(scopedName), text, false).map(ParsedTableDescription.Query(scope, canonicalName, basedOn, _, params))
+      case Right(TableFunction(scope, canonicalName, text, params)) => doParse(Some(scopedName), text, true).map(ParsedTableDescription.TableFunction(scope, canonicalName, _, params))
       case Left(LookupError.NotFound) => Error.NotFound(scopedName)
       case Left(LookupError.PermissionDenied) => Error.PermissionDenied(scopedName)
     }
@@ -218,12 +222,12 @@ trait TableFinder {
   def walkDesc(desc: ParsedTableDescription[ResourceNameScope, ColumnType], acc: TableMap): Result[TableMap] = {
     desc match {
       case ParsedTableDescription.Dataset(_, _) => Success(acc)
-      case ParsedTableDescription.Query(scope, basedOn, tree, _params) =>
+      case ParsedTableDescription.Query(scope, _canonicalName, basedOn, tree, _params) =>
         for {
           acc <- walkFromName((scope, basedOn), acc)
           acc <- walkTree(scope, tree, acc)
         } yield acc
-      case ParsedTableDescription.TableFunction(scope, tree, _params) => walkTree(scope, tree, acc)
+      case ParsedTableDescription.TableFunction(scope, _canonicalName, tree, _params) => walkTree(scope, tree, acc)
     }
   }
 
