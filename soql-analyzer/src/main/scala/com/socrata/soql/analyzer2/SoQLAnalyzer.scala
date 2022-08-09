@@ -58,7 +58,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
               labelProvider.columnLabel() -> NamedExpr(Column(from.label, label, typ)(NoPosition), name)
             }
           case from: FromSingleRow =>
-            OrderedMap.empty[ColumnLabel, NamedExpr[CT, CV]]
+            OrderedMap.empty[AutoColumnLabel, NamedExpr[CT, CV]]
           case from: FromStatement[CT, CV] =>
             // Just short-circuit it and return the underlying Statement
             return from.statement
@@ -430,7 +430,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
           )
 
           FromStatement(
-            CTE(definitionLabel, definitionQuery, None, useQuery),
+            CTE(definitionLabel, definitionQuery, MaterializedHint.Materialized, useQuery),
             labelProvider.tableLabel(),
             Some(ResourceName(tableName.aliasWithoutPrefix.getOrElse(tableName.nameWithoutPrefix)))
           )

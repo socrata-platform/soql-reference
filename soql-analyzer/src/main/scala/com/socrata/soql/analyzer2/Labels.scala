@@ -4,11 +4,11 @@ class LabelProvider(tablePattern: Int => String, columnPattern: Int => String) {
   private var tables = 0
   private var columns = 0
 
-  def tableLabel(): TableLabel = {
+  def tableLabel(): AutoTableLabel = {
     tables += 1
     new AutoTableLabel(tablePattern(tables))
   }
-  def columnLabel(): ColumnLabel = {
+  def columnLabel(): AutoColumnLabel = {
     columns += 1
     new AutoColumnLabel(columnPattern(columns))
   }
