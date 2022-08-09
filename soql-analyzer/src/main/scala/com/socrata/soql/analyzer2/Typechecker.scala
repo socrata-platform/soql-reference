@@ -45,6 +45,8 @@ class Typechecker[CT, CV](
 
   private def check(expr: ast.Expression): Seq[Expr[CT, CV]] = {
     expr match {
+      case ast.FunctionCall(ast.SpecialFunctions.Parens, Seq(param), None, None) =>
+        check(param)
       case fc: ast.FunctionCall =>
         squash(checkFuncall(fc), fc.position)
       case col@ast.ColumnOrAliasRef(None, name) =>
