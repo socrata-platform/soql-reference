@@ -6,7 +6,7 @@ import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.{StandaloneParser, AbstractParser}
-import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, ParsedTableDescription}
+import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, ParsedTableDescription, CanonicalName}
 
 sealed abstract class Thing[+T]
 case class D[+T](schema: Map[String, T]) extends Thing[T]
@@ -24,9 +24,9 @@ class MockTableFinder[T](raw: Map[(Int, String), Thing[T]]) extends TableFinder 
           }
         )
       case Q(scope, parent, soql, params) =>
-        Query(scope, ResourceName(rawResourceName), ResourceName(parent), soql, params)
+        Query(scope, CanonicalName(rawResourceName), ResourceName(parent), soql, params)
       case U(scope, soql, params) =>
-        TableFunction(scope, ResourceName(rawResourceName), soql, OrderedMap() ++ params.iterator.map { case (k,v) => HoleName(k) -> v })
+        TableFunction(scope, CanonicalName(rawResourceName), soql, OrderedMap() ++ params.iterator.map { case (k,v) => HoleName(k) -> v })
     }
       (scope, ResourceName(rawResourceName)) -> converted
   }.toMap

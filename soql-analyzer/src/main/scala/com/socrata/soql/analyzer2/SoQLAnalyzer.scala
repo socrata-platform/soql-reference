@@ -16,13 +16,28 @@ abstract class SoQLAnalysis[CT, CV] {
 
 case class TypedNull[+CT](typ: CT)
 
+case class CanonicalName(name: String)
+
+case class UserParameters[+CT, +CV](
+  qualified: Map[CanonicalName, Map[HoleName, Either[TypedNull[CT], CV]]],
+  // This is used for a top-level (i.e., non-saved, anonymous) query
+  // that contains param references to figure out what an unqualified
+  // `param("whatever")` form refers to.  If it's Left, it's used as a
+  // key into the qualified map.  If it's Right, it's used as a
+  // parameter directory directly.
+  unqualified: Either[CanonicalName, Map[HoleName, Either[TypedNull[CT], CV]]] = Right(Map.empty[HoleName, Nothing])
+)
+object UserParameters {
+  val empty = UserParameters[Nothing, Nothing](Map.empty, Right(Map.empty))
+}
+
 class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: FunctionInfo[CT]) {
   type ScopedResourceName = (RNS, ResourceName)
   type TableMap = com.socrata.soql.analyzer2.TableMap[RNS, CT]
   type FoundTables = com.socrata.soql.analyzer2.FoundTables[RNS, CT]
   type ParsedTableDescription = com.socrata.soql.analyzer2.ParsedTableDescription[RNS, CT]
+  type UserParameters = com.socrata.soql.analyzer2.UserParameters[CT, CV]
 
-  type UserParameters = Map[ResourceName, Map[HoleName, Either[TypedNull[CT], CV]]]
   type UdfParameters = Map[HoleName, Position => Column[CT]]
 
   def apply(start: FoundTables, userParameters: UserParameters): SoQLAnalysis[CT, CV] = {
@@ -44,6 +59,9 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
           case FoundTables.InContext(rn, q) =>
             val context = analyzeForContext(tableMap.find(scope, rn), Environment.empty)
             analyzeInContext(scope, None, q, Some(context), Environment.empty, Map.empty)
+          case FoundTables.InContextImpersonatingSaved(rn, q, impersonating) =>
+            val context = analyzeForContext(tableMap.find(scope, rn), Environment.empty)
+            analyzeInContext(scope, Some(impersonating), q, Some(context), Environment.empty, Map.empty)
           case FoundTables.Standalone(q) =>
             analyzeInContext(scope, None, q, None, Environment.empty, Map.empty)
         }
@@ -102,7 +120,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
       }
     }
 
-    def analyzeInContext(scope: RNS, canonicalName: Option[ResourceName], q: BinaryTree[ast.Select], from0: Option[AtomicFrom[CT, CV]], env: Environment[CT], udfParams: UdfParameters): AtomicFrom[CT, CV] = {
+    def analyzeInContext(scope: RNS, canonicalName: Option[CanonicalName], q: BinaryTree[ast.Select], from0: Option[AtomicFrom[CT, CV]], env: Environment[CT], udfParams: UdfParameters): AtomicFrom[CT, CV] = {
       q match {
         case Leaf(select) =>
           analyzeSelection(scope, canonicalName, select, from0, env, udfParams)
@@ -132,7 +150,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
       }
     }
 
-    def analyzeSelection(scope: RNS, canonicalName: Option[ResourceName], select: ast.Select, from0: Option[AtomicFrom[CT, CV]], env: Environment[CT], udfParams: UdfParameters): FromStatement[CT, CV] = {
+    def analyzeSelection(scope: RNS, canonicalName: Option[CanonicalName], select: ast.Select, from0: Option[AtomicFrom[CT, CV]], env: Environment[CT], udfParams: UdfParameters): FromStatement[CT, CV] = {
       val ast.Select(
         distinct,
         selection,
@@ -286,7 +304,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
       loop(from, Map.empty)
     }
 
-    def queryInputSchema(scope: RNS, canonicalName: Option[ResourceName], input: Option[AtomicFrom[CT, CV]], from: Option[TableName], joins: Seq[ast.Join], enclosingEnv: Environment[CT], udfParams: UdfParameters): From[CT, CV] = {
+    def queryInputSchema(scope: RNS, canonicalName: Option[CanonicalName], input: Option[AtomicFrom[CT, CV]], from: Option[TableName], joins: Seq[ast.Join], enclosingEnv: Environment[CT], udfParams: UdfParameters): From[CT, CV] = {
       // Ok so:
       //  * @This is special only in From
       //  * It is an error if we have neither an input nor a from
@@ -373,7 +391,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
         case Left(e) => addScopeError(e)
       }
 
-    def analyzeJoinSelect(scope: RNS, canonicalName: Option[ResourceName], js: ast.JoinSelect, env: Environment[CT], udfParams: UdfParameters): AtomicFrom[CT, CV] = {
+    def analyzeJoinSelect(scope: RNS, canonicalName: Option[CanonicalName], js: ast.JoinSelect, env: Environment[CT], udfParams: UdfParameters): AtomicFrom[CT, CV] = {
       js match {
         case ast.JoinTable(tn) =>
           analyzeForContext(tableMap.find(scope, ResourceName(tn.nameWithoutPrefix)), env).reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
@@ -384,7 +402,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
       }
     }
 
-    def analyzeUDF(scope: RNS, outerCanonicalName: Option[ResourceName], tableName: TableName, params: Seq[ast.Expression], env: Environment[CT], outerUdfParams: UdfParameters): AtomicFrom[CT, CV] = {
+    def analyzeUDF(scope: RNS, outerCanonicalName: Option[CanonicalName], tableName: TableName, params: Seq[ast.Expression], env: Environment[CT], outerUdfParams: UdfParameters): AtomicFrom[CT, CV] = {
       val resource = ResourceName(tableName.nameWithoutPrefix)
       tableMap.find(scope, resource) match {
         case ParsedTableDescription.TableFunction(udfScope, canonicalName, parsed, paramSpecs) =>
@@ -464,7 +482,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
       namedExprs: Map[ColumnName, Expr[CT, CV]],
       udfParams: UdfParameters,
       expectedType: Option[CT],
-      canonicalName: Option[ResourceName]
+      canonicalName: Option[CanonicalName]
     ): Expr[CT, CV] = {
       val tc = new Typechecker(env, namedExprs, udfParams, userParameters, canonicalName, typeInfo, functionInfo)
       tc(expr, expectedType)

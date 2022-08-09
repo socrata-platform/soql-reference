@@ -19,7 +19,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     val tf = new MockTableFinder(Map.empty)
 
     val tf.Success(start) = tf.findTables(0, "select ((('5' + 7))), 'hello', '2001-01-01' :: date from @single_row")
-    val analysis = analyzer(start, Map.empty)
+    val analysis = analyzer(start, UserParameters.empty)
 
     println(analysis.statement.debugStr)
   }
@@ -32,8 +32,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
       )
     )
 
-    val tf.Success(start) = tf.findTables(0, ResourceName("bbbb-bbbb"), "select param(@bbbb-bbbb, 'gnu')")
-    val analysis = analyzer(start, Map(ResourceName("bbbb-bbbb") -> Map(HoleName("gnu") -> Right(SoQLText("Hello world")))))
+    val tf.Success(start) = tf.findTables(0, ResourceName("aaaa-aaaa"), "select param('gnu')")
+    val analysis = analyzer(start, UserParameters(qualified = Map(CanonicalName("bbbb-bbbb") -> Map(HoleName("gnu") -> Right(SoQLText("Hello world")))), Left(CanonicalName("bbbb-bbbb"))))
     println(analysis.statement.debugStr)
   }
 
@@ -48,7 +48,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
 
     val tf.Success(start) = tf.findTables(0, ResourceName("bbbb-bbbb"), "select @x.*, @t.*, num_2 as bleh from @this as t join lateral @cccc-cccc(text) as x on true")
 
-    val analysis = analyzer(start, Map(ResourceName("aaaa-aaaa") -> Map(HoleName("gnu") -> Right(SoQLFixedTimestamp(DateTime.now())))))
+    val analysis = analyzer(start, UserParameters(qualified = Map(CanonicalName("aaaa-aaaa") -> Map(HoleName("gnu") -> Right(SoQLFixedTimestamp(DateTime.now()))))))
 
     println(analysis.statement.debugStr)
     // println(analysis.statement.schema.withValuesMapped(_.name))
@@ -66,7 +66,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
 
     val tf.Success(start) = tf.findTables(0, ResourceName("aaaa-aaaa"), "select * |> select text, sum(num) as s group by text order by s desc |> select *")
 
-    val analysis = analyzer(start, Map.empty)
+    val analysis = analyzer(start, UserParameters.empty)
     println(analysis.statement.numericate.debugStr)
     println(analysis.statement.schema.withValuesMapped(_.name))
   }

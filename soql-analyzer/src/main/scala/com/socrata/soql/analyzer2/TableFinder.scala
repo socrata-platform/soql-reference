@@ -15,14 +15,14 @@ object ParsedTableDescription {
   ) extends ParsedTableDescription[Nothing, ColumnType]
   case class Query[+ResourceNameScope, +ColumnType](
     scope: ResourceNameScope, // This scope is to resolve both basedOn and any tables referenced within the soql
-    canonicalName: ResourceName, // This is the canonical name of this query; it also is assumed to be findable within `scope`
+    canonicalName: CanonicalName, // This is the canonical name of this query; it is assumed to be unique across scopes
     basedOn: ResourceName,
     parsed: BinaryTree[ast.Select],
     parameters: Map[HoleName, ColumnType]
   ) extends ParsedTableDescription[ResourceNameScope, ColumnType]
   case class TableFunction[+ResourceNameScope, +ColumnType](
     scope: ResourceNameScope, // This scope is to resolve any tables referenced within the soql
-    canonicalName: ResourceName, // This is the canonical name of this UDF; it also is assumed to be findable within `scope`
+    canonicalName: CanonicalName, // This is the canonical name of this UDF; it is assumed to be unique across scopes
     parsed: BinaryTree[ast.Select],
     parameters: OrderedMap[HoleName, ColumnType]
   ) extends ParsedTableDescription[ResourceNameScope, ColumnType]
@@ -57,7 +57,8 @@ case class FoundTables[ResourceNameScope, +ColumnType](
 object FoundTables {
   sealed abstract class Query
   case class Saved(name: ResourceName) extends Query
-  case class InContext(name: ResourceName, soql: BinaryTree[ast.Select]) extends Query
+  case class InContext(parent: ResourceName, soql: BinaryTree[ast.Select]) extends Query
+  case class InContextImpersonatingSaved(parent: ResourceName, soql: BinaryTree[ast.Select], fake: CanonicalName) extends Query
   case class Standalone(soql: BinaryTree[ast.Select]) extends Query
 }
 
@@ -114,7 +115,7 @@ trait TableFinder {
   /** A saved query, with any parameters it (non-transitively!) defines. */
   case class Query(
     scope: ResourceNameScope,
-    canonicalName: ResourceName,
+    canonicalName: CanonicalName,
     basedOn: ResourceName,
     soql: String,
     parameters: Map[HoleName, ColumnType]
@@ -123,7 +124,7 @@ trait TableFinder {
   /** A saved table query ("UDF"), with any parameters it defines for itself. */
   case class TableFunction(
     scope: ResourceNameScope,
-    canonicalName: ResourceName,
+    canonicalName: CanonicalName,
     soql: String,
     parameters: OrderedMap[HoleName, ColumnType]
   ) extends TableDescription
@@ -169,6 +170,15 @@ trait TableFinder {
   final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String): Result[FoundTables[ResourceNameScope, ColumnType]] = {
     walkFromName((scope, resourceName), TableMap.empty) match {
       case Success(acc) => walkSoQL(scope, FoundTables.InContext(resourceName, _), text, acc)
+      case err: Error => err
+    }
+  }
+
+  /** Find all tables referenced from the given SoQL on name that
+    * provides an implicit context, impersonating a saved query. */
+  final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String, impersonating: CanonicalName): Result[FoundTables[ResourceNameScope, ColumnType]] = {
+    walkFromName((scope, resourceName), TableMap.empty) match {
+      case Success(acc) => walkSoQL(scope, FoundTables.InContextImpersonatingSaved(resourceName, _, impersonating), text, acc)
       case err: Error => err
     }
   }

@@ -11,8 +11,8 @@ class Typechecker[CT, CV](
   env: Environment[CT],
   namedExprs: Map[ColumnName, Expr[CT, CV]],
   udfParams: Map[HoleName, Position => Column[CT]],
-  userParameters: Map[ResourceName, Map[HoleName, Either[TypedNull[CT], CV]]],
-  canonicalName: Option[ResourceName],
+  userParameters: UserParameters[CT, CV],
+  canonicalName: Option[CanonicalName],
   typeInfo: TypeInfo[CT, CV],
   functionInfo: FunctionInfo[CT]
 ) {
@@ -102,24 +102,31 @@ class Typechecker[CT, CV](
           case Some(expr) => Right(Seq(expr(hole.position)))
           case None => Left(UnknownUDFParameter(name, hole.position))
         }
-      case hole@ast.Hole.SavedQuery(name, Some(view)) =>
-        userParameter(ResourceName(view), name, hole.position)
-      case hole@ast.Hole.SavedQuery(name, None) =>
-        canonicalName match {
-          case None =>
-            Left(UnknownUserParameter(None, name, hole.position))
-          case Some(v) =>
-            userParameter(v, name, hole.position)
-        }
+      case hole@ast.Hole.SavedQuery(name, view) =>
+        userParameter(view.map(CanonicalName), name, hole.position)
     }
   }
 
-  private def userParameter(view: ResourceName, name: HoleName, position: Position) =
-    userParameters.get(view).flatMap(_.get(name)) match {
+  private def userParameter(view: Option[CanonicalName], name: HoleName, position: Position) = {
+    val canonicalView = view.orElse(canonicalName)
+
+    val paramSet =
+      canonicalView match {
+        case Some(view) =>
+          userParameters.qualified.get(view)
+        case None =>
+          userParameters.unqualified match {
+            case Right(vars) => Some(vars)
+            case Left(canon) => userParameters.qualified.get(canon)
+          }
+      }
+
+    paramSet.flatMap(_.get(name)) match {
       case Some(Left(TypedNull(t))) => Right(Seq(NullLiteral(t)(position)))
       case Some(Right(v)) => Right(Seq(LiteralValue(v)(position)(typeInfo.hasType)))
-      case None => Left(UnknownUserParameter(Some(view), name, position))
+      case None => Left(UnknownUserParameter(canonicalView, name, position))
     }
+  }
 
   private def checkFuncall(fc: ast.FunctionCall): Either[TypecheckError, Seq[Expr[CT, CV]]] = {
     val ast.FunctionCall(name, parameters, filter, window) = fc
@@ -225,14 +232,15 @@ class Typechecker[CT, CV](
     (left.result(), right.result())
   }
 
-  sealed abstract class TypecheckError extends Exception
-  case class NoSuchColumn(name: ColumnName, pos: Position) extends TypecheckError
-  case class UnknownUDFParameter(name: HoleName, pos: Position) extends TypecheckError
-  case class UnknownUserParameter(view: Option[ResourceName], name: HoleName, pos: Position) extends TypecheckError
-  private def unqualifiedUserParam(name: HoleName, pos: Position): Nothing = ???
-  case class NoSuchFunction(name: FunctionName, arity: Int, pos: Position) extends TypecheckError
-  case class TypeMismatch(found: CT, pos: Position) extends TypecheckError
-  case class RequiresWindow(name: FunctionName, pos: Position) extends TypecheckError
-  case class NonAggregate(name: FunctionName, pos: Position) extends TypecheckError
-  case class NonWindowFunction(name: FunctionName, pos: Position) extends TypecheckError
+  sealed abstract class TypecheckError(msg: String) extends Exception(msg) {
+    val pos: Position
+  }
+  case class NoSuchColumn(name: ColumnName, pos: Position) extends TypecheckError(s"No such column ${name.name}")
+  case class UnknownUDFParameter(name: HoleName, pos: Position) extends TypecheckError(s"No such UDF parameter ${name.name}")
+  case class UnknownUserParameter(view: Option[CanonicalName], name: HoleName, pos: Position) extends TypecheckError(s"No such user parameter ${view.fold("")(_.name + "/")}${name.name}")
+  case class NoSuchFunction(name: FunctionName, arity: Int, pos: Position) extends TypecheckError(s"No such function ${name}/${arity}")
+  case class TypeMismatch(found: CT, pos: Position) extends TypecheckError("Type mismatch")
+  case class RequiresWindow(name: FunctionName, pos: Position) extends TypecheckError(s"${name.name} requires a window clause")
+  case class NonAggregate(name: FunctionName, pos: Position) extends TypecheckError(s"${name.name} is not an aggregate function")
+  case class NonWindowFunction(name: FunctionName, pos: Position) extends TypecheckError(s"${name.name} is not a window function")
 }
