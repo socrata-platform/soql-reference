@@ -16,6 +16,15 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   val analyzer = new SoQLAnalyzer[Int, SoQLType, SoQLValue](SoQLTypeInfo, SoQLFunctionInfo)
 
   test("simple") {
+    val tf = new MockTableFinder(Map.empty)
+
+    val tf.Success(start) = tf.findTables(0, "select ((('5' + 7))), 'hello', '2001-01-01' :: date from @single_row")
+    val analysis = analyzer(start, Map.empty)
+
+    println(analysis.statement.debugStr)
+  }
+
+  test("more complex") {
     val tf = new MockTableFinder(
       Map(
         (0, "aaaa-aaaa") -> D(Map("text" -> SoQLText.t, "num" -> SoQLNumber.t)),
@@ -24,11 +33,11 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
       )
     )
 
-    val tf.Success(start) = tf.findTables(0, ResourceName("bbbb-bbbb"), "select @cccc-cccc.*, @t.*, num_2 as bleh from @this as t join lateral @cccc-cccc(text) on true")
+    val tf.Success(start) = tf.findTables(0, ResourceName("bbbb-bbbb"), "select @x.*, @t.*, num_2 as bleh from @this as t join lateral @cccc-cccc(text) as x on true")
 
     val analysis = analyzer(start, Map("aaaa-aaaa" -> Map(HoleName("gnu") -> Right(SoQLFixedTimestamp(DateTime.now())))))
 
-    // println(analysis.statement.debugStr)
+    println(analysis.statement.debugStr)
     // println(analysis.statement.schema.withValuesMapped(_.name))
 
     // println(analysis.statement.relabel(new LabelProvider(i => s"tbl$i", c => s"col$c")).debugStr)

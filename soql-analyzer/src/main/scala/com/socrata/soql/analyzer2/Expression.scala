@@ -17,6 +17,7 @@ sealed abstract class Expr[+CT, +CV] {
 
   private[analyzer2] def doRelabel(state: RelabelState): Expr[CT, CV]
 
+  final def debugStr: String = debugStr(new StringBuilder).toString
   def debugStr(sb: StringBuilder): StringBuilder
 }
 case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
