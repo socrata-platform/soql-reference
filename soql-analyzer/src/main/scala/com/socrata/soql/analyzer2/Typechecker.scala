@@ -11,7 +11,8 @@ class Typechecker[CT, CV](
   env: Environment[CT],
   namedExprs: Map[ColumnName, Expr[CT, CV]],
   udfParams: Map[HoleName, Position => Column[CT]],
-  userParameters: Map[String, Map[HoleName, Either[TypedNull[CT], CV]]],
+  userParameters: Map[ResourceName, Map[HoleName, Either[TypedNull[CT], CV]]],
+  canonicalName: Option[ResourceName],
   typeInfo: TypeInfo[CT, CV],
   functionInfo: FunctionInfo[CT]
 ) {
@@ -102,15 +103,23 @@ class Typechecker[CT, CV](
           case None => Left(UnknownUDFParameter(name, hole.position))
         }
       case hole@ast.Hole.SavedQuery(name, Some(view)) =>
-        userParameters.get(view).flatMap(_.get(name)) match {
-          case Some(Left(TypedNull(t))) => Right(Seq(NullLiteral(t)(hole.position)))
-          case Some(Right(v)) => Right(Seq(LiteralValue(v)(hole.position)(typeInfo.hasType)))
-          case None => Left(UnknownUserParameter(view, name, hole.position))
-        }
+        userParameter(ResourceName(view), name, hole.position)
       case hole@ast.Hole.SavedQuery(name, None) =>
-        unqualifiedUserParam(name, hole.position)
+        canonicalName match {
+          case None =>
+            Left(UnknownUserParameter(None, name, hole.position))
+          case Some(v) =>
+            userParameter(v, name, hole.position)
+        }
     }
   }
+
+  private def userParameter(view: ResourceName, name: HoleName, position: Position) =
+    userParameters.get(view).flatMap(_.get(name)) match {
+      case Some(Left(TypedNull(t))) => Right(Seq(NullLiteral(t)(position)))
+      case Some(Right(v)) => Right(Seq(LiteralValue(v)(position)(typeInfo.hasType)))
+      case None => Left(UnknownUserParameter(Some(view), name, position))
+    }
 
   private def checkFuncall(fc: ast.FunctionCall): Either[TypecheckError, Seq[Expr[CT, CV]]] = {
     val ast.FunctionCall(name, parameters, filter, window) = fc
@@ -219,7 +228,7 @@ class Typechecker[CT, CV](
   sealed abstract class TypecheckError extends Exception
   case class NoSuchColumn(name: ColumnName, pos: Position) extends TypecheckError
   case class UnknownUDFParameter(name: HoleName, pos: Position) extends TypecheckError
-  case class UnknownUserParameter(view: String, name: HoleName, pos: Position) extends TypecheckError
+  case class UnknownUserParameter(view: Option[ResourceName], name: HoleName, pos: Position) extends TypecheckError
   private def unqualifiedUserParam(name: HoleName, pos: Position): Nothing = ???
   case class NoSuchFunction(name: FunctionName, arity: Int, pos: Position) extends TypecheckError
   case class TypeMismatch(found: CT, pos: Position) extends TypecheckError

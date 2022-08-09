@@ -10,7 +10,7 @@ import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, ParsedTableDe
 
 sealed abstract class Thing[+T]
 case class D[+T](schema: Map[String, T]) extends Thing[T]
-case class Q(scope: Int, parent: String, soql: String) extends Thing[Nothing]
+case class Q[+T](scope: Int, parent: String, soql: String, params: Map[HoleName, T] = Map.empty[HoleName, Nothing]) extends Thing[T]
 case class U[+T](scope: Int, soql: String, params: OrderedMap[String, T]) extends Thing[T]
 
 class MockTableFinder[T](raw: Map[(Int, String), Thing[T]]) extends TableFinder {
@@ -23,8 +23,8 @@ class MockTableFinder[T](raw: Map[(Int, String), Thing[T]]) extends TableFinder 
             ColumnName(rawColumnName) -> ct
           }
         )
-      case Q(scope, parent, soql) =>
-        Query(scope, ResourceName(rawResourceName), ResourceName(parent), soql, None)
+      case Q(scope, parent, soql, params) =>
+        Query(scope, ResourceName(rawResourceName), ResourceName(parent), soql, params)
       case U(scope, soql, params) =>
         TableFunction(scope, ResourceName(rawResourceName), soql, OrderedMap() ++ params.iterator.map { case (k,v) => HoleName(k) -> v })
     }

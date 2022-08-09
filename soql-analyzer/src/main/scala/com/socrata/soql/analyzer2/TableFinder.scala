@@ -18,7 +18,7 @@ object ParsedTableDescription {
     canonicalName: ResourceName, // This is the canonical name of this query; it also is assumed to be findable within `scope`
     basedOn: ResourceName,
     parsed: BinaryTree[ast.Select],
-    parameters: Option[ParameterInfo[ColumnType]]
+    parameters: Map[HoleName, ColumnType]
   ) extends ParsedTableDescription[ResourceNameScope, ColumnType]
   case class TableFunction[+ResourceNameScope, +ColumnType](
     scope: ResourceNameScope, // This scope is to resolve any tables referenced within the soql
@@ -27,8 +27,6 @@ object ParsedTableDescription {
     parameters: OrderedMap[HoleName, ColumnType]
   ) extends ParsedTableDescription[ResourceNameScope, ColumnType]
 }
-
-case class ParameterInfo[+CT](namespace: String, params: Map[HoleName, CT])
 
 class TableMap[ResourceNameScope, +ColumnType](private val underlying: Map[(ResourceNameScope, ResourceName), ParsedTableDescription[ResourceNameScope, ColumnType]]) extends AnyVal {
   type ScopedResourceName = (ResourceNameScope, ResourceName)
@@ -119,7 +117,7 @@ trait TableFinder {
     canonicalName: ResourceName,
     basedOn: ResourceName,
     soql: String,
-    parameters: Option[ParameterInfo[ColumnType]]
+    parameters: Map[HoleName, ColumnType]
   ) extends TableDescription {
   }
   /** A saved table query ("UDF"), with any parameters it defines for itself. */

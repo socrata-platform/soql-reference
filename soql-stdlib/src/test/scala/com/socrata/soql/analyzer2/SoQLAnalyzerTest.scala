@@ -24,6 +24,19 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     println(analysis.statement.debugStr)
   }
 
+  test("untagged parameters") {
+    val tf = new MockTableFinder(
+      Map(
+        (0, "aaaa-aaaa") -> D(Map("text" -> SoQLText.t, "num" -> SoQLNumber.t)),
+        (0, "bbbb-bbbb") -> Q(0, "aaaa-aaaa", "select text, num*2, param('gnu')", Map(HoleName("gnu") -> SoQLText))
+      )
+    )
+
+    val tf.Success(start) = tf.findTables(0, ResourceName("bbbb-bbbb"), "select param(@bbbb-bbbb, 'gnu')")
+    val analysis = analyzer(start, Map(ResourceName("bbbb-bbbb") -> Map(HoleName("gnu") -> Right(SoQLText("Hello world")))))
+    println(analysis.statement.debugStr)
+  }
+
   test("more complex") {
     val tf = new MockTableFinder(
       Map(
@@ -35,7 +48,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
 
     val tf.Success(start) = tf.findTables(0, ResourceName("bbbb-bbbb"), "select @x.*, @t.*, num_2 as bleh from @this as t join lateral @cccc-cccc(text) as x on true")
 
-    val analysis = analyzer(start, Map("aaaa-aaaa" -> Map(HoleName("gnu") -> Right(SoQLFixedTimestamp(DateTime.now())))))
+    val analysis = analyzer(start, Map(ResourceName("aaaa-aaaa") -> Map(HoleName("gnu") -> Right(SoQLFixedTimestamp(DateTime.now())))))
 
     println(analysis.statement.debugStr)
     // println(analysis.statement.schema.withValuesMapped(_.name))
