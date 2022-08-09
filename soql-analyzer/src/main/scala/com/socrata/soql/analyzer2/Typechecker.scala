@@ -42,10 +42,8 @@ class Typechecker[CT, CV](
 
     for { e <- exprs } {
       acc.get(e.typ) match {
-        case Some(e2) if e2.size < e.size =>
-          // the smaller is already chosen
-        case Some(e2) if e2.size == e.size =>
-          return Left(AmbiguousExpression(pos))
+        case Some(e2) if e2.size <= e.size =>
+          // the smaller (or at least most-preferred) is already chosen
         case Some(_) | None =>
           acc += e.typ -> e
       }
@@ -223,7 +221,6 @@ class Typechecker[CT, CV](
   case class UnknownUDFParameter(name: HoleName, pos: Position) extends TypecheckError
   case class UnknownUserParameter(view: String, name: HoleName, pos: Position) extends TypecheckError
   private def unqualifiedUserParam(name: HoleName, pos: Position): Nothing = ???
-  case class AmbiguousExpression(pos: Position) extends TypecheckError
   case class NoSuchFunction(name: FunctionName, arity: Int, pos: Position) extends TypecheckError
   case class TypeMismatch(found: CT, pos: Position) extends TypecheckError
   case class RequiresWindow(name: FunctionName, pos: Position) extends TypecheckError
