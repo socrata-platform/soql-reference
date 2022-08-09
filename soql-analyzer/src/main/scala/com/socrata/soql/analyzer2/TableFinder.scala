@@ -43,6 +43,8 @@ class TableMap[ResourceNameScope, +ColumnType](private val underlying: Map[(Reso
       throw new NoSuchElementException(s"TableMap: No such key: $scope:$name")
     }
   }
+
+  def descriptions = underlying.valuesIterator
 }
 object TableMap {
   def empty[ResourceNameScope] = new TableMap[ResourceNameScope, Nothing](Map.empty)
@@ -52,7 +54,15 @@ case class FoundTables[ResourceNameScope, +ColumnType](
   tableMap: TableMap[ResourceNameScope, ColumnType],
   initialScope: ResourceNameScope,
   initialQuery: FoundTables.Query
-)
+) {
+  val knownUserParameters: Map[CanonicalName, Map[HoleName, ColumnType]] =
+    tableMap.descriptions.foldLeft(Map.empty[CanonicalName, Map[HoleName, ColumnType]]) { (acc, desc) =>
+      desc match {
+        case _ : ParsedTableDescription.Dataset[_] | _ : ParsedTableDescription.TableFunction[_, _] => acc
+        case q: ParsedTableDescription.Query[_, ColumnType] => acc + (q.canonicalName -> q.parameters)
+      }
+    }
+}
 
 object FoundTables {
   sealed abstract class Query
