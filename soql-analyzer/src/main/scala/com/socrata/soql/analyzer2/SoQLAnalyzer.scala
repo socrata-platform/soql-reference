@@ -40,10 +40,10 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
       val from =
         query match {
           case FoundTables.Saved(rn) =>
-            analyzeForContext(tableMap.find(scope, rn), Environment.empty)._1
+            analyzeForContext(tableMap.find(scope, rn), Environment.empty)
           case FoundTables.InContext(rn, q) =>
-            val (context, canonicalName) = analyzeForContext(tableMap.find(scope, rn), Environment.empty)
-            analyzeInContext(scope, canonicalName, q, Some(context), Environment.empty, Map.empty)
+            val context = analyzeForContext(tableMap.find(scope, rn), Environment.empty)
+            analyzeInContext(scope, None, q, Some(context), Environment.empty, Map.empty)
           case FoundTables.Standalone(q) =>
             analyzeInContext(scope, None, q, None, Environment.empty, Map.empty)
         }
@@ -87,16 +87,16 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
         columns = desc.schema
       )
 
-    def analyzeForContext(desc: ParsedTableDescription, env: Environment[CT]): (AtomicFrom[CT, CV], Option[ResourceName]) = {
+    def analyzeForContext(desc: ParsedTableDescription, env: Environment[CT]): AtomicFrom[CT, CV] = {
       desc match {
         case ds: ParsedTableDescription.Dataset[CT] =>
-          (fromTable(ds, None), None)
+          fromTable(ds, None)
         case ParsedTableDescription.Query(scope, canonicalName, basedOn, parsed, parameters) =>
           // so this is basedOn |> parsed
           // so we want to analyze "basedOn" in the env we're given
           // and then parsed in that env extended with the result of basedOn
-          val (from, _basedOnCanonicalName) = analyzeForContext(tableMap.find(scope, basedOn), env)
-          (analyzeInContext(scope, Some(canonicalName), parsed, Some(from), env, Map.empty), Some(canonicalName))
+          val from = analyzeForContext(tableMap.find(scope, basedOn), env)
+          analyzeInContext(scope, Some(canonicalName), parsed, Some(from), env, Map.empty)
         case ParsedTableDescription.TableFunction(_, _, _, _) =>
           tableFunctionInIncorrectPosition()
       }
@@ -326,7 +326,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
           analyzeForContext(
             tableMap.find(scope, ResourceName(tn.nameWithoutPrefix)),
             enclosingEnv
-          )._1.reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
+          ).reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
         case (Some(input), None) =>
           // chained query: {something} |> {the thing we're analyzing}
           input.reAlias(None)
@@ -376,7 +376,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
     def analyzeJoinSelect(scope: RNS, canonicalName: Option[ResourceName], js: ast.JoinSelect, env: Environment[CT], udfParams: UdfParameters): AtomicFrom[CT, CV] = {
       js match {
         case ast.JoinTable(tn) =>
-          analyzeForContext(tableMap.find(scope, ResourceName(tn.nameWithoutPrefix)), env)._1.reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
+          analyzeForContext(tableMap.find(scope, ResourceName(tn.nameWithoutPrefix)), env).reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
         case ast.JoinQuery(select, alias) =>
           analyzeInContext(scope, canonicalName, select, None, env, udfParams).reAlias(Some(ResourceName(alias)))
         case ast.JoinFunc(tn, params) =>
