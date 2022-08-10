@@ -30,13 +30,15 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   test("simple contextless") {
     val tf = new MockTableFinder(Map.empty)
 
-    val tf.Success(start) = tf.findTables(0, "select ((('5' + 7))), 'hello' from @single_row")
+    // Getting rid of parents, literal coersions, function overloading, disambiguation....
+    val tf.Success(start) = tf.findTables(0, "select ((('5' + 7))), 'hello' + 'world', '1' + '2' from @single_row")
     val analysis = analyzer(start, UserParameters.empty)
 
     analysis.statement.schema.withValuesMapped(_.name) must equal (
       OrderedMap(
         c(1) -> cn("_5_7"),
-        c(2) -> cn("hello")
+        c(2) -> cn("hello_world"),
+        c(3) -> cn("_1_2")
       )
     )
 
@@ -58,8 +60,24 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
           cn("_5_7")
         ),
         c(2) -> NamedExpr(
-          LiteralValue(TestText("hello"))(NoPosition),
-          cn("hello")
+          FunctionCall(
+            MonomorphicFunction(TestFunctions.BinaryPlus, Map("a" -> TestText)),
+            Seq(
+              LiteralValue(TestText("hello"))(NoPosition),
+              LiteralValue(TestText("world"))(NoPosition)
+            )
+          )(NoPosition, NoPosition),
+          cn("hello_world")
+        ),
+        c(3) -> NamedExpr(
+          FunctionCall(
+            MonomorphicFunction(TestFunctions.BinaryPlus, Map("a" -> TestText)),
+            Seq(
+              LiteralValue(TestText("1"))(NoPosition),
+              LiteralValue(TestText("2"))(NoPosition)
+            )
+          )(NoPosition, NoPosition),
+          cn("_1_2")
         )
       )
     )
