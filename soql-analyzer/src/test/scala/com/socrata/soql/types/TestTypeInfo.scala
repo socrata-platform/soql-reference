@@ -5,7 +5,6 @@ import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.typechecker.{TypeInfo, HasType}
 import com.socrata.soql.typed
-import com.socrata.soql.analyzer2
 
 import scala.util.parsing.input.Position
 
@@ -22,11 +21,6 @@ object TestTypeInfo extends TypeInfo[TestType, SoQLValue] {
     TestObject,
     TestArray
   )
-
-  implicit val hasType = new HasType[SoQLValue, TestType] {
-    def typeOf(v: SoQLValue): TestType = ???
-  }
-  def potentialExprs(l: Literal) = ???
 
   def boolType = TestBoolean.t
   def booleanLiteralExpr(b: Boolean, pos: Position) = Seq(typed.BooleanLiteral(b, TestBoolean.t)(pos))
@@ -67,7 +61,4 @@ object TestTypeInfo extends TypeInfo[TestType, SoQLValue] {
       case SoQLText(s) => Some(typed.StringLiteral(s, TestText.t)(pos))
       case _ => None
     }
-
-  def literalBoolean(b: Boolean, pos: Position) =
-    analyzer2.LiteralValue(SoQLBoolean(b))(pos)
 }

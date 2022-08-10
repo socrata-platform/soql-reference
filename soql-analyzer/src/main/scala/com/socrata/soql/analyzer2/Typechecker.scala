@@ -5,7 +5,7 @@ import scala.util.parsing.input.Position
 import com.socrata.soql.ast
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ColumnName, HoleName, ResourceName, TableName, FunctionName}
-import com.socrata.soql.typechecker.{TypeInfo, FunctionInfo, FunctionCallTypechecker, Passed, TypeMismatchFailure, HasType}
+import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, FunctionCallTypechecker, Passed, TypeMismatchFailure, HasType}
 
 class Typechecker[CT, CV](
   env: Environment[CT],
@@ -13,7 +13,7 @@ class Typechecker[CT, CV](
   udfParams: Map[HoleName, Position => Column[CT]],
   userParameters: UserParameters[CT, CV],
   canonicalName: Option[CanonicalName],
-  typeInfo: TypeInfo[CT, CV],
+  typeInfo: TypeInfo2[CT, CV],
   functionInfo: FunctionInfo[CT]
 ) {
   private val funcallTypechecker = new FunctionCallTypechecker(typeInfo, functionInfo)

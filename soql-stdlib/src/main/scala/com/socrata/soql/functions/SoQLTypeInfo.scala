@@ -7,13 +7,13 @@ import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.typed
 import com.socrata.soql.types._
-import com.socrata.soql.typechecker.{TypeInfo, HasType}
+import com.socrata.soql.typechecker.{TypeInfo, TypeInfo2, HasType}
 import com.socrata.soql.ast
 import com.socrata.soql.analyzer2
 
 import scala.util.parsing.input.Position
 
-object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] {
+object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLType, SoQLValue] {
   val typeParameterUniverse = OrderedSet(SoQLType.typePreferences : _*)
 
   implicit object hasType extends HasType[SoQLValue, SoQLType] {

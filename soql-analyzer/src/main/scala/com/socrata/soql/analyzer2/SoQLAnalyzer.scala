@@ -16,7 +16,7 @@ import com.socrata.soql.{BinaryTree, Leaf, TrueOp, PipeQuery, UnionQuery, UnionA
 import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, OrderedSet}
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName, HoleName, UntypedDatasetContext}
-import com.socrata.soql.typechecker.{TypeInfo, FunctionInfo, HasType}
+import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, HasType}
 import com.socrata.soql.aliases.AliasAnalysis
 import com.socrata.soql.exceptions.AliasAnalysisException
 
@@ -41,7 +41,7 @@ object UserParameters {
   val empty = UserParameters[Nothing, Nothing](Map.empty, Right(Map.empty))
 }
 
-class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: FunctionInfo[CT]) {
+class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: FunctionInfo[CT]) {
   type ScopedResourceName = (RNS, ResourceName)
   type TableMap = com.socrata.soql.analyzer2.TableMap[RNS, CT]
   type FoundTables = com.socrata.soql.analyzer2.FoundTables[RNS, CT]

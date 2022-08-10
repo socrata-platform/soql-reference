@@ -92,7 +92,7 @@ sealed trait FuncallLike[+CT, +CV] extends Expr[CT, CV] with Product {
 case class FunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
   args: Seq[Expr[CT, CV]]
-)(val position: Position, val functionNamePosition: Position) extends Expr[CT, CV] {
+)(val position: Position, val functionNamePosition: Position) extends FuncallLike[CT, CV] {
   require(!function.isAggregate)
   val typ = function.result
 
@@ -121,7 +121,7 @@ case class AggregateFunctionCall[+CT, +CV](
   args: Seq[Expr[CT, CV]],
   distinct: Boolean,
   filter: Option[Expr[CT, CV]]
-)(val position: Position, val functionNamePosition: Position) extends Expr[CT, CV] {
+)(val position: Position, val functionNamePosition: Position) extends FuncallLike[CT, CV] {
   require(function.isAggregate)
   val typ = function.result
   def isAggregated = true
@@ -167,7 +167,7 @@ case class WindowedFunctionCall[+CT, +CV](
   start: FrameBound,
   end: Option[FrameBound],
   exclusion: Option[FrameExclusion]
-)(val position: Position, val functionNamePosition: Position) extends Expr[CT, CV] {
+)(val position: Position, val functionNamePosition: Position) extends FuncallLike[CT, CV] {
   require(function.needsWindow)
 
   val typ = function.result
