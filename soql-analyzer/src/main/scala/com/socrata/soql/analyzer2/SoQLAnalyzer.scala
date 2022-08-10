@@ -372,8 +372,9 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
         }
 
         val augmentedFrom = envify(fromSoFar().extendEnvironment(enclosingEnv))
+        val effectiveLateral = join.lateral || join.from.isInstanceOf[ast.JoinFunc]
         val checkedFrom =
-          if(join.lateral) {
+          if(effectiveLateral) {
             analyzeJoinSelect(scope, canonicalName, join.from, augmentedFrom, udfParams)
           } else {
             analyzeJoinSelect(scope, canonicalName, join.from, enclosingEnv, udfParams)
@@ -386,7 +387,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
         }
 
         val left = mostRecentFrom
-        pendingJoins +:= { (right: From[CT, CV]) => Join(joinType, join.lateral, left, right, checkedOn) }
+        pendingJoins +:= { (right: From[CT, CV]) => Join(joinType, effectiveLateral, left, right, checkedOn) }
         mostRecentFrom = checkedFrom
       }
 
