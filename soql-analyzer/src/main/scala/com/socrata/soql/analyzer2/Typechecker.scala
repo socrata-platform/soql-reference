@@ -136,11 +136,10 @@ class Typechecker[CT, CV](
       case Right(es) => es
     }
 
-    val typedWindow: Option[(Seq[Expr[CT, CV]], Seq[OrderBy[CT, CV]], Seq[Expr[CT, CV]])] = window.map { w =>
+    val typedWindow: Option[(Seq[Expr[CT, CV]], Seq[OrderBy[CT, CV]], Seq[ast.Expression])] = window.map { w =>
       val typedPartitions = w.partitions.map(apply(_, None))
       val typedOrderings = w.orderings.map(ob => OrderBy(apply(ob.expression, Some(typeInfo.boolType)), ob.ascending, ob.nullLast))
-      val typedFrames = w.frames.map { x => apply(x, None) }
-      (typedPartitions, typedOrderings, typedFrames)
+      (typedPartitions, typedOrderings, w.frames)
     }
 
     val typedFilter: Option[Expr[CT, CV]] = filter.map(apply(_, Some(typeInfo.boolType)))
@@ -183,27 +182,94 @@ class Typechecker[CT, CV](
         choices.flatMap { choice => remainingParams.map(choice :: _) }
       }.map { params: Seq[Expr[CT, CV]] =>
         (typedFilter, typedWindow) match {
-          case (Some(boolExpr), Some((partitions, orderings, frames))) =>
-            val error =
-              if(f.isAggregate) {
-                NonWindowFunction(fc.functionName, fc.functionNamePosition)
-              } else if(f.needsWindow) {
-                NonAggregate(fc.functionName, fc.functionNamePosition)
-              } else {
-                NonWindowFunction(fc.functionName, fc.functionNamePosition)
-              }
-            return Left(error)
           case (Some(boolExpr), None) =>
-            if(!f.isAggregate) {
+            if(f.needsWindow) {
+              return Left(RequiresWindow(fc.functionName, fc.functionNamePosition))
+            }
+            if(!f.isAggregate && !f.needsWindow) {
               return Left(NonAggregate(fc.functionName, fc.functionNamePosition))
             }
             AggregateFunctionCall(f, params, false, Some(boolExpr))(fc.position, fc.functionNamePosition)
-          case (None, Some((partitions, orderings, frames))) =>
-            if(!f.needsWindow) {
+          case (maybeFilter, Some((partitions, orderings, frames))) =>
+            if(!f.needsWindow && !f.isAggregate) {
               return Left(NonWindowFunction(fc.functionName, fc.functionNamePosition))
             }
-            // TODO: figure out what "frames" actually means
-            WindowedFunctionCall(f, params, partitions, orderings, ???, ???, ???, ???)(fc.position, fc.functionNamePosition)
+
+            // blearghhh ok so the parser does in fact parse this
+            // (i.e., we know this is well-formed, assuming the input
+            // came out of the parser) but it gives it to use as text
+            // rather than something useful so we have to re-parse it
+            // here.
+            //
+            // Once this is the only typechecker that can hopefully be
+            // revisited.
+
+            object RangeRowsGroups {
+              def unapply(s: ast.Expression) =
+                s match {
+                  case ast.StringLiteral("RANGE") => Some(FrameContext.Range)
+                  case ast.StringLiteral("ROWS") => Some(FrameContext.Rows)
+                  case ast.StringLiteral("GROUPS") => Some(FrameContext.Groups)
+                  case _ => None
+                }
+            }
+
+            def frameBound(f: Seq[ast.Expression]): (FrameBound, Seq[ast.Expression]) =
+              f match {
+                case Seq(ast.StringLiteral("UNBOUNDED"), ast.StringLiteral("PRECEDING"), rest @ _*) =>
+                  (FrameBound.UnboundedPreceding, rest)
+                case Seq(ast.NumberLiteral(n), ast.StringLiteral("PRECEDING"), rest @ _*) =>
+                  (FrameBound.Preceding(n.min(Long.MaxValue).max(Long.MinValue).toLong), rest)
+                case Seq(ast.StringLiteral("CURRENT"), ast.StringLiteral("ROW"), rest @ _*) =>
+                  (FrameBound.CurrentRow, rest)
+                case Seq(ast.NumberLiteral(n), ast.StringLiteral("FOLLOWING"), rest @ _*) =>
+                  (FrameBound.Following(n.min(Long.MaxValue).max(Long.MinValue).toLong), rest)
+                case Seq(ast.StringLiteral("UNBOUNDED"), ast.StringLiteral("FOLLOWING"), rest @ _*) =>
+                  (FrameBound.UnboundedFollowing, rest)
+                case _ =>
+                  malformedFrames(frames)
+              }
+
+            def and(f: Seq[ast.Expression]): Seq[ast.Expression] =
+              f match {
+                case Seq(ast.StringLiteral("AND"), rest @ _*) => rest
+                case _ => malformedFrames(frames)
+              }
+
+            def optFrameExclusion(f: Seq[ast.Expression]): Option[FrameExclusion] =
+              f match {
+                case Seq(ast.StringLiteral("EXCLUDE"), ast.StringLiteral("CURRENT"), ast.StringLiteral("ROW")) => Some(FrameExclusion.CurrentRow)
+                case Seq(ast.StringLiteral("EXCLUDE"), ast.StringLiteral("GROUP")) => Some(FrameExclusion.Group)
+                case Seq(ast.StringLiteral("EXCLUDE"), ast.StringLiteral("TIES")) => Some(FrameExclusion.Ties)
+                case Seq(ast.StringLiteral("EXCLUDE"), ast.StringLiteral("NO"), ast.StringLiteral("OTHERS")) => Some(FrameExclusion.NoOthers)
+                case Seq() => None
+                case _=> malformedFrames(frames)
+              }
+
+            val parsedFrames =
+              frames.headOption match {
+                case None =>
+                  None
+                case Some(RangeRowsGroups(frameContext)) =>
+                  frames.tail match {
+                    case Seq(ast.StringLiteral("BETWEEN"), rest @ _*) =>
+                      val (start, rest1) = frameBound(rest)
+                      val rest2 = and(rest1)
+                      val (end, rest3) = frameBound(rest2)
+                      val excl = optFrameExclusion(rest3)
+                      Some(Frame(frameContext, start, Some(end), excl))
+                    case rest @ Seq(_, _ @ _*) =>
+                      val (start, rest1) = frameBound(rest)
+                      val excl = optFrameExclusion(rest1)
+                      Some(Frame(frameContext, start, None, excl))
+                    case Seq() =>
+                      malformedFrames(frames)
+                  }
+                case _ =>
+                  malformedFrames(frames)
+              }
+
+            WindowedFunctionCall(f, params, maybeFilter, partitions, orderings, parsedFrames)(fc.position, fc.functionNamePosition)
           case (None, None) =>
             if(f.needsWindow) {
               return Left(RequiresWindow(fc.functionName, fc.functionNamePosition))
@@ -231,6 +297,9 @@ class Typechecker[CT, CV](
     }
     (left.result(), right.result())
   }
+
+  private def malformedFrames(frames: Seq[ast.Expression]): Nothing =
+    throw new Exception(s"Malformed frames: {frames}")
 
   sealed abstract class TypecheckError(msg: String) extends Exception(msg) {
     val pos: Position

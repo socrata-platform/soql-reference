@@ -7,6 +7,14 @@ final case class SoQLPosition(line: Int, column: Int, sourceText: String, offset
 }
 
 object SoQLPosition {
+  def show(pos: Position) =
+    pos match {
+      case p: SoQLPosition =>
+        val pfx = s"${p.line}.${p.column}:"
+        s"$pfx ${p.lineContents}\n${" " * (p.column + pfx.length)}^"
+      case _ => pos.toString
+    }
+
   def findLineFor(source: String, offset: Int): String = {
     val pre = source.substring(0, offset)
     val post = source.substring(offset)

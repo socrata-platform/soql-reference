@@ -528,10 +528,11 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             args.foreach(verifyAggregatesAndWindowFunctions(_, false, false, groupBys))
           case agg: AggregateFunctionCall[CT, CV] =>
             aggregateFunctionNotAllowed(agg.position)
-          case WindowedFunctionCall(f, args, partitionBy, orderBy, _context, _start, _end, _exclusion) if allowWindow =>
-            args.foreach(verifyAggregatesAndWindowFunctions(_, allowAggregates, false, groupBys))
-            partitionBy.foreach(verifyAggregatesAndWindowFunctions(_, allowAggregates, false, groupBys))
-            orderBy.foreach { ob => verifyAggregatesAndWindowFunctions(ob.expr, allowAggregates, false, groupBys) }
+          case w@WindowedFunctionCall(f, args, filter, partitionBy, orderBy, _frame) if allowWindow =>
+            val subExprsAreAggregates = allowAggregates && w.isAggregated
+            args.foreach(verifyAggregatesAndWindowFunctions(_, subExprsAreAggregates, false, groupBys))
+            partitionBy.foreach(verifyAggregatesAndWindowFunctions(_, subExprsAreAggregates, false, groupBys))
+            orderBy.foreach { ob => verifyAggregatesAndWindowFunctions(ob.expr, subExprsAreAggregates, false, groupBys) }
           case wfc: WindowedFunctionCall[CT, CV] =>
             windowFunctionNotAllowed(wfc.functionNamePosition)
           case e: Expr[CT, CV] if allowAggregates && groupBys.contains(e) =>

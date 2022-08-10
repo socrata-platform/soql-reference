@@ -32,6 +32,12 @@ object TestFunctions {
 
   val Eq = f("=", SpecialFunctions.Operator("="), Map("a" -> Equatable), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
 
+  val RowNumber = mf("row_number", FunctionName("row_number"), Nil, Nil, TestNumber, needsWindow = true)
+
+  val Sum = mf("sum", FunctionName("sum"), Seq(TestNumber), Nil, TestNumber, isAggregate = true)
+
+  val Count = f("count", FunctionName("count"), Map.empty, Seq(VariableType("a")), Nil, FixedType(TestNumber), isAggregate = true)
+
   val castIdentitiesByType = OrderedMap() ++ TestType.typesByName.iterator.map { case (n, t) =>
     t -> mf(n.caseFolded + "::" + n.caseFolded, SpecialFunctions.Cast(n), Seq(t), Seq.empty, t)
   }

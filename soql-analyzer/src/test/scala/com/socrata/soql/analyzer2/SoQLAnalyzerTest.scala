@@ -445,4 +445,17 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
       )
     )
   }
+
+  test("burble") {
+    val tf = new MockTableFinder(
+      Map(
+        (0, "aaaa-aaaa") -> D(Map("text" -> TestText, "num" -> TestNumber))
+      )
+    )
+
+    val tf.Success(start) = tf.findTables(0, rn("aaaa-aaaa"), "select count(count(num)) filter (where num = 5) over (rows unbounded preceding exclude current row) as row_number")
+    val analysis = analyzer(start, UserParameters.empty)
+
+    println(analysis.statement.debugStr)
+  }
 }

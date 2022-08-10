@@ -286,8 +286,8 @@ class ParserTest extends WordSpec with MustMatchers {
       x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER (ORDER BY `m` ASC NULL LAST RANGE 123 PRECEDING)")
     }
 
-    "window frame clause should start with rows or range, not row" in {
-      expectFailure("Expected one of `)', `RANGE', `ROWS', `,', `NULL', `NULLS', `ASC', or `DESC', but got `row'", "avg(x) over(order by m row 123 PRECEDING)")
+    "window frame clause should start with rows or range or groups, not row" in {
+      expectFailure("Expected one of `)', `RANGE', `ROWS', `GROUPS', `,', `NULL', `NULLS', `ASC', or `DESC', but got `row'", "avg(x) over(order by m row 123 PRECEDING)")
     }
 
     "reject pipe query where right side is not a leaf." in {

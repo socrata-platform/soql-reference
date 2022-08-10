@@ -161,14 +161,12 @@ case class AggregateFunctionCall[+CT, +CV](
 case class WindowedFunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
   args: Seq[Expr[CT, CV]],
+  filter: Option[Expr[CT, CV]],
   partitionBy: Seq[Expr[CT, CV]], // is normal right here, or should it be aggregate?
   orderBy: Seq[OrderBy[CT, CV]], // ditto thus
-  context: FrameContext,
-  start: FrameBound,
-  end: Option[FrameBound],
-  exclusion: Option[FrameExclusion]
+  frame: Option[Frame]
 )(val position: Position, val functionNamePosition: Position) extends FuncallLike[CT, CV] {
-  require(function.needsWindow)
+  require(function.needsWindow || function.isAggregate)
 
   val typ = function.result
 
@@ -189,9 +187,41 @@ case class WindowedFunctionCall[+CT, +CV](
          orderBy = orderBy.map(_.doRelabel(state)))(position, functionNamePosition)
 
   override def debugStr(sb: StringBuilder): StringBuilder = {
-    sb.append("[WINDOW FUNCTION STUFF]")
+    sb.append(function.name).append('(')
+    var didOne = false
+    for(arg <- args) {
+      if(didOne) sb.append(", ")
+      else didOne = true
+      arg.debugStr(sb)
+    }
+    for(f <- filter) {
+      sb.append(" FILTER (WHERE ")
+      f.debugStr(sb)
+      sb.append(')')
+    }
+    sb.append(") OVER (")
+    for(Frame(context, start, end, exclusion) <- frame) {
+      sb.append(context)
+      if(end.isDefined) sb.append(" BETWEEN")
+      sb.append(' ')
+      sb.append(start)
+      end.foreach { e =>
+        sb.append(' ').append(e)
+      }
+      exclusion.foreach { e =>
+        sb.append(" EXCLUDE ").append(e)
+      }
+    }
+    sb.append(')')
   }
 }
+
+case class Frame(
+  context: FrameContext,
+  start: FrameBound,
+  end: Option[FrameBound],
+  exclusion: Option[FrameExclusion]
+)
 
 sealed abstract class FrameContext
 object FrameContext {
