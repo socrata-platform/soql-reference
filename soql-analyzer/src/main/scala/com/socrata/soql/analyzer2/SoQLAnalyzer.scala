@@ -124,7 +124,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
       }
     }
 
-    class Context(scope: RNS, canonicalName: Option[CanonicalName], env: Environment[CT], udfParams: UdfParameters) {
+    class Context(scope: RNS, canonicalName: Option[CanonicalName], enclosingEnv: Environment[CT], udfParams: UdfParameters) {
       private def withEnv(env: Environment[CT]) = new Context(scope, canonicalName, env, udfParams)
 
       def analyzeStatement(q: BinaryTree[ast.Select], from0: Option[AtomicFrom[CT, CV]]): FromStatement[CT, CV] = {
@@ -179,7 +179,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
 
         val completeFrom = queryInputSchema(from0, from, joins)
 
-        val localEnv = envify(completeFrom.extendEnvironment(env))
+        val localEnv = envify(completeFrom.extendEnvironment(enclosingEnv))
 
         // Now that we know what we're selecting from, we'll give names to the selection...
         val aliasAnalysis = AliasAnalysis(selection, from)(collectNamesForAnalysis(completeFrom))
@@ -359,7 +359,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
             // n.b., sometable may actually be a query
             analyzeForFrom(
               tableMap.find(scope, ResourceName(tn.nameWithoutPrefix)),
-              env
+              enclosingEnv
             ).reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
           case (Some(input), None) =>
             // chained query: {something} |> {the thing we're analyzing}
@@ -379,7 +379,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
             case ast.FullOuterJoinType => JoinType.FullOuter
           }
 
-          val augmentedFrom = envify(fromSoFar().extendEnvironment(env))
+          val augmentedFrom = envify(fromSoFar().extendEnvironment(enclosingEnv))
           val effectiveLateral = join.lateral || join.from.isInstanceOf[ast.JoinFunc]
           val checkedFrom =
             if(effectiveLateral) {
@@ -413,7 +413,8 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
       def analyzeJoinSelect(js: ast.JoinSelect): AtomicFrom[CT, CV] = {
         js match {
           case ast.JoinTable(tn) =>
-            analyzeForFrom(tableMap.find(scope, ResourceName(tn.nameWithoutPrefix)), env).reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
+            analyzeForFrom(tableMap.find(scope, ResourceName(tn.nameWithoutPrefix)), enclosingEnv).
+              reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
           case ast.JoinQuery(select, alias) =>
             analyzeStatement(select, None).reAlias(Some(ResourceName(alias)))
           case ast.JoinFunc(tn, params) =>
@@ -443,7 +444,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
               name -> { (p: Position) => Column(paramsLabel, colLabel, typ)(p) }
             }.toMap
             val useQuery =
-              new Context(udfScope, Some(udfCanonicalName), env, innerUdfParams)
+              new Context(udfScope, Some(udfCanonicalName), enclosingEnv, innerUdfParams)
                 .analyzeStatement(parsed, None)
 
             FromStatement(
@@ -483,7 +484,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
         namedExprs: Map[ColumnName, Expr[CT, CV]],
         expectedType: Option[CT],
       ): Expr[CT, CV] = {
-        val tc = new Typechecker(env, namedExprs, udfParams, userParameters, canonicalName, typeInfo, functionInfo)
+        val tc = new Typechecker(enclosingEnv, namedExprs, udfParams, userParameters, canonicalName, typeInfo, functionInfo)
         tc(expr, expectedType)
       }
 
