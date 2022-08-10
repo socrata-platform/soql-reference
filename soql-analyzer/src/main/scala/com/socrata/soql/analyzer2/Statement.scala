@@ -27,6 +27,13 @@ sealed abstract class Statement[+CT, +CV] {
 
   private[analyzer2] def doRelabel(state: RelabelState): Statement[CT, CV]
 
+  /** For SQL forms that can refer to the select-columns by number, replace relevant
+    * entries in those forms with the relevant select-column-index.
+    *
+    * e.g., this will rewrite a Statement that corresponds to "select
+    * x+1, count(*) group by x+1 order by count(*)" to one that
+    * corresponds to "select x+1, count(*) group by 1 order by 2"
+    */
   def numericate: Statement[CT, CV]
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Statement[CT, CV]
