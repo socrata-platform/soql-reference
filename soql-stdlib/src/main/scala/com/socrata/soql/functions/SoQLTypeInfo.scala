@@ -213,6 +213,9 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] {
 
   def typeOf(value: SoQLValue) = value.typ
 
+  def literalBoolean(b: Boolean, pos: Position) =
+    analyzer2.LiteralValue(SoQLBoolean(b))(pos)
+
   def literalExprFor(value: SoQLValue, pos: Position) =
     value match {
       case SoQLText(s) =>

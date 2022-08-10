@@ -35,4 +35,5 @@ trait TypeInfo[Type, Value] {
   def literalExprFor(value: Value, pos: Position): Option[CoreExpr[Nothing, Type]]
 
   def potentialExprs(l: Literal): Seq[analyzer2.Expr[Type, Value]]
+  def literalBoolean(b: Boolean, position: Position): analyzer2.Expr[Type, Value]
 }

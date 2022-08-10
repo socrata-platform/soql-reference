@@ -120,7 +120,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
       }
     }
 
-    def analyzeInContext(scope: RNS, canonicalName: Option[CanonicalName], q: BinaryTree[ast.Select], from0: Option[AtomicFrom[CT, CV]], env: Environment[CT], udfParams: UdfParameters): AtomicFrom[CT, CV] = {
+    def analyzeInContext(scope: RNS, canonicalName: Option[CanonicalName], q: BinaryTree[ast.Select], from0: Option[AtomicFrom[CT, CV]], env: Environment[CT], udfParams: UdfParameters): FromStatement[CT, CV] = {
       q match {
         case Leaf(select) =>
           analyzeSelection(scope, canonicalName, select, from0, env, udfParams)
@@ -413,7 +413,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
     def analyzeUDF(scope: RNS, outerCanonicalName: Option[CanonicalName], tableName: TableName, params: Seq[ast.Expression], env: Environment[CT], outerUdfParams: UdfParameters): AtomicFrom[CT, CV] = {
       val resource = ResourceName(tableName.nameWithoutPrefix)
       tableMap.find(scope, resource) match {
-        case ParsedTableDescription.TableFunction(udfScope, canonicalName, parsed, paramSpecs) =>
+        case ParsedTableDescription.TableFunction(udfScope, udfCanonicalName, parsed, paramSpecs) =>
           if(params.length != paramSpecs.size) {
             incorrectNumberOfParameters(resource, expected = params.length, got = paramSpecs.size)
           }
@@ -421,43 +421,49 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
           //    @bleh(x, y, z)
           // to
           //    with $label (values(x,y,z)) udfexpansion
-          val definitionQuery =
+          //    select * from (values (x,y,z)) join lateral (udfexpansion) on true
+          val paramsQuery =
             Values(
               params.lazyZip(paramSpecs).map { case (expr, (_name, typ)) =>
                 typecheck(expr, env, Map.empty, outerUdfParams, Some(typ), outerCanonicalName)
               }
             )
-          val definitionLabel = labelProvider.tableLabel()
-          val definitionUseLabel = labelProvider.tableLabel()
-          val innerUdfParams = definitionQuery.schema.keys.lazyZip(paramSpecs).map { case (colLabel, (name, typ)) =>
-            name -> { (p: Position) => Column(definitionUseLabel, colLabel, typ)(p) }
+          val paramsLabel = labelProvider.tableLabel()
+          val innerUdfParams = paramsQuery.schema.keys.lazyZip(paramSpecs).map { case (colLabel, (name, typ)) =>
+            name -> { (p: Position) => Column(paramsLabel, colLabel, typ)(p) }
           }.toMap
-          val useQuery = intoStatement(
+          val useQuery =
             analyzeInContext(
               udfScope,
-              Some(canonicalName),
-              // For historical reasons, UDF queries were written as
-              // `select blahblah FROM @single_row ...` but we're
-              // providing the definition differently now and it's not
-              // needed anymore, so remove it if it's present.
-              removeSingleRowFrom(parsed),
-              // This is a little ugly; what's happening here is that
-              // the databasetablename of the CTE is is _also_ a label
-              // (and in fact there is no way to give it a different
-              // alias in the sql).
-              Some(FromVirtualTable(
-                     definitionLabel,
-                     None,
-                     definitionUseLabel,
-                     definitionQuery.typeVariedSchema
-                   )),
+              Some(udfCanonicalName),
+              parsed,
+              None,
               env,
               innerUdfParams
             )
-          )
 
           FromStatement(
-            CTE(definitionLabel, definitionQuery, MaterializedHint.Materialized, useQuery),
+            Select(
+              Distinctiveness.Indistinct,
+              OrderedMap() ++ useQuery.statement.schema.iterator.map { case (label, NameEntry(name, typ)) =>
+                labelProvider.columnLabel() -> NamedExpr(Column(useQuery.label, label, typ)(NoPosition), name)
+              },
+              Join(
+                JoinType.Inner,
+                true,
+                FromStatement(paramsQuery, paramsLabel, None),
+                useQuery,
+                typeInfo.literalBoolean(true, NoPosition)
+              ),
+              None,
+              Nil,
+              None,
+              Nil,
+              None,
+              None,
+              None,
+              Set.empty
+            ),
             labelProvider.tableLabel(),
             Some(ResourceName(tableName.aliasWithoutPrefix.getOrElse(tableName.nameWithoutPrefix)))
           )
