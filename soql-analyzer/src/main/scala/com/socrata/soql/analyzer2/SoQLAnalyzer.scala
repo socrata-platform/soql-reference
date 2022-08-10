@@ -473,23 +473,6 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
       }
     }
 
-    def removeSingleRowFrom(select: BinaryTree[ast.Select]): BinaryTree[ast.Select] = {
-      select match {
-        case Leaf(q) => Leaf(q.copy(from = q.from.filter(notSingleRow)))
-        case PipeQuery(l, r) => PipeQuery(removeSingleRowFrom(l), r)
-        case UnionQuery(l, r) => UnionQuery(removeSingleRowFrom(l), r)
-        case UnionAllQuery(l, r) => UnionAllQuery(removeSingleRowFrom(l), r)
-        case IntersectQuery(l, r) => IntersectQuery(removeSingleRowFrom(l), r)
-        case IntersectAllQuery(l, r) => IntersectAllQuery(removeSingleRowFrom(l), r)
-        case MinusQuery(l, r) => MinusQuery(removeSingleRowFrom(l), r)
-        case MinusAllQuery(l, r) => MinusAllQuery(removeSingleRowFrom(l), r)
-      }
-    }
-
-    def notSingleRow(from: TableName): Boolean = {
-      from.name != TableName.SingleRow
-    }
-
     def typecheck(
       expr: ast.Expression,
       env: Environment[CT],
