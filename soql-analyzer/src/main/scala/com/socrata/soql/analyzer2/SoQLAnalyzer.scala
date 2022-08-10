@@ -420,7 +420,6 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
           // we're rewriting the UDF from
           //    @bleh(x, y, z)
           // to
-          //    with $label (values(x,y,z)) udfexpansion
           //    select * from (values (x,y,z)) join lateral (udfexpansion) on true
           val paramsQuery =
             Values(
