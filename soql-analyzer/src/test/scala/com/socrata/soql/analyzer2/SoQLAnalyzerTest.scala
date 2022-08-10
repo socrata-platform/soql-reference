@@ -322,4 +322,109 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
       )
     )
   }
+
+  test("UDF - referencing outer column") {
+    val tf = new MockTableFinder(
+      Map(
+        (0, "aaaa-aaaa") -> D(Map("text" -> TestText, "num" -> TestNumber)),
+        (0, "bbbb-bbbb") -> D(Map("user" -> TestText, "allowed" -> TestBoolean)),
+        (0, "cccc-cccc") -> U(0, "select 1 from @bbbb-bbbb where user = ?user and allowed limit 1", OrderedMap("user" -> TestText))
+      )
+    )
+
+    val tf.Success(start) = tf.findTables(0, rn("aaaa-aaaa"), "select * join @cccc-cccc(text) on true")
+    val analysis = analyzer(start, UserParameters.empty)
+
+
+    val select = analysis.statement match {
+      case select: Select[TestType, TestValue] => select
+      case _ => fail("Expected a select")
+    }
+
+    select.selectList must equal (
+      OrderedMap(
+        c(3) -> NamedExpr(
+          Column(t(1), dcn("text"), TestText)(NoPosition),
+          cn("text")
+        ),
+        c(4) -> NamedExpr(
+          Column(t(1), dcn("num"), TestNumber)(NoPosition),
+          cn("num")
+        )
+      )
+    )
+
+    select.from must equal (
+      Join(
+        JoinType.Inner,
+        true,
+        FromTable(
+          dtn("aaaa-aaaa"), None, t(1),
+          OrderedMap(
+            dcn("text") -> NameEntry(ColumnName("text"), TestText),
+            dcn("num") -> NameEntry(ColumnName("num"), TestNumber)
+          )
+        ),
+        FromStatement(
+          Select(
+            Distinctiveness.Indistinct,
+            OrderedMap(
+              c(2) -> NamedExpr(
+                Column(t(4),c(1),TestNumber)(NoPosition),
+                cn("_1")
+              )
+            ),
+            Join(
+              JoinType.Inner,
+              true,
+              FromStatement(
+                Values(Seq(Column(t(1), dcn("text"), TestText)(NoPosition))),
+                t(2),
+                None
+              ),
+              FromStatement(
+                Select(
+                  Distinctiveness.Indistinct,
+                  OrderedMap(
+                    c(1) -> NamedExpr(
+                      LiteralValue(TestNumber(1))(NoPosition),
+                      cn("_1")
+                    )
+                  ),
+                  FromTable(
+                    DatabaseTableName("bbbb-bbbb"), Some(rn("bbbb-bbbb")), t(3),
+                    OrderedMap(
+                      dcn("user") -> NameEntry(cn("user"), TestText),
+                      dcn("allowed") -> NameEntry(cn("allowed"), TestBoolean)
+                    )
+                  ),
+                  Some(
+                    FunctionCall(
+                      TestFunctions.And.monomorphic.get,
+                      Seq(
+                        FunctionCall(
+                          MonomorphicFunction(TestFunctions.Eq, Map("a" -> TestText)),
+                          Seq(
+                            Column(t(3),dcn("user"),TestText)(NoPosition),
+                            Column(t(2),dcn("column1"),TestText)(NoPosition)
+                          )
+                        )(NoPosition, NoPosition),
+                        Column(t(3),dcn("allowed"),TestBoolean)(NoPosition)
+                      )
+                    )(NoPosition, NoPosition)
+                  ),
+                  Nil, None, Nil, Some(1), None, None, Set.empty
+                ),
+                t(4), None
+              ),
+              LiteralValue(TestBoolean(true))(NoPosition)
+            ),
+            None, Nil, None, Nil, None, None, None, Set.empty
+          ),
+          t(5), Some(rn("cccc-cccc"))
+        ),
+        LiteralValue(TestBoolean(true))(NoPosition)
+      )
+    )
+  }
 }
