@@ -13,6 +13,10 @@ case class D[+T](schema: Map[String, T]) extends Thing[T]
 case class Q[+T](scope: Int, parent: String, soql: String, params: Map[HoleName, T] = Map.empty[HoleName, Nothing]) extends Thing[T]
 case class U[+T](scope: Int, soql: String, params: OrderedMap[String, T]) extends Thing[T]
 
+object MockTableFinder {
+  def empty[T] = new MockTableFinder[T](Map.empty)
+}
+
 class MockTableFinder[T](raw: Map[(Int, String), Thing[T]]) extends TableFinder {
   private val tables = raw.iterator.map { case ((scope, rawResourceName), thing) =>
     val converted = thing match {

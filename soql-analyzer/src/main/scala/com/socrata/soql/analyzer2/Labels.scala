@@ -25,6 +25,9 @@ final class AutoTableLabel private[analyzer2] (private val name: String) extends
       case _ => false
     }
 }
+object AutoTableLabel {
+  def forTest(name: String) = new AutoTableLabel(name)
+}
 final case class DatabaseTableName(name: String) extends TableLabel {
   override def toString = name
 }
@@ -38,6 +41,9 @@ final class AutoColumnLabel private[analyzer2] (private val name: String) extend
       case acl: AutoColumnLabel => this.name == acl.name
       case _ => false
     }
+}
+object AutoColumnLabel {
+  def forTest(name: String) = new AutoColumnLabel(name)
 }
 final case class DatabaseColumnName(name: String) extends ColumnLabel {
   override def toString = name

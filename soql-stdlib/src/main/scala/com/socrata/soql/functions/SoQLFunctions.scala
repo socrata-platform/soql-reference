@@ -604,11 +604,12 @@ object SoQLFunctions {
     Example("Get records of last month converted into US/Pacific time", "floating_date_column between date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'P1M' and date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'PT1S'", "")
   )
 
-  val castIdentities = for ((n, t) <- SoQLType.typesByName.toSeq) yield {
-    f(n.caseFolded + "::" + n.caseFolded, SpecialFunctions.Cast(n), Map.empty, Seq(FixedType(t)), Seq.empty, FixedType(t))(
+  val castIdentitiesByType = OrderedMap() ++ SoQLType.typesByName.iterator.map { case (n, t) =>
+    t -> mf(n.caseFolded + "::" + n.caseFolded, SpecialFunctions.Cast(n), Seq(t), Seq.empty, t)(
       NoDocs
     )
   }
+  val castIdentities = castIdentitiesByType.valuesIterator.toVector
 
   val NumberToText = mf("number to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLNumber), Seq.empty, SoQLText)(
     NoDocs
