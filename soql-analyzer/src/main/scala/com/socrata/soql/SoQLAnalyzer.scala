@@ -870,84 +870,86 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
   // be "search the output of the first query" rather than "search the underlying
   // dataset".  Unfortunately this means "select :*,*" isn't a left-identity of merge
   // for a query that contains a search.
-  private def tryMerge(a: Analysis, b: Analysis): Option[Analysis] = (a, b) match {
-    case (_, b) if b.hints.exists(_.isInstanceOf[typed.NoChainMerge]) => None
-    case (a, _) if (hasWindowFunction(a)) => None
-    case (SoQLAnalysis(aIsGroup, aIndistinct: typed.Indistinct[_, _], aSelect, aFrom, Nil, aWhere, aGroup, aHaving, aOrder, aLim, aOff, None, Nil),
-          SoQLAnalysis(false, _: typed.Indistinct[_, _], bSelect, None, bJoins, None,   Nil,   None,    Nil,   bLim, bOff, None, Nil)) if
-          // Do not merge when the previous soql is grouped and the next soql has joins
-          // select g, count(x) as cx group by g |> select g, cx, @b.a join @b on @b.g=g
-          // Newly introduced columns from joins cannot be merged and brought in w/o grouping and aggregate functions.
-          !(aIsGroup && bJoins.nonEmpty) && // TODO: relaxed requirement on aFrom = bFrom? is this ok?
-          !aGroup.exists(hasLiteral)
-          =>
-      // we can merge a change of only selection and limit + offset onto anything
-      val (newLim, newOff) = Merger.combineLimits(aLim, aOff, bLim, bOff)
-      Some(SoQLAnalysis(isGrouped = aIsGroup,
-                        distinct = aIndistinct,
-                        selection = mergeSelection(aSelect, bSelect),
-                        from = aFrom,
-                        joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on), lateral = join.lateral)),
-                        where = aWhere,
-                        groupBys = aGroup,
-                        having = aHaving,
-                        orderBys = aOrder,
-                        limit = newLim,
-                        offset = newOff,
-                        search = None,
-                        hints = Seq.empty))
-    case (SoQLAnalysis(false, aIndistinct: typed.Indistinct[_, _], aSelect, aFrom, Nil, aWhere, Nil, None, aOrder, None, None, aSearch, Nil),
-          SoQLAnalysis(false, _: typed.Indistinct[_, _], bSelect, None, bJoins, bWhere, Nil, None, bOrder, bLim, bOff, None, Nil)) =>
-      // Can merge a change of filter or order only if no window was specified on the left
-      Some(SoQLAnalysis(isGrouped = false,
-                        distinct = aIndistinct,
-                        selection = mergeSelection(aSelect, bSelect),
-                        from = aFrom,
-                        joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on), lateral = join.lateral)),
-                        where = mergeWhereLike(aSelect, aWhere, bWhere),
-                        groupBys = Nil,
-                        having = None,
-                        orderBys = mergeOrderBy(aSelect, aOrder, bOrder),
-                        limit = bLim,
-                        offset = bOff,
-                        search = aSearch,
-                        hints = Seq.empty))
-    case (SoQLAnalysis(false, aIndistinct: typed.Indistinct[_, _], aSelect, aFrom, aJoins, aWhere, Nil, None, _, None, None, None, Nil),
-          SoQLAnalysis(true, _: typed.Indistinct[_, _], bSelect, None, bJoins, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, Nil)) if !joinAliasCollision(a, b) =>
-      // an aggregate on a non-aggregate
-      Some(SoQLAnalysis(isGrouped = true,
-                        distinct = aIndistinct,
-                        selection = mergeSelection(aSelect, bSelect),
-                        from = aFrom,
-                        joins = aJoins ++ bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on), lateral = join.lateral)),
-                        where = mergeWhereLike(aSelect, aWhere, bWhere),
-                        groupBys = mergeGroupBy(aSelect, bGroup),
-                        having = mergeWhereLike(aSelect, None, bHaving),
-                        orderBys = mergeOrderBy(aSelect, Nil, bOrder),
-                        limit = bLim,
-                        offset = bOff,
-                        search = None,
-                        hints = Seq.empty))
-    case (SoQLAnalysis(true, aIndistinct: typed.Indistinct[_, _], aSelect, aFrom, Nil, aWhere, aGroup, aHaving, aOrder, None, None, None, Nil),
-          SoQLAnalysis(false, _: typed.Indistinct[_, _], bSelect, None, Nil, bWhere, Nil,      None,    bOrder, bLim, bOff, None, Nil))
-          if !aGroup.exists(hasLiteral)
-          =>
-      // a non-aggregate on an aggregate -- merge the WHERE of the second with the HAVING of the first
-      Some(SoQLAnalysis(isGrouped = true,
-                        distinct = aIndistinct,
-                        selection = mergeSelection(aSelect, bSelect),
-                        from = aFrom,
-                        joins = Nil,
-                        where = aWhere,
-                        groupBys = aGroup,
-                        having = mergeWhereLike(aSelect, aHaving, bWhere),
-                        orderBys = mergeOrderBy(aSelect, aOrder, bOrder),
-                        limit = bLim,
-                        offset = bOff,
-                        search = None,
-                        hints = Seq.empty))
-    case (_, _) =>
-      None
+  private def tryMerge(a: Analysis, b: Analysis): Option[Analysis] = {
+    for { mergedDistinct <- mergeDistinct(a, b)
+          mergedAnalysis <- (a, b) match {
+            case (_, b) if b.hints.exists(_.isInstanceOf[typed.NoChainMerge]) => None
+            case (a, _) if (hasWindowFunction(a)) => None
+            case (SoQLAnalysis(aIsGroup, _aIndistinct, aSelect, aFrom, Nil, aWhere, aGroup, aHaving, aOrder, aLim, aOff, None, Nil),
+                  SoQLAnalysis(false, _bDistinct, bSelect, None, bJoins, None, Nil, None, Nil, bLim, bOff, None, Nil)) if
+              // Do not merge when the previous soql is grouped and the next soql has joins
+              // select g, count(x) as cx group by g |> select g, cx, @b.a join @b on @b.g=g
+              // Newly introduced columns from joins cannot be merged and brought in w/o grouping and aggregate functions.
+              !(aIsGroup && bJoins.nonEmpty) && // TODO: relaxed requirement on aFrom = bFrom? is this ok?
+                !aGroup.exists(hasLiteral) =>
+              // we can merge a change of only selection and limit + offset onto anything
+              val (newLim, newOff) = Merger.combineLimits(aLim, aOff, bLim, bOff)
+              Some(SoQLAnalysis(isGrouped = aIsGroup,
+                   distinct = mergedDistinct,
+                   selection = mergeSelection(aSelect, bSelect),
+                   from = aFrom,
+                   joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on), lateral = join.lateral)),
+                   where = aWhere,
+                   groupBys = aGroup,
+                   having = aHaving,
+                   orderBys = aOrder,
+                   limit = newLim,
+                   offset = newOff,
+                   search = None,
+                   hints = Seq.empty))
+            case (SoQLAnalysis(false, _aDistinct, aSelect, aFrom, Nil, aWhere, Nil, None, aOrder, None, None, aSearch, Nil),
+                  SoQLAnalysis(false, _bDistinct, bSelect, None, bJoins, bWhere, Nil, None, bOrder, bLim, bOff, None, Nil)) =>
+              // Can merge a change of filter or order only if no window was specified on the left
+              Some(SoQLAnalysis(isGrouped = false,
+                   distinct = mergedDistinct,
+                   selection = mergeSelection(aSelect, bSelect),
+                   from = aFrom,
+                   joins = bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on), lateral = join.lateral)),
+                   where = mergeWhereLike(aSelect, aWhere, bWhere),
+                   groupBys = Nil,
+                   having = None,
+                   orderBys = mergeOrderBy(aSelect, aOrder, bOrder),
+                   limit = bLim,
+                   offset = bOff,
+                   search = aSearch,
+                   hints = Seq.empty))
+            case (SoQLAnalysis(false, _aDistinct, aSelect, aFrom, aJoins, aWhere, Nil, None, _, None, None, None, Nil),
+                  SoQLAnalysis(true, _bDistinct, bSelect, None, bJoins, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, Nil)) if !joinAliasCollision(a, b) =>
+               // an aggregate on a non-aggregate
+               Some(SoQLAnalysis(isGrouped = true,
+                    distinct = mergedDistinct,
+                    selection = mergeSelection(aSelect, bSelect),
+                    from = aFrom,
+                    joins = aJoins ++ bJoins.map(join => join.copy(on = replaceRefs(aSelect, join.on), lateral = join.lateral)),
+                    where = mergeWhereLike(aSelect, aWhere, bWhere),
+                    groupBys = mergeGroupBy(aSelect, bGroup),
+                    having = mergeWhereLike(aSelect, None, bHaving),
+                    orderBys = mergeOrderBy(aSelect, Nil, bOrder),
+                    limit = bLim,
+                    offset = bOff,
+                    search = None,
+                    hints = Seq.empty))
+            case (SoQLAnalysis(true, _aDistinct, aSelect, aFrom, Nil, aWhere, aGroup, aHaving, aOrder, None, None, None, Nil),
+                  SoQLAnalysis(false, _bDistinct, bSelect, None, Nil, bWhere, Nil, None, bOrder, bLim, bOff, None, Nil))
+                  if !aGroup.exists(hasLiteral) =>
+              // a non-aggregate on an aggregate -- merge the WHERE of the second with the HAVING of the first
+              Some(SoQLAnalysis(isGrouped = true,
+                   distinct = mergedDistinct,
+                   selection = mergeSelection(aSelect, bSelect),
+                   from = aFrom,
+                   joins = Nil,
+                   where = aWhere,
+                   groupBys = aGroup,
+                   having = mergeWhereLike(aSelect, aHaving, bWhere),
+                   orderBys = mergeOrderBy(aSelect, aOrder, bOrder),
+                   limit = bLim,
+                   offset = bOff,
+                   search = None,
+                   hints = Seq.empty))
+            case (_, _) =>
+              None
+          }
+         } yield { mergedAnalysis }
   }
 
   private def joinAliases(a: Analysis): Seq[String] = {
@@ -1040,6 +1042,21 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
         }
         typed.FunctionCall(f, params.map(replaceRefs(a, _)), fi, w)(fc.position, fc.functionNamePosition)
     }
+
+
+  /**
+    * Allow merging with distinct where a.distinctiveness is indistinct and b.distinctiveness is indistinct or fullydistinct
+    */
+  private def mergeDistinct(a: Analysis, b: Analysis): Option[typed.Distinctiveness[ColumnName, T]] = {
+    a.distinct match {
+      case _: typed.Indistinct[_, _] =>
+        b.distinct  match {
+          case _: typed.DistinctOn[_, _] => None
+          case x => Some(x)
+        }
+      case _ => None
+    }
+  }
 }
 
 private object Merger {
