@@ -225,8 +225,16 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
 
       checkedDistinct match {
         case Distinctiveness.On(exprs) =>
-          if(!checkedOrderBys.map(_.expr).startsWith(exprs)) {
-            distinctOnMustBePrefixOfOrderBy()
+          if(checkedOrderBys.nonEmpty){
+            if(!checkedOrderBys.map(_.expr).startsWith(exprs)) {
+              distinctOnMustBePrefixOfOrderBy()
+            }
+          } else { // distinct on without an order by implicitly orders by the distinct columns
+            for(expr <- exprs) {
+              if(!typeInfo.isOrdered(expr.typ)) {
+                unorderedOrderBy(expr.typ, expr.position)
+              }
+            }
           }
         case _ =>
           // all well
