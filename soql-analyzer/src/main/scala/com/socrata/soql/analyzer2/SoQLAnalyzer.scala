@@ -8,6 +8,7 @@
 
 package com.socrata.soql.analyzer2
 
+import scala.annotation.tailrec
 import scala.util.parsing.input.{Position, NoPosition}
 import scala.collection.compat._
 
@@ -325,6 +326,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
           }
         }
 
+        @tailrec
         def loop(from: From[CT, CV], acc: Map[AliasAnalysis.Qualifier, UntypedDatasetContext]): Map[AliasAnalysis.Qualifier, UntypedDatasetContext] = {
           from match {
             case j: Join[CT, CV] =>
@@ -432,7 +434,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
             analyzeForFrom(tableMap.find(scope, ResourceName(tn.nameWithoutPrefix)), enclosingEnv).
               reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
           case ast.JoinQuery(select, alias) =>
-            analyzeStatement(select, None).reAlias(Some(ResourceName(alias)))
+            analyzeStatement(select, None).reAlias(Some(ResourceName(alias.substring(1))))
           case ast.JoinFunc(tn, params) =>
             analyzeUDF(tn, params)
         }
@@ -565,8 +567,8 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
     def aggregateFunctionNotAllowed(pos: Position): Nothing = ???
     def aggregateRequired(pos: Position): Nothing = ???
     def windowFunctionNotAllowed(pos: Position): Nothing = ???
-    def augmentAliasAnalysisException(aae: AliasAnalysisException): Nothing = ???
-    def augmentTypecheckException[CT, CV](aae: Typechecker[CT, CV]#TypecheckError): Nothing = ???
+    def augmentAliasAnalysisException(aae: AliasAnalysisException): Nothing = throw aae
+    def augmentTypecheckException[CT, CV](tce: Typechecker[CT, CV]#TypecheckError): Nothing = throw tce
     def constantInGroupBy(pos: Position): Nothing = ???
     def constantInOrderBy(pos: Position): Nothing = ???
     def constantInDistinctOn(pos: Position): Nothing = ???

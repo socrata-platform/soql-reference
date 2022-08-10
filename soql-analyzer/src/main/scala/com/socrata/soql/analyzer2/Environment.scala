@@ -60,12 +60,18 @@ object Scope {
 //
 // SoQL naming rules:
 //  You cannot have the same table alias more than once in a FROM clause
-//     - unqualified-names are resolved relative to the first entry in the current query's FROM list
+//     - unqualified-names are resolved relative to the first entry in the current query's FROM list, or from the inherited environment
 //     - qualified names find the nearest qualifier
 
 sealed abstract class Environment[+CT](parent: Option[Environment[CT]]) {
+  @tailrec
   final def lookup(name: ColumnName): Option[Environment.LookupResult[CT]] = {
-    lookupHere(name)
+    val candidate = lookupHere(name)
+    if(candidate.isDefined) return candidate
+    parent match {
+      case Some(p) => p.lookup(name)
+      case None => None
+    }
   }
 
   @tailrec
