@@ -114,8 +114,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
           fromTable(ds, None)
         case ParsedTableDescription.Query(scope, canonicalName, basedOn, parsed, parameters) =>
           // so this is basedOn |> parsed
-          // so we want to analyze "basedOn" in the env we're given
-          // and then parsed in that env extended with the result of basedOn
+          // so we want to use "basedOn" as the implicit "from" for "parsed"
           val from = analyzeForFrom(tableMap.find(scope, basedOn), env)
           new Context(scope, Some(canonicalName), env, Map.empty).
             analyzeStatement(parsed, Some(from))
