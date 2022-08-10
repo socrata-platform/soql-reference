@@ -1052,6 +1052,8 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
 
   /**
     * Allow merging with distinct where a.distinctiveness is indistinct and b.distinctiveness is indistinct or fullydistinct
+    * Do not look at this independent of other aspects of a SoQL.  Two analyses being mergeable excluding distinct is the
+    * prerequisite of this function returning some.
     */
   private def mergeDistinct(a: Analysis, b: Analysis): Option[typed.Distinctiveness[ColumnName, T]] = {
     a.distinct match {
