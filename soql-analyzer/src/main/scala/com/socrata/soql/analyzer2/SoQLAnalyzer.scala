@@ -17,6 +17,7 @@ import com.socrata.soql.collection.{OrderedMap, OrderedSet}
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName, HoleName, UntypedDatasetContext}
 import com.socrata.soql.typechecker.{TypeInfo, FunctionInfo, HasType}
 import com.socrata.soql.aliases.AliasAnalysis
+import com.socrata.soql.exceptions.AliasAnalysisException
 
 abstract class SoQLAnalysis[CT, CV] {
   val statement: Statement[CT, CV]
@@ -182,34 +183,32 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
 
         // ok, first things first: establish the schema we're
         // operating in, which means rolling up "from" and "joins"
-        // into a From
-
+        // into a single From
         val completeFrom = queryInputSchema(from0, from, joins)
-
         val localEnv = envify(completeFrom.extendEnvironment(enclosingEnv))
 
         // Now that we know what we're selecting from, we'll give names to the selection...
-        val aliasAnalysis = AliasAnalysis(selection, from)(collectNamesForAnalysis(completeFrom))
-
-        // With the aliases assigned we'll typecheck the select-list.
-        //
-        // Complications here:
-        //   1. bleh as blah introduces a new name into scope.  We'll have to augment the
-        //      environment with a way to find the (typechecked) expansions of those names
-        //   2. During typechecking we'll need (?) to keep track of the window/aggregate/normal
-        //      state.  The old analyzer does that in a secondary pass; perhaps we should
-        //      too.
-
-        class EvaluationState private (val env: Environment[CT], val namedExprs: OrderedMap[ColumnName, Expr[CT, CV]]) {
-          def this(env: Environment[CT]) = this(env, OrderedMap())
-          def update(name: ColumnName, expr: Expr[CT, CV]): EvaluationState = {
-            new EvaluationState(env, namedExprs + (name -> expr))
+        val aliasAnalysis =
+          try {
+            AliasAnalysis(selection, from)(collectNamesForAnalysis(completeFrom))
+          } catch {
+            case e: AliasAnalysisException =>
+              augmentAliasAnalysisException(e)
           }
 
-          def typecheck(expr: ast.Expression) = withEnv(env).typecheck(expr, namedExprs, None)
+        // With the aliases assigned we'll typecheck the select-list,
+        // building up the set of named exprs we can use as shortcuts
+        // for other expressions
+        class EvaluationState(val namedExprs: OrderedMap[ColumnName, Expr[CT, CV]] = OrderedMap.empty) {
+          def update(name: ColumnName, expr: Expr[CT, CV]): EvaluationState = {
+            new EvaluationState(namedExprs + (name -> expr))
+          }
+
+          def typecheck(expr: ast.Expression, expectedType: Option[CT] = None) =
+            withEnv(localEnv).typecheck(expr, namedExprs, None)
         }
 
-        val finalState = aliasAnalysis.evaluationOrder.foldLeft(new EvaluationState(localEnv)) { (state, colName) =>
+        val finalState = aliasAnalysis.evaluationOrder.foldLeft(new EvaluationState()) { (state, colName) =>
           val expression = aliasAnalysis.expressions(colName)
           val typed = state.typecheck(expression)
           state.update(colName, typed)
@@ -219,19 +218,26 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
           case ast.Indistinct => Distinctiveness.Indistinct
           case ast.FullyDistinct => Distinctiveness.FullyDistinct
           case ast.DistinctOn(exprs) =>
-            Distinctiveness.On(exprs.map(finalState.typecheck))
+            Distinctiveness.On(exprs.map(finalState.typecheck(_)))
         }
 
-        val checkedWhere = where.map(finalState.typecheck)
-        val checkedGroupBys = groupBys.map(finalState.typecheck)
-        for(cgb <- checkedGroupBys) {
-          if(!typeInfo.isGroupable(cgb.typ)) {
-            invalidGroupBy(cgb.typ, cgb.position)
+        val checkedWhere = where.map(finalState.typecheck(_, Some(typeInfo.boolType)))
+        val checkedGroupBys = groupBys.map { expr =>
+          val checked = finalState.typecheck(expr)
+          if(checked.isInstanceOf[Literal[_, _]]) {
+            constantInGroupBy(checked.position)
           }
+          if(!typeInfo.isGroupable(checked.typ)) {
+            invalidGroupBy(checked.typ, checked.position)
+          }
+          checked
         }
-        val checkedHaving = having.map(finalState.typecheck)
+        val checkedHaving = having.map(finalState.typecheck(_, Some(typeInfo.boolType)))
         val checkedOrderBys = orderBys.map { case ast.OrderBy(expr, ascending, nullLast) =>
           val checked = finalState.typecheck(expr)
+          if(checked.isInstanceOf[Literal[_, _]]) {
+            constantInOrderBy(checked.position)
+          }
           if(!typeInfo.isOrdered(checked.typ)) {
             unorderedOrderBy(checked.typ, checked.position)
           }
@@ -246,6 +252,9 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
               }
             } else { // distinct on without an order by implicitly orders by the distinct columns
               for(expr <- exprs) {
+                if(expr.isInstanceOf[Literal[_, _]]) {
+                  constantInDistinctOn(expr.position)
+                }
                 if(!typeInfo.isOrdered(expr.typ)) {
                   unorderedOrderBy(expr.typ, expr.position)
                 }
@@ -492,7 +501,12 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
         expectedType: Option[CT],
       ): Expr[CT, CV] = {
         val tc = new Typechecker(enclosingEnv, namedExprs, udfParams, userParameters, canonicalName, typeInfo, functionInfo)
-        tc(expr, expectedType)
+        try {
+          tc(expr, expectedType)
+        } catch {
+          case e: tc.TypecheckError =>
+            augmentTypecheckException(e)
+        }
       }
 
       def verifyAggregatesAndWindowFunctions(stmt: Select[CT, CV]): Unit = {
@@ -551,5 +565,10 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo[CT, CV], functionInfo: Functi
     def aggregateFunctionNotAllowed(pos: Position): Nothing = ???
     def aggregateRequired(pos: Position): Nothing = ???
     def windowFunctionNotAllowed(pos: Position): Nothing = ???
+    def augmentAliasAnalysisException(aae: AliasAnalysisException): Nothing = ???
+    def augmentTypecheckException[CT, CV](aae: Typechecker[CT, CV]#TypecheckError): Nothing = ???
+    def constantInGroupBy(pos: Position): Nothing = ???
+    def constantInOrderBy(pos: Position): Nothing = ???
+    def constantInDistinctOn(pos: Position): Nothing = ???
  }
 }
