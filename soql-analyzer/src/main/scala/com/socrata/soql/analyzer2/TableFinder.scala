@@ -7,25 +7,35 @@ import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ResourceName, ColumnName, HoleName, TableName}
 import com.socrata.soql.{BinaryTree, Leaf, Compound}
 
-sealed trait ParsedTableDescription[+ResourceNameScope, +ColumnType]
+sealed trait ParsedTableDescription[+ResourceNameScope, +ColumnType] {
+  private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]): ParsedTableDescription[RNS2, ColumnType]
+}
 object ParsedTableDescription {
   case class Dataset[+ColumnType](
     name: DatabaseTableName,
     schema: OrderedMap[DatabaseColumnName, NameEntry[ColumnType]]
-  ) extends ParsedTableDescription[Nothing, ColumnType]
+  ) extends ParsedTableDescription[Nothing, ColumnType] {
+    private[analyzer2] def rewriteScopes[RNS, RNS2](scopeMap: Map[RNS, RNS2]) = this
+  }
   case class Query[+ResourceNameScope, +ColumnType](
     scope: ResourceNameScope, // This scope is to resolve both basedOn and any tables referenced within the soql
     canonicalName: CanonicalName, // This is the canonical name of this query; it is assumed to be unique across scopes
     basedOn: ResourceName,
     parsed: BinaryTree[ast.Select],
     parameters: Map[HoleName, ColumnType]
-  ) extends ParsedTableDescription[ResourceNameScope, ColumnType]
+  ) extends ParsedTableDescription[ResourceNameScope, ColumnType] {
+    private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]) =
+      copy(scope = scopeMap(scope))
+  }
   case class TableFunction[+ResourceNameScope, +ColumnType](
     scope: ResourceNameScope, // This scope is to resolve any tables referenced within the soql
     canonicalName: CanonicalName, // This is the canonical name of this UDF; it is assumed to be unique across scopes
     parsed: BinaryTree[ast.Select],
     parameters: OrderedMap[HoleName, ColumnType]
-  ) extends ParsedTableDescription[ResourceNameScope, ColumnType]
+  ) extends ParsedTableDescription[ResourceNameScope, ColumnType] {
+    private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]) =
+      copy(scope = scopeMap(scope))
+  }
 }
 
 class TableMap[ResourceNameScope, +ColumnType](private val underlying: Map[(ResourceNameScope, ResourceName), ParsedTableDescription[ResourceNameScope, ColumnType]]) extends AnyVal {
@@ -45,6 +55,17 @@ class TableMap[ResourceNameScope, +ColumnType](private val underlying: Map[(Reso
   }
 
   def descriptions = underlying.valuesIterator
+
+  private[analyzer2] def rewriteScopes(topLevel: ResourceNameScope): (TableMap[Int, ColumnType], Map[Int, ResourceNameScope], Map[ResourceNameScope, Int]) = {
+    val oldToNew = (underlying.keysIterator.map(_._1) ++ Iterator.single(topLevel)).zipWithIndex.toMap
+    val newToOld = oldToNew.iterator.map(_.swap).toMap
+    val newMap =
+      underlying.iterator.map { case ((rns, rn), desc) =>
+        (oldToNew(rns), rn) -> desc.rewriteScopes(oldToNew)
+      }.toMap
+
+    (new TableMap(newMap), newToOld, oldToNew)
+  }
 }
 object TableMap {
   def empty[ResourceNameScope] = new TableMap[ResourceNameScope, Nothing](Map.empty)
@@ -62,6 +83,24 @@ case class FoundTables[ResourceNameScope, +ColumnType](
         case q: ParsedTableDescription.Query[_, ColumnType] => acc + (q.canonicalName -> q.parameters)
       }
     }
+
+  // This lets you convert resource scope names to a simplified form
+  // if your resource scope names in one location have semantic
+  // meaning that you don't care to serialize.  You also get a map
+  // from the meaningless name to the meaningful one so if you want to
+  // (for example) translate an error from the analyzer back into the
+  // meaningful form, you can do that.
+  lazy val (withSimplifiedScopes, simplifiedScopeMap) = locally {
+    val (newMap, newToOld, oldToNew) = tableMap.rewriteScopes(initialScope)
+
+    val newFT = FoundTables(
+      newMap,
+      oldToNew(initialScope),
+      initialQuery
+    )
+
+    (newMap, newToOld)
+  }
 }
 
 object FoundTables {
