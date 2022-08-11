@@ -841,9 +841,8 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
             val ra = r.asLeaf.getOrElse(throw RightSideOfChainQueryMustBeLeaf(NoPosition))
             tryMerge(mlCandidate.leaf, ra) match {
               case Some(merged) =>
-                val mergedWithJoinsMerged = merge(Leaf(merged)).outputSchema
-                if (ml.asLeaf.isDefined) mergedWithJoinsMerged
-                else ml.replace(mlCandidate, mergedWithJoinsMerged)
+                if (ml.asLeaf.isDefined) Leaf(merged)
+                else ml.replace(mlCandidate, Leaf(merged))
               case None =>
                 PipeQuery(ml, r)
             }
@@ -854,17 +853,8 @@ private class Merger[T](andFunction: MonomorphicFunction[T]) {
         val nl = merge(l)
         val nr = merge(r)
         Compound(op, nl, nr)
-      case Leaf(leaf) =>
-        val mergedJoins = leaf.joins.map { join =>
-          join.from.subAnalysis match {
-            case Left(_) =>
-              join
-            case Right(SubAnalysis(subAnalyses, alias)) =>
-              val mergedSubAnalyses = merge(subAnalyses)
-              join.copy(from = JoinAnalysis(Right(SubAnalysis(mergedSubAnalyses, alias))))
-          }
-        }
-        Leaf(leaf.copy(joins = mergedJoins))
+      case Leaf(_) =>
+        stages
     }
   }
 
