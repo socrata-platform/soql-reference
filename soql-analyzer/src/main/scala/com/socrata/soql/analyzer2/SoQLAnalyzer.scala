@@ -2,7 +2,6 @@
 //  * Errors
 //     - everything needs position info
 //     - that position info needs to include query source (scope, Option[ResourceName])
-//  * Window functions in the typechecker
 //  * Make it possible to find label-isomorphisms between Statements
 //    and transform an isomorphic statement into an equal statement
 
