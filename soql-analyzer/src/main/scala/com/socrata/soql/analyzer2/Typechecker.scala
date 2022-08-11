@@ -269,6 +269,10 @@ class Typechecker[CT, CV](
                   malformedFrames(frames)
               }
 
+            if(parsedFrames.map(_.context) == FrameContext.Groups && orderings.isEmpty) {
+              return Left(GroupsRequiresOrderBy(frames.head.position))
+            }
+
             WindowedFunctionCall(f, params, maybeFilter, partitions, orderings, parsedFrames)(fc.position, fc.functionNamePosition)
           case (None, None) =>
             if(f.needsWindow) {
@@ -312,4 +316,5 @@ class Typechecker[CT, CV](
   case class RequiresWindow(name: FunctionName, pos: Position) extends TypecheckError(s"${name.name} requires a window clause")
   case class NonAggregate(name: FunctionName, pos: Position) extends TypecheckError(s"${name.name} is not an aggregate function")
   case class NonWindowFunction(name: FunctionName, pos: Position) extends TypecheckError(s"${name.name} is not a window function")
+  case class GroupsRequiresOrderBy(pos: Position) extends TypecheckError(s"GROUPS mode requires and ORDER BY in the window definition")
 }

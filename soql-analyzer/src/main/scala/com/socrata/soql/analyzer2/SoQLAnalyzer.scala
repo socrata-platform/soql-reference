@@ -529,6 +529,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           case agg: AggregateFunctionCall[CT, CV] =>
             aggregateFunctionNotAllowed(agg.position)
           case w@WindowedFunctionCall(f, args, filter, partitionBy, orderBy, _frame) if allowWindow =>
+            // Fun fact: this order by does not have the same no-literals restriction as a select's order-by
             val subExprsAreAggregates = allowAggregates && w.isAggregated
             args.foreach(verifyAggregatesAndWindowFunctions(_, subExprsAreAggregates, false, groupBys))
             partitionBy.foreach(verifyAggregatesAndWindowFunctions(_, subExprsAreAggregates, false, groupBys))
