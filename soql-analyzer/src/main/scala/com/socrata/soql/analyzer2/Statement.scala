@@ -8,6 +8,8 @@ import com.socrata.soql.environment.{ColumnName, ResourceName, TableName}
 import com.socrata.NonEmptySeq
 
 sealed abstract class Statement[+CT, +CV] {
+  type Self[+CT, +CV] <: Statement[CT, CV]
+
   val schema: OrderedMap[_ <: ColumnLabel, NameEntry[CT]]
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
@@ -16,16 +18,16 @@ sealed abstract class Statement[+CT, +CV] {
     tableName: DatabaseTableName => DatabaseTableName,
     // This is given the _original_ database table name
     columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): Statement[CT, CV] =
+  ): Self[CT, CV] =
     doRewriteDatabaseNames(new RewriteDatabaseNamesState(realTables, tableName, columnName))
 
   /** The names that the SoQLAnalyzer produces aren't necessarily safe
     * for use in any particular database.  This lets those
     * automatically-generated names be systematically replaced. */
-  final def relabel(using: LabelProvider): Statement[CT, CV] =
+  final def relabel(using: LabelProvider): Self[CT, CV] =
     doRelabel(new RelabelState(using))
 
-  private[analyzer2] def doRelabel(state: RelabelState): Statement[CT, CV]
+  private[analyzer2] def doRelabel(state: RelabelState): Self[CT, CV]
 
   /** For SQL forms that can refer to the select-columns by number, replace relevant
     * entries in those forms with the relevant select-column-index.
@@ -34,9 +36,9 @@ sealed abstract class Statement[+CT, +CV] {
     * x+1, count(*) group by x+1 order by count(*)" to one that
     * corresponds to "select x+1, count(*) group by 1 order by 2"
     */
-  def numericate: Statement[CT, CV]
+  def numericate: Self[CT, CV]
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Statement[CT, CV]
+  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[CT, CV]
 
   final def debugStr: String = debugStr(new StringBuilder).toString
   def debugStr(sb: StringBuilder): StringBuilder
@@ -44,6 +46,9 @@ sealed abstract class Statement[+CT, +CV] {
 
 case class CombinedTables[+CT, +CV](op: TableFunc, left: Statement[CT, CV], right: Statement[CT, CV]) extends Statement[CT, CV] {
   require(left.schema.values.map(_.typ) == right.schema.values.map(_.typ))
+
+  type Self[+CT, +CV] = CombinedTables[CT, CV]
+
   val schema = left.schema
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName] =
@@ -77,6 +82,8 @@ case class CTE[+CT, +CV](
   materializedHint: MaterializedHint,
   useQuery: Statement[CT, CV]
 ) extends Statement[CT, CV] {
+  type Self[+CT, +CV] = CTE[CT, CV]
+
   val schema = useQuery.schema
 
   private[analyzer2] def realTables =
@@ -112,6 +119,8 @@ case class CTE[+CT, +CV](
 case class Values[+CT, +CV](
   values: Seq[Expr[CT, CV]]
 ) extends Statement[CT, CV] {
+  type Self[+CT, +CV] = Values[CT, CV]
+
   // This lets us see the schema with DatabaseColumnNames as keys
   def typeVariedSchema[T >: DatabaseColumnName]: OrderedMap[T, NameEntry[CT]] =
     OrderedMap() ++ values.iterator.zipWithIndex.map { case (expr, idx) =>
@@ -159,6 +168,8 @@ case class Select[+CT, +CV](
   search: Option[String],
   hint: Set[SelectHint]
 ) extends Statement[CT, CV] {
+  type Self[+CT, +CV] = Select[CT, CV]
+
   val schema = selectList.withValuesMapped { case NamedExpr(expr, name) => NameEntry(name, expr.typ) }
 
   def isAggregated =

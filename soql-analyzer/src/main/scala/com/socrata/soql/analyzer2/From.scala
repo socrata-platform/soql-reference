@@ -6,21 +6,28 @@ import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.ResourceName
 
 sealed abstract class From[+CT, +CV] {
+  type Self[+CT, +CV] <: From[CT, CV]
+
   // extend the given environment with names introduced by this FROM clause
   private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]): Either[AddScopeError, Environment[CT2]]
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): From[CT, CV]
+  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[CT, CV]
 
-  private[analyzer2] def doRelabel(state: RelabelState): From[CT, CV]
+  private[analyzer2] def doRelabel(state: RelabelState): Self[CT, CV]
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
-  def numericate: From[CT, CV]
+  def numericate: Self[CT, CV]
 
   def debugStr(sb: StringBuilder): StringBuilder
+
+  def reduceMapRight[S, CT2 >: CT, CV2 >: CV, CT3, CV3](combine: (JoinType, Boolean, AtomicFrom[CT2, CV2], From[CT3, CV3], Expr[CT2, CV2], S) => (Join[CT3, CV3], S), base: AtomicFrom[CT2, CV2] => (From[CT3, CV3], S)): (From[CT3, CV3], S)
+  def mapRight[CT2 >: CT, CV2 >: CV, CT3, CV3](combine: (JoinType, Boolean, AtomicFrom[CT2, CV2], From[CT3, CV3], Expr[CT2, CV2]) => Join[CT3, CV3], base: AtomicFrom[CT2, CV2] => From[CT3, CV3]): From[CT3, CV3]
 }
 
 case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom[CT, CV], right: From[CT, CV], on: Expr[CT, CV]) extends From[CT, CV] {
+  type Self[+CT, +CV] = Join[CT, CV]
+
   // The difference between a lateral and a non-lateral join is the
   // environment assumed while typechecking; in a non-lateral join
   // it's something like:
@@ -62,60 +69,64 @@ case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom
     loop(Map.empty, this)
   }
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): From[CT, CV] = {
-    type Stack = List[From[CT, CV] => Join[CT, CV]]
+  override def reduceMapRight[S, CT2 >: CT, CV2 >: CV, CT3, CV3](combine: (JoinType, Boolean, AtomicFrom[CT2, CV2], From[CT3, CV3], Expr[CT2, CV2], S) => (Join[CT3, CV3], S), base: AtomicFrom[CT2, CV2] => (From[CT3, CV3], S)): (Join[CT3, CV3], S) = {
+    type Stack = List[(From[CT3, CV3], S) => (Join[CT3, CV3], S)]
 
     @tailrec
-    def loop(self: From[CT, CV], stack: Stack): From[CT, CV] =
+    def loop(self: From[CT2, CV2], stack: Stack): (From[CT3, CV3], S) = {
       self match {
         case Join(joinType, lateral, left, right, on) =>
-          val newLeft = left.doRewriteDatabaseNames(state)
-          val newOn = on.doRewriteDatabaseNames(state)
-          loop(right, { newRight: From[CT, CV] => Join(joinType, lateral, newLeft, newRight, newOn) } :: stack)
-        case nonJoin =>
-          stack.foldLeft(nonJoin.doRewriteDatabaseNames(state)) { (acc, f) =>
-            f(acc)
+          loop(right, { (newRight, s) => combine(joinType, lateral, left, newRight, on, s) } :: stack)
+        case last: AtomicFrom[CT2, CV2] =>
+          stack.foldLeft(base(last)) { (acc, f) =>
+            val (right, s) = acc
+            f(right, s)
           }
       }
+    }
 
-    loop(this, Nil)
+    val (result, s) = loop(this, Nil)
+
+    (result.asInstanceOf[Join[CT3, CV3]], s)
   }
 
-  private[analyzer2] def doRelabel(state: RelabelState): From[CT, CV] = {
-    type Stack = List[From[CT, CV] => Join[CT, CV]]
-
-    @tailrec
-    def loop(self: From[CT, CV], stack: Stack): From[CT, CV] =
-      self match {
-        case Join(joinType, lateral, left, right, on) =>
-          val newLeft = left.doRelabel(state)
-          val newOn = on.doRelabel(state)
-          loop(right, { newRight: From[CT, CV] => Join(joinType, lateral, newLeft, newRight, newOn) } :: stack)
-        case nonJoin =>
-          stack.foldLeft(nonJoin.doRelabel(state)) { (acc, f) =>
-            f(acc)
-          }
-      }
-
-    loop(this, Nil)
+  override def mapRight[CT2 >: CT, CV2 >: CV, CT3, CV3](combine: (JoinType, Boolean, AtomicFrom[CT2, CV2], From[CT3, CV3], Expr[CT2, CV2]) => Join[CT3, CV3], base: AtomicFrom[CT2, CV2] => From[CT3, CV3]): Join[CT3, CV3] = {
+    reduceMapRight[Unit, CT2, CV2, CT3, CV3](
+      { (joinType, lateral, left, right, on, _) => (combine(joinType, lateral, left, right, on), ()) },
+      { nonJoin => (base(nonJoin), ()) }
+    )._1
   }
 
-  def numericate: From[CT, CV] = {
-    type Stack = List[From[CT, CV] => Join[CT, CV]]
+  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Join[CT, CV] = {
+    mapRight[CT, CV, CT, CV](
+       { (joinType, lateral, left, right, on) =>
+         val newLeft = left.doRewriteDatabaseNames(state)
+         val newOn = on.doRewriteDatabaseNames(state)
+         Join(joinType, lateral, newLeft, right, newOn)
+       },
+       _.doRewriteDatabaseNames(state)
+    )
+  }
 
-    @tailrec
-    def loop(self: From[CT, CV], stack: Stack): From[CT, CV] =
-      self match {
-        case Join(joinType, lateral, left, right, on) =>
-          val newLeft = left.numericate
-          loop(right, { newRight: From[CT, CV] => Join(joinType, lateral, newLeft, newRight, on) } :: stack)
-        case nonJoin =>
-          stack.foldLeft(nonJoin.numericate) { (acc, f) =>
-            f(acc)
-          }
-      }
+  private[analyzer2] def doRelabel(state: RelabelState): Join[CT, CV] = {
+    mapRight[CT, CV, CT, CV](
+      { (joinType, lateral, left, right, on) =>
+        val newLeft = left.doRelabel(state)
+        val newOn = on.doRelabel(state)
+        Join(joinType, lateral, newLeft, right, newOn)
+      },
+      _.doRelabel(state)
+    )
+  }
 
-    loop(this, Nil)
+  def numericate: Join[CT, CV] = {
+    mapRight[CT, CV, CT, CV](
+      { (joinType, lateral, left, right, on) =>
+        val newLeft = left.numericate
+        Join(joinType, lateral, newLeft, right, on)
+      },
+      _.numericate
+    )
   }
 
   def debugStr(sb: StringBuilder): StringBuilder = {
@@ -155,10 +166,10 @@ object JoinType {
 }
 
 sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
+  type Self[+CT, +CV] <: AtomicFrom[CT, CV]
+
   val alias: Option[ResourceName]
   val label: TableLabel
-
-  def numericate: AtomicFrom[CT, CV]
 
   private[analyzer2] val scope: Scope[CT]
 
@@ -169,14 +180,18 @@ sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
     env.addScope(alias, scope)
   }
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): AtomicFrom[CT, CV]
+  override final def reduceMapRight[S, CT2 >: CT, CV2 >: CV, CT3, CV3](combine: (JoinType, Boolean, AtomicFrom[CT2, CV2], From[CT3, CV3], Expr[CT2, CV2], S) => (Join[CT3, CV3], S), base: AtomicFrom[CT2, CV2] => (From[CT3, CV3], S)): (From[CT3, CV3], S) =
+    base(this)
 
-  private[analyzer2] def doRelabel(state: RelabelState): AtomicFrom[CT, CV]
+  override final def mapRight[CT2 >: CT, CV2 >: CV, CT3, CV3](combine: (JoinType, Boolean, AtomicFrom[CT2, CV2], From[CT3, CV3], Expr[CT2, CV2]) => Join[CT3, CV3], base: AtomicFrom[CT2, CV2] => From[CT3, CV3]): From[CT3, CV3] =
+    base(this)
 
-  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): AtomicFrom[CT, CV]
+  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): Self[CT, CV]
 }
 
 sealed abstract class FromTableLike[+CT] extends AtomicFrom[CT, Nothing] {
+  type Self[+CT, +CV] <: FromTableLike[CT]
+
   val tableName: TableLabel
   val columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]
 
@@ -185,11 +200,11 @@ sealed abstract class FromTableLike[+CT] extends AtomicFrom[CT, Nothing] {
   override final def debugStr(sb: StringBuilder): StringBuilder = {
     sb.append(tableName).append(" AS ").append(label)
   }
-
-  def numericate: this.type = this
 }
 
 case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceName], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[CT] {
+  type Self[+CT, +CV] = FromTable[CT]
+
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     copy(
       tableName = state.convert(this.tableName),
@@ -204,11 +219,16 @@ case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceNa
 
   private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromTable[CT] =
     copy(alias = newAlias)
+
+
+  def numericate: this.type = this
 }
 
 case class FromVirtualTable[+CT](tableName: AutoTableLabel, alias: Option[ResourceName], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[CT] {
   // This is just like FromTable except it does not participate in the
   // DatabaseName-renaming system.
+
+  type Self[+CT, +CV] = FromVirtualTable[CT]
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
 
@@ -220,6 +240,8 @@ case class FromVirtualTable[+CT](tableName: AutoTableLabel, alias: Option[Resour
 
   private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromVirtualTable[CT] =
     copy(alias = newAlias)
+
+  def numericate: this.type = this
 }
 
 // "alias" is optional here because of chained soql; actually having a
@@ -227,6 +249,8 @@ case class FromVirtualTable[+CT](tableName: AutoTableLabel, alias: Option[Resour
 // select ...` does not.  The alias is just for name-resolution during
 // analysis anyway...
 case class FromStatement[+CT, +CV](statement: Statement[CT, CV], label: TableLabel, alias: Option[ResourceName]) extends AtomicFrom[CT, CV] {
+  type Self[+CT, +CV] = FromStatement[CT, CV]
+
   private[analyzer2] val scope: Scope[CT] = Scope(statement.schema, label)
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
@@ -252,6 +276,8 @@ case class FromStatement[+CT, +CV](statement: Statement[CT, CV], label: TableLab
 }
 
 case class FromSingleRow(label: TableLabel, alias: Option[ResourceName]) extends AtomicFrom[Nothing, Nothing] {
+  type Self[+CT, +CV] = FromSingleRow
+
   private[analyzer2] val scope: Scope[Nothing] =
     Scope(
       OrderedMap.empty[ColumnLabel, NameEntry[Nothing]],

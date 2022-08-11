@@ -6,6 +6,8 @@ import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasType
 
 sealed abstract class Expr[+CT, +CV] {
+  type Self[+CT, +CV] <: Expr[CT, CV]
+
   val typ: CT
   val position: Position
 
@@ -13,14 +15,16 @@ sealed abstract class Expr[+CT, +CV] {
 
   def isAggregated: Boolean
 
-  private[analyzer2] def doRewriteDatabaseNames(expr: RewriteDatabaseNamesState): Expr[CT, CV]
+  private[analyzer2] def doRewriteDatabaseNames(expr: RewriteDatabaseNamesState): Self[CT, CV]
 
-  private[analyzer2] def doRelabel(state: RelabelState): Expr[CT, CV]
+  private[analyzer2] def doRelabel(state: RelabelState): Self[CT, CV]
 
   final def debugStr: String = debugStr(new StringBuilder).toString
   def debugStr(sb: StringBuilder): StringBuilder
 }
 case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
+  type Self[+CT, +CV] = Column[CT]
+
   def isAggregated = false
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
@@ -41,6 +45,8 @@ case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val posi
 }
 
 case class SelectListReference[+CT](index: Int, isAggregated: Boolean, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
+  type Self[+CT, +CV] = SelectListReference[CT]
+
   val size = 1
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
@@ -54,28 +60,37 @@ case class SelectListReference[+CT](index: Int, isAggregated: Boolean, typ: CT)(
 }
 
 sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
+  type Self[+CT, +CV] <: Literal[CT, CV]
+
   def isAggregated = false
-
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
-    this
-
-  private[analyzer2] def doRelabel(state: RelabelState) = this
 }
 case class LiteralValue[+CT, +CV](value: CV)(val position: Position)(implicit ev: HasType[CV, CT]) extends Literal[CT, CV] {
+  type Self[+CT, +CV] = LiteralValue[CT, CV]
+
   val typ = ev.typeOf(value)
   val size = 1
 
   override def debugStr(sb: StringBuilder): StringBuilder =
     sb.append(value)
+
+  def doRelabel(state: RelabelState) = this
+  def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
 }
 case class NullLiteral[+CT](typ: CT)(val position: Position) extends Literal[CT, Nothing] {
+  type Self[+CT, +CV] = NullLiteral[CT]
+
   val size = 1
 
   override def debugStr(sb: StringBuilder): StringBuilder =
     sb.append("NULL")
+
+  def doRelabel(state: RelabelState) = this
+  def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
 }
 
 sealed trait FuncallLike[+CT, +CV] extends Expr[CT, CV] with Product {
+  type Self[+CT, +CV] <: FuncallLike[CT, CV]
+
   val function: MonomorphicFunction[CT]
   val functionNamePosition: Position
 
@@ -93,6 +108,8 @@ case class FunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
   args: Seq[Expr[CT, CV]]
 )(val position: Position, val functionNamePosition: Position) extends FuncallLike[CT, CV] {
+  type Self[+CT, +CV] = FunctionCall[CT, CV]
+
   require(!function.isAggregate)
   val typ = function.result
 
@@ -122,6 +139,8 @@ case class AggregateFunctionCall[+CT, +CV](
   distinct: Boolean,
   filter: Option[Expr[CT, CV]]
 )(val position: Position, val functionNamePosition: Position) extends FuncallLike[CT, CV] {
+  type Self[+CT, +CV] = AggregateFunctionCall[CT, CV]
+
   require(function.isAggregate)
   val typ = function.result
   def isAggregated = true
@@ -166,6 +185,8 @@ case class WindowedFunctionCall[+CT, +CV](
   orderBy: Seq[OrderBy[CT, CV]], // ditto thus
   frame: Option[Frame]
 )(val position: Position, val functionNamePosition: Position) extends FuncallLike[CT, CV] {
+  type Self[+CT, +CV] = WindowedFunctionCall[CT, CV]
+
   require(function.needsWindow || function.isAggregate)
 
   val typ = function.result
