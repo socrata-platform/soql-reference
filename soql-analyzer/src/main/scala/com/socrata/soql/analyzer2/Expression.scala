@@ -5,7 +5,7 @@ import scala.util.parsing.input.Position
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasType
 
-sealed abstract class Expr[+CT, +CV] {
+sealed abstract class Expr[+CT, +CV] extends Product {
   type Self[+CT, +CV] <: Expr[CT, CV]
 
   val typ: CT
@@ -21,8 +21,14 @@ sealed abstract class Expr[+CT, +CV] {
 
   final def debugStr: String = debugStr(new StringBuilder).toString
   def debugStr(sb: StringBuilder): StringBuilder
+
+  // Since this is completely immutable, cache the hashCode rather
+  // than recomputing, as these trees can be quite deep.  Annoying
+  // that it has to be lazy, but otherwise this gets initialized too
+  // early.
+  override final lazy val hashCode: Int = scala.runtime.ScalaRunTime._hashCode(this)
 }
-case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
+final case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
   type Self[+CT, +CV] = Column[CT]
 
   def isAggregated = false
@@ -44,7 +50,7 @@ case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val posi
     sb.append(table).append('.').append(column)
 }
 
-case class SelectListReference[+CT](index: Int, isAggregated: Boolean, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
+final case class SelectListReference[+CT](index: Int, isAggregated: Boolean, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
   type Self[+CT, +CV] = SelectListReference[CT]
 
   val size = 1
@@ -64,7 +70,7 @@ sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
 
   def isAggregated = false
 }
-case class LiteralValue[+CT, +CV](value: CV)(val position: Position)(implicit ev: HasType[CV, CT]) extends Literal[CT, CV] {
+final case class LiteralValue[+CT, +CV](value: CV)(val position: Position)(implicit ev: HasType[CV, CT]) extends Literal[CT, CV] {
   type Self[+CT, +CV] = LiteralValue[CT, CV]
 
   val typ = ev.typeOf(value)
@@ -76,7 +82,7 @@ case class LiteralValue[+CT, +CV](value: CV)(val position: Position)(implicit ev
   def doRelabel(state: RelabelState) = this
   def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
 }
-case class NullLiteral[+CT](typ: CT)(val position: Position) extends Literal[CT, Nothing] {
+final case class NullLiteral[+CT](typ: CT)(val position: Position) extends Literal[CT, Nothing] {
   type Self[+CT, +CV] = NullLiteral[CT]
 
   val size = 1
@@ -93,18 +99,9 @@ sealed trait FuncallLike[+CT, +CV] extends Expr[CT, CV] with Product {
 
   val function: MonomorphicFunction[CT]
   val functionNamePosition: Position
-
-  override final def equals(that: Any): Boolean =
-    that match {
-      case null => false
-      case thing: AnyRef if thing eq this => true // short circuit identity
-      case thing if thing.getClass == this.getClass =>
-        this.productIterator.zip(thing.asInstanceOf[Product].productIterator).forall { case (a, b) => a == b }
-      case _ => false
-    }
 }
 
-case class FunctionCall[+CT, +CV](
+final case class FunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
   args: Seq[Expr[CT, CV]]
 )(val position: Position, val functionNamePosition: Position) extends FuncallLike[CT, CV] {
@@ -133,7 +130,7 @@ case class FunctionCall[+CT, +CV](
     sb.append(')')
   }
 }
-case class AggregateFunctionCall[+CT, +CV](
+final case class AggregateFunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
   args: Seq[Expr[CT, CV]],
   distinct: Boolean,
@@ -177,7 +174,7 @@ case class AggregateFunctionCall[+CT, +CV](
     sb
   }
 }
-case class WindowedFunctionCall[+CT, +CV](
+final case class WindowedFunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
   args: Seq[Expr[CT, CV]],
   filter: Option[Expr[CT, CV]],
