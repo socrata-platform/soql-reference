@@ -1,0 +1,58 @@
+textarea {
+  width: calc(50% - 2em);
+  height: 50vh;
+}
+
+div.soql {
+  font-family: monospace;
+  isolation: isolate;
+}
+
+div.soql span {
+  position: relative;
+  z-index: 0;
+}
+
+div.soql span.tooltip {
+  position: absolute;
+  padding: 1mm;
+  left: 0.5em;
+  white-space: nowrap;
+  bottom: 1.3em;
+  border: dotted;
+  background-color: white;
+  color: black;
+  z-index: 1;
+}
+
+div.soql span.table-alias-def {
+  color: red;
+}
+
+div.soql span.column-alias-def {
+  color: green;
+}
+
+div.soql span.column-ref {
+  color: blue;
+}
+
+div.soql span.elect-list-ref-ref {
+  color: blue;
+}
+
+div.soql span.typed.active {
+  text-decoration: underline;
+}
+
+div.soql span.other_reference {
+  background-color: yellow;
+}
+
+div.soql span.defining_reference {
+  background-color: lightgreen;
+}
+
+div.soql span.self_reference {
+  background-color: lightblue;
+}
