@@ -1,9 +1,16 @@
 package com.socrata.soql.analyzer2
 
+import scala.language.higherKinds
 import scala.annotation.tailrec
+
+import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.ResourceName
+
+import com.socrata.soql.typechecker.HasDoc
+
+import DocUtils._
 
 sealed abstract class From[+RNS, +CT, +CV] {
   type Self[+RNS, +CT, +CV] <: From[RNS, CT, CV]
@@ -19,7 +26,9 @@ sealed abstract class From[+RNS, +CT, +CV] {
 
   def numericate: Self[RNS, CT, CV]
 
-  def debugStr(sb: StringBuilder): StringBuilder
+  final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
+  final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder = debugDoc.layoutSmart().toStringBuilder(sb)
+  def debugDoc(implicit ev: HasDoc[CV]): Doc[ResourceAnn[RNS, CT]]
 
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV]
 
@@ -37,6 +46,18 @@ sealed abstract class From[+RNS, +CT, +CV] {
       { (nonJoin: AtomicFrom[RNS2, CT2, CV2]) => (base.apply(nonJoin), ()) }
     )._1
   }
+
+  final def reduceRight[RNS2 >: RNS, CT2 >: CT, CV2 >: CV, S](
+    combine: (Join[RNS2, CT2, CV2], S) => S,
+    base: AtomicFrom[RNS2, CT2, CV2] => S
+  ): S =
+    reduceMapRight[S, RNS2, CT2, CV2, RNS2, CT2, CV2](
+      { (joinType, lateral, left, right, on, s) =>
+        val j = Join(joinType, lateral, left, right, on)
+        (j, combine(j, s))
+      },
+      { (nonJoin: AtomicFrom[RNS2, CT2, CV2]) => (nonJoin, base(nonJoin)) }
+    )._2
 }
 
 case class Join[+RNS, +CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom[RNS, CT, CV], right: From[RNS, CT, CV], on: Expr[CT, CV]) extends From[RNS, CT, CV] {
@@ -143,40 +164,36 @@ case class Join[+RNS, +CT, +CV](joinType: JoinType, lateral: Boolean, left: Atom
       _.mapAlias(f)
     ).asInstanceOf[Join[RNS2, CT, CV]]
 
-  def debugStr(sb: StringBuilder): StringBuilder = {
-    left.debugStr(sb)
-    def loop(prevJoin: Join[RNS, CT, CV], from: From[RNS, CT, CV]): StringBuilder = {
-      from match {
-        case j: Join[RNS, CT, CV] =>
-          sb.
-            append(' ').
-            append(prevJoin.joinType).
-            append(if(prevJoin.lateral) " LATERAL" else "").
-            append(' ')
-          j.left.debugStr(sb).
-            append(" ON ")
-          prevJoin.on.debugStr(sb)
-          loop(j, j.right)
-        case nonJoin =>
-          sb.append(' ').
-            append(prevJoin.joinType).
-            append(if(prevJoin.lateral) " LATERAL" else "").
-            append(' ')
-          nonJoin.debugStr(sb).
-            append(" ON ")
-          prevJoin.on.debugStr(sb)
+  def debugDoc(implicit ev: HasDoc[CV]) =
+    reduceRight[RNS, CT, CV, Option[Expr[CT, CV]] => Doc[ResourceAnn[RNS, CT]]](
+      { (j, rightDoc) => lastOn: Option[Expr[CT, CV]] =>
+        val Join(joinType, lateral, left, right, on) = j
+        Seq(
+          Some(left.debugDoc),
+          lastOn.map { e => d"ON" +#+ e.debugDoc.hang(2) },
+          Some(Seq(
+                 Some(joinType.debugDoc),
+                 if(lateral) Some(d"LATERAL") else None,
+                 Some(rightDoc(Some(on)))
+               ).flatten.hsep
+          )
+        ).flatten.sep.nest(2)
+      },
+      { lastJoin => lastOn: Option[Expr[CT, CV]] =>
+        Seq(
+          Some(lastJoin.debugDoc),
+          lastOn.map { e => d"ON" +#+ e.debugDoc.hang(2) }
+        ).flatten.sep.nest(2)
       }
-    }
-    loop(this, this.right)
-  }
+    )(None)
 }
 
-sealed abstract class JoinType
+sealed abstract class JoinType(val debugDoc: Doc[Nothing])
 object JoinType {
-  case object Inner extends JoinType
-  case object LeftOuter extends JoinType
-  case object RightOuter extends JoinType
-  case object FullOuter extends JoinType
+  case object Inner extends JoinType(d"JOIN")
+  case object LeftOuter extends JoinType(d"LEFT OUTER JOIN")
+  case object RightOuter extends JoinType(d"RIGHT OUTER JOIN")
+  case object FullOuter extends JoinType(d"FULL OUTER JOIN")
 }
 
 sealed abstract class AtomicFrom[+RNS, +CT, +CV] extends From[RNS, CT, CV] {
@@ -207,13 +224,13 @@ sealed abstract class FromTableLike[+RNS, +CT] extends AtomicFrom[RNS, CT, Nothi
   type Self[+RNS, +CT, +CV] <: FromTableLike[RNS, CT]
 
   val tableName: TableLabel
+  val label: TableLabel
   val columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]
 
   private[analyzer2] override final val scope: Scope[CT] = Scope(columns, label)
 
-  override final def debugStr(sb: StringBuilder): StringBuilder = {
-    sb.append(tableName).append(" AS ").append(label)
-  }
+  def debugDoc(implicit ev: HasDoc[Nothing]) =
+    (tableName.debugDoc.annotate(ResourceAnn.from(alias, label)) ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(ResourceAnn.from(alias, label))).annotate(ResourceAnn.TableDef(label))
 }
 
 case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS, ResourceName)], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[RNS, CT] {
@@ -290,11 +307,8 @@ case class FromStatement[+RNS, +CT, +CV](statement: Statement[RNS, CT, CV], labe
 
   private[analyzer2] def realTables = Map.empty
 
-  override def debugStr(sb: StringBuilder): StringBuilder = {
-    sb.append('(')
-    statement.debugStr(sb)
-    sb.append(") AS ").append(label)
-  }
+  def debugDoc(implicit ev: HasDoc[CV]) =
+    (statement.debugDoc.encloseNesting(d"(", d")") ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(ResourceAnn.from(alias, label))).annotate(ResourceAnn.TableDef(label))
 }
 
 case class FromSingleRow[+RNS](label: TableLabel, alias: Option[(RNS, ResourceName)]) extends AtomicFrom[RNS, Nothing, Nothing] {
@@ -322,7 +336,6 @@ case class FromSingleRow[+RNS](label: TableLabel, alias: Option[(RNS, ResourceNa
 
   private[analyzer2] def realTables = Map.empty
 
-  override def debugStr(sb: StringBuilder): StringBuilder = {
-    sb.append("@single_row")
-  }
+  def debugDoc(implicit ev: HasDoc[Nothing]) =
+    (d"single_row".annotate(ResourceAnn.from(alias, label)) ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(ResourceAnn.from(alias, label))).annotate(ResourceAnn.TableDef(label))
 }

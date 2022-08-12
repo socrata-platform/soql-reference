@@ -91,7 +91,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   test("simple context") {
     val tf = new MockTableFinder(
       Map(
-        (0, "aaaa-aaaa") -> D(Map("text" -> TestText, "num" -> TestNumber))
+        (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
       )
     )
 
@@ -148,7 +148,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   test("untagged parameters in anonymous soql - impersonating a saved query") {
     val tf = new MockTableFinder(
       Map(
-        (0, "aaaa-aaaa") -> D(Map("text" -> TestText, "num" -> TestNumber))
+        (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
       )
     )
 
@@ -178,7 +178,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   test("untagged parameters in anonymous soql - anonymous parameters") {
     val tf = new MockTableFinder(
       Map(
-        (0, "aaaa-aaaa") -> D(Map("text" -> TestText, "num" -> TestNumber))
+        (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
       )
     )
 
@@ -209,7 +209,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   test("untagged parameters in anonymous soql - redirected parameters") {
     val tf = new MockTableFinder(
       Map(
-        (0, "aaaa-aaaa") -> D(Map("text" -> TestText, "num" -> TestNumber))
+        (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
       )
     )
 
@@ -240,8 +240,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   test("UDF - simple") {
     val tf = new MockTableFinder(
       Map(
-        (0, "aaaa-aaaa") -> D(Map("text" -> TestText, "num" -> TestNumber)),
-        (0, "bbbb-bbbb") -> D(Map("user" -> TestText, "allowed" -> TestBoolean)),
+        (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber),
+        (0, "bbbb-bbbb") -> D("user" -> TestText, "allowed" -> TestBoolean),
         (0, "cccc-cccc") -> U(0, "select 1 from @bbbb-bbbb where user = ?user and allowed limit 1", "user" -> TestText)
       )
     )
@@ -344,8 +344,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   test("UDF - referencing outer column") {
     val tf = new MockTableFinder(
       Map(
-        (0, "aaaa-aaaa") -> D(Map("text" -> TestText, "num" -> TestNumber)),
-        (0, "bbbb-bbbb") -> D(Map("user" -> TestText, "allowed" -> TestBoolean)),
+        (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber),
+        (0, "bbbb-bbbb") -> D("user" -> TestText, "allowed" -> TestBoolean),
         (0, "cccc-cccc") -> U(0, "select 1 from @bbbb-bbbb where user = ?user and allowed limit 1", "user" -> TestText)
       )
     )
@@ -444,18 +444,5 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
         LiteralValue(TestBoolean(true))(NoPosition)
       )
     )
-  }
-
-  test("burble") {
-    val tf = new MockTableFinder(
-      Map(
-        (0, "aaaa-aaaa") -> D(Map("text" -> TestText, "num" -> TestNumber))
-      )
-    )
-
-    val tf.Success(start) = tf.findTables(0, rn("aaaa-aaaa"), "select count(count(num)) filter (where num = 5) over (rows unbounded preceding exclude current row) as row_number")
-    val analysis = analyzer(start, UserParameters.empty)
-
-    println(analysis.statement.debugStr)
   }
 }

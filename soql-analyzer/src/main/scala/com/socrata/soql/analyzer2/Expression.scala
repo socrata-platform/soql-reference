@@ -1,9 +1,15 @@
 package com.socrata.soql.analyzer2
 
+import scala.language.higherKinds
 import scala.util.parsing.input.Position
 
+import com.socrata.prettyprint.prelude._
+import com.socrata.prettyprint.Pretty
+
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.typechecker.HasType
+import com.socrata.soql.typechecker.{HasType, HasDoc}
+
+import DocUtils._
 
 sealed abstract class Expr[+CT, +CV] extends Product {
   type Self[+CT, +CV] <: Expr[CT, CV]
@@ -19,8 +25,9 @@ sealed abstract class Expr[+CT, +CV] extends Product {
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[CT, CV]
 
-  final def debugStr: String = debugStr(new StringBuilder).toString
-  def debugStr(sb: StringBuilder): StringBuilder
+  final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
+  final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder = debugDoc.layoutSmart().toStringBuilder(sb)
+  def debugDoc(implicit ev: HasDoc[CV]): Doc[ResourceAnn[Nothing, CT]]
 
   // Since this is completely immutable, cache the hashCode rather
   // than recomputing, as these trees can be quite deep.  Annoying
@@ -46,8 +53,8 @@ final case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(va
 
   val size = 1
 
-  override def debugStr(sb: StringBuilder): StringBuilder =
-    sb.append(table).append('.').append(column)
+  def debugDoc(implicit ev: HasDoc[Nothing]) =
+    (table.debugDoc ++ d"." ++ column.debugDoc).annotate(ResourceAnn.from(table, column)).annotate(ResourceAnn.from(typ))
 }
 
 final case class SelectListReference[+CT](index: Int, isAggregated: Boolean, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
@@ -61,8 +68,7 @@ final case class SelectListReference[+CT](index: Int, isAggregated: Boolean, typ
   private[analyzer2] def doRelabel(state: RelabelState) =
     this
 
-  override def debugStr(sb: StringBuilder): StringBuilder =
-    sb.append(index)
+  def debugDoc(implicit ev: HasDoc[Nothing]) = Doc(index.toString).annotate(ResourceAnn.from(typ))
 }
 
 sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
@@ -76,8 +82,8 @@ final case class LiteralValue[+CT, +CV](value: CV)(val position: Position)(impli
   val typ = ev.typeOf(value)
   val size = 1
 
-  override def debugStr(sb: StringBuilder): StringBuilder =
-    sb.append(value)
+  def debugDoc(implicit ev: HasDoc[CV]) =
+    ev.docOf(value).annotate(ResourceAnn.from(typ))
 
   def doRelabel(state: RelabelState) = this
   def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
@@ -87,8 +93,8 @@ final case class NullLiteral[+CT](typ: CT)(val position: Position) extends Liter
 
   val size = 1
 
-  override def debugStr(sb: StringBuilder): StringBuilder =
-    sb.append("NULL")
+  def debugDoc(implicit ev: HasDoc[Nothing]) =
+    d"NULL".annotate(ResourceAnn.from(typ))
 
   def doRelabel(state: RelabelState) = this
   def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
@@ -119,16 +125,8 @@ final case class FunctionCall[+CT, +CV](
   private[analyzer2] def doRelabel(state: RelabelState) =
     copy(args = args.map(_.doRelabel(state)))(position, functionNamePosition)
 
-  override def debugStr(sb: StringBuilder): StringBuilder = {
-    sb.append(function.name).append('(')
-    var didOne = false
-    for(arg <- args) {
-      if(didOne) sb.append(", ")
-      else didOne = true
-      arg.debugStr(sb)
-    }
-    sb.append(')')
-  }
+  def debugDoc(implicit ev: HasDoc[CV]) =
+    args.map(_.debugDoc).encloseHanging(Doc(function.name.name) ++ d"(", d",", d")").annotate(ResourceAnn.from(typ))
 }
 final case class AggregateFunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
@@ -154,24 +152,17 @@ final case class AggregateFunctionCall[+CT, +CV](
     copy(args = args.map(_.doRelabel(state)),
          filter = filter.map(_.doRelabel(state)))(position, functionNamePosition)
 
-  override def debugStr(sb: StringBuilder): StringBuilder = {
-    sb.append(function.name).append('(')
-    if(distinct) {
-      sb.append("DISTINCT ")
-    }
-    var didOne = false
-    for(arg <- args) {
-      if(didOne) sb.append(", ")
-      else didOne = true
-      arg.debugStr(sb)
-    }
-    sb.append(')')
-    for(f <- filter) {
-      sb.append(" FILTER (WHERE ")
-      f.debugStr(sb)
-      sb.append(')')
-    }
-    sb
+  def debugDoc(implicit ev: HasDoc[CV]) = {
+    val preArgs = Seq(
+      Some(Doc(function.name.name)),
+      Some(d"("),
+      if(distinct) Some(d"DISTINCT ") else None
+    ).flatten.hcat
+    val postArgs = Seq(
+      Some(d")"),
+      filter.map { w => w.debugDoc.encloseNesting(d"FILTER (", d")") }
+    ).flatten.hsep
+    args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs).annotate(ResourceAnn.from(typ))
   }
 }
 final case class WindowedFunctionCall[+CT, +CV](
@@ -204,33 +195,27 @@ final case class WindowedFunctionCall[+CT, +CV](
          partitionBy = partitionBy.map(_.doRelabel(state)),
          orderBy = orderBy.map(_.doRelabel(state)))(position, functionNamePosition)
 
-  override def debugStr(sb: StringBuilder): StringBuilder = {
-    sb.append(function.name).append('(')
-    var didOne = false
-    for(arg <- args) {
-      if(didOne) sb.append(", ")
-      else didOne = true
-      arg.debugStr(sb)
-    }
-    for(f <- filter) {
-      sb.append(" FILTER (WHERE ")
-      f.debugStr(sb)
-      sb.append(')')
-    }
-    sb.append(") OVER (")
-    for(Frame(context, start, end, exclusion) <- frame) {
-      sb.append(context)
-      if(end.isDefined) sb.append(" BETWEEN")
-      sb.append(' ')
-      sb.append(start)
-      end.foreach { e =>
-        sb.append(' ').append(e)
-      }
-      exclusion.foreach { e =>
-        sb.append(" EXCLUDE ").append(e)
-      }
-    }
-    sb.append(')')
+  def debugDoc(implicit ev: HasDoc[CV]) = {
+    val preArgs: Doc[Nothing] = Doc(function.name.name) ++ d"("
+    val windowParts: Doc[ResourceAnn[Nothing, CT]] =
+      Seq[Option[Doc[ResourceAnn[Nothing, CT]]]](
+        if(partitionBy.nonEmpty) {
+          Some((d"PARTITION BY" +: partitionBy.map(_.debugDoc).punctuate(d",")).sep.nest(2))
+        } else {
+          None
+        },
+        if(orderBy.nonEmpty) {
+          Some((d"ORDER BY" +: orderBy.map(_.debugDoc).punctuate(d",")).sep.nest(2))
+        } else {
+          None
+        },
+        frame.map(_.debugDoc)
+      ).flatten.sep.encloseNesting(d"(", d")")
+    val postArgs = Seq(
+      Some(d")"),
+      filter.map { w => w.debugDoc.encloseNesting(d"FILTER (", d") OVER" +#+ windowParts) }
+    ).flatten.hsep
+    args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs).annotate(ResourceAnn.from(typ))
   }
 }
 
@@ -239,28 +224,53 @@ case class Frame(
   start: FrameBound,
   end: Option[FrameBound],
   exclusion: Option[FrameExclusion]
-)
+) {
+  def debugDoc =
+    Seq(
+      Some(context.debugDoc),
+      Some(end match {
+        case None => start.debugDoc
+        case Some(end) =>
+          Seq(d"BETWEEN", start.debugDoc, d"AND", end.debugDoc).hsep
+      }),
+      exclusion.map { e =>
+        d"EXCLUDE" +#+ e.debugDoc
+      }
+    ).flatten.sep
+}
 
-sealed abstract class FrameContext
+sealed abstract class FrameContext(val debugDoc: Doc[Nothing])
 object FrameContext {
-  case object Range extends FrameContext
-  case object Rows extends FrameContext
-  case object Groups extends FrameContext
+  case object Range extends FrameContext(d"RANGE")
+  case object Rows extends FrameContext(d"ROWS")
+  case object Groups extends FrameContext(d"GROUPS")
 }
 
-sealed abstract class FrameBound
+sealed abstract class FrameBound {
+  def debugDoc: Doc[Nothing]
+}
 object FrameBound {
-  case object UnboundedPreceding extends FrameBound
-  case class Preceding(n: Long) extends FrameBound
-  case object CurrentRow extends FrameBound
-  case class Following(n: Long) extends FrameBound
-  case object UnboundedFollowing extends FrameBound
+  case object UnboundedPreceding extends FrameBound {
+    def debugDoc = d"UNBOUNDED PRECEDING"
+  }
+  case class Preceding(n: Long) extends FrameBound {
+    def debugDoc = d"$n PRECEDING"
+  }
+  case object CurrentRow extends FrameBound {
+    def debugDoc = d"CURRENT ROW"
+  }
+  case class Following(n: Long) extends FrameBound {
+    def debugDoc = d"$n FOLLOWING"
+  }
+  case object UnboundedFollowing extends FrameBound {
+    def debugDoc = d"UNBOUNDED FOLLOWING"
+  }
 }
 
-sealed abstract class FrameExclusion
+sealed abstract class FrameExclusion(val debugDoc: Doc[Nothing])
 object FrameExclusion {
-  case object CurrentRow extends FrameExclusion
-  case object Group extends FrameExclusion
-  case object Ties extends FrameExclusion
-  case object NoOthers extends FrameExclusion
+  case object CurrentRow extends FrameExclusion(d"CURRENT ROW")
+  case object Group extends FrameExclusion(d"GROUP")
+  case object Ties extends FrameExclusion(d"TIES")
+  case object NoOthers extends FrameExclusion(d"NO OTHERS")
 }

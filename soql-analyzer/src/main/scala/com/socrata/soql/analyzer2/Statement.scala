@@ -1,10 +1,18 @@
 package com.socrata.soql.analyzer2
 
 import scala.annotation.tailrec
+import scala.language.higherKinds
 import scala.util.parsing.input.Position
+
+import com.rojoma.json.v3.ast.JString
+import com.socrata.prettyprint.prelude._
+
 
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName}
+import com.socrata.soql.typechecker.HasDoc
+
+import DocUtils._
 
 sealed abstract class Statement[+RNS, +CT, +CV] {
   type Self[+RNS, +CT, +CV] <: Statement[RNS, CT, CV]
@@ -39,8 +47,10 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[RNS, CT, CV]
 
-  final def debugStr: String = debugStr(new StringBuilder).toString
-  def debugStr(sb: StringBuilder): StringBuilder
+  final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
+  final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder =
+    debugDoc.layoutSmart().toStringBuilder(sb)
+  def debugDoc(implicit ev: HasDoc[CV]): Doc[ResourceAnn[RNS, CT]]
 
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV]
 }
@@ -70,18 +80,12 @@ case class CombinedTables[+RNS, +CT, +CV](
 
   def numericate = copy(left = left.numericate, right = right.numericate)
 
-  override def debugStr(sb: StringBuilder) = {
-    sb.append('(')
-    left.debugStr(sb)
-    sb.append(") ")
-    sb.append(op.toString)
-    sb.append(" (")
-    right.debugStr(sb)
-    sb.append(")")
-  }
-
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
     copy(left = left.mapAlias(f), right = right.mapAlias(f))
+
+  override def debugDoc(implicit ev: HasDoc[CV]): Doc[ResourceAnn[RNS, CT]] = {
+    left.debugDoc.encloseNesting(d"(", d")") +#+ op.debugDoc +#+ right.debugDoc.encloseNesting(d"(", d")")
+  }
 }
 
 case class CTE[+RNS, +CT, +CV](
@@ -113,18 +117,15 @@ case class CTE[+RNS, +CT, +CV](
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
     copy(definitionQuery = definitionQuery.mapAlias(f), useQuery = useQuery.mapAlias(f))
 
-  override def debugStr(sb: StringBuilder) = {
-    sb.append( "WITH ").append(definitionLabel).append(" AS ")
-    materializedHint match {
-      case MaterializedHint.Default => // ok
-      case MaterializedHint.Materialized => sb.append("MATERIALIZED ")
-      case MaterializedHint.NotMaterialized => sb.append("NOT MATERIALIZED ")
-    }
-    sb.append("(")
-    definitionQuery.debugStr(sb)
-    sb.append(") ")
-    useQuery.debugStr(sb)
-  }
+  override def debugDoc(implicit ev: HasDoc[CV]): Doc[ResourceAnn[RNS, CT]] =
+    Seq(
+      Seq(
+        Some(d"WITH" +#+ definitionLabel.debugDoc +#+ d"AS"),
+        materializedHint.debugDoc
+      ).flatten.hsep,
+      definitionQuery.debugDoc.encloseNesting(d"(", d")"),
+      useQuery.debugDoc
+    ).sep
 }
 
 case class Values[+CT, +CV](
@@ -159,23 +160,13 @@ case class Values[+CT, +CV](
   private[analyzer2] def doRelabel(state: RelabelState): Self[Nothing, CT, CV] =
     copy(values = values.map(_.map(_.doRelabel(state))))
 
-  override def debugStr(sb: StringBuilder) = {
-    sb.append("values ")
-    var didOne = false
-    for(list <- values) {
-      if(didOne) sb.append(", ")
-      else didOne = true
-
-      sb.append('(')
-      var didExpr = false
-      for(expr <- list) {
-        if(didExpr) sb.append(", ")
-        else didExpr = true
-        expr.debugStr(sb)
-      }
-      sb.append(')')
-    }
-    sb
+  override def debugDoc(implicit ev: HasDoc[CV]): Doc[ResourceAnn[Nothing, CT]] = {
+    Seq(
+      d"VALUES",
+      values.toSeq.map { row =>
+        row.toSeq.zip(schema.keys).map { case (expr, label) => expr.debugDoc.annotate(ResourceAnn.ColumnDef(label)) }.encloseNesting(d"(", d",", d")")
+      }.encloseNesting(d"(", d",", d")")
+    ).sep.nest(2)
   }
 }
 
@@ -257,63 +248,29 @@ case class Select[+RNS, +CT, +CV](
     )
   }
 
-  def debugStr(sb: StringBuilder) = {
-    sb.append("SELECT ")
-
-    distinctiveness.debugStr(sb)
-
-    {
-      var didOne = false
-      for((col, expr) <- selectList) {
-        if(didOne) sb.append(", ")
-        else didOne = true
-        expr.expr.debugStr(sb).append(" AS ").append(col)
-      }
-    }
-
-    sb.append(" FROM ")
-    from.debugStr(sb)
-
-    for(w <- where) {
-      sb.append(" WHERE ")
-      w.debugStr(sb)
-    }
-
-    if(groupBy.nonEmpty) {
-      sb.append(" GROUP BY ")
-      var didOne = false
-      for(gb <- groupBy) {
-        if(didOne) sb.append(", ")
-        else didOne = true
-        gb.debugStr(sb)
-      }
-    }
-
-    for(h <- having) {
-      sb.append(" HAVING ")
-      h.debugStr(sb)
-    }
-
-    if(orderBy.nonEmpty) {
-      sb.append(" ORDER BY ")
-      var didOne = false
-      for(ob <- orderBy) {
-        if(didOne) sb.append(", ")
-        else didOne = true
-        ob.debugStr(sb)
-      }
-    }
-
-    for(l <- offset) {
-      sb.append(" OFFSET ").append(l)
-    }
-    for(l <- limit) {
-      sb.append(" LIMIT ").append(l)
-    }
-    for(s <- search) {
-      sb.append(" SEARCH ").append(com.rojoma.json.v3.ast.JString(s))
-    }
-
-    sb
-  }
+  override def debugDoc(implicit ev: HasDoc[CV]) =
+    Seq[Option[Doc[ResourceAnn[RNS, CT]]]](
+      Some(
+        (Seq(Some(d"SELECT"), distinctiveness.debugDoc).flatten.hsep +:
+          selectList.toSeq.map { case (columnLabel, NamedExpr(expr, columnName)) =>
+            expr.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ columnLabel.debugDoc.annotate(ResourceAnn.from(columnName, columnLabel))
+          }.punctuate(d",")).sep.nest(2)
+      ),
+      Some(Seq(d"FROM", from.debugDoc).sep.nest(2)),
+      where.map { w => Seq(d"WHERE", w.debugDoc).sep.nest(2) },
+      if(groupBy.nonEmpty) {
+        Some((d"GROUP BY" +: groupBy.map(_.debugDoc).punctuate(d",")).sep.nest(2))
+      } else {
+        None
+      },
+      having.map { h => Seq(d"HAVING", h.debugDoc).sep.nest(2) },
+      if(orderBy.nonEmpty) {
+        Some((d"ORDER BY" +: orderBy.map(_.debugDoc).punctuate(d",")).sep.nest(2))
+      } else {
+        None
+      },
+      limit.map { l => d"LIMIT $l" },
+      offset.map { o => d"OFFSET $o" },
+      search.map { s => Seq(d"SEARCH", Doc(JString(s).toString)).sep }
+    ).flatten.sep
 }

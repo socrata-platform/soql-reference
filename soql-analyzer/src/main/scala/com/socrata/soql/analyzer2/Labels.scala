@@ -1,5 +1,7 @@
 package com.socrata.soql.analyzer2
 
+import com.socrata.prettyprint.prelude._
+
 class LabelProvider(tablePattern: Int => String, columnPattern: Int => String) {
   private var tables = 0
   private var columns = 0
@@ -14,7 +16,9 @@ class LabelProvider(tablePattern: Int => String, columnPattern: Int => String) {
   }
 }
 
-sealed abstract class TableLabel
+sealed abstract class TableLabel {
+  def debugDoc: Doc[Nothing] = Doc(toString)
+}
 final class AutoTableLabel private[analyzer2] (private val name: String) extends TableLabel {
   override def toString = name
 
@@ -31,7 +35,9 @@ object AutoTableLabel {
 final case class DatabaseTableName(name: String) extends TableLabel {
   override def toString = name
 }
-sealed abstract class ColumnLabel
+sealed abstract class ColumnLabel {
+  def debugDoc: Doc[Nothing] = Doc(toString)
+}
 final class AutoColumnLabel private[analyzer2] (private val name: String) extends ColumnLabel {
   override def toString = name
 

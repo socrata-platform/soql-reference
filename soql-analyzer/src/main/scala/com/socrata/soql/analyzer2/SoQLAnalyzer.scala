@@ -38,6 +38,13 @@ case class UserParameters[+CT, +CV](
 )
 object UserParameters {
   val empty = UserParameters[Nothing, Nothing](Map.empty, Right(Map.empty))
+
+  def emptyFor[RNS, CT](map: FoundTables[RNS, CT]) = {
+    val known = map.knownUserParameters.iterator.map { case (cn, hnct) =>
+      cn -> hnct.iterator.map { case (hn, ct) => hn -> Left(TypedNull(ct)) }.toMap
+    }.toMap
+    UserParameters(known)
+  }
 }
 
 class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: FunctionInfo[CT]) {
