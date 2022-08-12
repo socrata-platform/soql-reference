@@ -5,28 +5,40 @@ import scala.annotation.tailrec
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.ResourceName
 
-sealed abstract class From[+CT, +CV] {
-  type Self[+CT, +CV] <: From[CT, CV]
+sealed abstract class From[+RNS, +CT, +CV] {
+  type Self[+RNS, +CT, +CV] <: From[RNS, CT, CV]
 
   // extend the given environment with names introduced by this FROM clause
   private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]): Either[AddScopeError, Environment[CT2]]
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[CT, CV]
+  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[RNS, CT, CV]
 
-  private[analyzer2] def doRelabel(state: RelabelState): Self[CT, CV]
+  private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV]
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
-  def numericate: Self[CT, CV]
+  def numericate: Self[RNS, CT, CV]
 
   def debugStr(sb: StringBuilder): StringBuilder
 
-  def reduceMapRight[S, CT2 >: CT, CV2 >: CV, CT3, CV3](combine: (JoinType, Boolean, AtomicFrom[CT2, CV2], From[CT3, CV3], Expr[CT2, CV2], S) => (Join[CT3, CV3], S), base: AtomicFrom[CT2, CV2] => (From[CT3, CV3], S)): (From[CT3, CV3], S)
-  def mapRight[CT2 >: CT, CV2 >: CV, CT3, CV3](combine: (JoinType, Boolean, AtomicFrom[CT2, CV2], From[CT3, CV3], Expr[CT2, CV2]) => Join[CT3, CV3], base: AtomicFrom[CT2, CV2] => From[CT3, CV3]): From[CT3, CV3]
+  def reduceMapRight[S, RNS2 >: RNS, CT2 >: CT, CV2 >: CV, RNS3, CT3, CV3](
+    combine: (JoinType, Boolean, AtomicFrom[RNS2, CT2, CV2], From[RNS3, CT3, CV3], Expr[CT2, CV2], S) => (From[RNS3, CT3, CV3], S),
+    base: AtomicFrom[RNS2, CT2, CV2] => (From[RNS3, CT3, CV3], S)
+  ): (From[RNS3, CT3, CV3], S)
+
+  final def mapRight[RNS2 >: RNS, CT2 >: CT, CV2 >: CV, RNS3, CT3, CV3](
+    combine: (JoinType, Boolean, AtomicFrom[RNS2, CT2, CV2], From[RNS3, CT3, CV3], Expr[CT2, CV2]) => From[RNS3, CT3, CV3],
+    base: AtomicFrom[RNS2, CT2, CV2] => From[RNS3, CT3, CV3]
+  ): From[RNS3, CT3, CV3] = {
+    reduceMapRight[Unit, RNS2, CT2, CV2, RNS3, CT3, CV3](
+      { (joinType, lateral, left, right, on, _) => (combine(joinType, lateral, left, right, on), ()) },
+      { (nonJoin: AtomicFrom[RNS2, CT2, CV2]) => (base.apply(nonJoin), ()) }
+    )._1
+  }
 }
 
-case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom[CT, CV], right: From[CT, CV], on: Expr[CT, CV]) extends From[CT, CV] {
-  type Self[+CT, +CV] = Join[CT, CV]
+case class Join[+RNS, +CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom[RNS, CT, CV], right: From[RNS, CT, CV], on: Expr[CT, CV]) extends From[RNS, CT, CV] {
+  type Self[+RNS, +CT, +CV] = Join[RNS, CT, CV]
 
   // The difference between a lateral and a non-lateral join is the
   // environment assumed while typechecking; in a non-lateral join
@@ -42,14 +54,14 @@ case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom
   // as a loop so that a lot of joins don't use a lot of stack.
   private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]) = {
     @tailrec
-    def loop(acc: Environment[CT2], self: From[CT2, CV]): Either[AddScopeError, Environment[CT2]] = {
+    def loop(acc: Environment[CT2], self: From[RNS, CT2, CV]): Either[AddScopeError, Environment[CT2]] = {
       self match {
         case j@Join(_, _, left, right, _) =>
-          acc.addScope(left.alias, left.scope) match {
+          acc.addScope(left.alias.map(_._2), left.scope) match {
             case Right(env) => loop(env, right)
             case Left(err) => Left(err)
           }
-        case other: AtomicFrom[CT2, CV] =>
+        case other: AtomicFrom[RNS, CT2, CV] =>
           other.addToEnvironment(acc)
       }
     }
@@ -58,7 +70,7 @@ case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName] = {
     @tailrec
-    def loop(acc: Map[AutoTableLabel, DatabaseTableName], self: From[CT, CV]): Map[AutoTableLabel, DatabaseTableName] = {
+    def loop(acc: Map[AutoTableLabel, DatabaseTableName], self: From[RNS, CT, CV]): Map[AutoTableLabel, DatabaseTableName] = {
       self match {
         case j@Join(_, _, left, right, _) =>
           loop(acc ++ left.realTables, right)
@@ -69,15 +81,18 @@ case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom
     loop(Map.empty, this)
   }
 
-  override def reduceMapRight[S, CT2 >: CT, CV2 >: CV, CT3, CV3](combine: (JoinType, Boolean, AtomicFrom[CT2, CV2], From[CT3, CV3], Expr[CT2, CV2], S) => (Join[CT3, CV3], S), base: AtomicFrom[CT2, CV2] => (From[CT3, CV3], S)): (Join[CT3, CV3], S) = {
-    type Stack = List[(From[CT3, CV3], S) => (Join[CT3, CV3], S)]
+  override def reduceMapRight[S, RNS2 >: RNS, CT2 >: CT, CV2 >: CV, RNS3, CT3, CV3](
+    combine: (JoinType, Boolean, AtomicFrom[RNS2, CT2, CV2], From[RNS3, CT3, CV3], Expr[CT2, CV2], S) => (From[RNS3, CT3, CV3], S),
+    base: AtomicFrom[RNS2, CT2, CV2] => (From[RNS3, CT3, CV3], S)
+  ): (From[RNS3, CT3, CV3], S) = {
+    type Stack = List[(From[RNS3, CT3, CV3], S) => (From[RNS3, CT3, CV3], S)]
 
     @tailrec
-    def loop(self: From[CT2, CV2], stack: Stack): (From[CT3, CV3], S) = {
+    def loop(self: From[RNS2, CT2, CV2], stack: Stack): (From[RNS3, CT3, CV3], S) = {
       self match {
         case Join(joinType, lateral, left, right, on) =>
           loop(right, { (newRight, s) => combine(joinType, lateral, left, newRight, on, s) } :: stack)
-        case last: AtomicFrom[CT2, CV2] =>
+        case last: AtomicFrom[RNS2, CT2, CV2] =>
           stack.foldLeft(base(last)) { (acc, f) =>
             val (right, s) = acc
             f(right, s)
@@ -85,55 +100,46 @@ case class Join[+CT, +CV](joinType: JoinType, lateral: Boolean, left: AtomicFrom
       }
     }
 
-    val (result, s) = loop(this, Nil)
-
-    (result.asInstanceOf[Join[CT3, CV3]], s)
+    loop(this, Nil)
   }
 
-  override def mapRight[CT2 >: CT, CV2 >: CV, CT3, CV3](combine: (JoinType, Boolean, AtomicFrom[CT2, CV2], From[CT3, CV3], Expr[CT2, CV2]) => Join[CT3, CV3], base: AtomicFrom[CT2, CV2] => From[CT3, CV3]): Join[CT3, CV3] = {
-    reduceMapRight[Unit, CT2, CV2, CT3, CV3](
-      { (joinType, lateral, left, right, on, _) => (combine(joinType, lateral, left, right, on), ()) },
-      { nonJoin => (base(nonJoin), ()) }
-    )._1
-  }
-
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Join[CT, CV] = {
-    mapRight[CT, CV, CT, CV](
+  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Join[RNS, CT, CV] = {
+    mapRight[RNS, CT, CV, RNS, CT, CV](
        { (joinType, lateral, left, right, on) =>
          val newLeft = left.doRewriteDatabaseNames(state)
          val newOn = on.doRewriteDatabaseNames(state)
          Join(joinType, lateral, newLeft, right, newOn)
        },
        _.doRewriteDatabaseNames(state)
-    )
+    ).asInstanceOf[Join[RNS, CT, CV]]
   }
 
-  private[analyzer2] def doRelabel(state: RelabelState): Join[CT, CV] = {
-    mapRight[CT, CV, CT, CV](
+  private[analyzer2] def doRelabel(state: RelabelState): Join[RNS, CT, CV] = {
+    mapRight[RNS, CT, CV, RNS, CT, CV](
       { (joinType, lateral, left, right, on) =>
         val newLeft = left.doRelabel(state)
         val newOn = on.doRelabel(state)
         Join(joinType, lateral, newLeft, right, newOn)
       },
       _.doRelabel(state)
-    )
+    ).asInstanceOf[Join[RNS, CT, CV]]
   }
 
-  def numericate: Join[CT, CV] = {
-    mapRight[CT, CV, CT, CV](
+  def numericate: Join[RNS, CT, CV] = {
+    mapRight[RNS, CT, CV, RNS, CT, CV](
       { (joinType, lateral, left, right, on) =>
         val newLeft = left.numericate
         Join(joinType, lateral, newLeft, right, on)
       },
       _.numericate
-    )
+    ).asInstanceOf[Join[RNS, CT, CV]]
   }
 
   def debugStr(sb: StringBuilder): StringBuilder = {
     left.debugStr(sb)
-    def loop(prevJoin: Join[CT, CV], from: From[CT, CV]): StringBuilder = {
+    def loop(prevJoin: Join[RNS, CT, CV], from: From[RNS, CT, CV]): StringBuilder = {
       from match {
-        case j: Join[CT, CV] =>
+        case j: Join[RNS, CT, CV] =>
           sb.
             append(' ').
             append(prevJoin.joinType).
@@ -165,10 +171,10 @@ object JoinType {
   case object FullOuter extends JoinType
 }
 
-sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
-  type Self[+CT, +CV] <: AtomicFrom[CT, CV]
+sealed abstract class AtomicFrom[+RNS, +CT, +CV] extends From[RNS, CT, CV] {
+  type Self[+RNS, +CT, +CV] <: AtomicFrom[RNS, CT, CV]
 
-  val alias: Option[ResourceName]
+  val alias: Option[(RNS, ResourceName)]
   val label: TableLabel
 
   private[analyzer2] val scope: Scope[CT]
@@ -177,20 +183,20 @@ sealed abstract class AtomicFrom[+CT, +CV] extends From[CT, CV] {
     addToEnvironment(base.extend)
   }
   private[analyzer2] def addToEnvironment[CT2 >: CT](env: Environment[CT2]) = {
-    env.addScope(alias, scope)
+    env.addScope(alias.map(_._2), scope)
   }
 
-  override final def reduceMapRight[S, CT2 >: CT, CV2 >: CV, CT3, CV3](combine: (JoinType, Boolean, AtomicFrom[CT2, CV2], From[CT3, CV3], Expr[CT2, CV2], S) => (Join[CT3, CV3], S), base: AtomicFrom[CT2, CV2] => (From[CT3, CV3], S)): (From[CT3, CV3], S) =
+  override final def reduceMapRight[S, RNS2 >: RNS, CT2 >: CT, CV2 >: CV, RNS3, CT3, CV3](
+    combine: (JoinType, Boolean, AtomicFrom[RNS2, CT2, CV2], From[RNS3, CT3, CV3], Expr[CT2, CV2], S) => (From[RNS3, CT3, CV3], S),
+    base: AtomicFrom[RNS2, CT2, CV2] => (From[RNS3, CT3, CV3], S)
+  ): (From[RNS3, CT3, CV3], S) =
     base(this)
 
-  override final def mapRight[CT2 >: CT, CV2 >: CV, CT3, CV3](combine: (JoinType, Boolean, AtomicFrom[CT2, CV2], From[CT3, CV3], Expr[CT2, CV2]) => Join[CT3, CV3], base: AtomicFrom[CT2, CV2] => From[CT3, CV3]): From[CT3, CV3] =
-    base(this)
-
-  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): Self[CT, CV]
+  private[analyzer2] def reAlias[RNS2 >: RNS](newAlias: Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV]
 }
 
-sealed abstract class FromTableLike[+CT] extends AtomicFrom[CT, Nothing] {
-  type Self[+CT, +CV] <: FromTableLike[CT]
+sealed abstract class FromTableLike[+RNS, +CT] extends AtomicFrom[RNS, CT, Nothing] {
+  type Self[+RNS, +CT, +CV] <: FromTableLike[RNS, CT]
 
   val tableName: TableLabel
   val columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]
@@ -202,8 +208,8 @@ sealed abstract class FromTableLike[+CT] extends AtomicFrom[CT, Nothing] {
   }
 }
 
-case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceName], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[CT] {
-  type Self[+CT, +CV] = FromTable[CT]
+case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS, ResourceName)], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[RNS, CT] {
+  type Self[+RNS, +CT, +CV] = FromTable[RNS, CT]
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     copy(
@@ -217,18 +223,18 @@ case class FromTable[+CT](tableName: DatabaseTableName, alias: Option[ResourceNa
 
   private[analyzer2] def realTables = Map(label -> tableName)
 
-  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromTable[CT] =
+  private[analyzer2] def reAlias[RNS2](newAlias: Option[(RNS2, ResourceName)]): FromTable[RNS2, CT] =
     copy(alias = newAlias)
 
 
   def numericate: this.type = this
 }
 
-case class FromVirtualTable[+CT](tableName: AutoTableLabel, alias: Option[ResourceName], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[CT] {
+case class FromVirtualTable[+RNS, +CT](tableName: AutoTableLabel, alias: Option[(RNS, ResourceName)], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[RNS, CT] {
   // This is just like FromTable except it does not participate in the
   // DatabaseName-renaming system.
 
-  type Self[+CT, +CV] = FromVirtualTable[CT]
+  type Self[+RNS, +CT, +CV] = FromVirtualTable[RNS, CT]
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
 
@@ -238,7 +244,7 @@ case class FromVirtualTable[+CT](tableName: AutoTableLabel, alias: Option[Resour
 
   private[analyzer2] def realTables = Map.empty
 
-  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromVirtualTable[CT] =
+  private[analyzer2] def reAlias[RNS2](newAlias: Option[(RNS2, ResourceName)]): FromVirtualTable[RNS2, CT] =
     copy(alias = newAlias)
 
   def numericate: this.type = this
@@ -248,8 +254,8 @@ case class FromVirtualTable[+CT](tableName: AutoTableLabel, alias: Option[Resour
 // real subselect syntactically requires an alias, but `select ... |>
 // select ...` does not.  The alias is just for name-resolution during
 // analysis anyway...
-case class FromStatement[+CT, +CV](statement: Statement[CT, CV], label: TableLabel, alias: Option[ResourceName]) extends AtomicFrom[CT, CV] {
-  type Self[+CT, +CV] = FromStatement[CT, CV]
+case class FromStatement[+RNS, +CT, +CV](statement: Statement[RNS, CT, CV], label: TableLabel, alias: Option[(RNS, ResourceName)]) extends AtomicFrom[RNS, CT, CV] {
+  type Self[+RNS, +CT, +CV] = FromStatement[RNS, CT, CV]
 
   private[analyzer2] val scope: Scope[CT] = Scope(statement.schema, label)
 
@@ -263,7 +269,7 @@ case class FromStatement[+CT, +CV](statement: Statement[CT, CV], label: TableLab
          label = state.convert(label))
   }
 
-  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromStatement[CT, CV] =
+  private[analyzer2] def reAlias[RNS2 >: RNS](newAlias: Option[(RNS2, ResourceName)]): FromStatement[RNS2, CT, CV] =
     copy(alias = newAlias)
 
   private[analyzer2] def realTables = Map.empty
@@ -275,8 +281,8 @@ case class FromStatement[+CT, +CV](statement: Statement[CT, CV], label: TableLab
   }
 }
 
-case class FromSingleRow(label: TableLabel, alias: Option[ResourceName]) extends AtomicFrom[Nothing, Nothing] {
-  type Self[+CT, +CV] = FromSingleRow
+case class FromSingleRow[+RNS](label: TableLabel, alias: Option[(RNS, ResourceName)]) extends AtomicFrom[RNS, Nothing, Nothing] {
+  type Self[+RNS, +CT, +CV] = FromSingleRow[RNS]
 
   private[analyzer2] val scope: Scope[Nothing] =
     Scope(
@@ -292,7 +298,7 @@ case class FromSingleRow(label: TableLabel, alias: Option[ResourceName]) extends
     copy(label = state.convert(label))
   }
 
-  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromSingleRow =
+  private[analyzer2] def reAlias[RNS2 >: RNS](newAlias: Option[(RNS2, ResourceName)]): FromSingleRow[RNS2] =
     copy(alias = newAlias)
 
   private[analyzer2] def realTables = Map.empty

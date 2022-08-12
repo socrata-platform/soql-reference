@@ -6,8 +6,8 @@ import scala.util.parsing.input.Position
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName}
 
-sealed abstract class Statement[+CT, +CV] {
-  type Self[+CT, +CV] <: Statement[CT, CV]
+sealed abstract class Statement[+RNS, +CT, +CV] {
+  type Self[+RNS, +CT, +CV] <: Statement[RNS, CT, CV]
 
   val schema: OrderedMap[_ <: ColumnLabel, NameEntry[CT]]
 
@@ -17,16 +17,16 @@ sealed abstract class Statement[+CT, +CV] {
     tableName: DatabaseTableName => DatabaseTableName,
     // This is given the _original_ database table name
     columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): Self[CT, CV] =
+  ): Self[RNS, CT, CV] =
     doRewriteDatabaseNames(new RewriteDatabaseNamesState(realTables, tableName, columnName))
 
   /** The names that the SoQLAnalyzer produces aren't necessarily safe
     * for use in any particular database.  This lets those
     * automatically-generated names be systematically replaced. */
-  final def relabel(using: LabelProvider): Self[CT, CV] =
+  final def relabel(using: LabelProvider): Self[RNS, CT, CV] =
     doRelabel(new RelabelState(using))
 
-  private[analyzer2] def doRelabel(state: RelabelState): Self[CT, CV]
+  private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV]
 
   /** For SQL forms that can refer to the select-columns by number, replace relevant
     * entries in those forms with the relevant select-column-index.
@@ -35,18 +35,22 @@ sealed abstract class Statement[+CT, +CV] {
     * x+1, count(*) group by x+1 order by count(*)" to one that
     * corresponds to "select x+1, count(*) group by 1 order by 2"
     */
-  def numericate: Self[CT, CV]
+  def numericate: Self[RNS, CT, CV]
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[CT, CV]
+  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[RNS, CT, CV]
 
   final def debugStr: String = debugStr(new StringBuilder).toString
   def debugStr(sb: StringBuilder): StringBuilder
 }
 
-case class CombinedTables[+CT, +CV](op: TableFunc, left: Statement[CT, CV], right: Statement[CT, CV]) extends Statement[CT, CV] {
+case class CombinedTables[+RNS, +CT, +CV](
+  op: TableFunc,
+  left: Statement[RNS, CT, CV],
+  right: Statement[RNS, CT, CV]
+) extends Statement[RNS, CT, CV] {
   require(left.schema.values.map(_.typ) == right.schema.values.map(_.typ))
 
-  type Self[+CT, +CV] = CombinedTables[CT, CV]
+  type Self[+RNS, +CT, +CV] = CombinedTables[RNS, CT, CV]
 
   val schema = left.schema
 
@@ -59,7 +63,7 @@ case class CombinedTables[+CT, +CV](op: TableFunc, left: Statement[CT, CV], righ
       right = right.doRewriteDatabaseNames(state)
     )
 
-  private[analyzer2] def doRelabel(state: RelabelState): CombinedTables[CT, CV] =
+  private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV] =
     copy(left = left.doRelabel(state), right = right.doRelabel(state))
 
   def numericate = copy(left = left.numericate, right = right.numericate)
@@ -75,13 +79,13 @@ case class CombinedTables[+CT, +CV](op: TableFunc, left: Statement[CT, CV], righ
   }
 }
 
-case class CTE[+CT, +CV](
+case class CTE[+RNS, +CT, +CV](
   definitionLabel: AutoTableLabel,
-  definitionQuery: Statement[CT, CV],
+  definitionQuery: Statement[RNS, CT, CV],
   materializedHint: MaterializedHint,
-  useQuery: Statement[CT, CV]
-) extends Statement[CT, CV] {
-  type Self[+CT, +CV] = CTE[CT, CV]
+  useQuery: Statement[RNS, CT, CV]
+) extends Statement[RNS, CT, CV] {
+  type Self[+RNS, +CT, +CV] = CTE[RNS, CT, CV]
 
   val schema = useQuery.schema
 
@@ -96,7 +100,7 @@ case class CTE[+CT, +CV](
       useQuery = useQuery.doRewriteDatabaseNames(state)
     )
 
-  private[analyzer2] def doRelabel(state: RelabelState): CTE[CT, CV] =
+  private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV] =
     copy(definitionLabel = state.convert(definitionLabel),
          definitionQuery = definitionQuery.doRelabel(state),
          useQuery = useQuery.doRelabel(state))
@@ -115,13 +119,13 @@ case class CTE[+CT, +CV](
   }
 }
 
-case class Values[+CT, +CV](
+case class Values[+RNS, +CT, +CV](
   values: NonEmptySeq[NonEmptySeq[Expr[CT, CV]]]
-) extends Statement[CT, CV] {
+) extends Statement[RNS, CT, CV] {
   require(values.tail.forall(_.length == values.head.length))
   require(values.tail.forall(_.iterator.zip(values.head.iterator).forall { case (a, b) => a.typ == b.typ }))
 
-  type Self[+CT, +CV] = Values[CT, CV]
+  type Self[+RNS, +CT, +CV] = Values[RNS, CT, CV]
 
   // This lets us see the schema with DatabaseColumnNames as keys
   def typeVariedSchema[T >: DatabaseColumnName]: OrderedMap[T, NameEntry[CT]] =
@@ -142,7 +146,7 @@ case class Values[+CT, +CV](
       values = values.map(_.map(_.doRewriteDatabaseNames(state)))
     )
 
-  private[analyzer2] def doRelabel(state: RelabelState): Values[CT, CV] =
+  private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV] =
     copy(values = values.map(_.map(_.doRelabel(state))))
 
   override def debugStr(sb: StringBuilder) = {
@@ -165,10 +169,10 @@ case class Values[+CT, +CV](
   }
 }
 
-case class Select[+CT, +CV](
+case class Select[+RNS, +CT, +CV](
   distinctiveness: Distinctiveness[CT, CV],
   selectList: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]],
-  from: From[CT, CV],
+  from: From[RNS, CT, CV],
   where: Option[Expr[CT, CV]],
   groupBy: Seq[Expr[CT, CV]],
   having: Option[Expr[CT, CV]],
@@ -177,8 +181,8 @@ case class Select[+CT, +CV](
   offset: Option[BigInt],
   search: Option[String],
   hint: Set[SelectHint]
-) extends Statement[CT, CV] {
-  type Self[+CT, +CV] = Select[CT, CV]
+) extends Statement[RNS, CT, CV] {
+  type Self[+RNS, +CT, +CV] = Select[RNS, CT, CV]
 
   val schema = selectList.withValuesMapped { case NamedExpr(expr, name) => NameEntry(name, expr.typ) }
 
@@ -221,7 +225,7 @@ case class Select[+CT, +CV](
       hint = hint
     )
 
-  def numericate: Select[CT, CV] = {
+  def numericate: Self[RNS, CT, CV] = {
     def numericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
       selectList.valuesIterator.map(_.expr).zipWithIndex.find { case (e2, _idx) => e2 == e } match {
         case Some((expr, idx)) => SelectListReference(idx+1, expr.isAggregated, expr.typ)(expr.position)

@@ -28,7 +28,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
   def xtest(s: String)(f: => Any): Unit = {}
 
   test("simple contextless") {
-    val tf = new MockTableFinder(Map.empty)
+    val tf = MockTableFinder.empty[Int, TestType]
 
     // Getting rid of parents, literal coersions, function overloading, disambiguation....
     val tf.Success(start) = tf.findTables(0, "select ((('5' + 7))), 'hello' + 'world', '1' + '2' from @single_row")
@@ -43,7 +43,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     )
 
     val select = analysis.statement match {
-      case select: Select[TestType, TestValue] => select
+      case select: Select[Int, TestType, TestValue] => select
       case _ => fail("Expected a select")
     }
 
@@ -82,7 +82,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
       )
     )
 
-    select.from must equal (FromSingleRow(t(1), Some(rn("single_row"))))
+    select.from must equal (FromSingleRow(t(1), Some((0, rn("single_row")))))
 
     // and the rest is empty
     val Select(Distinctiveness.Indistinct, _, _, None, Nil, None, Nil, None, None, None, _) = select
@@ -106,7 +106,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     )
 
     val select = analysis.statement match {
-      case select: Select[TestType, TestValue] => select
+      case select: Select[Int, TestType, TestValue] => select
       case _ => fail("Expected a select")
     }
 
@@ -161,7 +161,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     )
 
     val select = analysis.statement match {
-      case select: Select[TestType, TestValue] => select
+      case select: Select[Int, TestType, TestValue] => select
       case _ => fail("Expected a select")
     }
 
@@ -192,7 +192,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     )
 
     val select = analysis.statement match {
-      case select: Select[TestType, TestValue] => select
+      case select: Select[Int, TestType, TestValue] => select
       case _ => fail("Expected a select")
     }
 
@@ -223,7 +223,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     )
 
     val select = analysis.statement match {
-      case select: Select[TestType, TestValue] => select
+      case select: Select[Int, TestType, TestValue] => select
       case _ => fail("Expected a select")
     }
 
@@ -242,7 +242,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
       Map(
         (0, "aaaa-aaaa") -> D(Map("text" -> TestText, "num" -> TestNumber)),
         (0, "bbbb-bbbb") -> D(Map("user" -> TestText, "allowed" -> TestBoolean)),
-        (0, "cccc-cccc") -> U(0, "select 1 from @bbbb-bbbb where user = ?user and allowed limit 1", OrderedMap("user" -> TestText))
+        (0, "cccc-cccc") -> U(0, "select 1 from @bbbb-bbbb where user = ?user and allowed limit 1", "user" -> TestText)
       )
     )
 
@@ -250,7 +250,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     val analysis = analyzer(start, UserParameters.empty)
 
     val select = analysis.statement match {
-      case select: Select[TestType, TestValue] => select
+      case select: Select[Int, TestType, TestValue] => select
       case _ => fail("Expected a select")
     }
 
@@ -305,7 +305,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
                     )
                   ),
                   FromTable(
-                    DatabaseTableName("bbbb-bbbb"), Some(rn("bbbb-bbbb")), t(3),
+                    DatabaseTableName("bbbb-bbbb"), Some((0, rn("bbbb-bbbb"))), t(3),
                     OrderedMap(
                       dcn("user") -> NameEntry(cn("user"), TestText),
                       dcn("allowed") -> NameEntry(cn("allowed"), TestBoolean)
@@ -334,7 +334,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
             ),
             None, Nil, None, Nil, None, None, None, Set.empty
           ),
-          t(5), Some(rn("cccc-cccc"))
+          t(5), Some((0, rn("cccc-cccc")))
         ),
         LiteralValue(TestBoolean(true))(NoPosition)
       )
@@ -346,7 +346,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
       Map(
         (0, "aaaa-aaaa") -> D(Map("text" -> TestText, "num" -> TestNumber)),
         (0, "bbbb-bbbb") -> D(Map("user" -> TestText, "allowed" -> TestBoolean)),
-        (0, "cccc-cccc") -> U(0, "select 1 from @bbbb-bbbb where user = ?user and allowed limit 1", OrderedMap("user" -> TestText))
+        (0, "cccc-cccc") -> U(0, "select 1 from @bbbb-bbbb where user = ?user and allowed limit 1", "user" -> TestText)
       )
     )
 
@@ -355,7 +355,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
 
 
     val select = analysis.statement match {
-      case select: Select[TestType, TestValue] => select
+      case select: Select[Int, TestType, TestValue] => select
       case _ => fail("Expected a select")
     }
 
@@ -410,7 +410,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
                     )
                   ),
                   FromTable(
-                    DatabaseTableName("bbbb-bbbb"), Some(rn("bbbb-bbbb")), t(3),
+                    DatabaseTableName("bbbb-bbbb"), Some((0, rn("bbbb-bbbb"))), t(3),
                     OrderedMap(
                       dcn("user") -> NameEntry(cn("user"), TestText),
                       dcn("allowed") -> NameEntry(cn("allowed"), TestBoolean)
@@ -439,7 +439,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
             ),
             None, Nil, None, Nil, None, None, None, Set.empty
           ),
-          t(5), Some(rn("cccc-cccc"))
+          t(5), Some((0, rn("cccc-cccc")))
         ),
         LiteralValue(TestBoolean(true))(NoPosition)
       )

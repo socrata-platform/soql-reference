@@ -19,8 +19,8 @@ import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, HasType}
 import com.socrata.soql.aliases.AliasAnalysis
 import com.socrata.soql.exceptions.AliasAnalysisException
 
-abstract class SoQLAnalysis[CT, CV] {
-  val statement: Statement[CT, CV]
+abstract class SoQLAnalysis[RNS, CT, CV] {
+  val statement: Statement[RNS, CT, CV]
 }
 
 case class TypedNull[+CT](typ: CT)
@@ -49,10 +49,10 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
   type UdfParameters = Map[HoleName, Position => Column[CT]]
 
-  def apply(start: FoundTables, userParameters: UserParameters): SoQLAnalysis[CT, CV] = {
+  def apply(start: FoundTables, userParameters: UserParameters): SoQLAnalysis[RNS, CT, CV] = {
     val state = new State(start.tableMap, userParameters)
 
-    new SoQLAnalysis[CT, CV] {
+    new SoQLAnalysis[RNS, CT, CV] {
       val statement = state.analyze(start.initialScope, start.initialQuery)
     }
   }
@@ -60,17 +60,17 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
   private class State(tableMap: TableMap, userParameters: UserParameters) {
     val labelProvider = new LabelProvider(t => s"t$t", c => s"c$c")
 
-    def analyze(scope: RNS, query: FoundTables.Query): Statement[CT, CV] = {
+    def analyze(scope: RNS, query: FoundTables.Query): Statement[RNS, CT, CV] = {
       val from =
         query match {
           case FoundTables.Saved(rn) =>
-            analyzeForFrom(tableMap.find(scope, rn), Environment.empty)
+            analyzeForFrom(scope, rn, Environment.empty)
           case FoundTables.InContext(rn, q) =>
-            val from = analyzeForFrom(tableMap.find(scope, rn), Environment.empty)
+            val from = analyzeForFrom(scope, rn, Environment.empty)
             new Context(scope, None, Environment.empty, Map.empty).
               analyzeStatement(q, Some(from))
           case FoundTables.InContextImpersonatingSaved(rn, q, impersonating) =>
-            val from = analyzeForFrom(tableMap.find(scope, rn), Environment.empty)
+            val from = analyzeForFrom(scope, rn, Environment.empty)
             new Context(scope, Some(impersonating), Environment.empty, Map.empty).
               analyzeStatement(q, Some(from))
           case FoundTables.Standalone(q) =>
@@ -80,16 +80,16 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       intoStatement(from)
     }
 
-    def intoStatement(from: AtomicFrom[CT, CV]): Statement[CT, CV] = {
+    def intoStatement(from: AtomicFrom[RNS, CT, CV]): Statement[RNS, CT, CV] = {
       val selectList =
         from match {
-          case from: FromTableLike[CT] =>
+          case from: FromTableLike[RNS, CT] =>
             from.columns.map { case (label, NameEntry(name, typ)) =>
               labelProvider.columnLabel() -> NamedExpr(Column(from.label, label, typ)(NoPosition), name)
             }
-          case from: FromSingleRow =>
+          case from: FromSingleRow[RNS] =>
             OrderedMap.empty[AutoColumnLabel, NamedExpr[CT, CV]]
-          case from: FromStatement[CT, CV] =>
+          case from: FromStatement[RNS, CT, CV] =>
             // Just short-circuit it and return the underlying Statement
             return from.statement
         }
@@ -109,7 +109,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       )
     }
 
-    def fromTable(desc: ParsedTableDescription.Dataset[CT], alias: Option[ResourceName]): FromTable[CT] =
+    def fromTable(desc: ParsedTableDescription.Dataset[CT], alias: Option[(RNS, ResourceName)]): FromTable[RNS, CT] =
       FromTable(
         desc.name,
         alias,
@@ -117,14 +117,14 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         columns = desc.schema
       )
 
-    def analyzeForFrom(desc: ParsedTableDescription, env: Environment[CT]): AtomicFrom[CT, CV] = {
-      desc match {
+    def analyzeForFrom(scope: RNS, rn: ResourceName, env: Environment[CT]): AtomicFrom[RNS, CT, CV] = {
+      tableMap.find(scope, rn) match {
         case ds: ParsedTableDescription.Dataset[CT] =>
           fromTable(ds, None)
         case ParsedTableDescription.Query(scope, canonicalName, basedOn, parsed, parameters) =>
           // so this is basedOn |> parsed
           // so we want to use "basedOn" as the implicit "from" for "parsed"
-          val from = analyzeForFrom(tableMap.find(scope, basedOn), env)
+          val from = analyzeForFrom(scope, basedOn, env)
           new Context(scope, Some(canonicalName), env, Map.empty).
             analyzeStatement(parsed, Some(from))
         case ParsedTableDescription.TableFunction(_, _, _, _) =>
@@ -135,7 +135,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
     class Context(scope: RNS, canonicalName: Option[CanonicalName], enclosingEnv: Environment[CT], udfParams: UdfParameters) {
       private def withEnv(env: Environment[CT]) = new Context(scope, canonicalName, env, udfParams)
 
-      def analyzeStatement(q: BinaryTree[ast.Select], from0: Option[AtomicFrom[CT, CV]]): FromStatement[CT, CV] = {
+      def analyzeStatement(q: BinaryTree[ast.Select], from0: Option[AtomicFrom[RNS, CT, CV]]): FromStatement[RNS, CT, CV] = {
         q match {
           case Leaf(select) =>
             analyzeSelection(select, from0)
@@ -165,7 +165,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         }
       }
 
-      def analyzeSelection(select: ast.Select, from0: Option[AtomicFrom[CT, CV]]): FromStatement[CT, CV] = {
+      def analyzeSelection(select: ast.Select, from0: Option[AtomicFrom[RNS, CT, CV]]): FromStatement[RNS, CT, CV] = {
         val ast.Select(
           distinct,
           selection,
@@ -296,25 +296,25 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         FromStatement(stmt, labelProvider.tableLabel(), None)
       }
 
-      def collectNamesForAnalysis(from: From[CT, CV]): AliasAnalysis.AnalysisContext = {
-        def contextFrom(af: AtomicFrom[CT, CV]): UntypedDatasetContext =
+      def collectNamesForAnalysis(from: From[RNS, CT, CV]): AliasAnalysis.AnalysisContext = {
+        def contextFrom(af: AtomicFrom[RNS, CT, CV]): UntypedDatasetContext =
           af match {
-            case _: FromSingleRow => new UntypedDatasetContext {
+            case _: FromSingleRow[RNS] => new UntypedDatasetContext {
               val columns = OrderedSet.empty
             }
-            case t: FromTableLike[CT] => new UntypedDatasetContext {
+            case t: FromTableLike[RNS, CT] => new UntypedDatasetContext {
               val columns = OrderedSet() ++ t.columns.valuesIterator.map(_.name)
             }
-            case s: FromStatement[CT, CV] => new UntypedDatasetContext {
+            case s: FromStatement[RNS, CT, CV] => new UntypedDatasetContext {
               val columns = OrderedSet() ++ s.statement.schema.valuesIterator.map(_.name)
             }
           }
 
-        def augmentAcc(acc: Map[AliasAnalysis.Qualifier, UntypedDatasetContext], from: AtomicFrom[CT, CV]) = {
+        def augmentAcc(acc: Map[AliasAnalysis.Qualifier, UntypedDatasetContext], from: AtomicFrom[RNS, CT, CV]) = {
           from.alias match {
             case None =>
               acc + (TableName.PrimaryTable.qualifier -> contextFrom(from))
-            case Some(alias) =>
+            case Some((_scope, alias)) =>
               val acc1 =
                 if(acc.isEmpty) {
                   acc + (TableName.PrimaryTable.qualifier -> contextFrom(from))
@@ -326,18 +326,18 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         }
 
         @tailrec
-        def loop(from: From[CT, CV], acc: Map[AliasAnalysis.Qualifier, UntypedDatasetContext]): Map[AliasAnalysis.Qualifier, UntypedDatasetContext] = {
+        def loop(from: From[RNS, CT, CV], acc: Map[AliasAnalysis.Qualifier, UntypedDatasetContext]): Map[AliasAnalysis.Qualifier, UntypedDatasetContext] = {
           from match {
-            case j: Join[CT, CV] =>
+            case j: Join[RNS, CT, CV] =>
               loop(j.right, augmentAcc(acc, j.left))
-            case a: AtomicFrom[CT, CV] =>
+            case a: AtomicFrom[RNS, CT, CV] =>
               augmentAcc(acc, a)
           }
         }
         loop(from, Map.empty)
       }
 
-      def queryInputSchema(input: Option[AtomicFrom[CT, CV]], from: Option[TableName], joins: Seq[ast.Join]): From[CT, CV] = {
+      def queryInputSchema(input: Option[AtomicFrom[RNS, CT, CV]], from: Option[TableName], joins: Seq[ast.Join]): From[RNS, CT, CV] = {
         // Ok so:
         //  * @This is special only in From
         //  * It is an error if we have neither an input nor a from
@@ -355,13 +355,13 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         // will afterward be used to build up the linked list that this
         // analyzer wants from right to left.
 
-        var mostRecentFrom: AtomicFrom[CT, CV] = (input, from) match {
+        var mostRecentFrom: AtomicFrom[RNS, CT, CV] = (input, from) match {
           case (None, None) =>
             // No context and no from; this is an error
             noDataSource()
           case (Some(prev), Some(tn@TableName(TableName.This, _))) =>
             // chained query: {something} |> select ... from @this [as alias]
-            prev.reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
+            prev.reAlias(Some((scope, ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix)))))
           case (Some(_), Some(_)) =>
             // chained query: {something} |> select ... from somethingThatIsNotThis
             // this is an error
@@ -370,22 +370,23 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             // standalone query: select ... from @this.  But it's standalone, so this is an error
             thisWithoutContext()
           case (None, Some(tn@TableName(TableName.SingleRow, _))) =>
-            FromSingleRow(labelProvider.tableLabel(), Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
+            FromSingleRow(labelProvider.tableLabel(), Some((scope, ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix)))))
           case (None, Some(tn)) =>
             // standalone query: select ... from sometable ...
             // n.b., sometable may actually be a query
             analyzeForFrom(
-              tableMap.find(scope, ResourceName(tn.nameWithoutPrefix)),
+              scope,
+              ResourceName(tn.nameWithoutPrefix),
               enclosingEnv
-            ).reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
+            ).reAlias(Some((scope, ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix)))))
           case (Some(input), None) =>
             // chained query: {something} |> {the thing we're analyzing}
             input.reAlias(None)
         }
 
-        var pendingJoins = Vector[From[CT, CV] => From[CT, CV]]()
-        def fromSoFar(): From[CT, CV] = {
-          pendingJoins.foldRight[From[CT, CV]](mostRecentFrom) { (part, acc) => part(acc) }
+        var pendingJoins = Vector[From[RNS, CT, CV] => From[RNS, CT, CV]]()
+        def fromSoFar(): From[RNS, CT, CV] = {
+          pendingJoins.foldRight[From[RNS, CT, CV]](mostRecentFrom) { (part, acc) => part(acc) }
         }
 
         for(join <- joins) {
@@ -413,7 +414,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           }
 
           val left = mostRecentFrom
-          pendingJoins +:= { (right: From[CT, CV]) => Join(joinType, effectiveLateral, left, right, checkedOn) }
+          pendingJoins +:= { (right: From[RNS, CT, CV]) => Join(joinType, effectiveLateral, left, right, checkedOn) }
           mostRecentFrom = checkedFrom
         }
 
@@ -427,19 +428,19 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         }
 
 
-      def analyzeJoinSelect(js: ast.JoinSelect): AtomicFrom[CT, CV] = {
+      def analyzeJoinSelect(js: ast.JoinSelect): AtomicFrom[RNS, CT, CV] = {
         js match {
           case ast.JoinTable(tn) =>
-            analyzeForFrom(tableMap.find(scope, ResourceName(tn.nameWithoutPrefix)), enclosingEnv).
-              reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
+            analyzeForFrom(scope, ResourceName(tn.nameWithoutPrefix), enclosingEnv).
+              reAlias(Some((scope, ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix)))))
           case ast.JoinQuery(select, alias) =>
-            analyzeStatement(select, None).reAlias(Some(ResourceName(alias.substring(1))))
+            analyzeStatement(select, None).reAlias(Some((scope, ResourceName(alias.substring(1)))))
           case ast.JoinFunc(tn, params) =>
             analyzeUDF(tn, params)
         }
       }
 
-      def analyzeUDF(tableName: TableName, params: Seq[ast.Expression]): AtomicFrom[CT, CV] = {
+      def analyzeUDF(tableName: TableName, params: Seq[ast.Expression]): AtomicFrom[RNS, CT, CV] = {
         val resource = ResourceName(tableName.nameWithoutPrefix)
         tableMap.find(scope, resource) match {
           case ParsedTableDescription.TableFunction(udfScope, udfCanonicalName, parsed, paramSpecs) =>
@@ -495,7 +496,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
                 Set.empty
               ),
               labelProvider.tableLabel(),
-              Some(ResourceName(tableName.aliasWithoutPrefix.getOrElse(tableName.nameWithoutPrefix)))
+              Some((scope, ResourceName(tableName.aliasWithoutPrefix.getOrElse(tableName.nameWithoutPrefix))))
             )
           case _ =>
             // Non-UDF
@@ -518,7 +519,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         }
       }
 
-      def verifyAggregatesAndWindowFunctions(stmt: Select[CT, CV]): Unit = {
+      def verifyAggregatesAndWindowFunctions(stmt: Select[RNS, CT, CV]): Unit = {
         val isAggregated = stmt.isAggregated
         for(w <- stmt.where) verifyAggregatesAndWindowFunctions(w, false, false, Set.empty)
         for(gb <- stmt.groupBy) verifyAggregatesAndWindowFunctions(gb, false, false, Set.empty)

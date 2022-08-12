@@ -8,16 +8,17 @@ import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.{StandaloneParser, AbstractParser}
 import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, ParsedTableDescription, CanonicalName}
 
-sealed abstract class Thing[+T]
-case class D[+T](schema: Map[String, T]) extends Thing[T]
-case class Q[+T](scope: Int, parent: String, soql: String, params: Map[HoleName, T] = Map.empty[HoleName, Nothing]) extends Thing[T]
-case class U[+T](scope: Int, soql: String, params: OrderedMap[String, T]) extends Thing[T]
+sealed abstract class Thing[+RNS, +CT]
+case class D[+CT](schema: Map[String, CT]) extends Thing[Nothing, CT]
+case class Q[+RNS, +CT](scope: RNS, parent: String, soql: String, params: (String, CT)*) extends Thing[RNS, CT]
+case class U[+RNS, CT](scope: RNS, soql: String, params: (String, CT)*) extends Thing[RNS, CT]
 
 object MockTableFinder {
-  def empty[T] = new MockTableFinder[T](Map.empty)
+  def empty[RNS, CT] = new MockTableFinder[RNS, CT](Map.empty)
+  def apply[RNS, CT](items: ((RNS, String), Thing[RNS, CT])*) = new MockTableFinder[RNS, CT](items.toMap)
 }
 
-class MockTableFinder[T](raw: Map[(Int, String), Thing[T]]) extends TableFinder {
+class MockTableFinder[RNS, CT](raw: Map[(RNS, String), Thing[RNS, CT]]) extends TableFinder {
   private val tables = raw.iterator.map { case ((scope, rawResourceName), thing) =>
     val converted = thing match {
       case D(rawSchema) =>
@@ -27,19 +28,19 @@ class MockTableFinder[T](raw: Map[(Int, String), Thing[T]]) extends TableFinder 
             ColumnName(rawColumnName) -> ct
           }
         )
-      case Q(scope, parent, soql, params) =>
-        Query(scope, CanonicalName(rawResourceName), ResourceName(parent), soql, params)
-      case U(scope, soql, params) =>
+      case Q(scope, parent, soql, params @ _*) =>
+        Query(scope, CanonicalName(rawResourceName), ResourceName(parent), soql, params.iterator.map { case (k, v) => HoleName(k) -> v }.toMap)
+      case U(scope, soql, params @ _*) =>
         TableFunction(scope, CanonicalName(rawResourceName), soql, OrderedMap() ++ params.iterator.map { case (k,v) => HoleName(k) -> v })
     }
       (scope, ResourceName(rawResourceName)) -> converted
   }.toMap
 
-  type ResourceNameScope = Int
+  type ResourceNameScope = RNS
   type ParseError = LexerParserException
-  type ColumnType = T
+  type ColumnType = CT
 
-  protected def lookup(scope: Int, name: ResourceName): Either[LookupError, TableDescription] = {
+  protected def lookup(scope: RNS, name: ResourceName): Either[LookupError, TableDescription] = {
     tables.get((scope, name)) match {
       case Some(schema) =>
         Right(schema)
@@ -68,7 +69,7 @@ class MockTableFinder[T](raw: Map[(Int, String), Thing[T]]) extends TableFinder 
     }
   }
 
-  def apply(names: (Int, String)*): Success[TableMap] = {
+  def apply(names: (RNS, String)*): Success[TableMap] = {
     val r = names.map { case (scope, n) =>
       val name = ResourceName(n)
       (scope, name) -> parsed(tables((scope, name)))
@@ -81,6 +82,6 @@ class MockTableFinder[T](raw: Map[(Int, String), Thing[T]]) extends TableFinder 
     Success(new TableMap(r))
   }
 
-  def notFound(scope: Int, name: String) =
+  def notFound(scope: RNS, name: String) =
     Error.NotFound((scope, ResourceName(name)))
 }
