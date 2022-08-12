@@ -5,7 +5,6 @@ import scala.util.parsing.input.Position
 
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName}
-import com.socrata.NonEmptySeq
 
 sealed abstract class Statement[+CT, +CV] {
   type Self[+CT, +CV] <: Statement[CT, CV]

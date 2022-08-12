@@ -6,7 +6,7 @@ import com.socrata.soql.types._
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.util.Base64
 
-import com.socrata.NonEmptySeq
+import com.socrata.soql.collection.NonEmptySeq
 
 class AnalysisSerializationTest extends FunSpec with MustMatchers {
   implicit val datasetCtx = new DatasetContext[TestType] {

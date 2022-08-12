@@ -11,10 +11,9 @@ import scala.annotation.tailrec
 import scala.util.parsing.input.{Position, NoPosition}
 import scala.collection.compat._
 
-import com.socrata.NonEmptySeq
 import com.socrata.soql.{BinaryTree, Leaf, TrueOp, PipeQuery, UnionQuery, UnionAllQuery, IntersectQuery, IntersectAllQuery, MinusQuery, MinusAllQuery}
 import com.socrata.soql.ast
-import com.socrata.soql.collection.{OrderedMap, OrderedSet}
+import com.socrata.soql.collection.{OrderedMap, OrderedSet, NonEmptySeq}
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName, HoleName, UntypedDatasetContext}
 import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, HasType}
 import com.socrata.soql.aliases.AliasAnalysis

@@ -5,7 +5,7 @@ import scala.collection.compat.immutable.LazyList
 import scala.util.parsing.input.Position
 import scala.annotation.tailrec
 
-import com.socrata.NonEmptySeq
+import com.socrata.soql.collection.NonEmptySeq
 import com.socrata.soql.ast._
 import com.socrata.soql.tokens._
 import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, ast, tokens}

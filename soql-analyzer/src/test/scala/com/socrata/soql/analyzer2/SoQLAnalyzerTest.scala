@@ -9,7 +9,6 @@ import org.scalatest.MustMatchers
 
 import org.joda.time.{DateTime, LocalDate}
 
-import com.socrata.NonEmptySeq
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName}
 import com.socrata.soql.functions.MonomorphicFunction
