@@ -41,6 +41,8 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
 
   final def debugStr: String = debugStr(new StringBuilder).toString
   def debugStr(sb: StringBuilder): StringBuilder
+
+  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV]
 }
 
 case class CombinedTables[+RNS, +CT, +CV](
@@ -77,6 +79,9 @@ case class CombinedTables[+RNS, +CT, +CV](
     right.debugStr(sb)
     sb.append(")")
   }
+
+  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
+    copy(left = left.mapAlias(f), right = right.mapAlias(f))
 }
 
 case class CTE[+RNS, +CT, +CV](
@@ -105,6 +110,9 @@ case class CTE[+RNS, +CT, +CV](
          definitionQuery = definitionQuery.doRelabel(state),
          useQuery = useQuery.doRelabel(state))
 
+  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
+    copy(definitionQuery = definitionQuery.mapAlias(f), useQuery = useQuery.mapAlias(f))
+
   override def debugStr(sb: StringBuilder) = {
     sb.append( "WITH ").append(definitionLabel).append(" AS ")
     materializedHint match {
@@ -119,13 +127,13 @@ case class CTE[+RNS, +CT, +CV](
   }
 }
 
-case class Values[+RNS, +CT, +CV](
+case class Values[+CT, +CV](
   values: NonEmptySeq[NonEmptySeq[Expr[CT, CV]]]
-) extends Statement[RNS, CT, CV] {
+) extends Statement[Nothing, CT, CV] {
   require(values.tail.forall(_.length == values.head.length))
   require(values.tail.forall(_.iterator.zip(values.head.iterator).forall { case (a, b) => a.typ == b.typ }))
 
-  type Self[+RNS, +CT, +CV] = Values[RNS, CT, CV]
+  type Self[+RNS, +CT, +CV] = Values[CT, CV]
 
   // This lets us see the schema with DatabaseColumnNames as keys
   def typeVariedSchema[T >: DatabaseColumnName]: OrderedMap[T, NameEntry[CT]] =
@@ -139,6 +147,8 @@ case class Values[+RNS, +CT, +CV](
 
   def numericate = this
 
+  def mapAlias[RNS2](f: Option[(Nothing, ResourceName)] => Option[(RNS2, ResourceName)]) = this
+
   private[analyzer2] def realTables = Map.empty
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
@@ -146,7 +156,7 @@ case class Values[+RNS, +CT, +CV](
       values = values.map(_.map(_.doRewriteDatabaseNames(state)))
     )
 
-  private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV] =
+  private[analyzer2] def doRelabel(state: RelabelState): Self[Nothing, CT, CV] =
     copy(values = values.map(_.map(_.doRelabel(state))))
 
   override def debugStr(sb: StringBuilder) = {
@@ -224,6 +234,9 @@ case class Select[+RNS, +CT, +CV](
       search = search,
       hint = hint
     )
+
+  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
+    copy(from = from.mapAlias(f))
 
   def numericate: Self[RNS, CT, CV] = {
     def numericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {

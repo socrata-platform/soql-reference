@@ -21,6 +21,8 @@ sealed abstract class From[+RNS, +CT, +CV] {
 
   def debugStr(sb: StringBuilder): StringBuilder
 
+  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV]
+
   def reduceMapRight[S, RNS2 >: RNS, CT2 >: CT, CV2 >: CV, RNS3, CT3, CV3](
     combine: (JoinType, Boolean, AtomicFrom[RNS2, CT2, CV2], From[RNS3, CT3, CV3], Expr[CT2, CV2], S) => (From[RNS3, CT3, CV3], S),
     base: AtomicFrom[RNS2, CT2, CV2] => (From[RNS3, CT3, CV3], S)
@@ -135,6 +137,12 @@ case class Join[+RNS, +CT, +CV](joinType: JoinType, lateral: Boolean, left: Atom
     ).asInstanceOf[Join[RNS, CT, CV]]
   }
 
+  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
+    mapRight[RNS, CT, CV, RNS2, CT, CV](
+      { (joinType, lateral, left, right, on) => Join(joinType, lateral, left.mapAlias(f), right, on) },
+      _.mapAlias(f)
+    ).asInstanceOf[Join[RNS2, CT, CV]]
+
   def debugStr(sb: StringBuilder): StringBuilder = {
     left.debugStr(sb)
     def loop(prevJoin: Join[RNS, CT, CV], from: From[RNS, CT, CV]): StringBuilder = {
@@ -226,6 +234,8 @@ case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS
   private[analyzer2] def reAlias[RNS2](newAlias: Option[(RNS2, ResourceName)]): FromTable[RNS2, CT] =
     copy(alias = newAlias)
 
+  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, Nothing] =
+    copy(alias = f(alias))
 
   def numericate: this.type = this
 }
@@ -246,6 +256,9 @@ case class FromVirtualTable[+RNS, +CT](tableName: AutoTableLabel, alias: Option[
 
   private[analyzer2] def reAlias[RNS2](newAlias: Option[(RNS2, ResourceName)]): FromVirtualTable[RNS2, CT] =
     copy(alias = newAlias)
+
+  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, Nothing] =
+    copy(alias = f(alias))
 
   def numericate: this.type = this
 }
@@ -271,6 +284,9 @@ case class FromStatement[+RNS, +CT, +CV](statement: Statement[RNS, CT, CV], labe
 
   private[analyzer2] def reAlias[RNS2 >: RNS](newAlias: Option[(RNS2, ResourceName)]): FromStatement[RNS2, CT, CV] =
     copy(alias = newAlias)
+
+  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
+    copy(statement = statement.mapAlias(f), alias = f(alias))
 
   private[analyzer2] def realTables = Map.empty
 
@@ -300,6 +316,9 @@ case class FromSingleRow[+RNS](label: TableLabel, alias: Option[(RNS, ResourceNa
 
   private[analyzer2] def reAlias[RNS2 >: RNS](newAlias: Option[(RNS2, ResourceName)]): FromSingleRow[RNS2] =
     copy(alias = newAlias)
+
+  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, Nothing, Nothing] =
+    copy(alias = f(alias))
 
   private[analyzer2] def realTables = Map.empty
 
