@@ -117,14 +117,17 @@ case class CTE[+CT, +CV](
 }
 
 case class Values[+CT, +CV](
-  values: Seq[Expr[CT, CV]]
+  values: NonEmptySeq[NonEmptySeq[Expr[CT, CV]]]
 ) extends Statement[CT, CV] {
+  require(values.tail.forall(_.length == values.head.length))
+  require(values.tail.forall(_.iterator.zip(values.head.iterator).forall { case (a, b) => a.typ == b.typ }))
+
   type Self[+CT, +CV] = Values[CT, CV]
 
   // This lets us see the schema with DatabaseColumnNames as keys
   def typeVariedSchema[T >: DatabaseColumnName]: OrderedMap[T, NameEntry[CT]] =
-    OrderedMap() ++ values.iterator.zipWithIndex.map { case (expr, idx) =>
-      // I'm not sure if this is a postgresqlism or not, but in any event here we go...
+    OrderedMap() ++ values.head.iterator.zipWithIndex.map { case (expr, idx) =>
+      // This is definitely a postgresqlism, unfortunately
       val name = s"column${idx+1}"
       DatabaseColumnName(name) -> NameEntry(ColumnName(name), expr.typ)
     }
@@ -137,21 +140,29 @@ case class Values[+CT, +CV](
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     copy(
-      values = values.map(_.doRewriteDatabaseNames(state))
+      values = values.map(_.map(_.doRewriteDatabaseNames(state)))
     )
 
   private[analyzer2] def doRelabel(state: RelabelState): Values[CT, CV] =
-    copy(values = values.map(_.doRelabel(state)))
+    copy(values = values.map(_.map(_.doRelabel(state))))
 
   override def debugStr(sb: StringBuilder) = {
-    sb.append("values (")
+    sb.append("values ")
     var didOne = false
-    for(expr <- values) {
+    for(list <- values) {
       if(didOne) sb.append(", ")
       else didOne = true
-      expr.debugStr(sb)
+
+      sb.append('(')
+      var didExpr = false
+      for(expr <- list) {
+        if(didExpr) sb.append(", ")
+        else didExpr = true
+        expr.debugStr(sb)
+      }
+      sb.append(')')
     }
-    sb.append(")")
+    sb
   }
 }
 

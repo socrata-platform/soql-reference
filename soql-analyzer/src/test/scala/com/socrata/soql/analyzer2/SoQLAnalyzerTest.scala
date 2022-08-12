@@ -9,6 +9,7 @@ import org.scalatest.MustMatchers
 
 import org.joda.time.{DateTime, LocalDate}
 
+import com.socrata.NonEmptySeq
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName}
 import com.socrata.soql.functions.MonomorphicFunction
@@ -291,7 +292,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
               JoinType.Inner,
               true,
               FromStatement(
-                Values(Seq(LiteralValue(TestText("bob"))(NoPosition))),
+                Values(NonEmptySeq(NonEmptySeq(LiteralValue(TestText("bob"))(NoPosition)))),
                 t(2),
                 None
               ),
@@ -396,7 +397,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
               JoinType.Inner,
               true,
               FromStatement(
-                Values(Seq(Column(t(1), dcn("text"), TestText)(NoPosition))),
+                Values(NonEmptySeq(NonEmptySeq(Column(t(1), dcn("text"), TestText)(NoPosition)))),
                 t(2),
                 None
               ),

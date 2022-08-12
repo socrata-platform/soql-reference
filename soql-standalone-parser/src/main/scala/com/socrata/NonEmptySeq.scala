@@ -30,6 +30,10 @@ case class NonEmptySeq[+T](head: T, tail: Seq[T] = Seq.empty) {
   def replaceLast[TT >: T](t: TT): NonEmptySeq[TT] = updated(length - 1, t)
   def replaceFirst[TT >: T](t: TT): NonEmptySeq[TT] = NonEmptySeq(t, tail)
 
+  def foreach[U](f: T => U): Unit = {
+    f(head)
+    tail.foreach(f)
+  }
   def map[U](f: T => U): NonEmptySeq[U] = NonEmptySeq(f(head), tail.map(f))
   def filter(f: T => Boolean): Seq[T] = seq.filter(f)
   def flatMap[U](f: T => NonEmptySeq[U]): NonEmptySeq[U] = {
@@ -49,9 +53,15 @@ case class NonEmptySeq[+T](head: T, tail: Seq[T] = Seq.empty) {
     val newHead = headF(head)
     tail.foldLeft(newHead)(tailF)
   }
+
+  def toSeq: Seq[T] = head +: tail
+
+  def forall(f: T => Boolean) = f(head) && tail.forall(f)
 }
 
 object NonEmptySeq {
+  def singleton[T](head: T) = new NonEmptySeq(head, Nil)
+
   def fromSeq[T](seq: Seq[T]): Option[NonEmptySeq[T]] = seq match {
     case Seq(h, t@_*) => Some(NonEmptySeq(h, t))
     case _ => None
@@ -62,4 +72,6 @@ object NonEmptySeq {
       throw new IllegalArgumentException("cannot create a NonEmptySeq from an empty sequence")
     }
   }
+
+  def unapply[T](seq: NonEmptySeq[T]) = Some(seq.toSeq)
 }

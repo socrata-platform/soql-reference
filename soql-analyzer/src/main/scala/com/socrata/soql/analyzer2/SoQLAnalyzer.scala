@@ -11,6 +11,7 @@ import scala.annotation.tailrec
 import scala.util.parsing.input.{Position, NoPosition}
 import scala.collection.compat._
 
+import com.socrata.NonEmptySeq
 import com.socrata.soql.{BinaryTree, Leaf, TrueOp, PipeQuery, UnionQuery, UnionAllQuery, IntersectQuery, IntersectAllQuery, MinusQuery, MinusAllQuery}
 import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, OrderedSet}
@@ -451,11 +452,19 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             // to
             //    select * from (values (x,y,z)) join lateral (udfexpansion) on true
             val paramsQuery =
-              Values(
-                params.lazyZip(paramSpecs).map { case (expr, (_name, typ)) =>
-                  typecheck(expr, Map.empty, Some(typ))
-                }
-              )
+              if(params.isEmpty) {
+                Values(NonEmptySeq(NonEmptySeq(NullLiteral(typeInfo.typeParameterUniverse.head)(NoPosition))))
+              } else {
+                Values(
+                  NonEmptySeq(
+                    NonEmptySeq.fromSeq(
+                      params.lazyZip(paramSpecs).map { case (expr, (_name, typ)) =>
+                        typecheck(expr, Map.empty, Some(typ))
+                      }
+                    ).get
+                  )
+                )
+              }
             val paramsLabel = labelProvider.tableLabel()
             val innerUdfParams = paramsQuery.schema.keys.lazyZip(paramSpecs).map { case (colLabel, (name, typ)) =>
               name -> { (p: Position) => Column(paramsLabel, colLabel, typ)(p) }
