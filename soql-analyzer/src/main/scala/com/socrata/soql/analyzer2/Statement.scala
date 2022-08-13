@@ -43,7 +43,7 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
     * x+1, count(*) group by x+1 order by count(*)" to one that
     * corresponds to "select x+1, count(*) group by 1 order by 2"
     */
-  def numericate: Self[RNS, CT, CV]
+  def useSelectListReferences: Self[RNS, CT, CV]
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[RNS, CT, CV]
 
@@ -78,7 +78,7 @@ case class CombinedTables[+RNS, +CT, +CV](
   private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV] =
     copy(left = left.doRelabel(state), right = right.doRelabel(state))
 
-  def numericate = copy(left = left.numericate, right = right.numericate)
+  def useSelectListReferences = copy(left = left.useSelectListReferences, right = right.useSelectListReferences)
 
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
     copy(left = left.mapAlias(f), right = right.mapAlias(f))
@@ -101,7 +101,7 @@ case class CTE[+RNS, +CT, +CV](
   private[analyzer2] def realTables =
     definitionQuery.realTables ++ useQuery.realTables
 
-  def numericate = copy(definitionQuery = definitionQuery.numericate, useQuery = useQuery.numericate)
+  def useSelectListReferences = copy(definitionQuery = definitionQuery.useSelectListReferences, useQuery = useQuery.useSelectListReferences)
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     copy(
@@ -146,7 +146,7 @@ case class Values[+CT, +CV](
 
   val schema = typeVariedSchema
 
-  def numericate = this
+  def useSelectListReferences = this
 
   def mapAlias[RNS2](f: Option[(Nothing, ResourceName)] => Option[(RNS2, ResourceName)]) = this
 
@@ -229,11 +229,18 @@ case class Select[+RNS, +CT, +CV](
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
     copy(from = from.mapAlias(f))
 
-  def numericate: Self[RNS, CT, CV] = {
+  def useSelectListReferences: Self[RNS, CT, CV] = {
+    val selectListIndices = selectList.valuesIterator.map(_.expr).toVector.zipWithIndex.reverseIterator.toMap
+
     def numericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
-      selectList.valuesIterator.map(_.expr).zipWithIndex.find { case (e2, _idx) => e2 == e } match {
-        case Some((expr, idx)) => SelectListReference(idx+1, expr.isAggregated, expr.typ)(expr.position)
-        case None => e
+      e match {
+        case c: Column[CT] =>
+          c // don't bother rewriting column references
+        case e =>
+          selectListIndices.get(e) match {
+            case Some(idx) => SelectListReference(idx + 1, e.isAggregated, e.typ)(e.position)
+            case None => e
+          }
       }
     }
 
@@ -242,7 +249,7 @@ case class Select[+RNS, +CT, +CV](
         case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
         case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(numericateExpr))
       },
-      from = from.numericate,
+      from = from.useSelectListReferences,
       groupBy = groupBy.map(numericateExpr),
       orderBy = orderBy.map { ob => ob.copy(expr = numericateExpr(ob.expr)) }
     )

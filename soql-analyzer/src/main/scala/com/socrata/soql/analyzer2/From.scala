@@ -24,7 +24,7 @@ sealed abstract class From[+RNS, +CT, +CV] {
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
-  def numericate: Self[RNS, CT, CV]
+  def useSelectListReferences: Self[RNS, CT, CV]
 
   final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
   final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder = debugDoc.layoutSmart().toStringBuilder(sb)
@@ -148,13 +148,13 @@ case class Join[+RNS, +CT, +CV](joinType: JoinType, lateral: Boolean, left: Atom
     ).asInstanceOf[Join[RNS, CT, CV]]
   }
 
-  def numericate: Join[RNS, CT, CV] = {
+  def useSelectListReferences: Join[RNS, CT, CV] = {
     mapRight[RNS, CT, CV, RNS, CT, CV](
       { (joinType, lateral, left, right, on) =>
-        val newLeft = left.numericate
+        val newLeft = left.useSelectListReferences
         Join(joinType, lateral, newLeft, right, on)
       },
-      _.numericate
+      _.useSelectListReferences
     ).asInstanceOf[Join[RNS, CT, CV]]
   }
 
@@ -254,7 +254,7 @@ case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, Nothing] =
     copy(alias = f(alias))
 
-  def numericate: this.type = this
+  def useSelectListReferences: this.type = this
 }
 
 case class FromVirtualTable[+RNS, +CT](tableName: AutoTableLabel, alias: Option[(RNS, ResourceName)], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[RNS, CT] {
@@ -277,7 +277,7 @@ case class FromVirtualTable[+RNS, +CT](tableName: AutoTableLabel, alias: Option[
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, Nothing] =
     copy(alias = f(alias))
 
-  def numericate: this.type = this
+  def useSelectListReferences: this.type = this
 }
 
 // "alias" is optional here because of chained soql; actually having a
@@ -292,7 +292,7 @@ case class FromStatement[+RNS, +CT, +CV](statement: Statement[RNS, CT, CV], labe
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     copy(statement = statement.doRewriteDatabaseNames(state))
 
-  def numericate = copy(statement = statement.numericate)
+  def useSelectListReferences = copy(statement = statement.useSelectListReferences)
 
   private[analyzer2] def doRelabel(state: RelabelState) = {
     copy(statement = statement.doRelabel(state),
@@ -320,7 +320,7 @@ case class FromSingleRow[+RNS](label: TableLabel, alias: Option[(RNS, ResourceNa
       label
     )
 
-  def numericate = this
+  def useSelectListReferences = this
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
 

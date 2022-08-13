@@ -225,15 +225,22 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           case ast.Indistinct => Distinctiveness.Indistinct
           case ast.FullyDistinct => Distinctiveness.FullyDistinct
           case ast.DistinctOn(exprs) =>
-            Distinctiveness.On(exprs.map(finalState.typecheck(_)))
+            Distinctiveness.On(
+              exprs.map { expr =>
+                if(expr.isInstanceOf[ast.Literal]) {
+                  constantInDistinctOn(expr.position)
+                }
+                finalState.typecheck(expr)
+              }
+            )
         }
 
         val checkedWhere = where.map(finalState.typecheck(_, Some(typeInfo.boolType)))
         val checkedGroupBys = groupBys.map { expr =>
-          val checked = finalState.typecheck(expr)
-          if(checked.isInstanceOf[Literal[_, _]]) {
-            constantInGroupBy(checked.position)
+          if(expr.isInstanceOf[ast.Literal]) {
+            constantInGroupBy(expr.position)
           }
+          val checked = finalState.typecheck(expr)
           if(!typeInfo.isGroupable(checked.typ)) {
             invalidGroupBy(checked.typ, checked.position)
           }
@@ -241,10 +248,10 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         }
         val checkedHaving = having.map(finalState.typecheck(_, Some(typeInfo.boolType)))
         val checkedOrderBys = orderBys.map { case ast.OrderBy(expr, ascending, nullLast) =>
-          val checked = finalState.typecheck(expr)
-          if(checked.isInstanceOf[Literal[_, _]]) {
-            constantInOrderBy(checked.position)
+          if(expr.isInstanceOf[ast.Literal]) {
+            constantInOrderBy(expr.position)
           }
+          val checked = finalState.typecheck(expr)
           if(!typeInfo.isOrdered(checked.typ)) {
             unorderedOrderBy(checked.typ, checked.position)
           }
@@ -259,9 +266,6 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
               }
             } else { // distinct on without an order by implicitly orders by the distinct columns
               for(expr <- exprs) {
-                if(expr.isInstanceOf[Literal[_, _]]) {
-                  constantInDistinctOn(expr.position)
-                }
                 if(!typeInfo.isOrdered(expr.typ)) {
                   unorderedOrderBy(expr.typ, expr.position)
                 }
