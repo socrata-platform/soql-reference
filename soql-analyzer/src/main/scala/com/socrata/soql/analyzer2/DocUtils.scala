@@ -18,6 +18,4 @@ object DocUtils {
     def encloseHanging[B >: A](left: Doc[B], right: Doc[B], indent: Int = 2): Doc[B] =
       underlying.toSeq.encloseHanging(left, Doc.empty, right, indent)
   }
-
-  // val CommaSep = d",".flatAlt(d", ")
 }
