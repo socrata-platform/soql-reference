@@ -28,7 +28,7 @@ sealed abstract class From[+RNS, +CT, +CV] {
 
   final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
   final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder = debugDoc.layoutSmart().toStringBuilder(sb)
-  def debugDoc(implicit ev: HasDoc[CV]): Doc[ResourceAnn[RNS, CT]]
+  def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]]
 
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV]
 
@@ -165,7 +165,7 @@ case class Join[+RNS, +CT, +CV](joinType: JoinType, lateral: Boolean, left: Atom
     ).asInstanceOf[Join[RNS2, CT, CV]]
 
   def debugDoc(implicit ev: HasDoc[CV]) =
-    reduceRight[RNS, CT, CV, Option[Expr[CT, CV]] => Doc[ResourceAnn[RNS, CT]]](
+    reduceRight[RNS, CT, CV, Option[Expr[CT, CV]] => Doc[Annotation[RNS, CT]]](
       { (j, rightDoc) => lastOn: Option[Expr[CT, CV]] =>
         val Join(joinType, lateral, left, right, on) = j
         Seq(
@@ -230,7 +230,7 @@ sealed abstract class FromTableLike[+RNS, +CT] extends AtomicFrom[RNS, CT, Nothi
   private[analyzer2] override final val scope: Scope[CT] = Scope(columns, label)
 
   def debugDoc(implicit ev: HasDoc[Nothing]) =
-    (tableName.debugDoc.annotate(ResourceAnn.from(alias, label)) ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(ResourceAnn.from(alias, label))).annotate(ResourceAnn.TableDef(label))
+    (tableName.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
 }
 
 case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS, ResourceName)], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[RNS, CT] {
@@ -308,7 +308,7 @@ case class FromStatement[+RNS, +CT, +CV](statement: Statement[RNS, CT, CV], labe
   private[analyzer2] def realTables = Map.empty
 
   def debugDoc(implicit ev: HasDoc[CV]) =
-    (statement.debugDoc.encloseNesting(d"(", d")") ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(ResourceAnn.from(alias, label))).annotate(ResourceAnn.TableDef(label))
+    (statement.debugDoc.encloseNesting(d"(", d")") ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
 }
 
 case class FromSingleRow[+RNS](label: TableLabel, alias: Option[(RNS, ResourceName)]) extends AtomicFrom[RNS, Nothing, Nothing] {
@@ -337,5 +337,5 @@ case class FromSingleRow[+RNS](label: TableLabel, alias: Option[(RNS, ResourceNa
   private[analyzer2] def realTables = Map.empty
 
   def debugDoc(implicit ev: HasDoc[Nothing]) =
-    (d"single_row".annotate(ResourceAnn.from(alias, label)) ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(ResourceAnn.from(alias, label))).annotate(ResourceAnn.TableDef(label))
+    (d"single_row" ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
 }

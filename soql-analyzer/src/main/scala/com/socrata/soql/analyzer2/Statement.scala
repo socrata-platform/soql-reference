@@ -50,7 +50,7 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
   final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
   final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder =
     debugDoc.layoutSmart().toStringBuilder(sb)
-  def debugDoc(implicit ev: HasDoc[CV]): Doc[ResourceAnn[RNS, CT]]
+  def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]]
 
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV]
 }
@@ -83,7 +83,7 @@ case class CombinedTables[+RNS, +CT, +CV](
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
     copy(left = left.mapAlias(f), right = right.mapAlias(f))
 
-  override def debugDoc(implicit ev: HasDoc[CV]): Doc[ResourceAnn[RNS, CT]] = {
+  override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]] = {
     left.debugDoc.encloseNesting(d"(", d")") +#+ op.debugDoc +#+ right.debugDoc.encloseNesting(d"(", d")")
   }
 }
@@ -117,7 +117,7 @@ case class CTE[+RNS, +CT, +CV](
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
     copy(definitionQuery = definitionQuery.mapAlias(f), useQuery = useQuery.mapAlias(f))
 
-  override def debugDoc(implicit ev: HasDoc[CV]): Doc[ResourceAnn[RNS, CT]] =
+  override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]] =
     Seq(
       Seq(
         Some(d"WITH" +#+ definitionLabel.debugDoc +#+ d"AS"),
@@ -160,11 +160,14 @@ case class Values[+CT, +CV](
   private[analyzer2] def doRelabel(state: RelabelState): Self[Nothing, CT, CV] =
     copy(values = values.map(_.map(_.doRelabel(state))))
 
-  override def debugDoc(implicit ev: HasDoc[CV]): Doc[ResourceAnn[Nothing, CT]] = {
+  override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[Nothing, CT]] = {
     Seq(
       d"VALUES",
       values.toSeq.map { row =>
-        row.toSeq.zip(schema.keys).map { case (expr, label) => expr.debugDoc.annotate(ResourceAnn.ColumnDef(label)) }.encloseNesting(d"(", d",", d")")
+        row.toSeq.zip(schema.keys).
+          map { case (expr, label) =>
+            expr.debugDoc.annotate(Annotation.ColumnAliasDefinition(schema(label).name, label))
+          }.encloseNesting(d"(", d",", d")")
       }.encloseNesting(d"(", d",", d")")
     ).sep.nest(2)
   }
@@ -256,11 +259,11 @@ case class Select[+RNS, +CT, +CV](
   }
 
   override def debugDoc(implicit ev: HasDoc[CV]) =
-    Seq[Option[Doc[ResourceAnn[RNS, CT]]]](
+    Seq[Option[Doc[Annotation[RNS, CT]]]](
       Some(
         (Seq(Some(d"SELECT"), distinctiveness.debugDoc).flatten.hsep +:
-          selectList.toSeq.map { case (columnLabel, NamedExpr(expr, columnName)) =>
-            expr.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ columnLabel.debugDoc.annotate(ResourceAnn.from(columnName, columnLabel))
+          selectList.toSeq.zipWithIndex.map { case ((columnLabel, NamedExpr(expr, columnName)), idx) =>
+            expr.debugDoc.annotate(Annotation.SelectListDefinition(idx+1)) ++ Doc.softlineSep ++ d"AS" +#+ columnLabel.debugDoc.annotate(Annotation.ColumnAliasDefinition(columnName, columnLabel))
           }.punctuate(d",")).sep.nest(2)
       ),
       Some(Seq(d"FROM", from.debugDoc).sep.nest(2)),

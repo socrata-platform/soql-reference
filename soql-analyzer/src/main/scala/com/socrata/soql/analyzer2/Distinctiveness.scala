@@ -7,7 +7,7 @@ import com.socrata.soql.typechecker.HasDoc
 sealed trait Distinctiveness[+CT, +CV] {
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Distinctiveness[CT, CV]
   private[analyzer2] def doRelabel(state: RelabelState): Distinctiveness[CT, CV]
-  def debugDoc(implicit ev: HasDoc[CV]): Option[Doc[ResourceAnn[Nothing, CT]]]
+  def debugDoc(implicit ev: HasDoc[CV]): Option[Doc[Annotation[Nothing, CT]]]
 }
 object Distinctiveness {
   case object Indistinct extends Distinctiveness[Nothing, Nothing] {

@@ -27,7 +27,9 @@ sealed abstract class Expr[+CT, +CV] extends Product {
 
   final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
   final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder = debugDoc.layoutSmart().toStringBuilder(sb)
-  def debugDoc(implicit ev: HasDoc[CV]): Doc[ResourceAnn[Nothing, CT]]
+  final def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[Nothing, CT]] =
+    doDebugDoc.annotate(Annotation.Typed(typ))
+  protected def doDebugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[Nothing, CT]]
 
   // Since this is completely immutable, cache the hashCode rather
   // than recomputing, as these trees can be quite deep.  Annoying
@@ -53,8 +55,9 @@ final case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(va
 
   val size = 1
 
-  def debugDoc(implicit ev: HasDoc[Nothing]) =
-    (table.debugDoc ++ d"." ++ column.debugDoc).annotate(ResourceAnn.from(table, column)).annotate(ResourceAnn.from(typ))
+  def doDebugDoc(implicit ev: HasDoc[Nothing]) =
+    (table.debugDoc ++ d"." ++ column.debugDoc).
+      annotate(Annotation.ColumnRef(table, column))
 }
 
 final case class SelectListReference[+CT](index: Int, isAggregated: Boolean, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
@@ -68,7 +71,8 @@ final case class SelectListReference[+CT](index: Int, isAggregated: Boolean, typ
   private[analyzer2] def doRelabel(state: RelabelState) =
     this
 
-  def debugDoc(implicit ev: HasDoc[Nothing]) = Doc(index.toString).annotate(ResourceAnn.from(typ))
+  protected def doDebugDoc(implicit ev: HasDoc[Nothing]) =
+    Doc(index).annotate(Annotation.SelectListReference(index))
 }
 
 sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
@@ -82,8 +86,7 @@ final case class LiteralValue[+CT, +CV](value: CV)(val position: Position)(impli
   val typ = ev.typeOf(value)
   val size = 1
 
-  def debugDoc(implicit ev: HasDoc[CV]) =
-    ev.docOf(value).annotate(ResourceAnn.from(typ))
+  protected def doDebugDoc(implicit ev: HasDoc[CV]) = ev.docOf(value)
 
   def doRelabel(state: RelabelState) = this
   def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
@@ -93,8 +96,7 @@ final case class NullLiteral[+CT](typ: CT)(val position: Position) extends Liter
 
   val size = 1
 
-  def debugDoc(implicit ev: HasDoc[Nothing]) =
-    d"NULL".annotate(ResourceAnn.from(typ))
+  protected def doDebugDoc(implicit ev: HasDoc[Nothing]) = d"NULL"
 
   def doRelabel(state: RelabelState) = this
   def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
@@ -125,8 +127,8 @@ final case class FunctionCall[+CT, +CV](
   private[analyzer2] def doRelabel(state: RelabelState) =
     copy(args = args.map(_.doRelabel(state)))(position, functionNamePosition)
 
-  def debugDoc(implicit ev: HasDoc[CV]) =
-    args.map(_.debugDoc).encloseHanging(Doc(function.name.name) ++ d"(", d",", d")").annotate(ResourceAnn.from(typ))
+  protected def doDebugDoc(implicit ev: HasDoc[CV]) =
+    args.map(_.debugDoc).encloseHanging(Doc(function.name.name) ++ d"(", d",", d")")
 }
 final case class AggregateFunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
@@ -152,7 +154,7 @@ final case class AggregateFunctionCall[+CT, +CV](
     copy(args = args.map(_.doRelabel(state)),
          filter = filter.map(_.doRelabel(state)))(position, functionNamePosition)
 
-  def debugDoc(implicit ev: HasDoc[CV]) = {
+  protected def doDebugDoc(implicit ev: HasDoc[CV]) = {
     val preArgs = Seq(
       Some(Doc(function.name.name)),
       Some(d"("),
@@ -162,7 +164,7 @@ final case class AggregateFunctionCall[+CT, +CV](
       Some(d")"),
       filter.map { w => w.debugDoc.encloseNesting(d"FILTER (", d")") }
     ).flatten.hsep
-    args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs).annotate(ResourceAnn.from(typ))
+    args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs)
   }
 }
 final case class WindowedFunctionCall[+CT, +CV](
@@ -195,10 +197,10 @@ final case class WindowedFunctionCall[+CT, +CV](
          partitionBy = partitionBy.map(_.doRelabel(state)),
          orderBy = orderBy.map(_.doRelabel(state)))(position, functionNamePosition)
 
-  def debugDoc(implicit ev: HasDoc[CV]) = {
+  protected def doDebugDoc(implicit ev: HasDoc[CV]) = {
     val preArgs: Doc[Nothing] = Doc(function.name.name) ++ d"("
-    val windowParts: Doc[ResourceAnn[Nothing, CT]] =
-      Seq[Option[Doc[ResourceAnn[Nothing, CT]]]](
+    val windowParts: Doc[Annotation[Nothing, CT]] =
+      Seq[Option[Doc[Annotation[Nothing, CT]]]](
         if(partitionBy.nonEmpty) {
           Some((d"PARTITION BY" +: partitionBy.map(_.debugDoc).punctuate(d",")).sep.nest(2))
         } else {
@@ -215,7 +217,7 @@ final case class WindowedFunctionCall[+CT, +CV](
       Some(d")"),
       filter.map { w => w.debugDoc.encloseNesting(d"FILTER (", d") OVER" +#+ windowParts) }
     ).flatten.hsep
-    args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs).annotate(ResourceAnn.from(typ))
+    args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs)
   }
 }
 
