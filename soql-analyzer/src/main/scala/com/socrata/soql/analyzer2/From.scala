@@ -169,20 +169,21 @@ case class Join[+RNS, +CT, +CV](joinType: JoinType, lateral: Boolean, left: Atom
       { (j, rightDoc) => lastOn: Option[Expr[CT, CV]] =>
         val Join(joinType, lateral, left, right, on) = j
         Seq(
-          Some(left.debugDoc),
-          lastOn.map { e => d"ON" +#+ e.debugDoc.hang(2) },
-          Some(Seq(
-                 Some(joinType.debugDoc),
-                 if(lateral) Some(d"LATERAL") else None,
-                 Some(rightDoc(Some(on)))
-               ).flatten.hsep
-          )
-        ).flatten.sep.nest(2)
+          Seq(
+            Some(left.debugDoc),
+            lastOn.map { e => Seq(d"ON", e.debugDoc).sep.nest(2) }
+          ).flatten.sep.nest(2),
+          Seq(
+            Some(joinType.debugDoc),
+            if(lateral) Some(d"LATERAL") else None,
+            Some(rightDoc(Some(on)))
+          ).flatten.hsep
+        ).sep
       },
       { lastJoin => lastOn: Option[Expr[CT, CV]] =>
         Seq(
           Some(lastJoin.debugDoc),
-          lastOn.map { e => d"ON" +#+ e.debugDoc.hang(2) }
+          lastOn.map { e => Seq(d"ON", e.debugDoc).sep.nest(2) }
         ).flatten.sep.nest(2)
       }
     )(None)
@@ -308,7 +309,7 @@ case class FromStatement[+RNS, +CT, +CV](statement: Statement[RNS, CT, CV], labe
   private[analyzer2] def realTables = Map.empty
 
   def debugDoc(implicit ev: HasDoc[CV]) =
-    (statement.debugDoc.encloseNesting(d"(", d")") ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
+    (statement.debugDoc.encloseNesting(d"(", d")") +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
 }
 
 case class FromSingleRow[+RNS](label: TableLabel, alias: Option[(RNS, ResourceName)]) extends AtomicFrom[RNS, Nothing, Nothing] {
@@ -337,5 +338,5 @@ case class FromSingleRow[+RNS](label: TableLabel, alias: Option[(RNS, ResourceNa
   private[analyzer2] def realTables = Map.empty
 
   def debugDoc(implicit ev: HasDoc[Nothing]) =
-    (d"single_row" ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
+    (d"(SELECT)" +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
 }

@@ -266,7 +266,7 @@ case class Select[+RNS, +CT, +CV](
             expr.debugDoc.annotate(Annotation.SelectListDefinition(idx+1)) ++ Doc.softlineSep ++ d"AS" +#+ columnLabel.debugDoc.annotate(Annotation.ColumnAliasDefinition(columnName, columnLabel))
           }.punctuate(d",")).sep.nest(2)
       ),
-      Some(Seq(d"FROM", from.debugDoc).sep.nest(2)),
+      Some((d"FROM" +#+ from.debugDoc).nest(2)),
       where.map { w => Seq(d"WHERE", w.debugDoc).sep.nest(2) },
       if(groupBy.nonEmpty) {
         Some((d"GROUP BY" +: groupBy.map(_.debugDoc).punctuate(d",")).sep.nest(2))
