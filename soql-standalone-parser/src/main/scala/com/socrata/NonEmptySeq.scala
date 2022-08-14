@@ -2,10 +2,10 @@ package com.socrata
 
 import com.socrata.soql.collection.{NonEmptySeq => NES}
 
-@deprecated
+@deprecated(message = "Use com.socrata.soql.collections.NonEmptySeq instead", since="4.9.0")
 class NonEmptySeq[+T](head: T, tail: Seq[T] = Seq.empty) extends NES(head, tail)
 
-@deprecated
+@deprecated(message = "Use com.socrata.soql.collections.NonEmptySeq instead", since="4.9.0")
 object NonEmptySeq {
   def fromSeq[T](seq: Seq[T]): Option[NonEmptySeq[T]] =
     NES.fromSeq(seq).map { case NES(hd, tl) =>
