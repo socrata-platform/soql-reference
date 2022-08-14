@@ -10,7 +10,7 @@ import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, FunctionCallTypech
 class Typechecker[CT, CV](
   env: Environment[CT],
   namedExprs: Map[ColumnName, Expr[CT, CV]],
-  udfParams: Map[HoleName, Position => Column[CT]],
+  udfParams: Map[HoleName, Position => Expr[CT, CV]],
   userParameters: UserParameters[CT, CV],
   canonicalName: Option[CanonicalName],
   typeInfo: TypeInfo2[CT, CV],

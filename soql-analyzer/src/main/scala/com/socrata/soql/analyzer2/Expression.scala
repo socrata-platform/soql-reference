@@ -25,6 +25,8 @@ sealed abstract class Expr[+CT, +CV] extends Product {
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[CT, CV]
 
+  private[analyzer2] def reposition(p: Position): Self[CT, CV]
+
   final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
   final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder = debugDoc.layoutSmart().toStringBuilder(sb)
   final def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[Nothing, CT]] =
@@ -58,6 +60,8 @@ final case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(va
   def doDebugDoc(implicit ev: HasDoc[Nothing]) =
     (table.debugDoc ++ d"." ++ column.debugDoc).
       annotate(Annotation.ColumnRef(table, column))
+
+  private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = p)
 }
 
 final case class SelectListReference[+CT](index: Int, isAggregated: Boolean, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
@@ -73,6 +77,8 @@ final case class SelectListReference[+CT](index: Int, isAggregated: Boolean, typ
 
   protected def doDebugDoc(implicit ev: HasDoc[Nothing]) =
     Doc(index).annotate(Annotation.SelectListReference(index))
+
+  private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = p)
 }
 
 sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
@@ -90,6 +96,8 @@ final case class LiteralValue[+CT, +CV](value: CV)(val position: Position)(impli
 
   def doRelabel(state: RelabelState) = this
   def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
+
+  private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = p)
 }
 final case class NullLiteral[+CT](typ: CT)(val position: Position) extends Literal[CT, Nothing] {
   type Self[+CT, +CV] = NullLiteral[CT]
@@ -100,6 +108,8 @@ final case class NullLiteral[+CT](typ: CT)(val position: Position) extends Liter
 
   def doRelabel(state: RelabelState) = this
   def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
+
+  private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = p)
 }
 
 sealed trait FuncallLike[+CT, +CV] extends Expr[CT, CV] with Product {
@@ -129,6 +139,8 @@ final case class FunctionCall[+CT, +CV](
 
   protected def doDebugDoc(implicit ev: HasDoc[CV]) =
     args.map(_.debugDoc).encloseHanging(Doc(function.name.name) ++ d"(", d",", d")")
+
+  private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = p, functionNamePosition)
 }
 final case class AggregateFunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
@@ -166,6 +178,8 @@ final case class AggregateFunctionCall[+CT, +CV](
     ).flatten.hsep
     args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs)
   }
+
+  private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = p, functionNamePosition)
 }
 final case class WindowedFunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
@@ -219,6 +233,8 @@ final case class WindowedFunctionCall[+CT, +CV](
     ).flatten.hsep
     args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs)
   }
+
+  private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = p, functionNamePosition)
 }
 
 case class Frame(

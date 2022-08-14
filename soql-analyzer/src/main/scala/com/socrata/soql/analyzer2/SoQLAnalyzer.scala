@@ -13,7 +13,7 @@ import scala.collection.compat._
 
 import com.socrata.soql.{BinaryTree, Leaf, TrueOp, PipeQuery, UnionQuery, UnionAllQuery, IntersectQuery, IntersectAllQuery, MinusQuery, MinusAllQuery}
 import com.socrata.soql.ast
-import com.socrata.soql.collection.{OrderedMap, OrderedSet, NonEmptySeq}
+import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName, HoleName, UntypedDatasetContext}
 import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, HasType}
 import com.socrata.soql.aliases.AliasAnalysis
@@ -47,6 +47,11 @@ object UserParameters {
   }
 }
 
+object SoQLAnalyzer {
+  private val This = ResourceName("this")
+  private val SingleRow = ResourceName("single_row")
+}
+
 class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: FunctionInfo[CT]) {
   type ScopedResourceName = (RNS, ResourceName)
   type TableMap = com.socrata.soql.analyzer2.TableMap[RNS, CT]
@@ -54,7 +59,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
   type ParsedTableDescription = com.socrata.soql.analyzer2.ParsedTableDescription[RNS, CT]
   type UserParameters = com.socrata.soql.analyzer2.UserParameters[CT, CV]
 
-  type UdfParameters = Map[HoleName, Position => Column[CT]]
+  type UdfParameters = Map[HoleName, Position => Expr[CT, CV]]
 
   def apply(start: FoundTables, userParameters: UserParameters): SoQLAnalysis[RNS, CT, CV] = {
     val state = new State(start.tableMap, userParameters)
@@ -370,26 +375,30 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           case (None, None) =>
             // No context and no from; this is an error
             noDataSource()
-          case (Some(prev), Some(tn@TableName(TableName.This, _))) =>
-            // chained query: {something} |> select ... from @this [as alias]
-            prev.reAlias(Some((scope, ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix)))))
-          case (Some(_), Some(_)) =>
-            // chained query: {something} |> select ... from somethingThatIsNotThis
-            // this is an error
-            chainWithFrom()
-          case (None, Some(tn@TableName(TableName.This, _))) =>
-            // standalone query: select ... from @this.  But it's standalone, so this is an error
-            thisWithoutContext()
-          case (None, Some(tn@TableName(TableName.SingleRow, _))) =>
-            FromSingleRow(labelProvider.tableLabel(), Some((scope, ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix)))))
+          case (Some(prev), Some(tn)) =>
+            val rn = ResourceName(tn.nameWithoutPrefix)
+            if(rn == SoQLAnalyzer.This) {
+              // chained query: {something} |> select ... from @this [as alias]
+              prev.reAlias(Some((scope, ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix)))))
+            } else {
+              // chained query: {something} |> select ... from somethingThatIsNotThis
+              // this is an error
+              chainWithFrom()
+            }
           case (None, Some(tn)) =>
-            // standalone query: select ... from sometable ...
-            // n.b., sometable may actually be a query
-            analyzeForFrom(
-              scope,
-              ResourceName(tn.nameWithoutPrefix),
-              enclosingEnv
-            ).reAlias(Some((scope, ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix)))))
+            val rn = ResourceName(tn.nameWithoutPrefix)
+            val alias = ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))
+            if(rn == SoQLAnalyzer.This) {
+              // standalone query: select ... from @this.  But it's standalone, so this is an error
+              thisWithoutContext()
+            } else if(rn == SoQLAnalyzer.SingleRow) {
+              FromSingleRow(labelProvider.tableLabel(), Some((scope, alias)))
+            } else {
+              // standalone query: select ... from sometable ...
+              // n.b., sometable may actually be a query
+              analyzeForFrom(scope, rn, enclosingEnv).
+                reAlias(Some((scope, alias)))
+            }
           case (Some(input), None) =>
             // chained query: {something} |> {the thing we're analyzing}
             input.reAlias(None)
@@ -462,53 +471,77 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             //    @bleh(x, y, z)
             // to
             //    select * from (values (x,y,z)) join lateral (udfexpansion) on true
-            val paramsQuery =
-              if(params.isEmpty) {
-                Values(NonEmptySeq(NonEmptySeq(NullLiteral(typeInfo.typeParameterUniverse.head)(NoPosition))))
-              } else {
-                Values(
-                  NonEmptySeq(
-                    NonEmptySeq.fromSeq(
-                      params.lazyZip(paramSpecs).map { case (expr, (_name, typ)) =>
-                        typecheck(expr, Map.empty, Some(typ))
-                      }
-                    ).get
-                  )
-                )
-              }
-            val paramsLabel = labelProvider.tableLabel()
-            val innerUdfParams = paramsQuery.schema.keys.lazyZip(paramSpecs).map { case (colLabel, (name, typ)) =>
-              name -> { (p: Position) => Column(paramsLabel, colLabel, typ)(p) }
-            }.toMap
-            val useQuery =
-              new Context(udfScope, Some(udfCanonicalName), enclosingEnv, innerUdfParams)
-                .analyzeStatement(parsed, None)
+            // though this only happens for params which expand to function calls.
+            // Literal and column refs just get inlined into the udfexpansion.
 
-            FromStatement(
-              Select(
-                Distinctiveness.Indistinct,
-                OrderedMap() ++ useQuery.statement.schema.iterator.map { case (label, NameEntry(name, typ)) =>
-                  labelProvider.columnLabel() -> NamedExpr(Column(useQuery.label, label, typ)(NoPosition), name)
-                },
-                Join(
-                  JoinType.Inner,
-                  true,
-                  FromStatement(paramsQuery, paramsLabel, None),
-                  useQuery,
-                  typeInfo.literalBoolean(true, NoPosition)
-                ),
-                None,
-                Nil,
-                None,
-                Nil,
-                None,
-                None,
-                None,
-                Set.empty
-              ),
-              labelProvider.tableLabel(),
-              Some((scope, ResourceName(tableName.aliasWithoutPrefix.getOrElse(tableName.nameWithoutPrefix))))
-            )
+            val typecheckedParams =
+              OrderedMap() ++ params.lazyZip(paramSpecs).map { case (expr, (name, typ)) =>
+                name -> typecheck(expr, Map.empty, Some(typ))
+              }
+
+            val (outOfLineParams, inlineParams) = typecheckedParams.partition { case (_name, e) =>
+                e match {
+                  case _ : FuncallLike[CT, CV] => true
+                  case _ : Column[CT] | _ : Literal[CT, CV] => false
+                  case _ : SelectListReference[CT] => throw new Exception("Impossible: select list reference out of typechecking")
+                }
+              }
+
+            NonEmptySeq.fromSeq(outOfLineParams.values.toVector) match {
+              case Some(outOfLineValues) =>
+                val outOfLineParamsQuery = Values(NonEmptySeq(outOfLineValues))
+                val outOfLineParamsLabel = labelProvider.tableLabel()
+                val innerUdfParams =
+                  outOfLineParamsQuery.schema.keys.lazyZip(outOfLineParams).map { case (colLabel, (name, expr)) =>
+                    name -> { (p: Position) => Column(outOfLineParamsLabel, colLabel, expr.typ)(p) }
+                  }.toMap ++ inlineParams.withValuesMapped { c =>
+                    // reposition the inline parameter so that if an
+                    // error is reported while typechecking (or,
+                    // eventually, running) the UDF body, it gets
+                    // reported at the parameter-use-site rather than
+                    // the parameter-call-site.
+                    c.reposition _
+                  }
+
+                val useQuery =
+                  new Context(udfScope, Some(udfCanonicalName), enclosingEnv, innerUdfParams)
+                    .analyzeStatement(parsed, None)
+
+                FromStatement(
+                  Select(
+                    Distinctiveness.Indistinct,
+                    OrderedMap() ++ useQuery.statement.schema.iterator.map { case (label, NameEntry(name, typ)) =>
+                      labelProvider.columnLabel() -> NamedExpr(Column(useQuery.label, label, typ)(NoPosition), name)
+                    },
+                    Join(
+                      JoinType.Inner,
+                      true,
+                      FromStatement(outOfLineParamsQuery, outOfLineParamsLabel, None),
+                      useQuery,
+                      typeInfo.literalBoolean(true, NoPosition)
+                    ),
+                    None,
+                    Nil,
+                    None,
+                    Nil,
+                    None,
+                    None,
+                    None,
+                    Set.empty
+                  ),
+                  labelProvider.tableLabel(),
+                  Some((scope, ResourceName(tableName.aliasWithoutPrefix.getOrElse(tableName.nameWithoutPrefix))))
+                )
+
+              case None =>
+                // There are no out-of-line values, so we can just
+                // expand the UDF without introducing a layer of
+                // additional joining.
+                val innerUdfParams = inlineParams.withValuesMapped { c => c.reposition _ }.toMap
+                new Context(udfScope, Some(udfCanonicalName), enclosingEnv, innerUdfParams)
+                  .analyzeStatement(parsed, None)
+                  .reAlias(Some((scope, ResourceName(tableName.aliasWithoutPrefix.getOrElse(tableName.nameWithoutPrefix)))))
+            }
           case _ =>
             // Non-UDF
             parametersForNonUdf(resource)
