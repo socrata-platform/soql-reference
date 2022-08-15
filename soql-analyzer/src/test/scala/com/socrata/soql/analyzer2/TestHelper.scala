@@ -7,8 +7,8 @@ import com.socrata.soql.typechecker.HasDoc
 
 trait TestHelper {
   implicit val hasType = TestTypeInfo.hasType
-  def t(n: Int) = AutoTableLabel.forTest(s"t$n")
-  def c(n: Int) = AutoColumnLabel.forTest(s"c$n")
+  def t(n: Int) = AutoTableLabel.forTest(n)
+  def c(n: Int) = AutoColumnLabel.forTest(n)
   def rn(n: String) = ResourceName(n)
   def cn(n: String) = ColumnName(n)
   def hn(n: String) = HoleName(n)

@@ -16,7 +16,9 @@ class SoQLAnalysis[RNS, CT, CV] private[analyzer2] (
   def merge: SoQLAnalysis[RNS, CT, CV] =
     copy(statement = this.statement)
 
-  /** Rewrite references. */
+  /** Rewrite expressions in group/order/distinct clauses which are
+    * identical to expressions in the select list to use select-list
+    * indexes instead. */
   def useSelectListReferences =
     copy(statement = statement.useSelectListReferences)
 
