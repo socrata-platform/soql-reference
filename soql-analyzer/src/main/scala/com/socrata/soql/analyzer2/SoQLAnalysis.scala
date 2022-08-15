@@ -13,8 +13,8 @@ class SoQLAnalysis[RNS, CT, CV] private[analyzer2] (
     copy(statement = statement.preserveOrdering(labelProvider, rowNumberFunction, true, false)._2)
 
   /** Simplify subselects on a best-effort basis. */
-  def merge: SoQLAnalysis[RNS, CT, CV] =
-    copy(statement = this.statement)
+  def merge(and: MonomorphicFunction[CT]): SoQLAnalysis[RNS, CT, CV] =
+    copy(statement = new Merger(and).merge(this.statement))
 
   /** Rewrite expressions in group/order/distinct clauses which are
     * identical to expressions in the select list to use select-list
