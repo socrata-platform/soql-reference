@@ -4,28 +4,17 @@ import scala.util.parsing.input.NoPosition
 
 import java.math.{BigDecimal => JBigDecimal}
 
-import org.scalatest.FunSuite
-import org.scalatest.MustMatchers
+import org.scalatest.{FunSuite, MustMatchers}
 
 import org.joda.time.{DateTime, LocalDate}
 
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName}
 import com.socrata.soql.functions.MonomorphicFunction
 
 import mocktablefinder._
 
-class SoQLAnalyzerTest extends FunSuite with MustMatchers {
-  implicit val hasType = TestTypeInfo.hasType
+class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
   val analyzer = new SoQLAnalyzer[Int, TestType, TestValue](TestTypeInfo, TestFunctionInfo)
-  def t(n: Int) = AutoTableLabel.forTest(s"t$n")
-  def c(n: Int) = AutoColumnLabel.forTest(s"c$n")
-  def rn(n: String) = ResourceName(n)
-  def cn(n: String) = ColumnName(n)
-  def dcn(n: String) = DatabaseColumnName(n)
-  def dtn(n: String) = DatabaseTableName(n)
-
-  def xtest(s: String)(f: => Any): Unit = {}
 
   test("simple contextless") {
     val tf = MockTableFinder.empty[Int, TestType]
@@ -152,7 +141,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     val analysis = analyzer(
       start,
       UserParameters(
-        qualified = Map(CanonicalName("bbbb-bbbb") -> Map(HoleName("gnu") -> Right(TestText("Hello world"))))
+        qualified = Map(CanonicalName("bbbb-bbbb") -> Map(hn("gnu") -> UserParameters.Value(TestText("Hello world"))))
       )
     )
 
@@ -181,7 +170,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
       start,
       UserParameters(
         qualified = Map.empty,
-        unqualified = Right(Map(HoleName("gnu") -> Right(TestText("Hello world"))))
+        unqualified = Right(Map(hn("gnu") -> UserParameters.Value(TestText("Hello world"))))
       )
     )
 
@@ -209,7 +198,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers {
     val analysis = analyzer(
       start,
       UserParameters(
-        qualified = Map(CanonicalName("bbbb-bbbb") -> Map(HoleName("gnu") -> Right(TestText("Hello world")))),
+        qualified = Map(CanonicalName("bbbb-bbbb") -> Map(hn("gnu") -> UserParameters.Value(TestText("Hello world")))),
         unqualified = Left(CanonicalName("bbbb-bbbb"))
       )
     )

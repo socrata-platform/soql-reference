@@ -11,6 +11,11 @@ case class OrderBy[+CT, +CV](expr: Expr[CT, CV], ascending: Boolean, nullLast: B
   private[analyzer2] def doRelabel(state: RelabelState) =
     copy(expr = expr.doRelabel(state))
 
+  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: OrderBy[CT2, CV2]): Boolean =
+    this.ascending == that.ascending &&
+      this.nullLast == that.nullLast &&
+      this.expr.findIsomorphism(state, that.expr)
+
   def debugDoc(implicit ev: HasDoc[CV]) =
     Seq(
       expr.debugDoc,

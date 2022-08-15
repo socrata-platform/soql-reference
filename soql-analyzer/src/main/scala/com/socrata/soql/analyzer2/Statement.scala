@@ -2,20 +2,21 @@ package com.socrata.soql.analyzer2
 
 import scala.annotation.tailrec
 import scala.language.higherKinds
-import scala.util.parsing.input.Position
+import scala.util.parsing.input.{Position, NoPosition}
 
 import com.rojoma.json.v3.ast.JString
 import com.socrata.prettyprint.prelude._
 
-
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName}
+import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
 
 import DocUtils._
 
 sealed abstract class Statement[+RNS, +CT, +CV] {
   type Self[+RNS, +CT, +CV] <: Statement[RNS, CT, CV]
+  def asSelf: Self[RNS, CT, CV]
 
   val schema: OrderedMap[_ <: ColumnLabel, NameEntry[CT]]
 
@@ -45,7 +46,24 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
     */
   def useSelectListReferences: Self[RNS, CT, CV]
 
+  def isIsomorphic[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](that: Statement[RNS2, CT2, CV2]): Boolean =
+    findIsomorphism(new IsomorphismState, None, None, that)
+
+  private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](
+    state: IsomorphismState,
+    thisCurrentTableLabel: Option[TableLabel],
+    thatCurrentTableLabel: Option[TableLabel],
+    that: Statement[RNS2, CT2, CV2]
+  ): Boolean
+
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[RNS, CT, CV]
+
+  private[analyzer2] def preserveOrdering[CT2 >: CT](
+    provider: LabelProvider,
+    rowNumberFunction: MonomorphicFunction[CT2],
+    wantOutputOrdered: Boolean,
+    wantOrderingColumn: Boolean
+  ): (Option[AutoColumnLabel], Self[RNS, CT2, CV])
 
   final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
   final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder =
@@ -63,6 +81,7 @@ case class CombinedTables[+RNS, +CT, +CV](
   require(left.schema.values.map(_.typ) == right.schema.values.map(_.typ))
 
   type Self[+RNS, +CT, +CV] = CombinedTables[RNS, CT, CV]
+  def asSelf = this
 
   val schema = left.schema
 
@@ -77,6 +96,35 @@ case class CombinedTables[+RNS, +CT, +CV](
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV] =
     copy(left = left.doRelabel(state), right = right.doRelabel(state))
+
+  private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](
+    state: IsomorphismState,
+    thisCurrentTableLabel: Option[TableLabel],
+    thatCurrentTableLabel: Option[TableLabel],
+    that: Statement[RNS2, CT2, CV2]
+  ): Boolean =
+    that match {
+      case CombinedTables(_, thatLeft, thatRight) =>
+        this.left.findIsomorphism(state, thisCurrentTableLabel, thatCurrentTableLabel, thatLeft) &&
+          this.right.findIsomorphism(state, thisCurrentTableLabel, thatCurrentTableLabel, thatRight)
+      case _ =>
+        false
+    }
+
+  private[analyzer2] override def preserveOrdering[CT2 >: CT](
+    provider: LabelProvider,
+    rowNumberFunction: MonomorphicFunction[CT2],
+    wantOutputOrdered: Boolean,
+    wantOrderingColumn: Boolean
+  ): (Option[AutoColumnLabel], Self[RNS, CT2, CV]) =
+    (
+      // table ops never preserve ordering
+      None,
+      copy(
+        left = left.preserveOrdering(provider, rowNumberFunction, false, false)._2,
+        right = right.preserveOrdering(provider, rowNumberFunction, false, false)._2
+      )
+    )
 
   def useSelectListReferences = copy(left = left.useSelectListReferences, right = right.useSelectListReferences)
 
@@ -95,6 +143,7 @@ case class CTE[+RNS, +CT, +CV](
   useQuery: Statement[RNS, CT, CV]
 ) extends Statement[RNS, CT, CV] {
   type Self[+RNS, +CT, +CV] = CTE[RNS, CT, CV]
+  def asSelf = this
 
   val schema = useQuery.schema
 
@@ -113,6 +162,38 @@ case class CTE[+RNS, +CT, +CV](
     copy(definitionLabel = state.convert(definitionLabel),
          definitionQuery = definitionQuery.doRelabel(state),
          useQuery = useQuery.doRelabel(state))
+
+  private[analyzer2] override def preserveOrdering[CT2 >: CT](
+    provider: LabelProvider,
+    rowNumberFunction: MonomorphicFunction[CT2],
+    wantOutputOrdered: Boolean,
+    wantOrderingColumn: Boolean
+  ): (Option[AutoColumnLabel], Self[RNS, CT2, CV]) = {
+    val (orderingColumn, newUseQuery) = useQuery.preserveOrdering(provider, rowNumberFunction, wantOutputOrdered, wantOrderingColumn)
+    (
+      orderingColumn,
+      copy(
+        definitionQuery = definitionQuery.preserveOrdering(provider, rowNumberFunction, false, false)._2,
+        useQuery = newUseQuery
+      )
+    )
+  }
+
+  private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](
+    state: IsomorphismState,
+    thisCurrentTableLabel: Option[TableLabel],
+    thatCurrentTableLabel: Option[TableLabel],
+    that: Statement[RNS2, CT2, CV2]
+  ): Boolean =
+    that match {
+      case CTE(thatDefLabel, thatDefQuery, thatMatrHint, thatUseQuery) =>
+        state.tryAssociate(this.definitionLabel, thatDefLabel) &&
+          this.definitionQuery.findIsomorphism(state, Some(this.definitionLabel), Some(thatDefLabel), thatDefQuery) &&
+          this.materializedHint == thatMatrHint &&
+          this.useQuery.findIsomorphism(state, thisCurrentTableLabel, thatCurrentTableLabel, thatUseQuery)
+      case _ =>
+        false
+    }
 
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
     copy(definitionQuery = definitionQuery.mapAlias(f), useQuery = useQuery.mapAlias(f))
@@ -135,6 +216,7 @@ case class Values[+CT, +CV](
   require(values.tail.forall(_.iterator.zip(values.head.iterator).forall { case (a, b) => a.typ == b.typ }))
 
   type Self[+RNS, +CT, +CV] = Values[CT, CV]
+  def asSelf = this
 
   // This lets us see the schema with DatabaseColumnNames as keys
   def typeVariedSchema[T >: DatabaseColumnName]: OrderedMap[T, NameEntry[CT]] =
@@ -142,6 +224,25 @@ case class Values[+CT, +CV](
       // This is definitely a postgresqlism, unfortunately
       val name = s"column${idx+1}"
       DatabaseColumnName(name) -> NameEntry(ColumnName(name), expr.typ)
+    }
+
+  private[analyzer2] def findIsomorphism[RNS2, CT2 >: CT, CV2 >: CV](
+    state: IsomorphismState,
+    thisCurrentTableLabel: Option[TableLabel],
+    thatCurrentTableLabel: Option[TableLabel],
+    that: Statement[RNS2, CT2, CV2]
+  ): Boolean =
+    that match {
+      case Values(thatValues) =>
+        this.values.length == thatValues.length &&
+        this.schema.size == that.schema.size &&
+          this.values.iterator.zip(thatValues.iterator).forall { case (thisRow, thatRow) =>
+            thisRow.iterator.zip(thatRow.iterator).forall { case (thisExpr, thatExpr) =>
+              thisExpr.findIsomorphism(state, thatExpr)
+            }
+          }
+      case _ =>
+        false
     }
 
   val schema = typeVariedSchema
@@ -159,6 +260,16 @@ case class Values[+CT, +CV](
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[Nothing, CT, CV] =
     copy(values = values.map(_.map(_.doRelabel(state))))
+
+  private[analyzer2] override def preserveOrdering[CT2 >: CT](
+    provider: LabelProvider,
+    rowNumberFunction: MonomorphicFunction[CT2],
+    wantOutputOrdered: Boolean,
+    wantOrderingColumn: Boolean
+  ): (Option[AutoColumnLabel], Self[Nothing, CT2, CV]) = {
+    // VALUES are a table and hence unordered
+    (None, this)
+  }
 
   override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[Nothing, CT]] = {
     Seq(
@@ -187,14 +298,25 @@ case class Select[+RNS, +CT, +CV](
   hint: Set[SelectHint]
 ) extends Statement[RNS, CT, CV] {
   type Self[+RNS, +CT, +CV] = Select[RNS, CT, CV]
+  def asSelf = this
 
   val schema = selectList.withValuesMapped { case NamedExpr(expr, name) => NameEntry(name, expr.typ) }
+
+  private def freshName(base: String) = {
+    val names = selectList.valuesIterator.map(_.name).toSet
+    Iterator.from(1).map { i => ColumnName(base + "_" + i) }.find { n =>
+      !names.contains(n)
+    }.get
+  }
 
   def isAggregated =
     groupBy.nonEmpty ||
       having.nonEmpty ||
       selectList.valuesIterator.exists(_.expr.isAggregated) ||
       orderBy.iterator.exists(_.expr.isAggregated)
+
+  def isWindowed =
+    selectList.valuesIterator.exists(_.expr.isWindowed)
 
   private[analyzer2] def realTables = from.realTables
 
@@ -229,6 +351,56 @@ case class Select[+RNS, +CT, +CV](
       hint = hint
     )
 
+  private[analyzer2] override def preserveOrdering[CT2 >: CT](
+    provider: LabelProvider,
+    rowNumberFunction: MonomorphicFunction[CT2],
+    wantOutputOrdered: Boolean,
+    wantOrderingColumn: Boolean
+  ): (Option[AutoColumnLabel], Self[RNS, CT2, CV]) = {
+    // If we're windowed, we want the underlying query ordered if
+    // possible even if our caller doesn't care, unless there's an
+    // aggregate in the way, in which case the aggregate will
+    // destroy any underlying ordering anyway so we stop caring.
+    val wantSubqueryOrdered = (isWindowed || wantOutputOrdered) && !isAggregated
+    from.preserveOrdering(provider, rowNumberFunction, wantSubqueryOrdered, wantSubqueryOrdered) match {
+      case (Some((table, column)), newFrom) =>
+        val col = Column(table, column, rowNumberFunction.result)(NoPosition)
+
+        val orderedSelf = copy(
+          from = newFrom,
+          orderBy = orderBy :+ OrderBy(col, true, true)
+        )
+
+        if(wantOrderingColumn) {
+          val rowNumberLabel = provider.columnLabel()
+          val newSelf = orderedSelf.copy(
+            selectList = selectList + (rowNumberLabel -> (NamedExpr(col, freshName("order"))))
+          )
+
+          (Some(rowNumberLabel), newSelf)
+        } else {
+          (None, orderedSelf)
+        }
+
+      case (None, newFrom) =>
+        if(wantOrderingColumn && orderBy.nonEmpty) {
+          // assume the given order by provides a total order and
+          // reflect that in our ordering column
+
+          val rowNumberLabel = provider.columnLabel()
+          val newSelf = copy(
+            selectList = selectList + (rowNumberLabel -> NamedExpr(WindowedFunctionCall(rowNumberFunction, Nil, None, Nil, Nil, None)(NoPosition, NoPosition), freshName("order"))),
+            from = newFrom
+          )
+
+          (Some(rowNumberLabel), newSelf)
+        } else {
+          // No ordered FROM _and_ no ORDER BY?  You don't get a column even though you asked for one
+          (None, copy(from = newFrom))
+        }
+    }
+  }
+
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
     copy(from = from.mapAlias(f))
 
@@ -241,7 +413,7 @@ case class Select[+RNS, +CT, +CV](
           c // don't bother rewriting column references
         case e =>
           selectListIndices.get(e) match {
-            case Some(idx) => SelectListReference(idx + 1, e.isAggregated, e.typ)(e.position)
+            case Some(idx) => SelectListReference(idx + 1, e.isAggregated, e.isWindowed, e.typ)(e.position)
             case None => e
           }
       }
@@ -257,6 +429,50 @@ case class Select[+RNS, +CT, +CV](
       orderBy = orderBy.map { ob => ob.copy(expr = numericateExpr(ob.expr)) }
     )
   }
+
+  private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](
+    state: IsomorphismState,
+    thisCurrentTableLabel: Option[TableLabel],
+    thatCurrentTableLabel: Option[TableLabel],
+    that: Statement[RNS2, CT2, CV2]
+  ): Boolean =
+    that match {
+      case Select(
+        thatDistinctiveness,
+        thatSelectList,
+        thatFrom,
+        thatWhere,
+        thatGroupBy,
+        thatHaving,
+        thatOrderBy,
+        thatLimit,
+        thatOffset,
+        thatSearch,
+        thatHint
+      ) =>
+        this.distinctiveness.findIsomorphism(state, thatDistinctiveness) &&
+          this.selectList.size == thatSelectList.size &&
+          this.selectList.iterator.zip(thatSelectList.iterator).forall { case ((thisColLabel, thisNamedExpr), (thatColLabel, thatNamedExpr)) =>
+            state.tryAssociate(thisCurrentTableLabel, thisColLabel, thatCurrentTableLabel, thatColLabel) &&
+              thisNamedExpr.expr.findIsomorphism(state, thatNamedExpr.expr)
+            // do we care about the name?
+          } &&
+          this.from.findIsomorphism(state, thatFrom) &&
+          this.where.isDefined == thatWhere.isDefined &&
+          this.where.zip(thatWhere).forall { case (a, b) => a.findIsomorphism(state, b) } &&
+          this.groupBy.length == thatGroupBy.length &&
+          this.groupBy.zip(thatGroupBy).forall { case (a, b) => a.findIsomorphism(state, b) } &&
+          this.having.isDefined == thatHaving.isDefined &&
+          this.having.zip(thatHaving).forall { case (a, b) => a.findIsomorphism(state, b) } &&
+          this.orderBy.length == thatOrderBy.length &&
+          this.orderBy.zip(thatOrderBy).forall { case (a, b) => a.findIsomorphism(state, b) } &&
+          this.limit == thatLimit &&
+          this.offset == thatOffset &&
+          this.search == thatSearch &&
+          this.hint == thatHint
+      case _ =>
+        false
+    }
 
   override def debugDoc(implicit ev: HasDoc[CV]) =
     Seq[Option[Doc[Annotation[RNS, CT]]]](

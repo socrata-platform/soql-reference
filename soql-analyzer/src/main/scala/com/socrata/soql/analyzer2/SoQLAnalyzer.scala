@@ -19,34 +19,6 @@ import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, HasType}
 import com.socrata.soql.aliases.AliasAnalysis
 import com.socrata.soql.exceptions.AliasAnalysisException
 
-abstract class SoQLAnalysis[RNS, CT, CV] {
-  val statement: Statement[RNS, CT, CV]
-}
-
-case class TypedNull[+CT](typ: CT)
-
-case class CanonicalName(name: String)
-
-case class UserParameters[+CT, +CV](
-  qualified: Map[CanonicalName, Map[HoleName, Either[TypedNull[CT], CV]]],
-  // This is used for a top-level (i.e., non-saved, anonymous) query
-  // that contains param references to figure out what an unqualified
-  // `param("whatever")` form refers to.  If it's Left, it's used as a
-  // key into the qualified map.  If it's Right, it's used as a
-  // parameter directory directly.
-  unqualified: Either[CanonicalName, Map[HoleName, Either[TypedNull[CT], CV]]] = Right(Map.empty[HoleName, Nothing])
-)
-object UserParameters {
-  val empty = UserParameters[Nothing, Nothing](Map.empty, Right(Map.empty))
-
-  def emptyFor[RNS, CT](map: FoundTables[RNS, CT]) = {
-    val known = map.knownUserParameters.iterator.map { case (cn, hnct) =>
-      cn -> hnct.iterator.map { case (hn, ct) => hn -> Left(TypedNull(ct)) }.toMap
-    }.toMap
-    UserParameters(known)
-  }
-}
-
 object SoQLAnalyzer {
   private val This = ResourceName("this")
   private val SingleRow = ResourceName("single_row")
@@ -64,9 +36,10 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
   def apply(start: FoundTables, userParameters: UserParameters): SoQLAnalysis[RNS, CT, CV] = {
     val state = new State(start.tableMap, userParameters)
 
-    new SoQLAnalysis[RNS, CT, CV] {
-      val statement = state.analyze(start.initialScope, start.initialQuery)
-    }
+    new SoQLAnalysis[RNS, CT, CV](
+      state.labelProvider,
+      state.analyze(start.initialScope, start.initialQuery)
+    )
   }
 
   private class State(tableMap: TableMap, userParameters: UserParameters) {
