@@ -38,39 +38,55 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
     }
 
   private def actuallyMerge(superquery: Select[RNS, CT, CV], subquery: Select[RNS, CT, CV], fromLabel: TableLabel, fromAlias: Option[(RNS, ResourceName)]): Option[Statement[RNS, CT, CV]] =
+    // Switch this around because I'm thinking about this as "select subquery |> select superquery"
+    // rather than "select superquery from (subquery)"
     (subquery, superquery) match {
       case (_, b) if b.hint(SelectHint.NoChainMerge) =>
         None
-      case (a, _) if a.isWindowed =>
+      case (a, b) if a.isWindowed && (b.isWindowed || b.isAggregated) =>
         None
       case (a, b) if a.isAggregated && b.isAggregated =>
         None
+      case (a, Select(Distinctiveness.Indistinct, bSelect, _from, None, Nil, None, Nil, bLim, bOff, None, bHint)) =>
+        // Just projection + limit/offset change; we can merge this onto (almost) anything
+        val (newLim, newOff) = Merger.combineLimits(a.limit, a.offset, bLim, bOff)
+        Some(a.copy(
+               selectList = mergeSelection(fromLabel, a.selectList, bSelect),
+               limit = newLim,
+               offset = newOff,
+               hint = a.hint ++ bHint
+             ))
       case _ =>
         None
     }
 
   private def mergeSelection(
     aTable: TableLabel,
-    aColumns: OrderedMap[ColumnLabel, Expr[CT, CV]],
-    b: OrderedMap[ColumnLabel, NamedExpr[CT, CV]]
-  ): OrderedMap[ColumnLabel, NamedExpr[CT, CV]] = {
+    aColumns: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]],
+    b: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]]
+  ): OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]] =
+    mergeSelection(aTable, aColumns.withValuesMapped(_.expr), b)
+
+  private def mergeSelection(
+    aTable: TableLabel,
+    aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]],
+    b: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]]
+  )(implicit erasureWorkaround: ErasureWorkaround): OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]] =
     b.withValuesMapped { bExpr =>
       bExpr.copy(expr = replaceRefs(aTable, aColumns, bExpr.expr))
     }
-  }
 
   private def mergeOrderBy(
     aTable: TableLabel,
-    aColumns: OrderedMap[ColumnLabel, Expr[CT, CV]],
+    aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]],
     obA: Seq[OrderBy[CT, CV]],
     obB: Seq[OrderBy[CT, CV]]
-  ): Seq[OrderBy[CT, CV]] = {
+  ): Seq[OrderBy[CT, CV]] =
     obB.map { ob => ob.copy(expr = replaceRefs(aTable, aColumns, ob.expr)) } ++ obA
-  }
 
   private def mergeWhereLike(
     aTable: TableLabel,
-    aColumns: OrderedMap[ColumnLabel, Expr[CT, CV]],
+    aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]],
     a: Option[Expr[CT, CV]],
     b: Option[Expr[CT, CV]]
   ): Option[Expr[CT, CV]] =
@@ -81,13 +97,13 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
       case (Some(a), Some(b)) => Some(FunctionCall(and, Seq(a, replaceRefs(aTable, aColumns, b)))(NoPosition, NoPosition))
     }
 
-  private def replaceRefs(aTable: TableLabel, aColumns: OrderedMap[ColumnLabel, Expr[CT, CV]], b: Expr[CT, CV]) =
+  private def replaceRefs(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]], b: Expr[CT, CV]) =
     new ReplaceRefs(aTable, aColumns).go(b)
 
-  private class ReplaceRefs(aTable: TableLabel, aColumns: OrderedMap[ColumnLabel, Expr[CT, CV]]) {
+  private class ReplaceRefs(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]]) {
     def go(b: Expr[CT, CV]): Expr[CT, CV] =
       b match {
-        case Column(`aTable`, c, t) =>
+        case Column(`aTable`, c : AutoColumnLabel, t) =>
           aColumns.get(c) match {
             case Some(aExpr) if aExpr.typ == t =>
               aExpr

@@ -12,6 +12,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
   val analyzer = new SoQLAnalyzer[Int, TestType, TestValue](TestTypeInfo, TestFunctionInfo)
   val rowNumber = TestFunctions.RowNumber.monomorphic.get
   val windowFunction = TestFunctions.WindowFunction.monomorphic.get
+  val and = TestFunctions.And.monomorphic.get
 
   test("direct query does not add a column") {
     val tf = MockTableFinder(
@@ -113,5 +114,23 @@ select *, row_number() over () as rn order by num
     val expectedAnalysis = analyzer(start2, UserParameters.empty)
 
     analysis.preserveOrdering(rowNumber).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("simple merge") {
+    val tf = MockTableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+select * order by num limit 20 offset 10 |> select text + text as t2, num * 2 as num offset 10
+""")
+    val analysis = analyzer(start, UserParameters.empty)
+
+    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+select text + text, num * 2 as num from @this as t order by @t.num limit 10 offset 20
+""")
+    val expectedAnalysis = analyzer(start2, UserParameters.empty)
+
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 }
