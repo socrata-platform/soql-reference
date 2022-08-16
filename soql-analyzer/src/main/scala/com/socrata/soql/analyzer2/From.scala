@@ -95,7 +95,7 @@ case class Join[+RNS, +CT, +CV](joinType: JoinType, lateral: Boolean, left: From
     def loop(stack: Stack, self: From[RNS, CT, CV]): (Stack, AtomicFrom[RNS, CT, CV]) = {
       self match {
         case j: Join[RNS, CT, CV] =>
-          loop(right.addToEnvironment[CT2] _ :: stack, j.left)
+          loop(j.right.addToEnvironment[CT2] _ :: stack, j.left)
         case other: AtomicFrom[RNS, CT, CV] =>
           (stack, other)
       }
