@@ -137,8 +137,8 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
   private def parsed(thing: TableDescription) = {
     thing match {
       case ds: Dataset => ds.toParsed
-      case Query(scope, canonicalName, parent, soql, params) => ParsedTableDescription.Query(scope, canonicalName, parent, parse(soql, false).getOrElse(throw new Exception("broken soql fixture 1")), params)
-      case TableFunction(scope, canonicalName, soql, params) => ParsedTableDescription.TableFunction(scope, canonicalName, parse(soql, false).getOrElse(throw new Exception("broken soql fixture 2")), params)
+      case Query(scope, canonicalName, parent, soql, params) => ParsedTableDescription.Query(scope, canonicalName, parent, parse(soql, false).getOrElse(throw new Exception("broken soql fixture 1")), soql, params)
+      case TableFunction(scope, canonicalName, soql, params) => ParsedTableDescription.TableFunction(scope, canonicalName, parse(soql, false).getOrElse(throw new Exception("broken soql fixture 2")), soql, params)
     }
   }
 

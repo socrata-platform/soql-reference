@@ -22,6 +22,7 @@ object ParsedTableDescription {
     canonicalName: CanonicalName, // This is the canonical name of this query; it is assumed to be unique across scopes
     basedOn: ResourceName,
     parsed: BinaryTree[ast.Select],
+    unparsed: String,
     parameters: Map[HoleName, ColumnType]
   ) extends ParsedTableDescription[ResourceNameScope, ColumnType] {
     private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]) =
@@ -31,6 +32,7 @@ object ParsedTableDescription {
     scope: ResourceNameScope, // This scope is to resolve any tables referenced within the soql
     canonicalName: CanonicalName, // This is the canonical name of this UDF; it is assumed to be unique across scopes
     parsed: BinaryTree[ast.Select],
+    unparsed: String,
     parameters: OrderedMap[HoleName, ColumnType]
   ) extends ParsedTableDescription[ResourceNameScope, ColumnType] {
     private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]) =
@@ -66,6 +68,8 @@ class TableMap[ResourceNameScope, +ColumnType](private val underlying: Map[(Reso
 
     (new TableMap(newMap), newToOld, oldToNew)
   }
+
+  override def toString = "TableMap(" + underlying + ")"
 }
 object TableMap {
   def empty[ResourceNameScope] = new TableMap[ResourceNameScope, Nothing](Map.empty)
@@ -245,8 +249,8 @@ trait TableFinder {
       case Right(ds: Dataset) =>
         Success(ds.toParsed)
       case Right(Query(scope, canonicalName, basedOn, text, params)) =>
-        doParse(Some(scopedName), text, false).map(ParsedTableDescription.Query(scope, canonicalName, basedOn, _, params))
-      case Right(TableFunction(scope, canonicalName, text, params)) => doParse(Some(scopedName), text, true).map(ParsedTableDescription.TableFunction(scope, canonicalName, _, params))
+        doParse(Some(scopedName), text, false).map(ParsedTableDescription.Query(scope, canonicalName, basedOn, _, text, params))
+      case Right(TableFunction(scope, canonicalName, text, params)) => doParse(Some(scopedName), text, true).map(ParsedTableDescription.TableFunction(scope, canonicalName, _, text, params))
       case Left(LookupError.NotFound) => Error.NotFound(scopedName)
       case Left(LookupError.PermissionDenied) => Error.PermissionDenied(scopedName)
     }
@@ -279,12 +283,12 @@ trait TableFinder {
   def walkDesc(desc: ParsedTableDescription[ResourceNameScope, ColumnType], acc: TableMap): Result[TableMap] = {
     desc match {
       case ParsedTableDescription.Dataset(_, _) => Success(acc)
-      case ParsedTableDescription.Query(scope, _canonicalName, basedOn, tree, _params) =>
+      case ParsedTableDescription.Query(scope, _canonicalName, basedOn, tree, _unparsed, _params) =>
         for {
           acc <- walkFromName((scope, basedOn), acc)
           acc <- walkTree(scope, tree, acc)
         } yield acc
-      case ParsedTableDescription.TableFunction(scope, _canonicalName, tree, _params) => walkTree(scope, tree, acc)
+      case ParsedTableDescription.TableFunction(scope, _canonicalName, tree, _unparsed, _params) => walkTree(scope, tree, acc)
     }
   }
 

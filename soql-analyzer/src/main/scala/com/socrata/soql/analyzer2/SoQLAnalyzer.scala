@@ -106,13 +106,13 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       tableMap.find(scope, rn) match {
         case ds: ParsedTableDescription.Dataset[CT] =>
           fromTable(ds, None)
-        case ParsedTableDescription.Query(scope, canonicalName, basedOn, parsed, parameters) =>
+        case ParsedTableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters) =>
           // so this is basedOn |> parsed
           // so we want to use "basedOn" as the implicit "from" for "parsed"
           val from = analyzeForFrom(scope, basedOn, env)
           new Context(scope, Some(canonicalName), env, Map.empty).
             analyzeStatement(parsed, Some(from))
-        case ParsedTableDescription.TableFunction(_, _, _, _) =>
+        case ParsedTableDescription.TableFunction(_, _, _, _, _) =>
           tableFunctionInIncorrectPosition()
       }
     }
@@ -421,7 +421,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       def analyzeUDF(tableName: TableName, params: Seq[ast.Expression]): AtomicFrom[RNS, CT, CV] = {
         val resource = ResourceName(tableName.nameWithoutPrefix)
         tableMap.find(scope, resource) match {
-          case ParsedTableDescription.TableFunction(udfScope, udfCanonicalName, parsed, paramSpecs) =>
+          case ParsedTableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs) =>
             if(params.length != paramSpecs.size) {
               incorrectNumberOfParameters(resource, expected = params.length, got = paramSpecs.size)
             }
