@@ -51,30 +51,55 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         // Just projection + limit/offset change; we can merge this onto (almost) anything
         val (newLim, newOff) = Merger.combineLimits(a.limit, a.offset, bLim, bOff)
         Some(a.copy(
-               selectList = mergeSelection(fromLabel, a.selectList, bSelect),
+               selectList = mergeSelection(fromLabel, a.selectedExprs, bSelect),
                limit = newLim,
                offset = newOff,
                hint = a.hint ++ bHint
              ))
+    case (a@Select(Distinctiveness.Indistinct, aSelect, aFrom, aWhere, Nil, None, _aOrder, None, None, None, aHints),
+          b@Select(Distinctiveness.Indistinct, bSelect, _oldA, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, bHints)) if b.isAggregated || b.isWindowed =>
+      // an aggregate on a non-aggregate
+      Some(Select(distinctiveness = Distinctiveness.Indistinct,
+                  selectList = mergeSelection(fromLabel, a.selectedExprs, bSelect),
+                  from = aFrom,
+                  where = mergeWhereLike(fromLabel, a.selectedExprs, aWhere, bWhere),
+                  groupBy = mergeGroupBy(fromLabel, a.selectedExprs, bGroup),
+                  having = mergeWhereLike(fromLabel, a.selectedExprs, None, bHaving),
+                  orderBy = mergeOrderBy(fromLabel, a.selectedExprs, Nil, bOrder),
+                  limit = bLim,
+                  offset = bOff,
+                  search = None,
+                  hint = aHints ++ bHints))
+    case (a@Select(Distinctiveness.Indistinct, aSelect, aFrom, aWhere, aGroup, aHaving, aOrder, None, None, None, aHints),
+          b@Select(Distinctiveness.Indistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHints)) if a.isAggregated || a.isWindowed =>
+      // an non-aggregate on an aggregate
+      Some(Select(distinctiveness = Distinctiveness.Indistinct,
+                  selectList = mergeSelection(fromLabel, a.selectedExprs, bSelect),
+                  from = aFrom,
+                  where = aWhere,
+                  groupBy = aGroup,
+                  having = mergeWhereLike(fromLabel, a.selectedExprs, aHaving, bWhere),
+                  orderBy = mergeOrderBy(fromLabel, a.selectedExprs, aOrder, bOrder),
+                  limit = bLim,
+                  offset = bOff,
+                  search = None,
+                  hint = aHints ++ bHints))
       case _ =>
         None
     }
 
   private def mergeSelection(
     aTable: TableLabel,
-    aColumns: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]],
-    b: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]]
-  ): OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]] =
-    mergeSelection(aTable, aColumns.withValuesMapped(_.expr), b)
-
-  private def mergeSelection(
-    aTable: TableLabel,
     aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]],
     b: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]]
-  )(implicit erasureWorkaround: ErasureWorkaround): OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]] =
+  ): OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]] =
     b.withValuesMapped { bExpr =>
       bExpr.copy(expr = replaceRefs(aTable, aColumns, bExpr.expr))
     }
+
+  private def mergeGroupBy(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]], gb: Seq[Expr[CT, CV]]): Seq[Expr[CT, CV]] = {
+    gb.map(replaceRefs(aTable, aColumns, _))
+  }
 
   private def mergeOrderBy(
     aTable: TableLabel,

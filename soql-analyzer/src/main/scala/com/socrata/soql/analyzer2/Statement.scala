@@ -301,6 +301,7 @@ case class Select[+RNS, +CT, +CV](
   def asSelf = this
 
   val schema = selectList.withValuesMapped { case NamedExpr(expr, name) => NameEntry(name, expr.typ) }
+  lazy val selectedExprs = selectList.withValuesMapped(_.expr)
 
   private def freshName(base: String) = {
     val names = selectList.valuesIterator.map(_.name).toSet
