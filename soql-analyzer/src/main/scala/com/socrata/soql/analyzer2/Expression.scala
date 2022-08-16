@@ -20,12 +20,15 @@ sealed abstract class Expr[+CT, +CV] extends Product {
   val size: Int
 
   def isAggregated: Boolean
+  def isWindowed: Boolean
 
   private[analyzer2] def doRewriteDatabaseNames(expr: RewriteDatabaseNamesState): Self[CT, CV]
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[CT, CV]
 
   private[analyzer2] def reposition(p: Position): Self[CT, CV]
+
+  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean
 
   final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
   final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder = debugDoc.layoutSmart().toStringBuilder(sb)
@@ -43,6 +46,17 @@ final case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(va
   type Self[+CT, +CV] = Column[CT]
 
   def isAggregated = false
+  def isWindowed = false
+
+  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean = {
+    that match {
+      case Column(thatTable, thatColumn, thatTyp) =>
+        this.typ == that.typ &&
+          state.tryAssociate(Some(this.table), this.column, Some(thatTable), thatColumn)
+      case _ =>
+        false
+    }
+  }
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     column match {
@@ -64,7 +78,7 @@ final case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(va
   private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = p)
 }
 
-final case class SelectListReference[+CT](index: Int, isAggregated: Boolean, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
+final case class SelectListReference[+CT](index: Int, isAggregated: Boolean, isWindowed: Boolean, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
   type Self[+CT, +CV] = SelectListReference[CT]
 
   val size = 1
@@ -74,6 +88,10 @@ final case class SelectListReference[+CT](index: Int, isAggregated: Boolean, typ
 
   private[analyzer2] def doRelabel(state: RelabelState) =
     this
+
+  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean = {
+    this == that
+  }
 
   protected def doDebugDoc(implicit ev: HasDoc[Nothing]) =
     Doc(index).annotate(Annotation.SelectListReference(index))
@@ -85,6 +103,11 @@ sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
   type Self[+CT, +CV] <: Literal[CT, CV]
 
   def isAggregated = false
+  def isWindowed = false
+
+  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean = {
+    this == that
+  }
 }
 final case class LiteralValue[+CT, +CV](value: CV)(val position: Position)(implicit ev: HasType[CV, CT]) extends Literal[CT, CV] {
   type Self[+CT, +CV] = LiteralValue[CT, CV]
@@ -130,6 +153,17 @@ final case class FunctionCall[+CT, +CV](
 
   val size = 1 + args.iterator.map(_.size).sum
   def isAggregated = args.exists(_.isAggregated)
+  def isWindowed = args.exists(_.isWindowed)
+
+  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean =
+    that match {
+      case FunctionCall(thatFunction, thatArgs) =>
+        this.function == thatFunction &&
+          this.args.length == thatArgs.length &&
+          this.args.zip(thatArgs).forall { case (a, b) => a.findIsomorphism(state, b) }
+      case _ =>
+        false
+    }
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     this.copy(args = args.map(_.doRewriteDatabaseNames(state)))(position, functionNamePosition)
@@ -153,8 +187,21 @@ final case class AggregateFunctionCall[+CT, +CV](
   require(function.isAggregate)
   val typ = function.result
   def isAggregated = true
+  def isWindowed = args.exists(_.isWindowed)
 
   val size = 1 + args.iterator.map(_.size).sum + filter.fold(0)(_.size)
+
+  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean =
+    that match {
+      case AggregateFunctionCall(thatFunction, thatArgs, thatDistinct, thatFilter) =>
+        this.function == thatFunction &&
+          this.args.length == thatArgs.length &&
+          this.distinct == thatDistinct &&
+          this.filter.isDefined == thatFilter.isDefined &&
+          this.filter.zip(thatFilter).forall { case (a, b) => a.findIsomorphism(state, b) }
+      case _ =>
+        false
+    }
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     this.copy(
@@ -198,6 +245,24 @@ final case class WindowedFunctionCall[+CT, +CV](
   val size = 1 + args.iterator.map(_.size).sum + partitionBy.iterator.map(_.size).sum + orderBy.iterator.map(_.expr.size).sum
 
   def isAggregated = args.exists(_.isAggregated) || partitionBy.exists(_.isAggregated) || orderBy.exists(_.expr.isAggregated)
+  def isWindowed = true
+
+  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean =
+    that match {
+      case WindowedFunctionCall(thatFunction, thatArgs, thatFilter, thatPartitionBy, thatOrderBy, thatFrame) =>
+        this.function == thatFunction &&
+          this.args.length == thatArgs.length &&
+          this.args.zip(thatArgs).forall { case (a, b) => a.findIsomorphism(state, b) } &&
+          this.filter.isDefined == thatFilter.isDefined &&
+          this.filter.zip(thatFilter).forall { case (a, b) => a.findIsomorphism(state, b) } &&
+          this.partitionBy.length == thatPartitionBy.length &&
+          this.partitionBy.zip(thatPartitionBy).forall { case (a, b) => a.findIsomorphism(state, b) } &&
+          this.orderBy.length == thatOrderBy.length &&
+          this.orderBy.zip(thatOrderBy).forall { case (a, b) => a.findIsomorphism(state, b) } &&
+          this.frame == thatFrame
+      case _ =>
+        false
+    }
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     this.copy(
@@ -229,7 +294,8 @@ final case class WindowedFunctionCall[+CT, +CV](
       ).flatten.sep.encloseNesting(d"(", d")")
     val postArgs = Seq(
       Some(d")"),
-      filter.map { w => w.debugDoc.encloseNesting(d"FILTER (", d") OVER" +#+ windowParts) }
+      filter.map { w => w.debugDoc.encloseNesting(d"FILTER (", d")") },
+      Some(d"OVER" +#+ windowParts)
     ).flatten.hsep
     args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs)
   }

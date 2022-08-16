@@ -39,8 +39,8 @@ private[analyzer2] object IsomorphismState {
   private[analyzer2] class View private[IsomorphismState](
     forwardTables: DMap[TableLabel],
     backwardTables: DMap[TableLabel],
-    forwardColumns: DMap[(TableLabel, ColumnLabel)],
-    backwardColumns: DMap[(TableLabel, ColumnLabel)]
+    forwardColumns: DMap[(Option[TableLabel], ColumnLabel)],
+    backwardColumns: DMap[(Option[TableLabel], ColumnLabel)]
   ) {
     def reverse: View =
       new View(backwardTables, forwardTables, backwardColumns, forwardColumns)
@@ -48,9 +48,9 @@ private[analyzer2] object IsomorphismState {
     def renameForward[T <: TableLabel](t: T): T = forwardTables.getOrElse(t, t)
     def renameBackward[T <: TableLabel](t: T): T = backwardTables.getOrElse(t, t)
 
-    def renameForward[T <: TableLabel, C <: ColumnLabel](t: T, c: C): (T, C) =
+    def renameForward[T <: TableLabel, C <: ColumnLabel](t: Option[T], c: C): (Option[T], C) =
       forwardColumns.getOrElse((t, c), (t, c))
-    def renameBackward[T <: TableLabel, C <: ColumnLabel](t: T, c: C): (T, C) =
+    def renameBackward[T <: TableLabel, C <: ColumnLabel](t: Option[T], c: C): (Option[T], C) =
       backwardColumns.getOrElse((t, c), (t, c))
   }
 }
@@ -58,8 +58,8 @@ private[analyzer2] object IsomorphismState {
 private[analyzer2] class IsomorphismState private (
   forwardTables: IsomorphismState.DMap[TableLabel],
   backwardTables: IsomorphismState.DMap[TableLabel],
-  forwardColumns: IsomorphismState.DMap[(TableLabel, ColumnLabel)],
-  backwardColumns: IsomorphismState.DMap[(TableLabel, ColumnLabel)]
+  forwardColumns: IsomorphismState.DMap[(Option[TableLabel], ColumnLabel)],
+  backwardColumns: IsomorphismState.DMap[(Option[TableLabel], ColumnLabel)]
 ) {
   def this() = this(new IsomorphismState.DMap,new IsomorphismState.DMap,new IsomorphismState.DMap,new IsomorphismState.DMap)
 
@@ -76,9 +76,9 @@ private[analyzer2] class IsomorphismState private (
     }
   }
 
-  def tryAssociate(tableA: TableLabel, columnA: ColumnLabel, tableB: TableLabel, columnB: ColumnLabel): Boolean = {
+  def tryAssociate(tableA: Option[TableLabel], columnA: ColumnLabel, tableB: Option[TableLabel], columnB: ColumnLabel): Boolean = {
     (tableA, tableB) match {
-      case (ta: AutoTableLabel, tb: AutoTableLabel) =>
+      case (ta@None, tb@None) =>
         (columnA, columnB) match {
           case (ca: AutoColumnLabel, cb: AutoColumnLabel) =>
             tryIntern(ta, ca, tb, cb)
@@ -87,7 +87,16 @@ private[analyzer2] class IsomorphismState private (
           case _ =>
             false
         }
-      case (ta@DatabaseTableName(a), tb@DatabaseTableName(b)) if a == b =>
+      case (ta@Some(_ : AutoTableLabel), tb@Some(_ : AutoTableLabel)) =>
+        (columnA, columnB) match {
+          case (ca: AutoColumnLabel, cb: AutoColumnLabel) =>
+            tryIntern(ta, ca, tb, cb)
+          case (ca@DatabaseColumnName(a), cb@DatabaseColumnName(b)) if a == b =>
+            tryIntern(ta, ca, tb, cb)
+          case _ =>
+            false
+        }
+      case (ta@Some(DatabaseTableName(a)), tb@Some(DatabaseTableName(b))) if a == b =>
         (columnA, columnB) match {
           case (ca: AutoColumnLabel, cb: AutoColumnLabel) =>
             tryIntern(ta, ca, tb, cb)
@@ -114,7 +123,15 @@ private[analyzer2] class IsomorphismState private (
     }
   }
 
-  private def tryIntern[T <: TableLabel, C <: ColumnLabel](tableA: T, columnA: C, tableB: T, columnB: C): Boolean = {
+  private def tryIntern[T <: TableLabel](tableA: Option[T], tableB: Option[T]): Boolean = {
+    (tableA, tableB) match {
+      case (Some(ta), Some(tb)) => tryIntern(ta, tb)
+      case (None, None) => true
+      case _ => false
+    }
+  }
+
+  private def tryIntern[T <: TableLabel, C <: ColumnLabel](tableA: Option[T], columnA: C, tableB: Option[T], columnB: C): Boolean = {
     (forwardColumns.get((tableA, columnA)), backwardColumns.get((tableB, columnB))) match {
       case (None, None) if tryIntern(tableA, tableB) =>
         forwardColumns += (tableA, columnA) -> (tableB, columnB)

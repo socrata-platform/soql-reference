@@ -31,6 +31,12 @@ class Scope[+CT] private (
 
   def types = schemaByName.iterator.map { case (_, e) => e.typ }.toSeq
   def relabelled(newLabel: TableLabel) = new Scope(schemaByName, schemaByLabel, newLabel)
+
+  override def toString =
+    new StringBuilder(label.toString).
+      append(" -> ").
+      append(schemaByLabel).
+      toString
 }
 
 object Scope {
@@ -109,6 +115,8 @@ object Environment {
         name.fold(Map.empty[ResourceName, Scope[CT2]]) { n => Map(n -> scope) },
         parent
       ))
+
+    override def toString = "Environment()"
   }
 
   private class NonEmptyEnvironment[+CT](
@@ -120,6 +128,17 @@ object Environment {
       implicitScope.schemaByName.get(name).map { entry =>
         LookupResult(implicitScope.label, entry.label, entry.typ)
       }
+
+    override def toString = {
+      new StringBuilder("Environment(\n  ").
+        append(parent.toString).
+        append(",\n  ").
+        append(implicitScope).
+        append(",\n  ").
+        append(explicitScopes).
+        append("\n)").
+        toString
+    }
 
     override def extend: Environment[CT] = new EmptyEnvironment(Some(this))
 

@@ -19,34 +19,6 @@ import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, HasType}
 import com.socrata.soql.aliases.AliasAnalysis
 import com.socrata.soql.exceptions.AliasAnalysisException
 
-abstract class SoQLAnalysis[RNS, CT, CV] {
-  val statement: Statement[RNS, CT, CV]
-}
-
-case class TypedNull[+CT](typ: CT)
-
-case class CanonicalName(name: String)
-
-case class UserParameters[+CT, +CV](
-  qualified: Map[CanonicalName, Map[HoleName, Either[TypedNull[CT], CV]]],
-  // This is used for a top-level (i.e., non-saved, anonymous) query
-  // that contains param references to figure out what an unqualified
-  // `param("whatever")` form refers to.  If it's Left, it's used as a
-  // key into the qualified map.  If it's Right, it's used as a
-  // parameter directory directly.
-  unqualified: Either[CanonicalName, Map[HoleName, Either[TypedNull[CT], CV]]] = Right(Map.empty[HoleName, Nothing])
-)
-object UserParameters {
-  val empty = UserParameters[Nothing, Nothing](Map.empty, Right(Map.empty))
-
-  def emptyFor[RNS, CT](map: FoundTables[RNS, CT]) = {
-    val known = map.knownUserParameters.iterator.map { case (cn, hnct) =>
-      cn -> hnct.iterator.map { case (hn, ct) => hn -> Left(TypedNull(ct)) }.toMap
-    }.toMap
-    UserParameters(known)
-  }
-}
-
 object SoQLAnalyzer {
   private val This = ResourceName("this")
   private val SingleRow = ResourceName("single_row")
@@ -64,13 +36,14 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
   def apply(start: FoundTables, userParameters: UserParameters): SoQLAnalysis[RNS, CT, CV] = {
     val state = new State(start.tableMap, userParameters)
 
-    new SoQLAnalysis[RNS, CT, CV] {
-      val statement = state.analyze(start.initialScope, start.initialQuery)
-    }
+    new SoQLAnalysis[RNS, CT, CV](
+      state.labelProvider,
+      state.analyze(start.initialScope, start.initialQuery)
+    )
   }
 
   private class State(tableMap: TableMap, userParameters: UserParameters) {
-    val labelProvider = new LabelProvider(t => s"t$t", c => s"c$c")
+    val labelProvider = new LabelProvider
 
     def analyze(scope: RNS, query: FoundTables.Query): Statement[RNS, CT, CV] = {
       val from =
@@ -341,16 +314,10 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           }
         }
 
-        @tailrec
-        def loop(from: From[RNS, CT, CV], acc: Map[AliasAnalysis.Qualifier, UntypedDatasetContext]): Map[AliasAnalysis.Qualifier, UntypedDatasetContext] = {
-          from match {
-            case j: Join[RNS, CT, CV] =>
-              loop(j.right, augmentAcc(acc, j.left))
-            case a: AtomicFrom[RNS, CT, CV] =>
-              augmentAcc(acc, a)
-          }
-        }
-        loop(from, Map.empty)
+        from.reduce[Map[AliasAnalysis.Qualifier, UntypedDatasetContext]](
+          augmentAcc(Map.empty, _),
+          { (acc, j) => augmentAcc(acc, j.right) }
+        )
       }
 
       def queryInputSchema(input: Option[AtomicFrom[RNS, CT, CV]], from: Option[TableName], joins: Seq[ast.Join]): From[RNS, CT, CV] = {
@@ -371,7 +338,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         // will afterward be used to build up the linked list that this
         // analyzer wants from right to left.
 
-        var mostRecentFrom: AtomicFrom[RNS, CT, CV] = (input, from) match {
+        val from0: AtomicFrom[RNS, CT, CV] = (input, from) match {
           case (None, None) =>
             // No context and no from; this is an error
             noDataSource()
@@ -404,12 +371,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             input.reAlias(None)
         }
 
-        var pendingJoins = Vector[From[RNS, CT, CV] => From[RNS, CT, CV]]()
-        def fromSoFar(): From[RNS, CT, CV] = {
-          pendingJoins.foldRight[From[RNS, CT, CV]](mostRecentFrom) { (part, acc) => part(acc) }
-        }
-
-        for(join <- joins) {
+        joins.foldLeft[From[RNS, CT, CV]](from0) { (left, join) =>
           val joinType = join.typ match {
             case ast.InnerJoinType => JoinType.Inner
             case ast.LeftOuterJoinType => JoinType.LeftOuter
@@ -417,28 +379,24 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             case ast.FullOuterJoinType => JoinType.FullOuter
           }
 
-          val augmentedFrom = envify(fromSoFar().extendEnvironment(enclosingEnv))
+          val augmentedFrom = envify(left.extendEnvironment(enclosingEnv))
           val effectiveLateral = join.lateral || join.from.isInstanceOf[ast.JoinFunc]
-          val checkedFrom =
+          val checkedRight =
             if(effectiveLateral) {
               withEnv(augmentedFrom).analyzeJoinSelect(join.from)
             } else {
               analyzeJoinSelect(join.from)
             }
 
-          val checkedOn = withEnv(envify(checkedFrom.addToEnvironment(augmentedFrom))).
+          val checkedOn = withEnv(envify(checkedRight.addToEnvironment(augmentedFrom))).
             typecheck(join.on, Map.empty, Some(typeInfo.boolType))
 
           if(!typeInfo.isBoolean(checkedOn.typ)) {
             expectedBoolean(join.on, checkedOn.typ)
           }
 
-          val left = mostRecentFrom
-          pendingJoins +:= { (right: From[RNS, CT, CV]) => Join(joinType, effectiveLateral, left, right, checkedOn) }
-          mostRecentFrom = checkedFrom
+          Join(joinType, effectiveLateral, left, checkedRight, checkedOn)
         }
-
-        fromSoFar()
       }
 
       def envify[T](result: Either[AddScopeError, T]): T =

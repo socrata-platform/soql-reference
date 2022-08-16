@@ -122,8 +122,8 @@ class Typechecker[CT, CV](
       }
 
     paramSet.flatMap(_.get(name)) match {
-      case Some(Left(TypedNull(t))) => Right(Seq(NullLiteral(t)(position)))
-      case Some(Right(v)) => Right(Seq(LiteralValue(v)(position)(typeInfo.hasType)))
+      case Some(UserParameters.Null(t)) => Right(Seq(NullLiteral(t)(position)))
+      case Some(UserParameters.Value(v)) => Right(Seq(LiteralValue(v)(position)(typeInfo.hasType)))
       case None => Left(UnknownUserParameter(canonicalView, name, position))
     }
   }
