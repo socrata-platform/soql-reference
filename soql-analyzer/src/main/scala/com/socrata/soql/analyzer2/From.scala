@@ -224,11 +224,11 @@ case class Join[+RNS, +CT, +CV](joinType: JoinType, lateral: Boolean, left: From
           Seq(
             Some(joinType.debugDoc),
             if(lateral) Some(d"LATERAL") else None,
-            Some(right.debugDoc)
-          ).flatten.hsep,
-          d"ON",
-          on.debugDoc
-        ).hsep
+            Some(right.debugDoc),
+            Some(d"ON"),
+            Some(on.debugDoc)
+          ).flatten.hsep
+        ).sep
       },
     )
 }
