@@ -47,7 +47,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         None
       case (a, b) if a.isAggregated && b.isAggregated =>
         None
-      case (a, Select(Distinctiveness.Indistinct, bSelect, _from, None, Nil, None, Nil, bLim, bOff, None, bHint)) =>
+      case (a, Select(Distinctiveness.Indistinct, bSelect, _oldA, None, Nil, None, Nil, bLim, bOff, None, bHint)) =>
         // Just projection + limit/offset change; we can merge this onto (almost) anything
         val (newLim, newOff) = Merger.combineLimits(a.limit, a.offset, bLim, bOff)
         Some(a.copy(
