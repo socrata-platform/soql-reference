@@ -21,7 +21,7 @@ import com.socrata.prettyprint.prelude._
 import com.socrata.soql.analyzer2.mocktablefinder._
 import com.socrata.soql.analyzer2.{SoQLAnalyzer, UserParameters, Annotation, Statement}
 import com.socrata.soql.types._
-import com.socrata.soql.functions.{SoQLTypeInfo, SoQLFunctionInfo}
+import com.socrata.soql.functions.{SoQLTypeInfo, SoQLFunctionInfo, SoQLFunctions}
 import com.socrata.soql.types.obfuscation.CryptProvider
 import com.socrata.soql.typechecker.HasDoc
 
@@ -76,7 +76,14 @@ object Main extends App {
   }
 
 
-  def result(scope: MockTableFinder[String, SoQLType], query: String, html: String): String = {
+  def result(
+    scope: MockTableFinder[String, SoQLType],
+    query: String,
+    html: String,
+    merge: Boolean,
+    preserveOrder: Boolean,
+    useSelectRefs: Boolean
+  ): String = {
     s"""<!DOCTYPE html>
 <html>
 <head>
@@ -88,6 +95,9 @@ object Main extends App {
   <textarea name="scope">${escapeHtml(JsonUtil.renderJson(scope, pretty = true))}</textarea>
   <textarea name="query">${escapeHtml(query)}</textarea>
   <input type="submit">
+  <input type="checkbox" id="merge" name="merge" value="1"${if(merge)" checked"else""}><label for="merge">Merge</label>
+  <input type="checkbox" id="preserve_order" name="preserve_order" value="1"${if(preserveOrder)" checked"else""}><label for="preserve_order">Preserve order</label>
+  <input type="checkbox" id="select_refs" name="select_refs" value="1"${if(useSelectRefs)" checked"else""}><label for="select_refs">Use selection references</label>
 </form>
 <div class="soql" id="rendered">$html</div>
 <div>
@@ -96,6 +106,12 @@ object Main extends App {
 <p>The right textbox defines the query you want to typecheck.  Any tables referenced in this query will be looked up in scope <tt>"one"</tt>.</p>
 <p>Having created your schemas and query, clicking "submit query" will send them to the server for validation.  Right now error handling is.. bad.  Sorry.  It's a demo I worked up on my weekend. :)<p>
 <p>If you get a good answer though, you will find a somewhat-colored analysis returned, which will look roughly like SQL.  Mousing over the various colored bits will show cross-references (other references to a thing are highlighted in yellow, the place where a thing is defined is highlighted in green.  Expressions will pop up a tooltip showing the type of the expression under the mouse, and the aliases for both tables and select-lists will show the human names that correlate to the generated labels.
+<p>In addition, you can control a set of postprocessing passes over the analysis:</p>
+<dl>
+<dt>Merge<dd>Attempt to merge queries with their FROM clause.
+<dt>Preserve order<dd>Add additional columns and ORDER BY clauses to preserve the ordering of subselects, if appropriate.
+<dt>Use selection references<dd>Rewrite expressions into numeric selection-list references where appropriate (inside <tt>GROUP&nbsp;BY</tt>, <tt>ORDER&nbsp;BY</tt>, and <tt>DISTINCT&nbsp;ON</tt> clauses, for nontrivial expressions).
+</dl>
 </div>
 </body>
 </html>"""
@@ -131,7 +147,7 @@ object Main extends App {
 
   val index = new SimpleResource {
     override def get: HttpRequest => HttpResponse = { req =>
-      OK ~> Header("Cache-Control", "no-cache") ~> Content("text/html; charset=UTF-8", result(defaultTableFinder, "select * from @evens\n  join @secured-view on text = @secured-view.key\n  where num > 3", ""))
+      OK ~> Header("Cache-Control", "no-cache") ~> Content("text/html; charset=UTF-8", result(defaultTableFinder, "select * from @evens\n  join @secured-view on text = @secured-view.key\n  where num > 3", "", true, true, true))
     }
 
     override def post: HttpRequest => HttpResponse = {
@@ -167,6 +183,10 @@ object Main extends App {
           return BadRequest ~> Content("text/plain", "No query?")
         }
 
+        val merge = Option(params.get("merge")).isDefined
+        val preserveOrder = Option(params.get("preserve_order")).isDefined
+        val useSelectRefs = Option(params.get("select_refs")).isDefined
+
         val map = tableFinder.findTables("one", query(0)) match {
           case tableFinder.Success(map) => map
           case tableFinder.Error.ParseError(name, error) =>
@@ -181,7 +201,7 @@ object Main extends App {
             return InternalServerError ~> Content("text/plain", "God a permission error somehow?")
         }
 
-        val analysis =
+        var analysis =
           try {
             analyzer(map, UserParameters.emptyFor(map))
           } catch {
@@ -193,9 +213,13 @@ object Main extends App {
               }
           }
 
+        if(merge) analysis = analysis.merge(SoQLFunctions.And.monomorphic.get)
+        if(preserveOrder) analysis = analysis.preserveOrdering(SoQLFunctions.RowNumber.monomorphic.get)
+        if(useSelectRefs) analysis = analysis.useSelectListReferences
+
         val html = debugHtml(analysis.statement.useSelectListReferences, width)
 
-        OK ~> Content("text/html; charset=UTF-8", result(tableFinder, query(0), html))
+        OK ~> Content("text/html; charset=UTF-8", result(tableFinder, query(0), html, merge, preserveOrder, useSelectRefs))
       }
 
       val srv: HttpRequest => HttpResponse = process(_)
