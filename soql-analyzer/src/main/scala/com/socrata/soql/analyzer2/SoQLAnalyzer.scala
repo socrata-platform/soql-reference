@@ -314,16 +314,10 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           }
         }
 
-        @tailrec
-        def loop(from: From[RNS, CT, CV], acc: Map[AliasAnalysis.Qualifier, UntypedDatasetContext]): Map[AliasAnalysis.Qualifier, UntypedDatasetContext] = {
-          from match {
-            case j: Join[RNS, CT, CV] =>
-              loop(j.right, augmentAcc(acc, j.left))
-            case a: AtomicFrom[RNS, CT, CV] =>
-              augmentAcc(acc, a)
-          }
-        }
-        loop(from, Map.empty)
+        from.reduce[Map[AliasAnalysis.Qualifier, UntypedDatasetContext]](
+          augmentAcc(Map.empty, _),
+          { (acc, j) => augmentAcc(acc, j.right) }
+        )
       }
 
       def queryInputSchema(input: Option[AtomicFrom[RNS, CT, CV]], from: Option[TableName], joins: Seq[ast.Join]): From[RNS, CT, CV] = {
@@ -344,7 +338,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         // will afterward be used to build up the linked list that this
         // analyzer wants from right to left.
 
-        var mostRecentFrom: AtomicFrom[RNS, CT, CV] = (input, from) match {
+        val from0: AtomicFrom[RNS, CT, CV] = (input, from) match {
           case (None, None) =>
             // No context and no from; this is an error
             noDataSource()
@@ -377,12 +371,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             input.reAlias(None)
         }
 
-        var pendingJoins = Vector[From[RNS, CT, CV] => From[RNS, CT, CV]]()
-        def fromSoFar(): From[RNS, CT, CV] = {
-          pendingJoins.foldRight[From[RNS, CT, CV]](mostRecentFrom) { (part, acc) => part(acc) }
-        }
-
-        for(join <- joins) {
+        joins.foldLeft[From[RNS, CT, CV]](from0) { (left, join) =>
           val joinType = join.typ match {
             case ast.InnerJoinType => JoinType.Inner
             case ast.LeftOuterJoinType => JoinType.LeftOuter
@@ -390,28 +379,24 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             case ast.FullOuterJoinType => JoinType.FullOuter
           }
 
-          val augmentedFrom = envify(fromSoFar().extendEnvironment(enclosingEnv))
+          val augmentedFrom = envify(left.extendEnvironment(enclosingEnv))
           val effectiveLateral = join.lateral || join.from.isInstanceOf[ast.JoinFunc]
-          val checkedFrom =
+          val checkedRight =
             if(effectiveLateral) {
               withEnv(augmentedFrom).analyzeJoinSelect(join.from)
             } else {
               analyzeJoinSelect(join.from)
             }
 
-          val checkedOn = withEnv(envify(checkedFrom.addToEnvironment(augmentedFrom))).
+          val checkedOn = withEnv(envify(checkedRight.addToEnvironment(augmentedFrom))).
             typecheck(join.on, Map.empty, Some(typeInfo.boolType))
 
           if(!typeInfo.isBoolean(checkedOn.typ)) {
             expectedBoolean(join.on, checkedOn.typ)
           }
 
-          val left = mostRecentFrom
-          pendingJoins +:= { (right: From[RNS, CT, CV]) => Join(joinType, effectiveLateral, left, right, checkedOn) }
-          mostRecentFrom = checkedFrom
+          Join(joinType, effectiveLateral, left, checkedRight, checkedOn)
         }
-
-        fromSoFar()
       }
 
       def envify[T](result: Either[AddScopeError, T]): T =
