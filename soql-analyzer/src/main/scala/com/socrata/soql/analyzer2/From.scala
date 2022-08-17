@@ -54,7 +54,7 @@ sealed abstract class From[+RNS, +CT, +CV] {
     combine: (JoinType, Boolean, From[RNS2, CT2, CV2], AtomicFrom[RNS, CT, CV], Expr[CT, CV]) => Join[RNS2, CT2, CV2]
   ): ReduceResult[RNS2, CT2, CV2] = {
     reduceMap[Unit, RNS2, CT2, CV2](
-      { (nonJoin: AtomicFrom[RNS, CT, CV]) => ((), base.apply(nonJoin)) },
+      { nonJoin => ((), base.apply(nonJoin)) },
       { (_, joinType, lateral, left, right, on) => ((), combine(joinType, lateral, left, right, on)) }
     )._2
   }
@@ -64,7 +64,7 @@ sealed abstract class From[+RNS, +CT, +CV] {
     combine: (S, Join[RNS, CT, CV]) => S
   ): S =
     reduceMap[S, RNS, CT, CV](
-      { (nonJoin: AtomicFrom[RNS, CT, CV]) => (base(nonJoin), nonJoin) },
+      { nonJoin => (base(nonJoin), nonJoin) },
       { (s, joinType, lateral, left, right, on) =>
         val j = Join(joinType, lateral, left, right, on)
         (combine(s, j), j)
