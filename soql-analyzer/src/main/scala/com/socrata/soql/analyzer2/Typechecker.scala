@@ -312,7 +312,7 @@ class Typechecker[CT, CV](
   case class UnknownUDFParameter(name: HoleName, pos: Position) extends TypecheckError(s"No such UDF parameter ${name.name}")
   case class UnknownUserParameter(view: Option[CanonicalName], name: HoleName, pos: Position) extends TypecheckError(s"No such user parameter ${view.fold("")(_.name + "/")}${name.name}")
   case class NoSuchFunction(name: FunctionName, arity: Int, pos: Position) extends TypecheckError(s"No such function ${name}/${arity}")
-  case class TypeMismatch(found: CT, pos: Position) extends TypecheckError("Type mismatch")
+  case class TypeMismatch(found: CT, pos: Position) extends TypecheckError(s"Type mismatch: found ${found}")
   case class RequiresWindow(name: FunctionName, pos: Position) extends TypecheckError(s"${name.name} requires a window clause")
   case class NonAggregate(name: FunctionName, pos: Position) extends TypecheckError(s"${name.name} is not an aggregate function")
   case class NonWindowFunction(name: FunctionName, pos: Position) extends TypecheckError(s"${name.name} is not a window function")
