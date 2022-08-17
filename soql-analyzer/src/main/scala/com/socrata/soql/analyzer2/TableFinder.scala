@@ -7,81 +7,6 @@ import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ResourceName, ColumnName, HoleName, TableName}
 import com.socrata.soql.{BinaryTree, Leaf, Compound}
 
-class TableMap[ResourceNameScope, +ColumnType](private val underlying: Map[(ResourceNameScope, ResourceName), ParsedTableDescription[ResourceNameScope, ColumnType]]) extends AnyVal {
-  type ScopedResourceName = (ResourceNameScope, ResourceName)
-
-  def contains(name: ScopedResourceName) = underlying.contains(name)
-  def get(name: ScopedResourceName) = underlying.get(name)
-  def getOrElse[CT2 >: ColumnType](name: ScopedResourceName)(orElse: => ParsedTableDescription[ResourceNameScope, CT2]) = underlying.getOrElse(name, orElse)
-
-  def +[CT2 >: ColumnType](kv: (ScopedResourceName, ParsedTableDescription[ResourceNameScope, CT2])): TableMap[ResourceNameScope, CT2] =
-    new TableMap(underlying + kv)
-
-  def find(scope: ResourceNameScope, name: ResourceName): ParsedTableDescription[ResourceNameScope, ColumnType] = {
-    getOrElse((scope, name)) {
-      throw new NoSuchElementException(s"TableMap: No such key: $scope:$name")
-    }
-  }
-
-  def descriptions = underlying.valuesIterator
-
-  private[analyzer2] def rewriteScopes(topLevel: ResourceNameScope): (TableMap[Int, ColumnType], Map[Int, ResourceNameScope], Map[ResourceNameScope, Int]) = {
-    val oldToNew = (underlying.keysIterator.map(_._1) ++ Iterator.single(topLevel)).zipWithIndex.toMap
-    val newToOld = oldToNew.iterator.map(_.swap).toMap
-    val newMap =
-      underlying.iterator.map { case ((rns, rn), desc) =>
-        (oldToNew(rns), rn) -> desc.rewriteScopes(oldToNew)
-      }.toMap
-
-    (new TableMap(newMap), newToOld, oldToNew)
-  }
-
-  override def toString = "TableMap(" + underlying + ")"
-}
-object TableMap {
-  def empty[ResourceNameScope] = new TableMap[ResourceNameScope, Nothing](Map.empty)
-}
-
-case class FoundTables[ResourceNameScope, +ColumnType](
-  tableMap: TableMap[ResourceNameScope, ColumnType],
-  initialScope: ResourceNameScope,
-  initialQuery: FoundTables.Query
-) {
-  val knownUserParameters: Map[CanonicalName, Map[HoleName, ColumnType]] =
-    tableMap.descriptions.foldLeft(Map.empty[CanonicalName, Map[HoleName, ColumnType]]) { (acc, desc) =>
-      desc match {
-        case _ : ParsedTableDescription.Dataset[_] | _ : ParsedTableDescription.TableFunction[_, _] => acc
-        case q: ParsedTableDescription.Query[_, ColumnType] => acc + (q.canonicalName -> q.parameters)
-      }
-    }
-
-  // This lets you convert resource scope names to a simplified form
-  // if your resource scope names in one location have semantic
-  // meaning that you don't care to serialize.  You also get a map
-  // from the meaningless name to the meaningful one so if you want to
-  // (for example) translate an error from the analyzer back into the
-  // meaningful form, you can do that.
-  lazy val (withSimplifiedScopes, simplifiedScopeMap) = locally {
-    val (newMap, newToOld, oldToNew) = tableMap.rewriteScopes(initialScope)
-
-    val newFT = FoundTables(
-      newMap,
-      oldToNew(initialScope),
-      initialQuery
-    )
-
-    (newMap, newToOld)
-  }
-}
-
-object FoundTables {
-  sealed abstract class Query
-  case class Saved(name: ResourceName) extends Query
-  case class InContext(parent: ResourceName, soql: BinaryTree[ast.Select]) extends Query
-  case class InContextImpersonatingSaved(parent: ResourceName, soql: BinaryTree[ast.Select], fake: CanonicalName) extends Query
-  case class Standalone(soql: BinaryTree[ast.Select]) extends Query
-}
-
 trait TableFinder {
   // These are the things that need to be implemented by subclasses.
   // The "TableMap" representation will have to become more complex if
@@ -112,8 +37,13 @@ trait TableFinder {
   /** Parse the given SoQL */
   protected def parse(soql: String, udfParamsAllowed: Boolean): Either[ParseError, BinaryTree[ast.Select]]
 
-  /** The result of looking up a name, containing only the values relevant to analysis. */
+  /** The result of looking up a name, containing only the values
+    * relevant to analysis.  Note this is very nearly the same as
+    * UnparsedTableDescription but not _quite_ the same because of the
+    * way Datasets' column names get turned into
+    * ParsedTableDescription.Datasets' column names. */
   sealed trait TableDescription
+
   /** A base dataset, or a saved query which is being analyzed opaquely. */
   case class Dataset(
     databaseName: DatabaseTableName,
