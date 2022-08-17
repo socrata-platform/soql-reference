@@ -47,7 +47,13 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         None
       case (a, b) if a.isAggregated && b.isAggregated =>
         None
-      case (a, Select(Distinctiveness.Indistinct, bSelect, _oldA, None, Nil, None, Nil, bLim, bOff, None, bHint)) =>
+      case (a, Select(Distinctiveness.Indistinct, bSelect, _oldA, None, Nil, None, Nil, None, None, None, bHint)) =>
+        // Just projection change; we can merge this onto anything
+        Some(a.copy(
+               selectList = mergeSelection(fromLabel, a.selectedExprs, bSelect),
+               hint = a.hint ++ bHint
+             ))
+      case (a, b@Select(Distinctiveness.Indistinct, bSelect, _oldA, None, Nil, None, Nil, bLim, bOff, None, bHint)) if !b.isAggregated =>
         // Just projection + limit/offset change; we can merge this onto (almost) anything
         val (newLim, newOff) = Merger.combineLimits(a.limit, a.offset, bLim, bOff)
         Some(a.copy(
@@ -56,34 +62,51 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
                offset = newOff,
                hint = a.hint ++ bHint
              ))
+
+      case (a@Select(Distinctiveness.Indistinct, aSelect, aFrom, aWhere, Nil, None, aOrder, None, None, aSearch, aHint),
+            b@Select(Distinctiveness.Indistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint))
+          if !a.isWindowed && !a.isAggregated && !b.isAggregated =>
+        // Non-aggregate on unwindowed non-aggregate change of filter + possible new limit/offset
+        Some(Select(distinctiveness = Distinctiveness.Indistinct,
+                    selectList = mergeSelection(fromLabel, a.selectedExprs, bSelect),
+                    from = aFrom,
+                    where = mergeWhereLike(fromLabel, a.selectedExprs, aWhere, bWhere),
+                    groupBy = Nil,
+                    having = None,
+                    orderBy = mergeOrderBy(fromLabel, a.selectedExprs, aOrder, bOrder),
+                    limit = bLim,
+                    offset = bOff,
+                    search = aSearch,
+                    hint = aHint ++ bHint))
+
     case (a@Select(Distinctiveness.Indistinct, aSelect, aFrom, aWhere, Nil, None, _aOrder, None, None, None, aHints),
           b@Select(Distinctiveness.Indistinct, bSelect, _oldA, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, bHints)) if b.isAggregated || b.isWindowed =>
-      // an aggregate on a non-aggregate
-      Some(Select(distinctiveness = Distinctiveness.Indistinct,
-                  selectList = mergeSelection(fromLabel, a.selectedExprs, bSelect),
-                  from = aFrom,
-                  where = mergeWhereLike(fromLabel, a.selectedExprs, aWhere, bWhere),
-                  groupBy = mergeGroupBy(fromLabel, a.selectedExprs, bGroup),
-                  having = mergeWhereLike(fromLabel, a.selectedExprs, None, bHaving),
-                  orderBy = mergeOrderBy(fromLabel, a.selectedExprs, Nil, bOrder),
-                  limit = bLim,
-                  offset = bOff,
-                  search = None,
-                  hint = aHints ++ bHints))
-    case (a@Select(Distinctiveness.Indistinct, aSelect, aFrom, aWhere, aGroup, aHaving, aOrder, None, None, None, aHints),
-          b@Select(Distinctiveness.Indistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHints)) if a.isAggregated || a.isWindowed =>
-      // an non-aggregate on an aggregate
-      Some(Select(distinctiveness = Distinctiveness.Indistinct,
-                  selectList = mergeSelection(fromLabel, a.selectedExprs, bSelect),
-                  from = aFrom,
-                  where = aWhere,
-                  groupBy = aGroup,
-                  having = mergeWhereLike(fromLabel, a.selectedExprs, aHaving, bWhere),
-                  orderBy = mergeOrderBy(fromLabel, a.selectedExprs, aOrder, bOrder),
-                  limit = bLim,
-                  offset = bOff,
-                  search = None,
-                  hint = aHints ++ bHints))
+        // an aggregate on a non-aggregate
+        Some(Select(distinctiveness = Distinctiveness.Indistinct,
+                    selectList = mergeSelection(fromLabel, a.selectedExprs, bSelect),
+                    from = aFrom,
+                    where = mergeWhereLike(fromLabel, a.selectedExprs, aWhere, bWhere),
+                    groupBy = mergeGroupBy(fromLabel, a.selectedExprs, bGroup),
+                    having = mergeWhereLike(fromLabel, a.selectedExprs, None, bHaving),
+                    orderBy = mergeOrderBy(fromLabel, a.selectedExprs, Nil, bOrder),
+                    limit = bLim,
+                    offset = bOff,
+                    search = None,
+                    hint = aHints ++ bHints))
+      case (a@Select(Distinctiveness.Indistinct, aSelect, aFrom, aWhere, aGroup, aHaving, aOrder, None, None, None, aHints),
+            b@Select(Distinctiveness.Indistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHints)) if a.isAggregated || a.isWindowed =>
+        // an non-aggregate on an aggregate
+        Some(Select(distinctiveness = Distinctiveness.Indistinct,
+                    selectList = mergeSelection(fromLabel, a.selectedExprs, bSelect),
+                    from = aFrom,
+                    where = aWhere,
+                    groupBy = aGroup,
+                    having = mergeWhereLike(fromLabel, a.selectedExprs, aHaving, bWhere),
+                    orderBy = mergeOrderBy(fromLabel, a.selectedExprs, aOrder, bOrder),
+                    limit = bLim,
+                    offset = bOff,
+                    search = None,
+                    hint = aHints ++ bHints))
       case _ =>
         None
     }
