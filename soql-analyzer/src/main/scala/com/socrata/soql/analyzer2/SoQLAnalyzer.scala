@@ -262,7 +262,10 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
         val stmt = Select(
           checkedDistinct,
-          finalState.namedExprs.map { case (cn, expr) => labelProvider.columnLabel() -> NamedExpr(expr, cn) },
+          OrderedMap() ++ aliasAnalysis.expressions.keysIterator.map { cn =>
+            val expr = finalState.namedExprs(cn)
+            labelProvider.columnLabel() -> NamedExpr(expr, cn)
+          },
           completeFrom,
           checkedWhere,
           checkedGroupBys,
