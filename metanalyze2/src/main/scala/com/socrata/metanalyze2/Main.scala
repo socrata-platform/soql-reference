@@ -14,7 +14,11 @@ import com.socrata.soql.types._
 import com.socrata.soql.functions.{SoQLTypeInfo, SoQLFunctionInfo, SoQLFunctions}
 import com.socrata.soql.typechecker.HasDoc
 
+final abstract class Main
+
 object Main extends App {
+  val log = org.slf4j.LoggerFactory.getLogger(classOf[Main])
+
   def toSoQLType(name: String) = name match {
     case "text" => SoQLText
     case "number" => SoQLNumber
@@ -41,9 +45,9 @@ object Main extends App {
 
   using(new ResourceScope) { rs =>
     val connProvider = rs.open(new JdbcConnectionProvider(
-      "jdbc:postgresql://" + config.hostport + "/" + config.database,
-      config.username,
-      config.password
+      "jdbc:postgresql://" + config.database.hostport + "/" + config.database.database,
+      config.database.username,
+      config.database.password
     ))
 
     val conn = connProvider.openImmediate(rs)
@@ -131,6 +135,23 @@ where
 
     case class UDFDefinition(soql: String, parameters: Seq[UDFParameter]) {
       val parametersMap = OrderedMap() ++ parameters.iterator.map { param => HoleName(param.name) -> toSoQLType(param.typ) }
+
+      def withOverrides(uid: String, overrides: Overrides): UDFDefinition = {
+        overrides.parameters.get(uid) match {
+          case None => this
+          case Some(typeOverrides) =>
+            val replacement = copy(
+              parameters = parameters.map { param =>
+                typeOverrides.get(param.name) match {
+                  case None => param
+                  case Some(t) => param.copy(typ = t)
+                }
+              }
+            )
+            log.info("Patching parameter types: old (${parameters.map(_.typ).mkString(",")}); new (${replacement.parameters.map(_.typ).mkString(",")})")
+            replacement
+        }
+      }
     }
     object UDFDefinition { implicit val jCodec = AutomaticJsonCodecBuilder[UDFDefinition] }
 
@@ -152,10 +173,23 @@ where
             binaryTreeSelect(soql)
         )
 
+      def patchSoql(uid: String, soql: String): String =
+        config.overrides.soqlPatch.get(uid) match {
+          case None =>
+            soql
+          case Some(replacements) =>
+            val replacement = replacements.foldLeft(soql) { (soql, fromto) =>
+              soql.replaceFirst(java.util.regex.Pattern.quote(fromto._1), java.util.regex.Matcher.quoteReplacement(fromto._2))
+            }
+            log.info(s"Patching soql: old length ${soql.length}; new length ${replacement.length}")
+            replacement
+        }
+
       def lookup(scope: DomainId, name: ResourceName): Either[LookupError, TableDescription] = {
-        println(s"Looking up $scope : $name")
+        log.info(s"Looking up $scope : $name")
         lensP.query(LensSpace(scope, name.name)).run(_.nextOption()) match {
           case Some(lens) =>
+            log.info(s"Found ${lens.uid}")
             val columns = lensColumnP.query(lens.id).run { results =>
               results.toVector
             }
@@ -165,15 +199,24 @@ where
               }
               val udfDefinition = JsonUtil.parseJson[UDFDefinition](udfDefJson) match {
                 case Left(e) => throw new Exception(lens.uid + " : " + e.english)
-                case Right(d) => d
+                case Right(d) => d.withOverrides(lens.uid, config.overrides)
+              }
+              for((c, t) <- udfDefinition.parametersMap) {
+                log.debug(s"  ${c} : ${t}")
               }
               Right(TableFunction(
                 scope = lens.domainId,
                 canonicalName = CanonicalName(lens.uid),
-                soql = udfDefinition.soql,
+                soql = patchSoql(lens.uid, udfDefinition.soql),
                 parameters = udfDefinition.parametersMap
               ))
             } else if(lens.isDefault) {
+              val schema = columns.map { c =>
+                ColumnName(c.fieldName) -> toSoQLType(c.dbName)
+              }
+              for((c, t) <- schema) {
+                log.debug(s"  ${c} : ${t}")
+              }
               Right(Dataset(
                 DatabaseTableName(lens.uid),
                 OrderedMap(
@@ -181,9 +224,7 @@ where
                   ColumnName(":version") -> SoQLVersion,
                   ColumnName(":created_at") -> SoQLFixedTimestamp,
                   ColumnName(":updated_at") -> SoQLFixedTimestamp
-                ) ++ columns.map { c =>
-                  ColumnName(c.fieldName) -> toSoQLType(c.dbName)
-                }
+                ) ++ schema
               ))
             } else {
               val queryString = lens.queryString.getOrElse {
@@ -207,7 +248,7 @@ where
                 scope = lens.domainId,
                 canonicalName = CanonicalName(lens.uid),
                 basedOn = ResourceName(basedOn.uid),
-                soql = queryString,
+                soql = patchSoql(lens.uid, queryString),
                 parameters = clientContext.map(_.parametersMap).getOrElse(Map.empty)
               ))
             }
@@ -227,14 +268,14 @@ where
       case Some(did) => did
       case None => throw new Exception("No such domain : " + domainName)
     }
-    println(domainId)
+    log.info("{}", domainId)
     for(uid <- views) {
       tableFinder.findTables(domainId, ResourceName(uid)) match {
         case tableFinder.Success(tm) =>
           val analysis = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo)(tm, UserParameters.emptyFor(tm))
-          println(analysis.merge(SoQLFunctions.And.monomorphic.get).preserveOrdering(SoQLFunctions.RowNumber.monomorphic.get).useSelectListReferences.statement.debugStr)
+          log.info(analysis.merge(SoQLFunctions.And.monomorphic.get).preserveOrdering(SoQLFunctions.RowNumber.monomorphic.get).useSelectListReferences.statement.debugStr)
         case other =>
-          println(other)
+          log.info("{}", other)
       }
     }
   }
