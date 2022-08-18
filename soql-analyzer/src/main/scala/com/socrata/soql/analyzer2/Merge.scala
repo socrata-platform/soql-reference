@@ -9,6 +9,10 @@ import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
 
 class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
+  private implicit val hd = new HasDoc[CV] {
+    override def docOf(v: CV) = com.socrata.prettyprint.Doc(v.toString)
+  }
+
   def merge(stmt: Statement[RNS, CT, CV]): Statement[RNS, CT, CV] = {
     val r = doMerge(stmt)
     debug("finished", r)
@@ -19,24 +23,34 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
   private def doMerge(stmt: Statement[RNS, CT, CV]): Statement[RNS, CT, CV] =
     stmt match {
       case c@CombinedTables(_, left, right) =>
+        debug("combined tables")
         c.copy(left = doMerge(left), right = doMerge(right))
       case cte@CTE(_defLabel, defQ, _label, useQ) =>
         // TODO: maybe make this not a CTE at all, sometimes?
+        debug("CTE")
         cte.copy(definitionQuery = doMerge(defQ), useQuery = doMerge(useQ))
       case v: Values[CT, CV] =>
+        debug("values")
         v
       case select: Select[RNS, CT, CV] =>
+        debug("select")
         select.copy(from = mergeFrom(select.from)) match {
           case b@Select(_, _, Unjoin(FromStatement(a: Select[RNS, CT, CV], aLabel, aAlias), bRejoin), _, _, _, _, _, _, _, _) =>
             // This privileges the first query in b's FROM because our
             // queries are frequently constructed in a chain.
             mergeSelects(a, aLabel, aAlias, b, bRejoin) match {
               case None =>
+                debug("declained to merge")
                 b
               case Some(merged) =>
+                debug("merged")
                 merged
             }
+          case other: Select[_, _, _] =>
+            debug("select on not-from-select")
+            other
           case other =>
+            debug("Not a select")
             other
         }
     }
@@ -121,6 +135,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
     //   select merged_projection from bRejoin(FromStatement(a.from)) ...)
     (a, b) match {
       case (a, b) if definitelyRequiresSubselect(a, aLabel, b) =>
+        debug("declaining to merge - definitely requires subselect")
         None
       case (a, Select(bDistinct, bSelect, _oldA, None, Nil, None, Nil, bLim, bOff, None, bHint)) =>
         // Just projection change + possibly limit/offset and
@@ -139,7 +154,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
 
       case (a@Select(_aDistinct, aSelect, aFrom, aWhere, Nil, None, aOrder, None, None, None, aHint),
             b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if !b.isAggregated =>
-        debug("non-aggregate on non-aggregate", a, b)
+        debug("non-aggregate on non-aggregate")
         Some(a.copy(
                selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
                from = bRejoin(a.from, replaceRefs(aLabel, a.selectedExprs, _)),
@@ -152,7 +167,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
 
       case (a@Select(_aDistinct, aSelect, aFrom, aWhere, Nil, None, _aOrder, None, None, None, aHint),
             b@Select(bDistinct, bSelect, _oldA, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, bHint)) if b.isAggregated =>
-        debug("aggregate on non-aggregate", a, b)
+        debug("aggregate on non-aggregate")
         Some(Select(
                distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
                selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
@@ -168,7 +183,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
 
       case (a@Select(_aDistinct, aSelect, aFrom, aWhere, aGroup, aHaving, aOrder, None, None, None, aHint),
             b@Select(bDistinct, bSelect, _oldA, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, bHint)) if a.isAggregated =>
-        debug("non-aggregate on aggregate", a, b)
+        debug("non-aggregate on aggregate")
         Some(Select(
                distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
                selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
@@ -182,24 +197,25 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
                search = None,
                hint = aHint ++ bHint))
       case _ =>
+        debug("decline to merge - unknown pattern")
         None
     }
 
   private def definitelyRequiresSubselect(a: Select[RNS, CT, CV], aLabel: TableLabel, b: Select[RNS, CT, CV]): Boolean = {
     if(b.hint(SelectHint.NoChainMerge)) {
-      debug("B asks not to merge with its upstream", a, b)
+      debug("B asks not to merge with its upstream")
       return true
     }
 
     if(b.search.isDefined) {
-      debug("B has a search", a, b)
+      debug("B has a search")
       return true
     }
 
     if(a.distinctiveness != Distinctiveness.Indistinct) {
       // selecting from a DISTINCT query is tricky to merge; let's
       // not.
-      debug("A is distinct in some way", a, b)
+      debug("A is distinct in some way")
       return true
     }
 
@@ -208,7 +224,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         // can't smash the queries together because a trims out some
         // of its rows after-the-fact, so b's windows (or groups)
         // shouldn't see those trimmed-out rows.
-        debug("B cares about windows or groups, and A trims leading/trailing rows", a, b)
+        debug("B cares about windows or groups, and A trims leading/trailing rows")
         return true
       }
     }
@@ -216,13 +232,13 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
     if(a.isAggregated) {
       if(b.isAggregated) {
         // can't aggregate-on-aggregate in a single query
-        debug("aggregate-on-aggregate", a, b)
+        debug("aggregate-on-aggregate")
         return true
       }
 
       if(!b.from.isInstanceOf[AtomicFrom[_, _, _]]) {
         // b multiplies the rows, which affects grouping; can't merge.
-        debug("join-on-aggregate", a, b)
+        debug("join-on-aggregate")
         return true
       }
     }
@@ -244,7 +260,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         if(shapeChanging(b)) {
           // Changing the shape of the result-set => would affect the
           // windows seen => need a subselect
-          debug("shape-changing on windowed", a, b)
+          debug("shape-changing on windowed")
           return true
         }
 
@@ -262,14 +278,14 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
             }
 
           if(windowsWithinWindows) {
-            debug("windows within windows", a, b)
+            debug("windows within windows")
             return true
           }
         }
       }
     }
 
-    debug("no a-priori reason not to merge", a, b)
+    debug("no a-priori reason not to merge")
     false
   }
 
@@ -280,113 +296,6 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
       q.where.isDefined ||
       q.orderBy.nonEmpty ||
       q.distinctiveness != Distinctiveness.Indistinct
-
-  private var debugOne = false
-  private def debugLine(s: => Any): Unit = {}
-  private def debug(message: String): Unit = {
-    if(debugOne) {
-      debugLine("-------------------------------------------------------------------------------")
-    } else {
-      debugLine("vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv MERGE vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv")
-      debugOne = true
-    }
-    debugLine(message)
-  }
-  private def debugDone(): Unit = {
-    if(debugOne) {
-      debugLine("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
-      debugOne = false
-    }
-  }
-  private def debug(message: String, a: Statement[RNS, CT, CV], bs: Statement[RNS, CT, CV]*): Unit = {
-    implicit val hd = new HasDoc[CV] {
-      override def docOf(v: CV) = com.socrata.prettyprint.Doc(v.toString)
-    }
-    debug(message)
-    debug(a.debugStr)
-    bs.foreach { b => debug(b.debugStr) }
-  }
-
-  private def mergeUnjoined(superquery: Select[RNS, CT, CV], subquery: Select[RNS, CT, CV], fromLabel: TableLabel, fromAlias: Option[(RNS, ResourceName)]): Option[Select[RNS, CT, CV]] =
-    // Switch this around because I'm thinking about this as "select subquery |> select superquery"
-    // rather than "select superquery from (subquery)"
-    (subquery, superquery) match {
-      case (_, b) if b.hint(SelectHint.NoChainMerge) =>
-        None
-      case (a, b) if a.isWindowed && (b.isWindowed || b.isAggregated) =>
-        System.err.println("MERGE: ABANDON: PARENT WINDOWED AND CHILD WINDOWED OR AGGREGATED")
-        None
-      case (a, b) if a.isAggregated && b.isAggregated =>
-        System.err.println("MERGE: ABANDON: PARENT AND CHILD BOTH AGGREGATED")
-        None
-      case (a, Select(Distinctiveness.Indistinct, bSelect, _oldA, None, Nil, None, Nil, None, None, None, bHint)) =>
-        // Just projection change; we can merge this onto anything
-        System.err.println("MERGE: SIMPLE PROJECTION CHANGE")
-        Some(a.copy(
-               selectList = mergeSelection(fromLabel, a.selectedExprs, bSelect),
-               hint = a.hint ++ bHint
-             ))
-      case (a, b@Select(Distinctiveness.Indistinct, bSelect, _oldA, None, Nil, None, Nil, bLim, bOff, None, bHint)) if !b.isAggregated =>
-        // Just projection + limit/offset change; we can merge this onto (almost) anything
-        System.err.println("MERGE: PROJECTION + LIMOFF CHANGE")
-        val (newLim, newOff) = Merger.combineLimits(a.limit, a.offset, bLim, bOff)
-        Some(a.copy(
-               selectList = mergeSelection(fromLabel, a.selectedExprs, bSelect),
-               limit = newLim,
-               offset = newOff,
-               hint = a.hint ++ bHint
-             ))
-
-      case (a@Select(Distinctiveness.Indistinct, aSelect, aFrom, aWhere, Nil, None, aOrder, None, None, aSearch, aHint),
-            b@Select(Distinctiveness.Indistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint))
-          if !a.isWindowed && !a.isAggregated && !b.isAggregated =>
-        // Non-aggregate on unwindowed non-aggregate change of filter + possible new limit/offset
-        System.err.println("MERGE: SIMPLE PROJECTION CHANGE")
-        Some(Select(distinctiveness = Distinctiveness.Indistinct,
-                    selectList = mergeSelection(fromLabel, a.selectedExprs, bSelect),
-                    from = aFrom,
-                    where = mergeWhereLike(fromLabel, a.selectedExprs, aWhere, bWhere),
-                    groupBy = Nil,
-                    having = None,
-                    orderBy = mergeOrderBy(fromLabel, a.selectedExprs, aOrder, bOrder),
-                    limit = bLim,
-                    offset = bOff,
-                    search = aSearch,
-                    hint = aHint ++ bHint))
-
-    case (a@Select(Distinctiveness.Indistinct, aSelect, aFrom, aWhere, Nil, None, _aOrder, None, None, None, aHints),
-          b@Select(Distinctiveness.Indistinct, bSelect, _oldA, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, bHints)) if b.isAggregated || b.isWindowed =>
-        // an aggregate on a non-aggregate
-        System.err.println("MERGE: AGGREGATE ON NON-AGGREGATE")
-        Some(Select(distinctiveness = Distinctiveness.Indistinct,
-                    selectList = mergeSelection(fromLabel, a.selectedExprs, bSelect),
-                    from = aFrom,
-                    where = mergeWhereLike(fromLabel, a.selectedExprs, aWhere, bWhere),
-                    groupBy = mergeGroupBy(fromLabel, a.selectedExprs, bGroup),
-                    having = mergeWhereLike(fromLabel, a.selectedExprs, None, bHaving),
-                    orderBy = mergeOrderBy(fromLabel, a.selectedExprs, Nil, bOrder),
-                    limit = bLim,
-                    offset = bOff,
-                    search = None,
-                    hint = aHints ++ bHints))
-      case (a@Select(Distinctiveness.Indistinct, aSelect, aFrom, aWhere, aGroup, aHaving, aOrder, None, None, None, aHints),
-            b@Select(Distinctiveness.Indistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHints)) if a.isAggregated || a.isWindowed =>
-        // an non-aggregate on an aggregate
-        System.err.println("MERGE: NON-AGGREGATE ON AGGREGATE")
-        Some(Select(distinctiveness = Distinctiveness.Indistinct,
-                    selectList = mergeSelection(fromLabel, a.selectedExprs, bSelect),
-                    from = aFrom,
-                    where = aWhere,
-                    groupBy = aGroup,
-                    having = mergeWhereLike(fromLabel, a.selectedExprs, aHaving, bWhere),
-                    orderBy = mergeOrderBy(fromLabel, a.selectedExprs, aOrder, bOrder),
-                    limit = bLim,
-                    offset = bOff,
-                    search = None,
-                    hint = aHints ++ bHints))
-      case _ =>
-        None
-    }
 
   private def mergeDistinct(
     aTable: TableLabel,
@@ -479,6 +388,29 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
   }
 
   private def oops(msg: String): Nothing = throw new Exception(msg)
+
+  private var debugOne = false
+  private def debugLine(s: => Any): Unit = { System.err.println(s) }
+  private def debug(message: String): Unit = {
+    if(debugOne) {
+      debugLine("-------------------------------------------------------------------------------")
+    } else {
+      debugLine("vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv MERGE vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv")
+      debugOne = true
+    }
+    debugLine(message)
+  }
+  private def debugDone(): Unit = {
+    if(debugOne) {
+      debugLine("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
+      debugOne = false
+    }
+  }
+  private def debug(message: String, a: Statement[RNS, CT, CV], bs: Statement[RNS, CT, CV]*): Unit = {
+    debug(message)
+    debug(a.debugStr)
+    bs.foreach { b => debug(b.debugStr) }
+  }
 }
 
 object Merger {
