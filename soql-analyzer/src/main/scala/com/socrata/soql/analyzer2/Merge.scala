@@ -390,7 +390,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
   private def oops(msg: String): Nothing = throw new Exception(msg)
 
   private var debugOne = false
-  private def debugLine(s: => Any): Unit = { System.err.println(s) }
+  private def debugLine(s: => Any): Unit = { }
   private def debug(message: String): Unit = {
     if(debugOne) {
       debugLine("-------------------------------------------------------------------------------")

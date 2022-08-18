@@ -6,6 +6,7 @@ import scala.util.parsing.input.Position
 import com.socrata.prettyprint.prelude._
 import com.socrata.prettyprint.Pretty
 
+import com.socrata.soql.collection._
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.{HasType, HasDoc}
 
