@@ -169,4 +169,60 @@ select text, count(num) as n group by text having n = 5
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
+
+  test("simple on windowed") {
+    val tf = MockTableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+select text, row_number() over () as rn |> select text, rn + 1 limit 5
+""")
+    val analysis = analyzer(start, UserParameters.empty)
+
+    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+select text, row_number() over () + 1 limit 5
+""")
+    val expectedAnalysis = analyzer(start2, UserParameters.empty)
+
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("filter on join") {
+    val tf = MockTableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "locowt") -> D("amount" -> TestNumber, "words" -> TestText)
+    )
+
+    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+select text, num, @ct.amount, @ct.words join @locowt as @ct on num = @ct.amount |> select * where amount = 3
+""")
+    val analysis = analyzer(start, UserParameters.empty)
+
+    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+select text, num, @ct.amount, @ct.words join @locowt as @ct on num = @ct.amount where @ct.amount = 3
+""")
+    val expectedAnalysis = analyzer(start2, UserParameters.empty)
+
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("join on simple") {
+    val tf = MockTableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "locowt") -> D("amount" -> TestNumber, "words" -> TestText)
+    )
+
+    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+select text, num order by num |> select * join @locowt as ct on num = @ct.amount
+""")
+    val analysis = analyzer(start, UserParameters.empty)
+
+    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+select text, num join @locowt as ct on num = @ct.amount order by num
+""")
+    val expectedAnalysis = analyzer(start2, UserParameters.empty)
+
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
 }

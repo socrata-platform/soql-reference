@@ -53,6 +53,7 @@ case class NonEmptySeq[+T](head: T, tail: Seq[T] = Seq.empty) {
     val newHead = headF(head)
     tail.foldLeft(newHead)(tailF)
   }
+  def exists(f: T => Boolean) = f(head) || tail.exists(f)
 
   def toSeq: Seq[T] = head +: tail
 
