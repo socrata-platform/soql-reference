@@ -65,6 +65,9 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
     wantOrderingColumn: Boolean
   ): (Option[AutoColumnLabel], Self[RNS, CT2, CV])
 
+  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]]
+  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean
+
   final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
   final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder =
     debugDoc.layoutSmart().toStringBuilder(sb)
@@ -84,6 +87,12 @@ case class CombinedTables[+RNS, +CT, +CV](
   def asSelf = this
 
   val schema = left.schema
+
+  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+    left.find(predicate).orElse(right.find(predicate))
+
+  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+    left.contains(e) || right.contains(e)
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName] =
     left.realTables ++ right.realTables
@@ -146,6 +155,12 @@ case class CTE[+RNS, +CT, +CV](
   def asSelf = this
 
   val schema = useQuery.schema
+
+  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+    definitionQuery.find(predicate).orElse(useQuery.find(predicate))
+
+  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+    definitionQuery.contains(e) || useQuery.contains(e)
 
   private[analyzer2] def realTables =
     definitionQuery.realTables ++ useQuery.realTables
@@ -249,6 +264,12 @@ case class Values[+CT, +CV](
 
   def useSelectListReferences = this
 
+  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+    values.iterator.flatMap(_.iterator.flatMap(_.find(predicate))).nextOption()
+
+  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+    values.exists(_.exists(_.contains(e)))
+
   def mapAlias[RNS2](f: Option[(Nothing, ResourceName)] => Option[(RNS2, ResourceName)]) = this
 
   private[analyzer2] def realTables = Map.empty
@@ -299,6 +320,49 @@ case class Select[+RNS, +CT, +CV](
 ) extends Statement[RNS, CT, CV] {
   type Self[+RNS, +CT, +CV] = Select[RNS, CT, CV]
   def asSelf = this
+
+  final def directlyFind(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] = {
+    // "directly" means "in _this_ query, not any non-lateral subqueries"
+    selectList.valuesIterator.flatMap(_.expr.find(predicate)).nextOption().orElse {
+      from.reduce[Option[Expr[CT, CV]]](
+        Function.const(None),
+        { (a, join) =>
+          a.orElse {
+            join.on.find(predicate)
+          }.orElse {
+            if(join.lateral) join.right.find(predicate) else None
+          }
+        })
+    }.orElse {
+      where.flatMap(_.find(predicate))
+    }.orElse {
+      groupBy.iterator.flatMap(_.find(predicate)).nextOption()
+    }.orElse {
+      having.flatMap(_.find(predicate))
+    }.orElse {
+      orderBy.iterator.flatMap(_.expr.find(predicate)).nextOption()
+    }.orElse {
+      distinctiveness match {
+        case Distinctiveness.Indistinct => None
+        case Distinctiveness.FullyDistinct => None
+        case Distinctiveness.On(exprs) => exprs.iterator.flatMap(_.find(predicate)).nextOption()
+      }
+    }
+  }
+
+  def directlyContains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+    directlyFind(_ == e).isDefined
+
+  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+    directlyFind(predicate).orElse { // this checks everything except the non-lateral AtomicFroms
+      from.reduce[Option[Expr[CT, CV]]]( // ..so that's what this does
+        _.find(predicate),
+        { (a, join) => a.orElse { if(join.lateral) None else join.right.find(predicate) } }
+      )
+    }
+
+  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+    find(_ == e).isDefined
 
   val schema = selectList.withValuesMapped { case NamedExpr(expr, name) => NameEntry(name, expr.typ) }
   lazy val selectedExprs = selectList.withValuesMapped(_.expr)

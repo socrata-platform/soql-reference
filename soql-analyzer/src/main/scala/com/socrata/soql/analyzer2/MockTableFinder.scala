@@ -10,7 +10,7 @@ import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.{StandaloneParser, AbstractParser}
-import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, ParsedTableDescription, CanonicalName}
+import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, ParsedTableDescription, CanonicalName, TableMap}
 
 sealed abstract class Thing[+RNS, +CT]
 case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT]
@@ -137,22 +137,23 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
   private def parsed(thing: TableDescription) = {
     thing match {
       case ds: Dataset => ds.toParsed
-      case Query(scope, canonicalName, parent, soql, params) => ParsedTableDescription.Query(scope, canonicalName, parent, parse(soql, false).getOrElse(throw new Exception("broken soql fixture 1")), params)
-      case TableFunction(scope, canonicalName, soql, params) => ParsedTableDescription.TableFunction(scope, canonicalName, parse(soql, false).getOrElse(throw new Exception("broken soql fixture 2")), params)
+      case Query(scope, canonicalName, parent, soql, params) => ParsedTableDescription.Query(scope, canonicalName, parent, parse(soql, false).getOrElse(throw new Exception("broken soql fixture 1")), soql, params)
+      case TableFunction(scope, canonicalName, soql, params) => ParsedTableDescription.TableFunction(scope, canonicalName, parse(soql, false).getOrElse(throw new Exception("broken soql fixture 2")), soql, params)
     }
   }
 
   def apply(names: (RNS, String)*): Success[TableMap] = {
-    val r = names.map { case (scope, n) =>
+    val r = names.foldLeft(TableMap.empty[RNS, CT]) { (tableMap, scopeName) =>
+      val (scope, n) = scopeName
       val name = ResourceName(n)
-      (scope, name) -> parsed(tables((scope, name)))
-    }.toMap
+      tableMap + ((scope, name) -> parsed(tables((scope, name))))
+    }
 
     if(r.size != names.length) {
       throw new Exception("Malformed table list")
     }
 
-    Success(new TableMap(r))
+    Success(r)
   }
 
   def notFound(scope: RNS, name: String) =

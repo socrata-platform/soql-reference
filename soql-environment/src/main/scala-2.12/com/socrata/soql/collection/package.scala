@@ -12,4 +12,10 @@ package object collection extends collection.CommonCollection {
     def mapValues[C](f: B => C): IterableView[(A, C), Iterable[_]] =
       underlying.map { case (a, b) => (a, f(b)) }
   }
+
+  implicit class AugmentedIterator[A](private val underlying: Iterator[A]) extends AnyVal {
+    def nextOption(): Option[A] =
+      if(underlying.hasNext) Some(underlying.next())
+      else None
+  }
 }

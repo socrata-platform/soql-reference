@@ -2,11 +2,22 @@ package com.socrata.soql.analyzer2
 
 import scala.annotation.tailrec
 
+import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode}
+import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder, JsonKey}
+
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName}
 
-case class LabelEntry[+CT](label: ColumnLabel, typ: CT)
-case class NameEntry[+CT](name: ColumnName, typ: CT)
+case class LabelEntry[+CT](label: ColumnLabel, @JsonKey("type") typ: CT)
+object LabelEntry {
+  implicit def jEncode[CT: JsonEncode] = AutomaticJsonEncodeBuilder[LabelEntry[CT]]
+  implicit def jDecode[CT: JsonDecode] = AutomaticJsonDecodeBuilder[LabelEntry[CT]]
+}
+case class NameEntry[+CT](name: ColumnName, @JsonKey("type") typ: CT)
+object NameEntry {
+  implicit def jEncode[CT: JsonEncode] = AutomaticJsonEncodeBuilder[NameEntry[CT]]
+  implicit def jDecode[CT: JsonDecode] = AutomaticJsonDecodeBuilder[NameEntry[CT]]
+}
 
 case class Entry[+CT](name: ColumnName, label: ColumnLabel, typ: CT)
 

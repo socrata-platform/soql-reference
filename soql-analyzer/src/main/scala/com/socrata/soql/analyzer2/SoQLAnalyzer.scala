@@ -12,6 +12,7 @@ import scala.util.parsing.input.{Position, NoPosition}
 import scala.collection.compat._
 
 import com.socrata.soql.{BinaryTree, Leaf, TrueOp, PipeQuery, UnionQuery, UnionAllQuery, IntersectQuery, IntersectAllQuery, MinusQuery, MinusAllQuery}
+import com.socrata.soql.parsing.SoQLPosition
 import com.socrata.soql.ast
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName, HoleName, UntypedDatasetContext}
@@ -49,13 +50,13 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       val from =
         query match {
           case FoundTables.Saved(rn) =>
-            analyzeForFrom(scope, rn, Environment.empty)
+            analyzeForFrom(scope, None, rn, Environment.empty)
           case FoundTables.InContext(rn, q) =>
-            val from = analyzeForFrom(scope, rn, Environment.empty)
+            val from = analyzeForFrom(scope, None, rn, Environment.empty)
             new Context(scope, None, Environment.empty, Map.empty).
               analyzeStatement(q, Some(from))
           case FoundTables.InContextImpersonatingSaved(rn, q, impersonating) =>
-            val from = analyzeForFrom(scope, rn, Environment.empty)
+            val from = analyzeForFrom(scope, None, rn, Environment.empty)
             new Context(scope, Some(impersonating), Environment.empty, Map.empty).
               analyzeStatement(q, Some(from))
           case FoundTables.Standalone(q) =>
@@ -102,18 +103,18 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         columns = desc.schema
       )
 
-    def analyzeForFrom(scope: RNS, rn: ResourceName, env: Environment[CT]): AtomicFrom[RNS, CT, CV] = {
+    def analyzeForFrom(scope: RNS, canonicalName: Option[CanonicalName], rn: ResourceName, env: Environment[CT]): AtomicFrom[RNS, CT, CV] = {
       tableMap.find(scope, rn) match {
         case ds: ParsedTableDescription.Dataset[CT] =>
           fromTable(ds, None)
-        case ParsedTableDescription.Query(scope, canonicalName, basedOn, parsed, parameters) =>
+        case ParsedTableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters) =>
           // so this is basedOn |> parsed
           // so we want to use "basedOn" as the implicit "from" for "parsed"
-          val from = analyzeForFrom(scope, basedOn, env)
+          val from = analyzeForFrom(scope, None, basedOn, env)
           new Context(scope, Some(canonicalName), env, Map.empty).
             analyzeStatement(parsed, Some(from))
-        case ParsedTableDescription.TableFunction(_, _, _, _) =>
-          tableFunctionInIncorrectPosition()
+        case ParsedTableDescription.TableFunction(_, _, _, _, _) =>
+          tableFunctionInIncorrectPosition(scope, canonicalName)
       }
     }
 
@@ -132,7 +133,10 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             val rhs = intoStatement(analyzeStatement(other.right, None))
 
             if(lhs.schema.values.map(_.typ) != rhs.schema.values.map(_.typ)) {
-              tableOpTypeMismatch()
+              tableOpTypeMismatch(
+                OrderedMap() ++ lhs.schema.valuesIterator.map { case NameEntry(name, typ) => name -> typ },
+                OrderedMap() ++ rhs.schema.valuesIterator.map { case NameEntry(name, typ) => name -> typ }
+              )
             }
 
             FromStatement(CombinedTables(opify(other), lhs, rhs), labelProvider.tableLabel(), None)
@@ -184,7 +188,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         // With the aliases assigned we'll typecheck the select-list,
         // building up the set of named exprs we can use as shortcuts
         // for other expressions
-        class EvaluationState(val namedExprs: OrderedMap[ColumnName, Expr[CT, CV]] = OrderedMap.empty) {
+        class EvaluationState(val namedExprs: Map[ColumnName, Expr[CT, CV]] = OrderedMap.empty) {
           def update(name: ColumnName, expr: Expr[CT, CV]): EvaluationState = {
             new EvaluationState(namedExprs + (name -> expr))
           }
@@ -206,7 +210,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             Distinctiveness.On(
               exprs.map { expr =>
                 if(expr.isInstanceOf[ast.Literal]) {
-                  constantInDistinctOn(expr.position)
+                  literalNotAllowedInDistinctOn(expr.position)
                 }
                 finalState.typecheck(expr)
               }
@@ -216,7 +220,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         val checkedWhere = where.map(finalState.typecheck(_, Some(typeInfo.boolType)))
         val checkedGroupBys = groupBys.map { expr =>
           if(expr.isInstanceOf[ast.Literal]) {
-            constantInGroupBy(expr.position)
+            literalNotAllowedInGroupBy(expr.position)
           }
           val checked = finalState.typecheck(expr)
           if(!typeInfo.isGroupable(checked.typ)) {
@@ -227,7 +231,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         val checkedHaving = having.map(finalState.typecheck(_, Some(typeInfo.boolType)))
         val checkedOrderBys = orderBys.map { case ast.OrderBy(expr, ascending, nullLast) =>
           if(expr.isInstanceOf[ast.Literal]) {
-            constantInOrderBy(expr.position)
+            literalNotAllowedInOrderBy(expr.position)
           }
           val checked = finalState.typecheck(expr)
           if(!typeInfo.isOrdered(checked.typ)) {
@@ -253,16 +257,12 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             // all well
         }
 
-        for(pos <- checkedGroupBys.collect { case l: Literal[_, _] => l.position }.headOption) {
-          literalNotAllowedInGroupBy(pos)
-        }
-        for(pos <- checkedOrderBys.collect { case OrderBy(l: Literal[_, _], _, _) => l.position }.headOption) {
-          literalNotAllowedInOrderBy(pos)
-        }
-
         val stmt = Select(
           checkedDistinct,
-          finalState.namedExprs.map { case (cn, expr) => labelProvider.columnLabel() -> NamedExpr(expr, cn) },
+          OrderedMap() ++ aliasAnalysis.expressions.keysIterator.map { cn =>
+            val expr = finalState.namedExprs(cn)
+            labelProvider.columnLabel() -> NamedExpr(expr, cn)
+          },
           completeFrom,
           checkedWhere,
           checkedGroupBys,
@@ -363,7 +363,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             } else {
               // standalone query: select ... from sometable ...
               // n.b., sometable may actually be a query
-              analyzeForFrom(scope, rn, enclosingEnv).
+              analyzeForFrom(scope, canonicalName, rn, enclosingEnv).
                 reAlias(Some((scope, alias)))
             }
           case (Some(input), None) =>
@@ -409,7 +409,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       def analyzeJoinSelect(js: ast.JoinSelect): AtomicFrom[RNS, CT, CV] = {
         js match {
           case ast.JoinTable(tn) =>
-            analyzeForFrom(scope, ResourceName(tn.nameWithoutPrefix), enclosingEnv).
+            analyzeForFrom(scope, canonicalName, ResourceName(tn.nameWithoutPrefix), enclosingEnv).
               reAlias(Some((scope, ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix)))))
           case ast.JoinQuery(select, alias) =>
             analyzeStatement(select, None).reAlias(Some((scope, ResourceName(alias.substring(1)))))
@@ -421,7 +421,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       def analyzeUDF(tableName: TableName, params: Seq[ast.Expression]): AtomicFrom[RNS, CT, CV] = {
         val resource = ResourceName(tableName.nameWithoutPrefix)
         tableMap.find(scope, resource) match {
-          case ParsedTableDescription.TableFunction(udfScope, udfCanonicalName, parsed, paramSpecs) =>
+          case ParsedTableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs) =>
             if(params.length != paramSpecs.size) {
               incorrectNumberOfParameters(resource, expected = params.length, got = paramSpecs.size)
             }
@@ -559,30 +559,30 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             // ok
         }
       }
-    }
 
-    def expectedBoolean(expr: ast.Expression, got: CT): Nothing = ???
-    def incorrectNumberOfParameters(forUdf: ResourceName, expected: Int, got: Int): Nothing = ???
-    def distinctOnMustBePrefixOfOrderBy(): Nothing = ???
-    def tableFunctionInIncorrectPosition(): Nothing = ???
-    def invalidGroupBy(typ: CT, position: Position): Nothing = ???
-    def unorderedOrderBy(typ: CT, position: Position): Nothing = ???
-    def parametersForNonUdf(name: ResourceName): Nothing = ???
-    def udfParameterTypeMismatch(position: Position, expected: CT, got: CT): Nothing = ???
-    def addScopeError(e: AddScopeError): Nothing = ???
-    def noDataSource(): Nothing = ???
-    def chainWithFrom(): Nothing = ???
-    def thisWithoutContext(): Nothing = ???
-    def tableOpTypeMismatch(): Nothing = ???
-    def literalNotAllowedInGroupBy(pos: Position): Nothing = ???
-    def literalNotAllowedInOrderBy(pos: Position): Nothing = ???
-    def aggregateFunctionNotAllowed(pos: Position): Nothing = ???
-    def aggregateRequired(pos: Position): Nothing = ???
-    def windowFunctionNotAllowed(pos: Position): Nothing = ???
-    def augmentAliasAnalysisException(aae: AliasAnalysisException): Nothing = throw aae
-    def augmentTypecheckException[CT, CV](tce: Typechecker[CT, CV]#TypecheckError): Nothing = throw tce
-    def constantInGroupBy(pos: Position): Nothing = ???
-    def constantInOrderBy(pos: Position): Nothing = ???
-    def constantInDistinctOn(pos: Position): Nothing = ???
- }
+      class Oops(label: String, args: Any*)(cause: Throwable = null) extends Exception(s"$scope@$canonicalName: $label " + args.mkString("(", ", ", ")") + args.find(_.isInstanceOf[Position]).fold("") { p => "\n" + SoQLPosition.show(p.asInstanceOf[Position]) }, cause)
+
+      def expectedBoolean(expr: ast.Expression, got: CT): Nothing = throw new Oops("expected boolean", expr, got)()
+      def incorrectNumberOfParameters(forUdf: ResourceName, expected: Int, got: Int): Nothing = throw new Oops("incorrect number of parameters", forUdf, expected, got)()
+      def distinctOnMustBePrefixOfOrderBy(): Nothing = throw new Oops("distinct on must be prefix of order by")()
+      def invalidGroupBy(typ: CT, position: Position): Nothing = throw new Oops("invalid group by", typ, position)()
+      def unorderedOrderBy(typ: CT, position: Position): Nothing = throw new Oops("unordered order by", typ, position)()
+      def parametersForNonUdf(name: ResourceName): Nothing = throw new Oops("parameters for non-udf", name)()
+      def udfParameterTypeMismatch(position: Position, expected: CT, got: CT): Nothing = throw new Oops("udf parameter type mismatch", expected, got, position)()
+      def addScopeError(e: AddScopeError): Nothing = throw new Oops("table alias already exists", e)()
+      def noDataSource(): Nothing = throw new Oops("no data source")()
+      def chainWithFrom(): Nothing = throw new Oops("chain with from")()
+      def thisWithoutContext(): Nothing = throw new Oops("this without context")()
+      def tableOpTypeMismatch(left: OrderedMap[ColumnName, CT], right: OrderedMap[ColumnName, CT]): Nothing = throw new Oops("table op type mismatch", left, right)()
+      def literalNotAllowedInGroupBy(pos: Position): Nothing = throw new Oops("literal not allowed in group by", pos)()
+      def literalNotAllowedInOrderBy(pos: Position): Nothing = throw new Oops("literal not allowed in order by", pos)()
+      def literalNotAllowedInDistinctOn(pos: Position): Nothing = throw new Oops("literal not allowed in order by", pos)()
+      def aggregateFunctionNotAllowed(pos: Position): Nothing = throw new Oops("aggregate function not allowed", pos)()
+      def aggregateRequired(pos: Position): Nothing = throw new Oops("aggregate required", pos)()
+      def windowFunctionNotAllowed(pos: Position): Nothing = throw new Oops("window function not allowed", pos)()
+      def augmentAliasAnalysisException(aae: AliasAnalysisException): Nothing = throw new Oops("alias analysis exception", aae.position)(aae)
+      def augmentTypecheckException[CT, CV](tce: Typechecker[CT, CV]#TypecheckError): Nothing = throw new Oops("typecheck error", tce.pos)(tce)
+    }
+    def tableFunctionInIncorrectPosition(scope: RNS, canonicalName: Option[CanonicalName]): Nothing = throw new Exception
+  }
 }

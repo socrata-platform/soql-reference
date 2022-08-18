@@ -35,6 +35,7 @@ trait TypeInfo[Type, Value] extends TypeInfoCommon[Type, Value] {
 
 trait TypeInfo2[Type, Value] extends TypeInfoCommon[Type, Value] {
   val hasType: HasType[Value, Type]
+
   def typeParameterUniverse: OrderedSet[Type]
   def potentialExprs(l: Literal): Seq[analyzer2.Expr[Type, Value]]
   def literalBoolean(b: Boolean, position: Position): analyzer2.Expr[Type, Value]

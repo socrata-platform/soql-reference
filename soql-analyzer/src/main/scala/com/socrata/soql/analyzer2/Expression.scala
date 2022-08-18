@@ -6,6 +6,7 @@ import scala.util.parsing.input.Position
 import com.socrata.prettyprint.prelude._
 import com.socrata.prettyprint.Pretty
 
+import com.socrata.soql.collection._
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.{HasType, HasDoc}
 
@@ -35,6 +36,10 @@ sealed abstract class Expr[+CT, +CV] extends Product {
   final def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[Nothing, CT]] =
     doDebugDoc.annotate(Annotation.Typed(typ))
   protected def doDebugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[Nothing, CT]]
+
+  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]]
+
+  final def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean = find(_ == e).isDefined
 
   // Since this is completely immutable, cache the hashCode rather
   // than recomputing, as these trees can be quite deep.  Annoying
@@ -76,6 +81,8 @@ final case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(va
       annotate(Annotation.ColumnRef(table, column))
 
   private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = p)
+
+  def find(predicate: Expr[CT, Nothing] => Boolean): Option[Expr[CT, Nothing]] = Some(this).filter(predicate)
 }
 
 final case class SelectListReference[+CT](index: Int, isAggregated: Boolean, isWindowed: Boolean, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
@@ -97,6 +104,8 @@ final case class SelectListReference[+CT](index: Int, isAggregated: Boolean, isW
     Doc(index).annotate(Annotation.SelectListReference(index))
 
   private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = p)
+
+  def find(predicate: Expr[CT, Nothing] => Boolean): Option[Expr[CT, Nothing]] = Some(this).filter(predicate)
 }
 
 sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
@@ -108,6 +117,8 @@ sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
   private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean = {
     this == that
   }
+
+  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] = Some(this).filter(predicate)
 }
 final case class LiteralValue[+CT, +CV](value: CV)(val position: Position)(implicit ev: HasType[CV, CT]) extends Literal[CT, CV] {
   type Self[+CT, +CV] = LiteralValue[CT, CV]
@@ -155,6 +166,11 @@ final case class FunctionCall[+CT, +CV](
   def isAggregated = args.exists(_.isAggregated)
   def isWindowed = args.exists(_.isWindowed)
 
+  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+    Some(this).filter(predicate).orElse {
+      args.iterator.flatMap(_.find(predicate)).nextOption()
+    }
+
   private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean =
     that match {
       case FunctionCall(thatFunction, thatArgs) =>
@@ -190,6 +206,13 @@ final case class AggregateFunctionCall[+CT, +CV](
   def isWindowed = args.exists(_.isWindowed)
 
   val size = 1 + args.iterator.map(_.size).sum + filter.fold(0)(_.size)
+
+  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+    Some(this).filter(predicate).orElse {
+      args.iterator.flatMap(_.find(predicate)).nextOption()
+    }.orElse {
+      filter.flatMap(_.find(predicate))
+    }
 
   private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean =
     that match {
@@ -246,6 +269,17 @@ final case class WindowedFunctionCall[+CT, +CV](
 
   def isAggregated = args.exists(_.isAggregated) || partitionBy.exists(_.isAggregated) || orderBy.exists(_.expr.isAggregated)
   def isWindowed = true
+
+  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+    Some(this).filter(predicate).orElse {
+      args.iterator.flatMap(_.find(predicate)).nextOption()
+    }.orElse {
+      filter.flatMap(_.find(predicate))
+    }.orElse {
+      partitionBy.iterator.flatMap(_.find(predicate)).nextOption()
+    }.orElse {
+      orderBy.iterator.flatMap(_.expr.find(predicate)).nextOption()
+    }
 
   private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean =
     that match {

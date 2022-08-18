@@ -36,6 +36,9 @@ sealed abstract class From[+RNS, +CT, +CV] {
 
   def useSelectListReferences: Self[RNS, CT, CV]
 
+  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]]
+  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean
+
   final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
   final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder = debugDoc.layoutSmart().toStringBuilder(sb)
   def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]]
@@ -54,7 +57,7 @@ sealed abstract class From[+RNS, +CT, +CV] {
     combine: (JoinType, Boolean, From[RNS2, CT2, CV2], AtomicFrom[RNS, CT, CV], Expr[CT, CV]) => Join[RNS2, CT2, CV2]
   ): ReduceResult[RNS2, CT2, CV2] = {
     reduceMap[Unit, RNS2, CT2, CV2](
-      { (nonJoin: AtomicFrom[RNS, CT, CV]) => ((), base.apply(nonJoin)) },
+      { nonJoin => ((), base.apply(nonJoin)) },
       { (_, joinType, lateral, left, right, on) => ((), combine(joinType, lateral, left, right, on)) }
     )._2
   }
@@ -64,7 +67,7 @@ sealed abstract class From[+RNS, +CT, +CV] {
     combine: (S, Join[RNS, CT, CV]) => S
   ): S =
     reduceMap[S, RNS, CT, CV](
-      { (nonJoin: AtomicFrom[RNS, CT, CV]) => (base(nonJoin), nonJoin) },
+      { nonJoin => (base(nonJoin), nonJoin) },
       { (s, joinType, lateral, left, right, on) =>
         val j = Join(joinType, lateral, left, right, on)
         (combine(s, j), j)
@@ -95,7 +98,7 @@ case class Join[+RNS, +CT, +CV](joinType: JoinType, lateral: Boolean, left: From
     def loop(stack: Stack, self: From[RNS, CT, CV]): (Stack, AtomicFrom[RNS, CT, CV]) = {
       self match {
         case j: Join[RNS, CT, CV] =>
-          loop(right.addToEnvironment[CT2] _ :: stack, j.left)
+          loop(j.right.addToEnvironment[CT2] _ :: stack, j.left)
         case other: AtomicFrom[RNS, CT, CV] =>
           (stack, other)
       }
@@ -187,6 +190,14 @@ case class Join[+RNS, +CT, +CV](joinType: JoinType, lateral: Boolean, left: From
       { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, right.mapAlias(f), on) },
     )
 
+  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+    reduce[Option[Expr[CT, CV]]](
+      _.find(predicate),
+      { (acc, join) => acc.orElse(join.right.find(predicate)).orElse(join.on.find(predicate)) }
+    )
+  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+    reduce[Boolean](_.contains(e), { (acc, join) => acc || join.right.contains(e) || join.on.contains(e) })
+
   private[analyzer2] override def preserveOrdering[CT2 >: CT](
     provider: LabelProvider,
     rowNumberFunction: MonomorphicFunction[CT2],
@@ -272,6 +283,10 @@ sealed abstract class FromTableLike[+RNS, +CT] extends AtomicFrom[RNS, CT, Nothi
   val tableName: TableLabel
   val label: TableLabel
   val columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]
+
+  def find(predicate: Expr[CT, Nothing] => Boolean) = None
+  def contains[CT2 >: CT, CV](e: Expr[CT2, CV]): Boolean =
+    false
 
   private[analyzer2] override final val scope: Scope[CT] = Scope(columns, label)
 
@@ -388,6 +403,10 @@ case class FromStatement[+RNS, +CT, +CV](statement: Statement[RNS, CT, CV], labe
 
   private[analyzer2] val scope: Scope[CT] = Scope(statement.schema, label)
 
+  def find(predicate: Expr[CT, CV] => Boolean) = statement.find(predicate)
+  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+    statement.contains(e)
+
   private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
@@ -444,6 +463,9 @@ case class FromSingleRow[+RNS](label: TableLabel, alias: Option[(RNS, ResourceNa
     )
 
   def useSelectListReferences = this
+
+  def find(predicate: Expr[Nothing, Nothing] => Boolean) = None
+  def contains[CT, CV](e: Expr[CT, CV]): Boolean = false
 
   private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
     that match {
