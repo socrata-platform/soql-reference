@@ -2,8 +2,12 @@
 //  * Errors
 //     - everything needs position info
 //     - that position info needs to include query source (scope, Option[ResourceName])
-//  * Make it possible to find label-isomorphisms between Statements
-//    and transform an isomorphic statement into an equal statement
+//  * More postprocessing passes in the SoQLAnalysis
+//     - provide_order(using_column: DatabaseTableName => DatabaseColumnName)
+//     - eliminate_dead_code
+//     - either provide an "undo use select list references" operation
+//       or make it so the fact that one has been done is reflected in
+//       SoQLAnalysis's type
 
 package com.socrata.soql.analyzer2
 
