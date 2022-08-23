@@ -5,7 +5,7 @@ import scala.annotation.tailrec
 
 import com.socrata.prettyprint.prelude._
 
-import com.socrata.soql.collection.OrderedMap
+import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
@@ -23,9 +23,12 @@ sealed abstract class From[+RNS, +CT, +CV] {
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV]
 
+  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]): Self[RNS, CT, CV]
+
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
   private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
 
   private[analyzer2] def preserveOrdering[CT2 >: CT](
     provider: LabelProvider,
@@ -144,6 +147,18 @@ case class Join[+RNS, +CT, +CV](joinType: JoinType, lateral: Boolean, left: From
 
     loop(this, Nil).asInstanceOf[(S, Join[RNS2, CT2, CV2])]
   }
+
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
+    reduce[Map[TableLabel, Set[ColumnLabel]]](
+      _.columnReferences,
+      (acc, join) => acc.mergeWith(join.right.columnReferences)(_ ++ _).mergeWith(join.on.columnReferences)(_ ++ _)
+    )
+
+  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]): Self[RNS, CT, CV] =
+    map[RNS, CT, CV](
+      _.doRemoveUnusedColumns(used),
+      { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, right.doRemoveUnusedColumns(used), on) }
+    )
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName] = {
     reduce[Map[AutoTableLabel, DatabaseTableName]] (
@@ -288,6 +303,8 @@ sealed abstract class FromTableLike[+RNS, +CT] extends AtomicFrom[RNS, CT, Nothi
   def contains[CT2 >: CT, CV](e: Expr[CT2, CV]): Boolean =
     false
 
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
+
   private[analyzer2] override final val scope: Scope[CT] = Scope(columns, label)
 
   private[analyzer2] override def preserveOrdering[CT2 >: CT](
@@ -315,6 +332,9 @@ case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS
   private[analyzer2] def doRelabel(state: RelabelState) = {
     copy(label = state.convert(label))
   }
+
+  // A table has its columns whether or not they're selected, so this is just "this"
+  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]) = this
 
   private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
@@ -350,6 +370,8 @@ case class FromVirtualTable[+RNS, +CT](tableName: AutoTableLabel, alias: Option[
 
   type Self[+RNS, +CT, +CV] = FromVirtualTable[RNS, CT]
   def asSelf = this
+
+  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]) = this
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
 
@@ -402,6 +424,12 @@ case class FromStatement[+RNS, +CT, +CV](statement: Statement[RNS, CT, CV], labe
   def asSelf = this
 
   private[analyzer2] val scope: Scope[CT] = Scope(statement.schema, label)
+
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = statement.columnReferences
+
+  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]): Self[RNS, CT, CV] = {
+    copy(statement = statement.doRemoveUnusedColumns(used, Some(label)))
+  }
 
   def find(predicate: Expr[CT, CV] => Boolean) = statement.find(predicate)
   def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
@@ -463,6 +491,7 @@ case class FromSingleRow[+RNS](label: TableLabel, alias: Option[(RNS, ResourceNa
     )
 
   def useSelectListReferences = this
+  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]) = this
 
   def find(predicate: Expr[Nothing, Nothing] => Boolean) = None
   def contains[CT, CV](e: Expr[CT, CV]): Boolean = false
@@ -489,6 +518,8 @@ case class FromSingleRow[+RNS](label: TableLabel, alias: Option[(RNS, ResourceNa
     copy(alias = f(alias))
 
   private[analyzer2] def realTables = Map.empty
+
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
 
   private[analyzer2] override def preserveOrdering[CT2](
     provider: LabelProvider,

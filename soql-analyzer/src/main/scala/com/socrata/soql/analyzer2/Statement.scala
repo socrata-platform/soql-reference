@@ -49,6 +49,15 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
     * not roundtrip perfectly through these two calls. */
   def unuseSelectListReferences: Self[RNS, CT, CV]
 
+  /** Remove columns that are not useful from inner selects.
+    * SelectListReferences must not be present. */
+  def removeUnusedColumns: Self[RNS, CT, CV] = doRemoveUnusedColumns(columnReferences, None)
+
+  // If "myLabel" is "None" it means "keep all output columns"
+  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]], myLabel: Option[TableLabel]): Self[RNS, CT, CV]
+
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
+
   def isIsomorphic[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](that: Statement[RNS2, CT2, CV2]): Boolean =
     findIsomorphism(new IsomorphismState, None, None, that)
 
@@ -100,6 +109,9 @@ case class CombinedTables[+RNS, +CT, +CV](
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName] =
     left.realTables ++ right.realTables
 
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
+    left.columnReferences.mergeWith(right.columnReferences)(_ ++ _)
+
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     copy(
       left = left.doRewriteDatabaseNames(state),
@@ -108,6 +120,13 @@ case class CombinedTables[+RNS, +CT, +CV](
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV] =
     copy(left = left.doRelabel(state), right = right.doRelabel(state))
+
+  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]], myLabel: Option[TableLabel]): Self[RNS, CT, CV] =
+    // We need all the columns in our subqueries to correctly do our
+    // table operation, so ignore what we're told are used and just
+    // tell our subqueries "go clean yourselves up without affecting
+    // your output schemas".
+    copy(left = left.doRemoveUnusedColumns(used, None), right = right.doRemoveUnusedColumns(used, None))
 
   private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](
     state: IsomorphismState,
@@ -169,8 +188,17 @@ case class CTE[+RNS, +CT, +CV](
   private[analyzer2] def realTables =
     definitionQuery.realTables ++ useQuery.realTables
 
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
+    definitionQuery.columnReferences.mergeWith(useQuery.columnReferences)(_ ++ _)
+
   def useSelectListReferences = copy(definitionQuery = definitionQuery.useSelectListReferences, useQuery = useQuery.useSelectListReferences)
   def unuseSelectListReferences = copy(definitionQuery = definitionQuery.unuseSelectListReferences, useQuery = useQuery.unuseSelectListReferences)
+
+  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]], myLabel: Option[TableLabel]): Self[RNS, CT, CV] =
+    copy(
+      definitionQuery = definitionQuery.doRemoveUnusedColumns(used, Some(definitionLabel)),
+      useQuery = useQuery.doRemoveUnusedColumns(used, myLabel)
+    )
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     copy(
@@ -245,6 +273,12 @@ case class Values[+CT, +CV](
       val name = s"column${idx+1}"
       DatabaseColumnName(name) -> NameEntry(ColumnName(name), expr.typ)
     }
+
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
+    Map.empty
+
+  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]], myLabel: Option[TableLabel]): Self[Nothing, CT, CV] =
+    this
 
   private[analyzer2] def findIsomorphism[RNS2, CT2 >: CT, CV2 >: CV](
     state: IsomorphismState,
@@ -326,6 +360,53 @@ case class Select[+RNS, +CT, +CV](
 ) extends Statement[RNS, CT, CV] {
   type Self[+RNS, +CT, +CV] = Select[RNS, CT, CV]
   def asSelf = this
+
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = {
+    var refs = distinctiveness.columnReferences
+    for(e <- selectList.values) {
+      refs = refs.mergeWith(e.expr.columnReferences)(_ ++ _)
+    }
+    refs = refs.mergeWith(from.columnReferences)(_ ++ _)
+    for(w <- where) {
+      refs = refs.mergeWith(w.columnReferences)(_ ++ _)
+    }
+    for(g <- groupBy) {
+      refs = refs.mergeWith(g.columnReferences)(_ ++ _)
+    }
+    for(h <- having) {
+      refs = refs.mergeWith(h.columnReferences)(_ ++ _)
+    }
+    for(o <- orderBy) {
+      refs = refs.mergeWith(o.expr.columnReferences)(_ ++ _)
+    }
+    refs
+  }
+
+  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]], myLabel: Option[TableLabel]): Self[RNS, CT, CV] = {
+    val newSelectList = (myLabel, distinctiveness) match {
+      case (_, Distinctiveness.FullyDistinct) | (None, _) =>
+        // need all my columns
+        selectList
+      case (Some(tl), _) =>
+        val wantedColumns = used.getOrElse(tl, Set.empty)
+        selectList.filter { case (cl, _) => wantedColumns(cl) }
+    }
+    val newFrom = from.doRemoveUnusedColumns(used)
+    val candidate = copy(selectList = newSelectList, from = newFrom)
+    if(candidate.isAggregated != isAggregated) {
+      // this is a super-extreme edge case, but consider
+      //   select x.x from (select count(*), 1 as x from whatever) as x
+      // Doing a naive "remove unused columns" would result in
+      //  select x.x from (select 1 as x from whatever) as x
+      // ..which changes the semantics of that inner query.  So, if removing
+      // columns from our select list changed whether or not we're aggregated,
+      // keep our column-list as-is.  This should hopefully basically never
+      // happen in practice.
+      copy(from = newFrom)
+    } else {
+      candidate
+    }
+  }
 
   final def directlyFind(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] = {
     // "directly" means "in _this_ query, not any non-lateral subqueries"

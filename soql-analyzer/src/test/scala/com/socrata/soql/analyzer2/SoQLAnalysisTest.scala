@@ -225,4 +225,40 @@ select text, num join @locowt as ct on num = @ct.amount order by num
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
+
+  test("remove unused columns - simple") {
+    val tf = MockTableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+select * order by num |> select text
+""")
+    val analysis = analyzer(start, UserParameters.empty)
+
+    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+select text order by num |> select text
+""")
+    val expectedAnalysis = analyzer(start2, UserParameters.empty)
+
+    analysis.removeUnusedColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("remove unused columns - preserve implicit group") {
+    val tf = MockTableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+select count(*), 1 as x |> select x
+""")
+    val analysis = analyzer(start, UserParameters.empty)
+
+    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+select count(*), 1 as x |> select x
+""")
+    val expectedAnalysis = analyzer(start2, UserParameters.empty)
+
+    analysis.removeUnusedColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
 }

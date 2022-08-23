@@ -12,4 +12,19 @@ abstract class CommonCollection {
       None
     }
   }
+
+  implicit class AugmentedMap[K, V](underlying: Map[K, V]) {
+    def mergeWith(that: Map[K, V])(f: (V, V) => V): Map[K, V] = {
+      var result = underlying
+      for((k, v) <- that) {
+        result.get(k) match {
+          case Some(v0) =>
+            result += k -> f(v0, v)
+          case None =>
+            result += k -> v
+        }
+      }
+      result
+    }
+  }
 }
