@@ -273,7 +273,7 @@ where
       tableFinder.findTables(domainId, ResourceName(uid)) match {
         case tableFinder.Success(tm) =>
           val analysis = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo)(tm, UserParameters.emptyFor(tm))
-          log.info(analysis.merge(SoQLFunctions.And.monomorphic.get).preserveOrdering(SoQLFunctions.RowNumber.monomorphic.get).useSelectListReferences.statement.debugStr)
+          log.info(analysis.removeUnusedColumns.merge(SoQLFunctions.And.monomorphic.get).preserveOrdering(SoQLFunctions.RowNumber.monomorphic.get).useSelectListReferences.statement.debugStr)
         case other =>
           log.info("{}", other)
       }
