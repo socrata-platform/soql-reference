@@ -45,6 +45,9 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
     * corresponds to "select x+1, count(*) group by 1 order by 2"
     */
   def useSelectListReferences: Self[RNS, CT, CV]
+  /** Undoes `useSelectListReferences`.  Note position information may
+    * not roundtrip perfectly through these two calls. */
+  def unuseSelectListReferences: Self[RNS, CT, CV]
 
   def isIsomorphic[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](that: Statement[RNS2, CT2, CV2]): Boolean =
     findIsomorphism(new IsomorphismState, None, None, that)
@@ -136,6 +139,7 @@ case class CombinedTables[+RNS, +CT, +CV](
     )
 
   def useSelectListReferences = copy(left = left.useSelectListReferences, right = right.useSelectListReferences)
+  def unuseSelectListReferences = copy(left = left.unuseSelectListReferences, right = right.unuseSelectListReferences)
 
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
     copy(left = left.mapAlias(f), right = right.mapAlias(f))
@@ -166,6 +170,7 @@ case class CTE[+RNS, +CT, +CV](
     definitionQuery.realTables ++ useQuery.realTables
 
   def useSelectListReferences = copy(definitionQuery = definitionQuery.useSelectListReferences, useQuery = useQuery.useSelectListReferences)
+  def unuseSelectListReferences = copy(definitionQuery = definitionQuery.unuseSelectListReferences, useQuery = useQuery.unuseSelectListReferences)
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     copy(
@@ -263,6 +268,7 @@ case class Values[+CT, +CV](
   val schema = typeVariedSchema
 
   def useSelectListReferences = this
+  def unuseSelectListReferences = this
 
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
     values.iterator.flatMap(_.iterator.flatMap(_.find(predicate))).nextOption()
@@ -492,6 +498,29 @@ case class Select[+RNS, +CT, +CV](
       from = from.useSelectListReferences,
       groupBy = groupBy.map(numericateExpr),
       orderBy = orderBy.map { ob => ob.copy(expr = numericateExpr(ob.expr)) }
+    )
+  }
+
+  def unuseSelectListReferences: Self[RNS, CT, CV] = {
+    val selectListIndices = selectList.valuesIterator.map(_.expr).toVector
+
+    def unnumericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
+      e match {
+        case r@SelectListReference(idxPlusOne, _, _, _) =>
+          selectListIndices(idxPlusOne - 1).reposition(r.position)
+        case other =>
+          other
+      }
+    }
+
+    copy(
+      distinctiveness = distinctiveness match {
+        case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
+        case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(unnumericateExpr))
+      },
+      from = from.useSelectListReferences,
+      groupBy = groupBy.map(unnumericateExpr),
+      orderBy = orderBy.map { ob => ob.copy(expr = unnumericateExpr(ob.expr)) }
     )
   }
 
