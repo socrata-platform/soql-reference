@@ -4,10 +4,6 @@
 //     - that position info needs to include query source (scope, Option[ResourceName])
 //  * More postprocessing passes in the SoQLAnalysis
 //     - provide_order(using_column: DatabaseTableName => DatabaseColumnName)
-//     - eliminate_dead_code
-//     - either provide an "undo use select list references" operation
-//       or make it so the fact that one has been done is reflected in
-//       SoQLAnalysis's type
 
 package com.socrata.soql.analyzer2
 
