@@ -134,7 +134,7 @@ select text + text, num * 2 as num from @this as t order by @t.num limit 10 offs
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("aggregate on non-aggregate") {
+  test("merge - aggregate on non-aggregate") {
     val tf = MockTableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -152,7 +152,7 @@ select text, count(*) where num = 3 group by text
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("non-aggregate on aggregate") {
+  test("merge - non-aggregate on aggregate") {
     val tf = MockTableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -170,7 +170,7 @@ select text, count(num) as n group by text having n = 5
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("simple on windowed") {
+  test("merge - simple on windowed") {
     val tf = MockTableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -188,7 +188,7 @@ select text, row_number() over () + 1 limit 5
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("filter on join") {
+  test("merge - filter on join") {
     val tf = MockTableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "locowt") -> D("amount" -> TestNumber, "words" -> TestText)
@@ -207,7 +207,7 @@ select text, num, @ct.amount, @ct.words join @locowt as @ct on num = @ct.amount 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("join on simple") {
+  test("merge - join on simple") {
     val tf = MockTableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "locowt") -> D("amount" -> TestNumber, "words" -> TestText)
@@ -220,6 +220,24 @@ select text, num order by num |> select * join @locowt as ct on num = @ct.amount
 
     val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
 select text, num join @locowt as ct on num = @ct.amount order by num
+""")
+    val expectedAnalysis = analyzer(start2, UserParameters.empty)
+
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("merge - implicit group-by") {
+    val tf = MockTableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+select count(*), 1 as x |> select x
+""")
+    val analysis = analyzer(start, UserParameters.empty)
+
+    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+select count(*), 1 as x |> select x
 """)
     val expectedAnalysis = analyzer(start2, UserParameters.empty)
 
