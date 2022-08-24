@@ -14,6 +14,19 @@ import com.socrata.soql.functions.MonomorphicFunction
 import mocktablefinder._
 
 class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
+  test("alias analysis qualifiers are correct") {
+    val tf = MockTableFinder.empty[Int, TestType]
+    val tf.Success(start) = tf.findTables(0, "select @bleh.whatever from @single_row")
+    analyzer(start, UserParameters.empty) match {
+      case Right(_) => fail("Expected an error")
+      case Left(nsc: SoQLAnalyzerError.TypecheckError.NoSuchColumn[_]) =>
+        nsc.qualifier must be (Some(rn("bleh")))
+        nsc.name must be (cn("whatever"))
+      case Left(err) =>
+        fail(s"Wrong error: ${err}")
+    }
+  }
+
   test("simple contextless") {
     val tf = MockTableFinder.empty[Int, TestType]
 
