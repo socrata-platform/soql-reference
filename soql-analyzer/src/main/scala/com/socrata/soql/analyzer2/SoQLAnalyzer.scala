@@ -50,13 +50,13 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       val from =
         query match {
           case FoundTables.Saved(rn) =>
-            analyzeForFrom(scope, None, rn, Environment.empty)
+            analyzeForFrom(scope, None, rn)
           case FoundTables.InContext(rn, q) =>
-            val from = analyzeForFrom(scope, None, rn, Environment.empty)
+            val from = analyzeForFrom(scope, None, rn)
             new Context(scope, None, Environment.empty, Map.empty).
               analyzeStatement(q, Some(from))
           case FoundTables.InContextImpersonatingSaved(rn, q, impersonating) =>
-            val from = analyzeForFrom(scope, None, rn, Environment.empty)
+            val from = analyzeForFrom(scope, None, rn)
             new Context(scope, Some(impersonating), Environment.empty, Map.empty).
               analyzeStatement(q, Some(from))
           case FoundTables.Standalone(q) =>
@@ -103,15 +103,15 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         columns = desc.schema
       )
 
-    def analyzeForFrom(scope: RNS, canonicalName: Option[CanonicalName], rn: ResourceName, env: Environment[CT]): AtomicFrom[RNS, CT, CV] = {
+    def analyzeForFrom(scope: RNS, canonicalName: Option[CanonicalName], rn: ResourceName): AtomicFrom[RNS, CT, CV] = {
       tableMap.find(scope, rn) match {
         case ds: ParsedTableDescription.Dataset[CT] =>
           fromTable(ds, None)
         case ParsedTableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters) =>
           // so this is basedOn |> parsed
           // so we want to use "basedOn" as the implicit "from" for "parsed"
-          val from = analyzeForFrom(scope, None, basedOn, env)
-          new Context(scope, Some(canonicalName), env, Map.empty).
+          val from = analyzeForFrom(scope, None, basedOn)
+          new Context(scope, Some(canonicalName), Environment.empty, Map.empty).
             analyzeStatement(parsed, Some(from))
         case ParsedTableDescription.TableFunction(_, _, _, _, _) =>
           tableFunctionInIncorrectPosition(scope, canonicalName)
@@ -363,7 +363,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             } else {
               // standalone query: select ... from sometable ...
               // n.b., sometable may actually be a query
-              analyzeForFrom(scope, canonicalName, rn, enclosingEnv).
+              analyzeForFrom(scope, canonicalName, rn).
                 reAlias(Some((scope, alias)))
             }
           case (Some(input), None) =>
@@ -409,7 +409,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       def analyzeJoinSelect(js: ast.JoinSelect): AtomicFrom[RNS, CT, CV] = {
         js match {
           case ast.JoinTable(tn) =>
-            analyzeForFrom(scope, canonicalName, ResourceName(tn.nameWithoutPrefix), enclosingEnv).
+            analyzeForFrom(scope, canonicalName, ResourceName(tn.nameWithoutPrefix)).
               reAlias(Some((scope, ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix)))))
           case ast.JoinQuery(select, alias) =>
             analyzeStatement(select, None).reAlias(Some((scope, ResourceName(alias.substring(1)))))
@@ -462,7 +462,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
                   }
 
                 val useQuery =
-                  new Context(udfScope, Some(udfCanonicalName), enclosingEnv, innerUdfParams)
+                  new Context(udfScope, Some(udfCanonicalName), Environment.empty, innerUdfParams)
                     .analyzeStatement(parsed, None)
 
                 FromStatement(
@@ -496,7 +496,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
                 // expand the UDF without introducing a layer of
                 // additional joining.
                 val innerUdfParams = inlineParams.withValuesMapped { c => c.reposition _ }.toMap
-                new Context(udfScope, Some(udfCanonicalName), enclosingEnv, innerUdfParams)
+                new Context(udfScope, Some(udfCanonicalName), Environment.empty, innerUdfParams)
                   .analyzeStatement(parsed, None)
                   .reAlias(Some((scope, ResourceName(tableName.aliasWithoutPrefix.getOrElse(tableName.nameWithoutPrefix)))))
             }
