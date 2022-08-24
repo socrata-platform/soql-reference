@@ -9,7 +9,6 @@ import com.socrata.soql.collection._
 import mocktablefinder._
 
 class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
-  val analyzer = new SoQLAnalyzer[Int, TestType, TestValue](TestTypeInfo, TestFunctionInfo)
   val rowNumber = TestFunctions.RowNumber.monomorphic.get
   val windowFunction = TestFunctions.WindowFunction.monomorphic.get
   val and = TestFunctions.And.monomorphic.get
@@ -19,9 +18,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("twocol"), "select * order by text")
-    val analysis = analyzer(start, UserParameters.empty)
-
+    val analysis = analyze(tf, "twocol", "select * order by text")
     analysis.preserveOrdering(rowNumber).statement.schema.size must equal (2)
   }
 
@@ -30,9 +27,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("twocol"), "select * |> select *")
-    val analysis = analyzer(start, UserParameters.empty)
-
+    val analysis = analyze(tf, "twocol", "select * |> select *")
     analysis.preserveOrdering(rowNumber).statement must equal (analysis.statement)
   }
 
@@ -41,12 +36,8 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("twocol"), "select * order by num |> select *")
-    val analysis = analyzer(start, UserParameters.empty)
-
-    val tf.Success(start2) = tf.findTables(0, rn("twocol"), "select *, row_number() over () as rn order by num |> select * (except rn) order by rn")
-    val expectedAnalysis = analyzer(start2, UserParameters.empty)
-
+    val analysis = analyze(tf, "twocol", "select * order by num |> select *")
+    val expectedAnalysis = analyze(tf, "twocol", "select *, row_number() over () as rn order by num |> select * (except rn) order by rn")
     analysis.preserveOrdering(rowNumber).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
@@ -55,12 +46,8 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("twocol"), "select * order by num |> select * order by text")
-    val analysis = analyzer(start, UserParameters.empty)
-
-    val tf.Success(start2) = tf.findTables(0, rn("twocol"), "select *, row_number() over () as rn order by num |> select * (except rn) order by text, rn")
-    val expectedAnalysis = analyzer(start2, UserParameters.empty)
-
+    val analysis = analyze(tf, "twocol", "select * order by num |> select * order by text")
+    val expectedAnalysis = analyze(tf, "twocol", "select *, row_number() over () as rn order by num |> select * (except rn) order by text, rn")
     analysis.preserveOrdering(rowNumber).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
@@ -69,23 +56,21 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+    val analysis = analyze(tf, "twocol", """
 select * order by num
   |> select *
   |> select *
   |> select text, num group by text, num order by num, text
   |> select *
 """)
-    val analysis = analyzer(start, UserParameters.empty)
 
-    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+    val expectedAnalysis = analyze(tf, "twocol", """
 select * order by num
   |> select *
   |> select *
   |> select text, num, row_number () over () as rn group by text, num order by num, text
   |> select * (except rn) order by rn
 """)
-    def expectedAnalysis = analyzer(start2, UserParameters.empty)
 
     analysis.preserveOrdering(rowNumber).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -95,23 +80,21 @@ select * order by num
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+    val analysis = analyze(tf, "twocol", """
 select * order by num
   |> select *
   |> select *, window_function() over ()
   |> select text, num group by text, num order by num, text
   |> select *
 """)
-    val analysis = analyzer(start, UserParameters.empty)
 
-    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+    val expectedAnalysis = analyze(tf, "twocol", """
 select *, row_number() over () as rn order by num
   |> select * order by rn
   |> select * (except rn), window_function() over () order by rn
   |> select text, num, row_number() over () as rn group by text, num order by num, text
   |> select * (except rn) order by rn
 """)
-    val expectedAnalysis = analyzer(start2, UserParameters.empty)
 
     analysis.preserveOrdering(rowNumber).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -121,15 +104,13 @@ select *, row_number() over () as rn order by num
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+    val analysis = analyze(tf, "twocol", """
 select * order by num limit 20 offset 10 |> select text + text as t2, num * 2 as num offset 10
 """)
-    val analysis = analyzer(start, UserParameters.empty)
 
-    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+    val expectedAnalysis = analyze(tf, "twocol", """
 select text + text, num * 2 as num from @this as t order by @t.num limit 10 offset 20
 """)
-    val expectedAnalysis = analyzer(start2, UserParameters.empty)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -139,15 +120,13 @@ select text + text, num * 2 as num from @this as t order by @t.num limit 10 offs
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+    val analysis = analyze(tf, "twocol", """
 select text, num where num = 3 order by num |> select text, count(*) group by text
 """)
-    val analysis = analyzer(start, UserParameters.empty)
 
-    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+    val expectedAnalysis = analyze(tf, "twocol", """
 select text, count(*) where num = 3 group by text
 """)
-    val expectedAnalysis = analyzer(start2, UserParameters.empty)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -157,15 +136,13 @@ select text, count(*) where num = 3 group by text
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+    val analysis = analyze(tf, "twocol", """
 select text, count(num) group by text |> select * where count_num = 5
 """)
-    val analysis = analyzer(start, UserParameters.empty)
 
-    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+    val expectedAnalysis = analyze(tf, "twocol", """
 select text, count(num) as n group by text having n = 5
 """)
-    val expectedAnalysis = analyzer(start2, UserParameters.empty)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -175,15 +152,13 @@ select text, count(num) as n group by text having n = 5
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+    val analysis = analyze(tf, "twocol", """
 select text, row_number() over () as rn |> select text, rn + 1 limit 5
 """)
-    val analysis = analyzer(start, UserParameters.empty)
 
-    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+    val expectedAnalysis = analyze(tf, "twocol", """
 select text, row_number() over () + 1 limit 5
 """)
-    val expectedAnalysis = analyzer(start2, UserParameters.empty)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -194,15 +169,13 @@ select text, row_number() over () + 1 limit 5
       (0, "locowt") -> D("amount" -> TestNumber, "words" -> TestText)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+    val analysis = analyze(tf, "twocol", """
 select text, num, @ct.amount, @ct.words join @locowt as @ct on num = @ct.amount |> select * where amount = 3
 """)
-    val analysis = analyzer(start, UserParameters.empty)
 
-    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+    val expectedAnalysis = analyze(tf, "twocol", """
 select text, num, @ct.amount, @ct.words join @locowt as @ct on num = @ct.amount where @ct.amount = 3
 """)
-    val expectedAnalysis = analyzer(start2, UserParameters.empty)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -213,15 +186,13 @@ select text, num, @ct.amount, @ct.words join @locowt as @ct on num = @ct.amount 
       (0, "locowt") -> D("amount" -> TestNumber, "words" -> TestText)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+    val analysis = analyze(tf, "twocol", """
 select text, num order by num |> select * join @locowt as ct on num = @ct.amount
 """)
-    val analysis = analyzer(start, UserParameters.empty)
 
-    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+    val expectedAnalysis = analyze(tf, "twocol", """
 select text, num join @locowt as ct on num = @ct.amount order by num
 """)
-    val expectedAnalysis = analyzer(start2, UserParameters.empty)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -231,15 +202,13 @@ select text, num join @locowt as ct on num = @ct.amount order by num
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+    val analysis = analyze(tf, "twocol", """
 select count(*), 1 as x |> select x
 """)
-    val analysis = analyzer(start, UserParameters.empty)
 
-    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+    val expectedAnalysis = analyze(tf, "twocol", """
 select count(*), 1 as x |> select x
 """)
-    val expectedAnalysis = analyzer(start2, UserParameters.empty)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -249,15 +218,13 @@ select count(*), 1 as x |> select x
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+    val analysis = analyze(tf, "twocol", """
 select * order by num |> select text
 """)
-    val analysis = analyzer(start, UserParameters.empty)
 
-    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+    val expectedAnalysis = analyze(tf, "twocol", """
 select text order by num |> select text
 """)
-    val expectedAnalysis = analyzer(start2, UserParameters.empty)
 
     analysis.removeUnusedColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -267,15 +234,13 @@ select text order by num |> select text
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("twocol"), """
+    val analysis = analyze(tf, "twocol", """
 select count(*), 1 as x |> select x
 """)
-    val analysis = analyzer(start, UserParameters.empty)
 
-    val tf.Success(start2) = tf.findTables(0, rn("twocol"), """
+    val expectedAnalysis = analyze(tf, "twocol", """
 select count(*), 1 as x |> select x
 """)
-    val expectedAnalysis = analyzer(start2, UserParameters.empty)
 
     analysis.removeUnusedColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
