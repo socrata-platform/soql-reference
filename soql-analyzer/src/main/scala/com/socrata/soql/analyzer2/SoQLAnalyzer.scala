@@ -1,7 +1,6 @@
 // TODO:
 //  * Errors
 //     - everything needs position info
-//     - that position info needs to include query source (scope, Option[ResourceName])
 //  * More postprocessing passes in the SoQLAnalysis
 //     - provide_order(using_column: DatabaseTableName => DatabaseColumnName)
 
