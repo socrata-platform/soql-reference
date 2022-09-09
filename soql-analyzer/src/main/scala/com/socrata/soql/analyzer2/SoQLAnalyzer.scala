@@ -34,9 +34,9 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
   type UdfParameters = Map[HoleName, Position => Expr[CT, CV]]
 
-  private case class Bail(result: SoQLAnalyzerError[RNS, CT]) extends Exception with NoStackTrace
+  private case class Bail(result: SoQLAnalyzerError[RNS]) extends Exception with NoStackTrace
 
-  def apply(start: FoundTables, userParameters: UserParameters): Either[SoQLAnalyzerError[RNS, CT], SoQLAnalysis[RNS, CT, CV]] = {
+  def apply(start: FoundTables, userParameters: UserParameters): Either[SoQLAnalyzerError[RNS], SoQLAnalysis[RNS, CT, CV]] = {
     try {
       val state = new State(start.tableMap, userParameters)
 
@@ -569,15 +569,15 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       class Oops(label: String, args: Any*)(cause: Throwable = null) extends Exception(s"$scope@$canonicalName: $label " + args.mkString("(", ", ", ")") + args.find(_.isInstanceOf[Position]).fold("") { p => "\n" + SoQLPosition.show(p.asInstanceOf[Position]) }, cause)
 
       def expectedBoolean(expr: ast.Expression, got: CT): Nothing =
-        throw Bail(SoQLAnalyzerError.ExpectedBoolean(scope, canonicalName, got, expr.position))
+        throw Bail(SoQLAnalyzerError.ExpectedBoolean(scope, canonicalName, typeInfo.typeNameFor(got), expr.position))
       def incorrectNumberOfParameters(forUdf: ResourceName, expected: Int, got: Int, position: Position): Nothing =
         throw Bail(SoQLAnalyzerError.IncorrectNumberOfUdfParameters(scope, canonicalName, forUdf, expected, got, position))
       def distinctOnMustBePrefixOfOrderBy(position: Position): Nothing =
         throw Bail(SoQLAnalyzerError.DistinctNotPrefixOfOrderBy(scope, canonicalName, position))
       def invalidGroupBy(typ: CT, position: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.InvalidGroupBy(scope, canonicalName, typ, position))
+        throw Bail(SoQLAnalyzerError.InvalidGroupBy(scope, canonicalName, typeInfo.typeNameFor(typ), position))
       def unorderedOrderBy(typ: CT, position: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.UnorderedOrderBy(scope, canonicalName, typ, position))
+        throw Bail(SoQLAnalyzerError.UnorderedOrderBy(scope, canonicalName, typeInfo.typeNameFor(typ), position))
       def parametersForNonUdf(name: ResourceName, position: Position): Nothing =
         throw Bail(SoQLAnalyzerError.ParametersForNonUDF(scope, canonicalName, name, position))
       def addScopeError(e: AddScopeError, position: Position): Nothing =
@@ -596,7 +596,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       def fromThisWithoutContext(position: Position): Nothing =
         throw Bail(SoQLAnalyzerError.FromThisWithoutContext(scope, canonicalName, position))
       def tableOpTypeMismatch(left: OrderedMap[ColumnName, CT], right: OrderedMap[ColumnName, CT], position: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.TableOperationTypeMismatch(scope, canonicalName, left.valuesIterator.toVector, right.valuesIterator.toVector, position))
+        throw Bail(SoQLAnalyzerError.TableOperationTypeMismatch(scope, canonicalName, left.valuesIterator.map(typeInfo.typeNameFor).toVector, right.valuesIterator.map(typeInfo.typeNameFor).toVector, position))
       def literalNotAllowedInGroupBy(pos: Position): Nothing =
         throw Bail(SoQLAnalyzerError.LiteralNotAllowedInGroupBy(scope, canonicalName, pos))
       def literalNotAllowedInOrderBy(pos: Position): Nothing =
@@ -629,7 +629,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
         throw Bail(rewritten)
       }
-      def augmentTypecheckException(tce: SoQLAnalyzerError.TypecheckError[RNS, CT]): Nothing =
+      def augmentTypecheckException(tce: SoQLAnalyzerError.TypecheckError[RNS]): Nothing =
         throw Bail(tce)
     }
     def parameterlessTableFunction(scope: RNS, canonicalName: Option[CanonicalName], name: ResourceName, position: Position): Nothing =

@@ -18,7 +18,7 @@ class Typechecker[RNS, CT, CV](
   typeInfo: TypeInfo2[CT, CV],
   functionInfo: FunctionInfo[CT]
 ) {
-  type TypecheckError = SoQLAnalyzerError.TypecheckError[RNS, CT]
+  type TypecheckError = SoQLAnalyzerError.TypecheckError[RNS]
   private val TypecheckError = SoQLAnalyzerError.TypecheckError
   import TypecheckError._
 
@@ -48,7 +48,7 @@ class Typechecker[RNS, CT, CV](
     expectedType match {
       case Some(t) =>
         exprs.find(_.typ == t).toRight {
-          TypeMismatch(scope, canonicalName, CovariantSet(t), mostPreferredType(exprs.iterator.map(_.typ).toSet), pos)
+          TypeMismatch(scope, canonicalName, Set(typeInfo.typeNameFor(t)), typeInfo.typeNameFor(mostPreferredType(exprs.iterator.map(_.typ).toSet)), pos)
         }
       case None =>
         Right(exprs.head)
@@ -174,7 +174,7 @@ class Typechecker[RNS, CT, CV](
 
     if(resolved.isEmpty) {
       val TypeMismatchFailure(expected, found, idx) = failed.maxBy(_.idx)
-      return Left(TypeMismatch(scope, canonicalName, CovariantSet.from(expected), mostPreferredType(found), parameters(idx).position))
+      return Left(TypeMismatch(scope, canonicalName, expected.map(typeInfo.typeNameFor), typeInfo.typeNameFor(mostPreferredType(found)), parameters(idx).position))
     }
 
     val potentials = resolved.flatMap { f =>
