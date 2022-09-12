@@ -566,8 +566,6 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         }
       }
 
-      class Oops(label: String, args: Any*)(cause: Throwable = null) extends Exception(s"$scope@$canonicalName: $label " + args.mkString("(", ", ", ")") + args.find(_.isInstanceOf[Position]).fold("") { p => "\n" + SoQLPosition.show(p.asInstanceOf[Position]) }, cause)
-
       def expectedBoolean(expr: ast.Expression, got: CT): Nothing =
         throw Bail(SoQLAnalyzerError.ExpectedBoolean(scope, canonicalName, typeInfo.typeNameFor(got), expr.position))
       def incorrectNumberOfParameters(forUdf: ResourceName, expected: Int, got: Int, position: Position): Nothing =
