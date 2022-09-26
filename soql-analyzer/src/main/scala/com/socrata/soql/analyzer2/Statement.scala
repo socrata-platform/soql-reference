@@ -513,7 +513,7 @@ case class Select[+RNS, +CT, +CV](
     // possible even if our caller doesn't care, unless there's an
     // aggregate in the way, in which case the aggregate will
     // destroy any underlying ordering anyway so we stop caring.
-    val wantSubqueryOrdered = (isWindowed || wantOutputOrdered) && !isAggregated
+    val wantSubqueryOrdered = (isWindowed || wantOutputOrdered) && !isAggregated && distinctiveness == Distinctiveness.Indistinct
     from.preserveOrdering(provider, rowNumberFunction, wantSubqueryOrdered, wantSubqueryOrdered) match {
       case (Some((table, column)), newFrom) =>
         val col = Column(table, column, rowNumberFunction.result)(NoPosition)
