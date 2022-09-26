@@ -19,6 +19,32 @@ class LabelProvider {
   }
 }
 
+object LabelProvider {
+  private[analyzer2] def subscript(n: Int): String = {
+    val nStr = n.toString
+    val sb = new StringBuilder(nStr.length)
+    for(c <- nStr) {
+      sb.append(
+        c match {
+          case '-' => '\u208b'
+          case '0' => '\u2080'
+          case '1' => '\u2081'
+          case '2' => '\u2082'
+          case '3' => '\u2083'
+          case '4' => '\u2084'
+          case '5' => '\u2085'
+          case '6' => '\u2086'
+          case '7' => '\u2087'
+          case '8' => '\u2088'
+          case '9' => '\u2089'
+          case _ => throw new Exception("unreachable")
+        }
+      )
+    }
+    sb.toString()
+  }
+}
+
 sealed abstract class TableLabel {
   def debugDoc: Doc[Nothing] = Doc(toString)
 }
@@ -40,7 +66,7 @@ object TableLabel {
 }
 
 final class AutoTableLabel private[analyzer2] (private val name: Int) extends TableLabel {
-  override def toString = s"t<$name>"
+  override def toString = s"t${LabelProvider.subscript(name)}"
 
   override def hashCode = name.hashCode
   override def equals(that: Any) =
@@ -106,7 +132,7 @@ object ColumnLabel {
 }
 
 final class AutoColumnLabel private[analyzer2] (private val name: Int) extends ColumnLabel {
-  override def toString = s"c<$name>"
+  override def toString = s"c${LabelProvider.subscript(name)}"
 
   override def hashCode = name.hashCode
   override def equals(that: Any) =
