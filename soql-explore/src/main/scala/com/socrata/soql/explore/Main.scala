@@ -201,17 +201,26 @@ object Main extends App {
             return InternalServerError ~> Content("text/plain", "God a permission error somehow?")
         }
 
-        var analysis =
+        val analysisOrError =
           try {
             analyzer(map, UserParameters.emptyFor(map))
           } catch {
             case e: Throwable =>
-              return BadRequest ~> Write("text/plain") { (w: java.io.Writer) =>
+              return InternalServerError ~> Write("text/plain") { (w: java.io.Writer) =>
                 val pw = new java.io.PrintWriter(w)
                 e.printStackTrace(pw)
                 pw.flush()
               }
           }
+
+
+        var analysis = analysisOrError match {
+          case Right(a) => a
+          case Left(e) =>
+            return InternalServerError ~> Write("text/plain") { (w: java.io.Writer) =>
+              w.write(e.toString)
+            }
+        }
 
         if(merge) analysis = analysis.merge(SoQLFunctions.And.monomorphic.get)
         if(preserveOrder) analysis = analysis.preserveOrdering(SoQLFunctions.RowNumber.monomorphic.get)
