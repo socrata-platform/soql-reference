@@ -189,7 +189,16 @@ sealed trait AliasAnalysisException extends SoQLException
 case class RepeatedException(name: ColumnName, position: Position) extends SoQLException("Column `" + name + "' has already been excluded", position) with AliasAnalysisException // this should be called RepeatedExclusion
 case class DuplicateAlias(name: ColumnName, position: Position) extends SoQLException("There is already a column named `" + name + "' selected", position) with AliasAnalysisException
 case class NoSuchColumn(name: ColumnName, position: Position) extends SoQLException("No such column `" + name + "'", position) with AliasAnalysisException with TypecheckException
+object NoSuchColumn {
+  // bit of a hack; the new analyzer wants the qualifier for its
+  // error, but I don't want to change NoSuchColumn's defintion, so
+  // we'll extend it and add it as a normal field.
+  class RealNoSuchColumn(val qualifier: Option[String], name: ColumnName, position: Position) extends NoSuchColumn(name, position)
+}
 case class NoSuchTable(qualifier: String, position: Position) extends SoQLException("No such table `" + qualifier + "'", position) with AliasAnalysisException with TypecheckException
+object NoSuchTable {
+  class RealNoSuchTable(qualifier: String, val name: ColumnName, position: Position) extends NoSuchTable(qualifier, position)
+}
 case class CircularAliasDefinition(name: ColumnName, position: Position) extends SoQLException("Circular reference while defining alias `" + name + "'", position) with AliasAnalysisException
 
 sealed trait LexerException extends SoQLException

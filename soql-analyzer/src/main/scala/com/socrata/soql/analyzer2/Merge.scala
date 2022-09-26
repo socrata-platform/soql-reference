@@ -141,16 +141,22 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         // Just projection change + possibly limit/offset and
         // distinctiveness.  We can merge this onto almost anything,
         // and what we can't merge it onto has been rejected by
-        // definitelyRequiresSubselect.
+        // definitelyRequiresSubselect - with one exception!  It's
+        // possible for a parent's group-by to have been implicit in
+        // its select list, so we'll only accept this merge if the
+        // resulting query's aggregatedness is the same as the
+        // parent's.
         debug("simple", a, b)
         val (newLim, newOff) = Merger.combineLimits(a.limit, a.offset, bLim, bOff)
-        Some(a.copy(
-               selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
-               from = bRejoin(a.from, replaceRefs(aLabel, a.selectedExprs, _)),
-               limit = newLim,
-               offset = newOff,
-               hint = a.hint ++ bHint
-             ))
+        Some(
+          a.copy(
+            selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
+            from = bRejoin(a.from, replaceRefs(aLabel, a.selectedExprs, _)),
+            limit = newLim,
+            offset = newOff,
+            hint = a.hint ++ bHint
+          )
+        ).filter(_.isAggregated == a.isAggregated)
 
       case (a@Select(_aDistinct, aSelect, aFrom, aWhere, Nil, None, aOrder, None, None, None, aHint),
             b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if !b.isAggregated =>
@@ -182,20 +188,22 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
                hint = aHint ++ bHint))
 
       case (a@Select(_aDistinct, aSelect, aFrom, aWhere, aGroup, aHaving, aOrder, None, None, None, aHint),
-            b@Select(bDistinct, bSelect, _oldA, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, bHint)) if a.isAggregated =>
+            b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if a.isAggregated =>
         debug("non-aggregate on aggregate")
-        Some(Select(
-               distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
-               selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
-               from = bRejoin(aFrom, replaceRefs(aLabel, a.selectedExprs, _)),
-               where = aWhere,
-               groupBy = aGroup,
-               having = mergeWhereLike(aLabel, a.selectedExprs, aHaving, bWhere),
-               orderBy = mergeOrderBy(aLabel, a.selectedExprs, aOrder, bOrder),
-               limit = bLim,
-               offset = bOff,
-               search = None,
-               hint = aHint ++ bHint))
+        Some(
+          Select(
+            distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
+            selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
+            from = bRejoin(aFrom, replaceRefs(aLabel, a.selectedExprs, _)),
+            where = aWhere,
+            groupBy = aGroup,
+            having = mergeWhereLike(aLabel, a.selectedExprs, aHaving, bWhere),
+            orderBy = mergeOrderBy(aLabel, a.selectedExprs, aOrder, bOrder),
+            limit = bLim,
+            offset = bOff,
+            search = None,
+            hint = aHint ++ bHint)
+        ).filter(_.isAggregated) // again, just in case the aggregation was implicit and our merge removed it
       case _ =>
         debug("decline to merge - unknown pattern")
         None

@@ -14,14 +14,24 @@ import com.socrata.soql.functions.MonomorphicFunction
 import mocktablefinder._
 
 class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
-  val analyzer = new SoQLAnalyzer[Int, TestType, TestValue](TestTypeInfo, TestFunctionInfo)
+  test("alias analysis qualifiers are correct") {
+    val tf = MockTableFinder.empty[Int, TestType]
+    val tf.Success(start) = tf.findTables(0, "select @bleh.whatever from @single_row")
+    analyzer(start, UserParameters.empty) match {
+      case Right(_) => fail("Expected an error")
+      case Left(nsc: SoQLAnalyzerError.TypecheckError.NoSuchColumn[_]) =>
+        nsc.qualifier must be (Some(rn("bleh")))
+        nsc.name must be (cn("whatever"))
+      case Left(err) =>
+        fail(s"Wrong error: ${err}")
+    }
+  }
 
   test("simple contextless") {
     val tf = MockTableFinder.empty[Int, TestType]
 
     // Getting rid of parents, literal coersions, function overloading, disambiguation....
-    val tf.Success(start) = tf.findTables(0, "select ((('5' + 7))), 'hello' + 'world', '1' + '2' from @single_row")
-    val analysis = analyzer(start, UserParameters.empty)
+    val analysis = analyze(tf, "select ((('5' + 7))), 'hello' + 'world', '1' + '2' from @single_row")
 
     analysis.statement.schema.withValuesMapped(_.name) must equal (
       OrderedMap(
@@ -82,8 +92,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("aaaa-aaaa"), "select text as t, num * num")
-    val analysis = analyzer(start, UserParameters.empty)
+    val analysis = analyze(tf, "aaaa-aaaa", "select text as t, num * num")
 
     analysis.statement.schema.withValuesMapped(_.name) must equal (
       OrderedMap(
@@ -137,9 +146,11 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("aaaa-aaaa"), "select param('gnu')", CanonicalName("bbbb-bbbb"))
-    val analysis = analyzer(
-      start,
+    val analysis = analyze(
+      tf,
+      "aaaa-aaaa",
+      "select param('gnu')",
+      CanonicalName("bbbb-bbbb"),
       UserParameters(
         qualified = Map(CanonicalName("bbbb-bbbb") -> Map(hn("gnu") -> UserParameters.Value(TestText("Hello world"))))
       )
@@ -165,9 +176,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("aaaa-aaaa"), "select param('gnu')")
-    val analysis = analyzer(
-      start,
+    val analysis = analyze(tf, "aaaa-aaaa", "select param('gnu')",
       UserParameters(
         qualified = Map.empty,
         unqualified = Right(Map(hn("gnu") -> UserParameters.Value(TestText("Hello world"))))
@@ -194,9 +203,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("aaaa-aaaa"), "select param('gnu')")
-    val analysis = analyzer(
-      start,
+    val analysis = analyze(tf, "aaaa-aaaa", "select param('gnu')",
       UserParameters(
         qualified = Map(CanonicalName("bbbb-bbbb") -> Map(hn("gnu") -> UserParameters.Value(TestText("Hello world")))),
         unqualified = Left(CanonicalName("bbbb-bbbb"))
@@ -225,8 +232,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       (0, "cccc-cccc") -> U(0, "select 1 from @bbbb-bbbb where user = ?user and allowed limit 1", "user" -> TestText)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("aaaa-aaaa"), "select * join @cccc-cccc('bob') on true")
-    val analysis = analyzer(start, UserParameters.empty)
+    val analysis = analyze(tf, "aaaa-aaaa", "select * join @cccc-cccc('bob') on true")
 
     val select = analysis.statement match {
       case select: Select[Int, TestType, TestValue] => select
@@ -302,9 +308,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       (0, "cccc-cccc") -> U(0, "select 1 from @bbbb-bbbb where user = ?user and allowed limit 1", "user" -> TestText)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("aaaa-aaaa"), "select * join @cccc-cccc(text) on true")
-    val analysis = analyzer(start, UserParameters.empty)
-
+    val analysis = analyze(tf, "aaaa-aaaa", "select * join @cccc-cccc(text) on true")
 
     val select = analysis.statement match {
       case select: Select[Int, TestType, TestValue] => select
@@ -379,9 +383,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       (0, "bbbb-bbbb") -> U(0, "select ?a, ?b, ?c, ?d from @single_row", "d" -> TestText, "c" -> TestNumber, "b" -> TestBoolean, "a" -> TestText)
     )
 
-    val tf.Success(start) = tf.findTables(0, rn("aaaa-aaaa"), "select * join @bbbb-bbbb('hello' :: text, 5, true :: boolean, text) on true")
-    val analysis = analyzer(start, UserParameters.empty)
-
+    val analysis = analyze(tf, "aaaa-aaaa", "select * join @bbbb-bbbb('hello' :: text, 5, true :: boolean, text) on true")
 
     val select = analysis.statement match {
       case select: Select[Int, TestType, TestValue] => select

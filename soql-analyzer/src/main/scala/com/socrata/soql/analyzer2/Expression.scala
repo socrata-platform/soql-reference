@@ -30,6 +30,7 @@ sealed abstract class Expr[+CT, +CV] extends Product {
   private[analyzer2] def reposition(p: Position): Self[CT, CV]
 
   private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
 
   final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
   final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder = debugDoc.layoutSmart().toStringBuilder(sb)
@@ -52,6 +53,9 @@ final case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(va
 
   def isAggregated = false
   def isWindowed = false
+
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
+    Map(table -> Set(column))
 
   private[analyzer2] def findIsomorphism[CT2 >: CT, CV2](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean = {
     that match {
@@ -90,6 +94,9 @@ final case class SelectListReference[+CT](index: Int, isAggregated: Boolean, isW
 
   val size = 1
 
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
+    throw new Exception("Cannot ask for ColumnReferences on a query with SelectListReferences")
+
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     this
 
@@ -113,6 +120,9 @@ sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
 
   def isAggregated = false
   def isWindowed = false
+
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
+    Map.empty
 
   private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean = {
     this == that
@@ -166,6 +176,11 @@ final case class FunctionCall[+CT, +CV](
   def isAggregated = args.exists(_.isAggregated)
   def isWindowed = args.exists(_.isWindowed)
 
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
+    args.foldLeft(Map.empty[TableLabel, Set[ColumnLabel]]) { (acc, arg) =>
+      acc.mergeWith(arg.columnReferences)(_ ++ _)
+    }
+
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
     Some(this).filter(predicate).orElse {
       args.iterator.flatMap(_.find(predicate)).nextOption()
@@ -206,6 +221,17 @@ final case class AggregateFunctionCall[+CT, +CV](
   def isWindowed = args.exists(_.isWindowed)
 
   val size = 1 + args.iterator.map(_.size).sum + filter.fold(0)(_.size)
+
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = {
+    var refs =
+      args.foldLeft(Map.empty[TableLabel, Set[ColumnLabel]]) { (acc, arg) =>
+        acc.mergeWith(arg.columnReferences)(_ ++ _)
+      }
+    for(f <- filter) {
+      refs = refs.mergeWith(f.columnReferences)(_ ++ _)
+    }
+    refs
+  }
 
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
     Some(this).filter(predicate).orElse {
@@ -269,6 +295,23 @@ final case class WindowedFunctionCall[+CT, +CV](
 
   def isAggregated = args.exists(_.isAggregated) || partitionBy.exists(_.isAggregated) || orderBy.exists(_.expr.isAggregated)
   def isWindowed = true
+
+  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = {
+    var refs =
+      args.foldLeft(Map.empty[TableLabel, Set[ColumnLabel]]) { (acc, arg) =>
+        acc.mergeWith(arg.columnReferences)(_ ++ _)
+      }
+    for(f <- filter) {
+      refs = refs.mergeWith(f.columnReferences)(_ ++ _)
+    }
+    for(pb <- partitionBy) {
+      refs = refs.mergeWith(pb.columnReferences)(_ ++ _)
+    }
+    for(ob <- orderBy) {
+      refs = refs.mergeWith(ob.expr.columnReferences)(_ ++ _)
+    }
+    refs
+  }
 
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
     Some(this).filter(predicate).orElse {
