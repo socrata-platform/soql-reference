@@ -115,6 +115,70 @@ select text + text, num * 2 as num from @this as t order by @t.num limit 10 offs
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("merge - distinct on ordered by different column") {
+    val tf = MockTableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", """
+select text, num order by num |> select distinct text
+""")
+
+    val expectedAnalysis = analyze(tf, "twocol", """
+select distinct text
+""")
+
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("merge - distinct on ordered by same column") {
+    val tf = MockTableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", """
+select text, num order by text |> select distinct text
+""")
+
+    val expectedAnalysis = analyze(tf, "twocol", """
+select distinct text order by text
+""")
+
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("merge - unsimple distinct on ordered") {
+    val tf = MockTableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", """
+select text, num order by num |> select distinct text, num order by text
+""")
+
+    val expectedAnalysis = analyze(tf, "twocol", """
+select distinct text, num order by text, num
+""")
+
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("merge - distinct aggregate on ordered") {
+    val tf = MockTableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", """
+select text, num order by num |> select distinct text group by text
+""")
+
+    val expectedAnalysis = analyze(tf, "twocol", """
+select distinct text group by text
+""")
+
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
   test("merge - aggregate on non-aggregate") {
     val tf = MockTableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
