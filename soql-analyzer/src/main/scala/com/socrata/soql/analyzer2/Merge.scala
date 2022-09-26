@@ -148,10 +148,13 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         // parent's.
         debug("simple", a, b)
         val (newLim, newOff) = Merger.combineLimits(a.limit, a.offset, bLim, bOff)
+        val selectList = mergeSelection(aLabel, a.selectedExprs, bSelect)
         Some(
           a.copy(
-            selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
+            distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
+            selectList = selectList,
             from = bRejoin(a.from, replaceRefs(aLabel, a.selectedExprs, _)),
+            orderBy = orderByVsDistinct(a.orderBy, selectList.withValuesMapped(_.expr), bDistinct),
             limit = newLim,
             offset = newOff,
             hint = a.hint ++ bHint
@@ -161,11 +164,13 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
       case (a@Select(_aDistinct, aSelect, aFrom, aWhere, Nil, None, aOrder, None, None, None, aHint),
             b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if !b.isAggregated =>
         debug("non-aggregate on non-aggregate")
+        val selectList = mergeSelection(aLabel, a.selectedExprs, bSelect)
         Some(a.copy(
-               selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
+               distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
+               selectList = selectList,
                from = bRejoin(a.from, replaceRefs(aLabel, a.selectedExprs, _)),
                where = mergeWhereLike(aLabel, a.selectedExprs, aWhere, bWhere),
-               orderBy = mergeOrderBy(aLabel, a.selectedExprs, aOrder, bOrder),
+               orderBy = mergeOrderBy(aLabel, a.selectedExprs, orderByVsDistinct(aOrder, selectList.withValuesMapped(_.expr), bDistinct), bOrder),
                limit = bLim,
                offset = bOff,
                hint = a.hint ++ bHint
@@ -327,6 +332,16 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
 
   private def mergeGroupBy(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]], gb: Seq[Expr[CT, CV]]): Seq[Expr[CT, CV]] = {
     gb.map(replaceRefs(aTable, aColumns, _))
+  }
+
+  private def orderByVsDistinct(orderBy: Seq[OrderBy[CT, CV]], columns: OrderedMap[AutoColumnLabel, Expr[CT, CV]], bDistinct: Distinctiveness[CT, CV]) = {
+    orderBy.filter { ob =>
+      bDistinct match {
+        case Distinctiveness.Indistinct => true
+        case Distinctiveness.FullyDistinct => columns.values.exists(_ == ob.expr)
+        case Distinctiveness.On(exprs) => exprs.contains(ob.expr)
+      }
+    }
   }
 
   private def mergeOrderBy(
