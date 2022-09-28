@@ -13,8 +13,13 @@ class SoQLAnalysis[RNS, CT, CV] private (
   /** Rewrite the analysis plumbing through enough information to
     * preserve table-ordering (except across joins and aggregates,
     * which of course destroy ordering). */
-  def preserveOrdering(rowNumberFunction: MonomorphicFunction[CT]): SoQLAnalysis[RNS, CT, CV] =
-    copy(statement = statement.preserveOrdering(labelProvider, rowNumberFunction, true, false)._2)
+  def preserveOrdering(rowNumberFunction: MonomorphicFunction[CT]): SoQLAnalysis[RNS, CT, CV] = {
+    val nlp = labelProvider.clone()
+    copy(
+      labelProvider = nlp,
+      statement = statement.preserveOrdering(nlp, rowNumberFunction, true, false)._2
+    )
+  }
 
   /** Simplify subselects on a best-effort basis. */
   def merge(and: MonomorphicFunction[CT]): SoQLAnalysis[RNS, CT, CV] =
