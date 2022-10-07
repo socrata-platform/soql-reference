@@ -12,7 +12,21 @@ class UnparsedFoundTables[ResourceNameScope, +ColumnType] private[analyzer2] (
   private[analyzer2] val initialScope: ResourceNameScope,
   private[analyzer2] val initialQuery: UnparsedFoundTables.Query,
   private[analyzer2] val parserParameters: EncodableParameters
-)
+) extends FoundTablesLike[ResourceNameScope, ColumnType] {
+  type Self[RNS, +CT] = UnparsedFoundTables[RNS, CT]
+
+  final def rewriteDatabaseNames(
+    tableName: DatabaseTableName => DatabaseTableName,
+    // This is given the _original_ database table name
+    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
+  ): UnparsedFoundTables[ResourceNameScope, ColumnType] =
+    new UnparsedFoundTables(
+      tableMap.rewriteDatabaseNames(tableName, columnName),
+      initialScope,
+      initialQuery,
+      parserParameters
+    )
+}
 
 object UnparsedFoundTables {
   sealed abstract class Query {

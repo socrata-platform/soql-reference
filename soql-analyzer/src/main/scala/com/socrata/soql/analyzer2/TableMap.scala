@@ -8,7 +8,18 @@ import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ResourceName, ColumnName}
 import com.socrata.soql.parsing.AbstractParser
 
-class TableMap[ResourceNameScope, +ColumnType] private[analyzer2] (private val underlying: Map[ResourceNameScope, Map[ResourceName, ParsedTableDescription[ResourceNameScope, ColumnType]]]) extends AnyVal {
+trait TableMapLike[ResourceNameScope, +ColumnType] extends Any {
+  type Self[RNS, +CT]
+
+  def rewriteDatabaseNames(
+    tableName: DatabaseTableName => DatabaseTableName,
+    // This is given the _original_ database table name
+    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
+  ): Self[ResourceNameScope, ColumnType]
+}
+
+class TableMap[ResourceNameScope, +ColumnType] private[analyzer2] (private val underlying: Map[ResourceNameScope, Map[ResourceName, ParsedTableDescription[ResourceNameScope, ColumnType]]]) extends AnyVal with TableMapLike[ResourceNameScope, ColumnType] {
+  type Self[RNS, +CT] = TableMap[RNS, CT]
   type ScopedResourceName = (ResourceNameScope, ResourceName)
 
   def asUnparsedTableMap: UnparsedTableMap[ResourceNameScope, ColumnType] =
@@ -55,6 +66,28 @@ class TableMap[ResourceNameScope, +ColumnType] private[analyzer2] (private val u
       }.toMap
 
     (new TableMap(newMap), newToOld, oldToNew)
+  }
+
+  def rewriteDatabaseNames(
+    tableName: DatabaseTableName => DatabaseTableName,
+    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
+  ): TableMap[ResourceNameScope, ColumnType] = {
+    new TableMap(underlying.iterator.map { case (rns, m) =>
+      rns -> m.iterator.map { case (rn, ptd) =>
+        val newptd = ptd match {
+          case ParsedTableDescription.Dataset(name, schema) =>
+            ParsedTableDescription.Dataset(
+              tableName(name),
+              OrderedMap(schema.iterator.map { case (dcn, ne) =>
+                columnName(name, dcn) -> ne
+              }.toSeq : _*)
+            )
+          case other =>
+            other
+        }
+        rn -> newptd
+      }.toMap
+    }.toMap)
   }
 
   override def toString = "TableMap(" + underlying + ")"

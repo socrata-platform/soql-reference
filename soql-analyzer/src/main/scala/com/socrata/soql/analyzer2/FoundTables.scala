@@ -10,12 +10,24 @@ import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.BinaryTree
 
-case class FoundTables[ResourceNameScope, +ColumnType] private[analyzer2] (
+trait FoundTablesLike[ResourceNameScope, +ColumnType] {
+  type Self[RNS, +CT]
+
+  def rewriteDatabaseNames(
+    tableName: DatabaseTableName => DatabaseTableName,
+    // This is given the _original_ database table name
+    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
+  ): Self[ResourceNameScope, ColumnType]
+}
+
+final case class FoundTables[ResourceNameScope, +ColumnType] private[analyzer2] (
   tableMap: TableMap[ResourceNameScope, ColumnType],
   initialScope: ResourceNameScope,
   initialQuery: FoundTables.Query,
   parserParameters: AbstractParser.Parameters
-) {
+) extends FoundTablesLike[ResourceNameScope, ColumnType] {
+  type Self[RNS, +CT] = FoundTables[RNS, CT]
+
   def asUnparsedFoundTables =
     new UnparsedFoundTables(
       tableMap.asUnparsedTableMap,
@@ -31,6 +43,13 @@ case class FoundTables[ResourceNameScope, +ColumnType] private[analyzer2] (
         case q: ParsedTableDescription.Query[_, ColumnType] => acc + (q.canonicalName -> q.parameters)
       }
     }
+
+  final def rewriteDatabaseNames(
+    tableName: DatabaseTableName => DatabaseTableName,
+    // This is given the _original_ database table name
+    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
+  ): FoundTables[ResourceNameScope, ColumnType] =
+    copy(tableMap = tableMap.rewriteDatabaseNames(tableName, columnName))
 
   // This lets you convert resource scope names to a simplified form
   // if your resource scope names in one location have semantic
