@@ -34,7 +34,7 @@ trait TableFinder {
   type ResourceNameScope
 
   /** Look up the given `name` in the given `scope` */
-  protected def lookup(scope: ResourceNameScope, name: ResourceName): Either[LookupError, TableDescription]
+  protected def lookup(scope: ResourceNameScope, name: ResourceName): Either[LookupError, FinderTableDescription]
 
   /** Parameters used to parse SoQL */
   protected val parserParameters: AbstractParser.Parameters = AbstractParser.defaultParameters
@@ -42,17 +42,16 @@ trait TableFinder {
   /** The result of looking up a name, containing only the values
     * relevant to analysis.  Note this is very nearly the same as
     * UnparsedTableDescription but not _quite_ the same because of the
-    * way Datasets' column names get turned into
-    * ParsedTableDescription.Datasets' column names. */
-  sealed trait TableDescription
+    * representation of Datasets' schemas. */
+  sealed trait FinderTableDescription
 
   /** A base dataset, or a saved query which is being analyzed opaquely. */
   case class Dataset(
     databaseName: DatabaseTableName,
     schema: OrderedMap[ColumnName, ColumnType]
-  ) extends TableDescription {
+  ) extends FinderTableDescription {
     private[analyzer2] def toParsed =
-      ParsedTableDescription.Dataset(
+      TableDescription.Dataset(
         databaseName,
         schema.map { case (cn, ct) =>
           // This is a little icky...?  But at this point we're in
@@ -71,7 +70,7 @@ trait TableFinder {
     basedOn: ResourceName,
     soql: String,
     parameters: Map[HoleName, ColumnType]
-  ) extends TableDescription {
+  ) extends FinderTableDescription {
   }
   /** A saved table query ("UDF"), with any parameters it defines for itself. */
   case class TableFunction(
@@ -79,7 +78,7 @@ trait TableFinder {
     canonicalName: CanonicalName,
     soql: String,
     parameters: OrderedMap[HoleName, ColumnType]
-  ) extends TableDescription
+  ) extends FinderTableDescription
 
   type ScopedResourceName = (ResourceNameScope, ResourceName)
 
@@ -143,13 +142,13 @@ trait TableFinder {
   }
 
   // A pair of helpers that lift the abstract functions into the Result world
-  private def doLookup(scopedName: ScopedResourceName): Result[ParsedTableDescription[ResourceNameScope, ColumnType]] = {
+  private def doLookup(scopedName: ScopedResourceName): Result[TableDescription[ResourceNameScope, ColumnType]] = {
     lookup(scopedName._1, scopedName._2) match {
       case Right(ds: Dataset) =>
         Success(ds.toParsed)
       case Right(Query(scope, canonicalName, basedOn, text, params)) =>
-        parse(Some(scopedName), text, false).map(ParsedTableDescription.Query(scope, canonicalName, basedOn, _, text, params))
-      case Right(TableFunction(scope, canonicalName, text, params)) => parse(Some(scopedName), text, true).map(ParsedTableDescription.TableFunction(scope, canonicalName, _, text, params))
+        parse(Some(scopedName), text, false).map(TableDescription.Query(scope, canonicalName, basedOn, _, text, params))
+      case Right(TableFunction(scope, canonicalName, text, params)) => parse(Some(scopedName), text, true).map(TableDescription.TableFunction(scope, canonicalName, _, text, params))
       case Left(LookupError.NotFound) => Error.NotFound(scopedName)
       case Left(LookupError.PermissionDenied) => Error.PermissionDenied(scopedName)
     }
@@ -179,15 +178,15 @@ trait TableFinder {
     TableName.reservedNames.contains(prefixedName)
   }
 
-  def walkDesc(desc: ParsedTableDescription[ResourceNameScope, ColumnType], acc: TableMap): Result[TableMap] = {
+  def walkDesc(desc: TableDescription[ResourceNameScope, ColumnType], acc: TableMap): Result[TableMap] = {
     desc match {
-      case ParsedTableDescription.Dataset(_, _) => Success(acc)
-      case ParsedTableDescription.Query(scope, _canonicalName, basedOn, tree, _unparsed, _params) =>
+      case TableDescription.Dataset(_, _) => Success(acc)
+      case TableDescription.Query(scope, _canonicalName, basedOn, tree, _unparsed, _params) =>
         for {
           acc <- walkFromName((scope, basedOn), acc)
           acc <- walkTree(scope, tree, acc)
         } yield acc
-      case ParsedTableDescription.TableFunction(scope, _canonicalName, tree, _unparsed, _params) => walkTree(scope, tree, acc)
+      case TableDescription.TableFunction(scope, _canonicalName, tree, _unparsed, _params) => walkTree(scope, tree, acc)
     }
   }
 

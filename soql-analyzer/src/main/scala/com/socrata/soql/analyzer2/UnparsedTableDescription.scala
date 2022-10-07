@@ -13,12 +13,12 @@ import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.BinaryTree
 
 // This class exists purely to be the JSON-serialized form of
-// ParsedTableDescriptions, but it can also be used by something that
+// TableDescriptions, but it can also be used by something that
 // has to handle passing through JSONified table descriptions but
 // doesn't care about the actual parse tree itself.
 
 sealed trait UnparsedTableDescription[+ResourceNameScope, +ColumnType] {
-  private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, ParsedTableDescription[ResourceNameScope, ColumnType]]
+  private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, TableDescription[ResourceNameScope, ColumnType]]
   private[analyzer2] type SoQL <: String
   private[analyzer2] def soql: SoQL
 }
@@ -44,7 +44,7 @@ object UnparsedTableDescription {
   ) extends UnparsedTableDescription[Nothing, ColumnType] {
     private[analyzer2] def rewriteScopes[RNS, RNS2](scopeMap: Map[RNS, RNS2]) = this
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
-      Right(ParsedTableDescription.Dataset(name, schema))
+      Right(TableDescription.Dataset(name, schema))
     private[analyzer2] type SoQL = Nothing
     private[analyzer2] def soql = ???
   }
@@ -78,7 +78,7 @@ object UnparsedTableDescription {
       copy(scope = scopeMap(scope))
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
       ParserUtil(soql, params.copy(allowHoles = false)).map { parsed =>
-        ParsedTableDescription.Query(
+        TableDescription.Query(
           scope,
           canonicalName,
           basedOn,
@@ -108,7 +108,7 @@ object UnparsedTableDescription {
 
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
       ParserUtil(soql, params.copy(allowHoles = true)).map { parsed =>
-        ParsedTableDescription.TableFunction(
+        TableDescription.TableFunction(
           scope,
           canonicalName,
           parsed,

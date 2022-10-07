@@ -29,7 +29,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
   type ScopedResourceName = (RNS, ResourceName)
   type TableMap = com.socrata.soql.analyzer2.TableMap[RNS, CT]
   type FoundTables = com.socrata.soql.analyzer2.FoundTables[RNS, CT]
-  type ParsedTableDescription = com.socrata.soql.analyzer2.ParsedTableDescription[RNS, CT]
+  type TableDescription = com.socrata.soql.analyzer2.TableDescription[RNS, CT]
   type UserParameters = com.socrata.soql.analyzer2.UserParameters[CT, CV]
 
   type UdfParameters = Map[HoleName, Position => Expr[CT, CV]]
@@ -102,7 +102,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       )
     }
 
-    def fromTable(desc: ParsedTableDescription.Dataset[CT], alias: Option[(RNS, ResourceName)]): FromTable[RNS, CT] =
+    def fromTable(desc: TableDescription.Dataset[CT], alias: Option[(RNS, ResourceName)]): FromTable[RNS, CT] =
       FromTable(
         desc.name,
         alias,
@@ -112,15 +112,15 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
     def analyzeForFrom(scope: RNS, canonicalName: Option[CanonicalName], rn: ResourceName, position: Position): AtomicFrom[RNS, CT, CV] = {
       tableMap.find(scope, rn) match {
-        case ds: ParsedTableDescription.Dataset[CT] =>
+        case ds: TableDescription.Dataset[CT] =>
           fromTable(ds, None)
-        case ParsedTableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters) =>
+        case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters) =>
           // so this is basedOn |> parsed
           // so we want to use "basedOn" as the implicit "from" for "parsed"
           val from = analyzeForFrom(scope, None, basedOn, NoPosition /* Yes, actually NoPosition here */)
           new Context(scope, Some(canonicalName), Environment.empty, Map.empty).
             analyzeStatement(parsed, Some(from))
-        case ParsedTableDescription.TableFunction(_, _, _, _, _) =>
+        case TableDescription.TableFunction(_, _, _, _, _) =>
           parameterlessTableFunction(scope, canonicalName, rn, position)
       }
     }
@@ -429,7 +429,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       def analyzeUDF(tableName: TableName, params: Seq[ast.Expression]): AtomicFrom[RNS, CT, CV] = {
         val resource = ResourceName(tableName.nameWithoutPrefix)
         tableMap.find(scope, resource) match {
-          case ParsedTableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs) =>
+          case TableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs) =>
             if(params.length != paramSpecs.size) {
               incorrectNumberOfParameters(resource, expected = params.length, got = paramSpecs.size, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
             }

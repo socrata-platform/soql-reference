@@ -10,21 +10,21 @@ import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ResourceName, ColumnName, HoleName}
 import com.socrata.soql.BinaryTree
 
-sealed trait ParsedTableDescription[+ResourceNameScope, +ColumnType] {
-  private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]): ParsedTableDescription[RNS2, ColumnType]
+sealed trait TableDescription[+ResourceNameScope, +ColumnType] {
+  private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]): TableDescription[RNS2, ColumnType]
 
   def asUnparsedTableDescription: UnparsedTableDescription[ResourceNameScope, ColumnType]
 }
 
-object ParsedTableDescription {
+object TableDescription {
   private[analyzer2] def jsonEncode[RNS: JsonEncode, CT: JsonEncode] =
-    new JsonEncode[ParsedTableDescription[RNS, CT]] {
-      def encode(x: ParsedTableDescription[RNS, CT]) =
+    new JsonEncode[TableDescription[RNS, CT]] {
+      def encode(x: TableDescription[RNS, CT]) =
         JsonEncode.toJValue(x.asUnparsedTableDescription)
     }
 
   private[analyzer2] def jsonDecode[RNS: JsonDecode, CT: JsonDecode](parserParameters: AbstractParser.Parameters) =
-    new JsonDecode[ParsedTableDescription[RNS, CT]] {
+    new JsonDecode[TableDescription[RNS, CT]] {
       def decode(x: JValue) =
         JsonDecode.fromJValue[UnparsedTableDescription[RNS, CT]](x).flatMap { c =>
           c.parse(parserParameters).left.map { _ =>
@@ -36,7 +36,7 @@ object ParsedTableDescription {
   case class Dataset[+ColumnType](
     name: DatabaseTableName,
     schema: OrderedMap[DatabaseColumnName, NameEntry[ColumnType]]
-  ) extends ParsedTableDescription[Nothing, ColumnType] {
+  ) extends TableDescription[Nothing, ColumnType] {
     private[analyzer2] def rewriteScopes[RNS, RNS2](scopeMap: Map[RNS, RNS2]) = this
 
     def asUnparsedTableDescription =
@@ -50,7 +50,7 @@ object ParsedTableDescription {
     parsed: BinaryTree[ast.Select],
     unparsed: String,
     parameters: Map[HoleName, ColumnType]
-  ) extends ParsedTableDescription[ResourceNameScope, ColumnType] {
+  ) extends TableDescription[ResourceNameScope, ColumnType] {
     private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]) =
       copy(scope = scopeMap(scope))
 
@@ -64,7 +64,7 @@ object ParsedTableDescription {
     parsed: BinaryTree[ast.Select],
     unparsed: String,
     parameters: OrderedMap[HoleName, ColumnType]
-  ) extends ParsedTableDescription[ResourceNameScope, ColumnType] {
+  ) extends TableDescription[ResourceNameScope, ColumnType] {
     private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]) =
       copy(scope = scopeMap(scope))
 

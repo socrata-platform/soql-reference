@@ -39,8 +39,8 @@ final case class FoundTables[ResourceNameScope, +ColumnType] private[analyzer2] 
   val knownUserParameters: Map[CanonicalName, Map[HoleName, ColumnType]] =
     tableMap.descriptions.foldLeft(Map.empty[CanonicalName, Map[HoleName, ColumnType]]) { (acc, desc) =>
       desc match {
-        case _ : ParsedTableDescription.Dataset[_] | _ : ParsedTableDescription.TableFunction[_, _] => acc
-        case q: ParsedTableDescription.Query[_, ColumnType] => acc + (q.canonicalName -> q.parameters)
+        case _ : TableDescription.Dataset[_] | _ : TableDescription.TableFunction[_, _] => acc
+        case q: TableDescription.Query[_, ColumnType] => acc + (q.canonicalName -> q.parameters)
       }
     }
 

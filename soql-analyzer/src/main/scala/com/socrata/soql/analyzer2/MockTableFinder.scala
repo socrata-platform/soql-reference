@@ -10,7 +10,7 @@ import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.StandaloneParser
-import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, ParsedTableDescription, CanonicalName, TableMap, ParserUtil}
+import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, TableDescription, CanonicalName, TableMap, ParserUtil}
 
 sealed abstract class Thing[+RNS, +CT]
 case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT]
@@ -112,7 +112,7 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
   type ResourceNameScope = RNS
   type ColumnType = CT
 
-  protected def lookup(scope: RNS, name: ResourceName): Either[LookupError, TableDescription] = {
+  protected def lookup(scope: RNS, name: ResourceName): Either[LookupError, FinderTableDescription] = {
     tables.get((scope, name)) match {
       case Some(schema) =>
         Right(schema)
@@ -121,16 +121,16 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
     }
   }
 
-  private def parsed(thing: TableDescription) = {
+  private def parsed(thing: FinderTableDescription) = {
     thing match {
       case ds: Dataset => ds.toParsed
       case Query(scope, canonicalName, parent, soql, params) =>
-        ParsedTableDescription.Query(
+        TableDescription.Query(
           scope, canonicalName, parent,
           ParserUtil(soql, parserParameters.copy(allowHoles = false)).getOrElse(throw new Exception("broken soql fixture 1")),
           soql, params)
       case TableFunction(scope, canonicalName, soql, params) =>
-        ParsedTableDescription.TableFunction(
+        TableDescription.TableFunction(
           scope, canonicalName,
           ParserUtil(soql, parserParameters.copy(allowHoles = true)).getOrElse(throw new Exception("broken soql fixture 2")),
           soql, params

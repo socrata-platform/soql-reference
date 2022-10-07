@@ -18,7 +18,7 @@ trait TableMapLike[ResourceNameScope, +ColumnType] extends Any {
   ): Self[ResourceNameScope, ColumnType]
 }
 
-class TableMap[ResourceNameScope, +ColumnType] private[analyzer2] (private val underlying: Map[ResourceNameScope, Map[ResourceName, ParsedTableDescription[ResourceNameScope, ColumnType]]]) extends AnyVal with TableMapLike[ResourceNameScope, ColumnType] {
+class TableMap[ResourceNameScope, +ColumnType] private[analyzer2] (private val underlying: Map[ResourceNameScope, Map[ResourceName, TableDescription[ResourceNameScope, ColumnType]]]) extends AnyVal with TableMapLike[ResourceNameScope, ColumnType] {
   type Self[RNS, +CT] = TableMap[RNS, CT]
   type ScopedResourceName = (ResourceNameScope, ResourceName)
 
@@ -37,11 +37,11 @@ class TableMap[ResourceNameScope, +ColumnType] private[analyzer2] (private val u
 
   def get(name: ScopedResourceName) = underlying.get(name._1).flatMap(_.get(name._2))
 
-  def getOrElse[CT2 >: ColumnType](name: ScopedResourceName)(orElse: => ParsedTableDescription[ResourceNameScope, CT2]) = get(name).getOrElse(orElse)
+  def getOrElse[CT2 >: ColumnType](name: ScopedResourceName)(orElse: => TableDescription[ResourceNameScope, CT2]) = get(name).getOrElse(orElse)
 
   def size = underlying.valuesIterator.map(_.size).sum
 
-  def +[CT2 >: ColumnType](kv: (ScopedResourceName, ParsedTableDescription[ResourceNameScope, CT2])): TableMap[ResourceNameScope, CT2] = {
+  def +[CT2 >: ColumnType](kv: (ScopedResourceName, TableDescription[ResourceNameScope, CT2])): TableMap[ResourceNameScope, CT2] = {
     val ((rns, rn), desc) = kv
     underlying.get(rns) match {
       case Some(resources) => new TableMap(underlying + (rns -> (resources + (rn -> desc))))
@@ -49,7 +49,7 @@ class TableMap[ResourceNameScope, +ColumnType] private[analyzer2] (private val u
     }
   }
 
-  def find(scope: ResourceNameScope, name: ResourceName): ParsedTableDescription[ResourceNameScope, ColumnType] = {
+  def find(scope: ResourceNameScope, name: ResourceName): TableDescription[ResourceNameScope, ColumnType] = {
     getOrElse((scope, name)) {
       throw new NoSuchElementException(s"TableMap: No such key: $scope:$name")
     }
@@ -75,8 +75,8 @@ class TableMap[ResourceNameScope, +ColumnType] private[analyzer2] (private val u
     new TableMap(underlying.iterator.map { case (rns, m) =>
       rns -> m.iterator.map { case (rn, ptd) =>
         val newptd = ptd match {
-          case ParsedTableDescription.Dataset(name, schema) =>
-            ParsedTableDescription.Dataset(
+          case TableDescription.Dataset(name, schema) =>
+            TableDescription.Dataset(
               tableName(name),
               OrderedMap(schema.iterator.map { case (dcn, ne) =>
                 columnName(name, dcn) -> ne
@@ -104,10 +104,10 @@ object TableMap {
   private [analyzer2] def jsonDecode[RNS: JsonDecode, CT: JsonDecode](parameters: AbstractParser.Parameters): JsonDecode[TableMap[RNS, CT]] =
     new JsonDecode[TableMap[RNS, CT]] {
       // this can't just go via UnparsedTableMap for error-tracking
-      // reasons.  We have to use the ParsedTableDescription
+      // reasons.  We have to use the TableDescription
       // JsonDecode directly.
-      private implicit val ptdDecode = ParsedTableDescription.jsonDecode[RNS, CT](parameters)
-      def decode(v: JValue) = JsonDecode.fromJValue[Seq[(RNS, Map[ResourceName, ParsedTableDescription[RNS, CT]])]](v).map { fields =>
+      private implicit val ptdDecode = TableDescription.jsonDecode[RNS, CT](parameters)
+      def decode(v: JValue) = JsonDecode.fromJValue[Seq[(RNS, Map[ResourceName, TableDescription[RNS, CT]])]](v).map { fields =>
         new TableMap(fields.toMap)
       }
     }
