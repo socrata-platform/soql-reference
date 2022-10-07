@@ -5,6 +5,8 @@ import scala.annotation.tailrec
 import com.socrata.soql.ast
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ResourceName, ColumnName, HoleName, TableName}
+import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
+import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.{BinaryTree, Leaf, Compound}
 
 trait TableFinder {
@@ -18,7 +20,7 @@ trait TableFinder {
   /** The way in which `parse` can fail.  This is probably a type from
     * soql.{standalone_exceptions,exceptions}.
     */
-  type ParseError
+  type ParseError = LexerParserException
 
   /** The way in which saved queries are scoped.  This is nearly opaque
     * as far as TableFinder is concerned, requiring only that a tuple
@@ -34,8 +36,8 @@ trait TableFinder {
   /** Look up the given `name` in the given `scope` */
   protected def lookup(scope: ResourceNameScope, name: ResourceName): Either[LookupError, TableDescription]
 
-  /** Parse the given SoQL */
-  protected def parse(soql: String, udfParamsAllowed: Boolean): Either[ParseError, BinaryTree[ast.Select]]
+  /** Parameters used to parse SoQL */
+  protected val parserParameters: AbstractParser.Parameters = AbstractParser.defaultParameters
 
   /** The result of looking up a name, containing only the values
     * relevant to analysis.  Note this is very nearly the same as
@@ -119,7 +121,7 @@ trait TableFinder {
   /** Find all tables referenced from the given SoQL on name that provides an implicit context. */
   final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String): Result[FoundTables[ResourceNameScope, ColumnType]] = {
     walkFromName((scope, resourceName), TableMap.empty) match {
-      case Success(acc) => walkSoQL(scope, FoundTables.InContext(resourceName, _), text, acc)
+      case Success(acc) => walkSoQL(scope, FoundTables.InContext(resourceName, _, _), text, acc)
       case err: Error => err
     }
   }
@@ -128,7 +130,7 @@ trait TableFinder {
     * provides an implicit context, impersonating a saved query. */
   final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String, impersonating: CanonicalName): Result[FoundTables[ResourceNameScope, ColumnType]] = {
     walkFromName((scope, resourceName), TableMap.empty) match {
-      case Success(acc) => walkSoQL(scope, FoundTables.InContextImpersonatingSaved(resourceName, _, impersonating), text, acc)
+      case Success(acc) => walkSoQL(scope, FoundTables.InContextImpersonatingSaved(resourceName, _, _, impersonating), text, acc)
       case err: Error => err
     }
   }
@@ -136,7 +138,7 @@ trait TableFinder {
   /** Find all tables referenced from the given name. */
   final def findTables(scope: ResourceNameScope, resourceName: ResourceName): Result[FoundTables[ResourceNameScope, ColumnType]] = {
     walkFromName((scope, resourceName), TableMap.empty).map { acc =>
-      FoundTables(acc, scope, FoundTables.Saved(resourceName))
+      FoundTables(acc, scope, FoundTables.Saved(resourceName), parserParameters)
     }
   }
 
@@ -146,15 +148,15 @@ trait TableFinder {
       case Right(ds: Dataset) =>
         Success(ds.toParsed)
       case Right(Query(scope, canonicalName, basedOn, text, params)) =>
-        doParse(Some(scopedName), text, false).map(ParsedTableDescription.Query(scope, canonicalName, basedOn, _, text, params))
-      case Right(TableFunction(scope, canonicalName, text, params)) => doParse(Some(scopedName), text, true).map(ParsedTableDescription.TableFunction(scope, canonicalName, _, text, params))
+        parse(Some(scopedName), text, false).map(ParsedTableDescription.Query(scope, canonicalName, basedOn, _, text, params))
+      case Right(TableFunction(scope, canonicalName, text, params)) => parse(Some(scopedName), text, true).map(ParsedTableDescription.TableFunction(scope, canonicalName, _, text, params))
       case Left(LookupError.NotFound) => Error.NotFound(scopedName)
       case Left(LookupError.PermissionDenied) => Error.PermissionDenied(scopedName)
     }
   }
 
-  private def doParse(name: Option[ScopedResourceName], text: String, udfParamsAllowed: Boolean): Result[BinaryTree[ast.Select]] = {
-    parse(text, udfParamsAllowed) match {
+  private def parse(name: Option[ScopedResourceName], text: String, udfParamsAllowed: Boolean): Result[BinaryTree[ast.Select]] = {
+    ParserUtil(text, parserParameters.copy(allowHoles = udfParamsAllowed)) match {
       case Right(tree) => Success(tree)
       case Left(err) => Error.ParseError(name, err)
     }
@@ -190,12 +192,12 @@ trait TableFinder {
   }
 
   // This walks anonymous soql.  Named soql gets parsed in doLookup
-  private def walkSoQL(scope: ResourceNameScope, context: BinaryTree[ast.Select] => FoundTables.Query, text: String, acc: TableMap): Result[FoundTables[ResourceNameScope, ColumnType]] = {
+  private def walkSoQL(scope: ResourceNameScope, context: (BinaryTree[ast.Select], String) => FoundTables.Query, text: String, acc: TableMap): Result[FoundTables[ResourceNameScope, ColumnType]] = {
     for {
-      tree <- doParse(None, text, udfParamsAllowed = false)
+      tree <- parse(None, text, udfParamsAllowed = false)
       acc <- walkTree(scope, tree, acc)
     } yield {
-      FoundTables(acc, scope, context(tree))
+      FoundTables(acc, scope, context(tree, text), parserParameters)
     }
   }
 

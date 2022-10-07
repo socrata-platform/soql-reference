@@ -5,7 +5,7 @@ import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 
 import com.socrata.soql.ast
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
-import com.socrata.soql.parsing.{StandaloneParser, AbstractParser}
+import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ResourceName, ColumnName, HoleName}
 import com.socrata.soql.BinaryTree
@@ -17,23 +17,18 @@ sealed trait ParsedTableDescription[+ResourceNameScope, +ColumnType] {
 }
 
 object ParsedTableDescription {
-  implicit def jEncode[RNS: JsonEncode, CT: JsonEncode] =
+  private[analyzer2] def jsonEncode[RNS: JsonEncode, CT: JsonEncode] =
     new JsonEncode[ParsedTableDescription[RNS, CT]] {
       def encode(x: ParsedTableDescription[RNS, CT]) =
         JsonEncode.toJValue(x.asUnparsedTableDescription)
     }
 
-  implicit def jDecode[RNS: JsonDecode, CT: JsonDecode] =
+  private[analyzer2] def jsonDecode[RNS: JsonDecode, CT: JsonDecode](parserParameters: AbstractParser.Parameters) =
     new JsonDecode[ParsedTableDescription[RNS, CT]] {
       def decode(x: JValue) =
         JsonDecode.fromJValue[UnparsedTableDescription[RNS, CT]](x).flatMap { c =>
-          try {
-            Right(c.parse { allowUdfParams =>
-              new StandaloneParser(AbstractParser.defaultParameters.copy(allowHoles = allowUdfParams))
-            })
-          } catch {
-            case _ : LexerParserException =>
-              Left(DecodeError.InvalidValue(JString(c.soql)).prefix("soql"))
+          c.parse(parserParameters).left.map { _ =>
+            DecodeError.InvalidValue(JString(c.soql)).prefix("soql")
           }
         }
     }

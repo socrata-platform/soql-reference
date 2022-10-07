@@ -9,8 +9,8 @@ import com.socrata.soql.ast.Select
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
-import com.socrata.soql.parsing.{StandaloneParser, AbstractParser}
-import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, ParsedTableDescription, CanonicalName, TableMap}
+import com.socrata.soql.parsing.StandaloneParser
+import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, ParsedTableDescription, CanonicalName, TableMap, ParserUtil}
 
 sealed abstract class Thing[+RNS, +CT]
 case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT]
@@ -110,7 +110,6 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
   }.toMap
 
   type ResourceNameScope = RNS
-  type ParseError = LexerParserException
   type ColumnType = CT
 
   protected def lookup(scope: RNS, name: ResourceName): Either[LookupError, TableDescription] = {
@@ -122,23 +121,20 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
     }
   }
 
-  protected def parse(soql: String, udfParamsAllowed: Boolean): Either[ParseError, BinaryTree[Select]] = {
-    try {
-      Right(
-        new StandaloneParser(AbstractParser.defaultParameters.copy(allowHoles = udfParamsAllowed)).
-          binaryTreeSelect(soql)
-      )
-    } catch {
-      case e: ParseError =>
-        Left(e)
-    }
-  }
-
   private def parsed(thing: TableDescription) = {
     thing match {
       case ds: Dataset => ds.toParsed
-      case Query(scope, canonicalName, parent, soql, params) => ParsedTableDescription.Query(scope, canonicalName, parent, parse(soql, false).getOrElse(throw new Exception("broken soql fixture 1")), soql, params)
-      case TableFunction(scope, canonicalName, soql, params) => ParsedTableDescription.TableFunction(scope, canonicalName, parse(soql, false).getOrElse(throw new Exception("broken soql fixture 2")), soql, params)
+      case Query(scope, canonicalName, parent, soql, params) =>
+        ParsedTableDescription.Query(
+          scope, canonicalName, parent,
+          ParserUtil(soql, parserParameters.copy(allowHoles = false)).getOrElse(throw new Exception("broken soql fixture 1")),
+          soql, params)
+      case TableFunction(scope, canonicalName, soql, params) =>
+        ParsedTableDescription.TableFunction(
+          scope, canonicalName,
+          ParserUtil(soql, parserParameters.copy(allowHoles = true)).getOrElse(throw new Exception("broken soql fixture 2")),
+          soql, params
+        )
     }
   }
 

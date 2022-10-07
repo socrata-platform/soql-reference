@@ -58,15 +58,15 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         query match {
           case FoundTables.Saved(rn) =>
             analyzeForFrom(scope, None, rn, NoPosition)
-          case FoundTables.InContext(rn, q) =>
+          case FoundTables.InContext(rn, q, _) =>
             val from = analyzeForFrom(scope, None, rn, NoPosition)
             new Context(scope, None, Environment.empty, Map.empty).
               analyzeStatement(q, Some(from))
-          case FoundTables.InContextImpersonatingSaved(rn, q, impersonating) =>
+          case FoundTables.InContextImpersonatingSaved(rn, q, _, impersonating) =>
             val from = analyzeForFrom(scope, None, rn, NoPosition)
             new Context(scope, Some(impersonating), Environment.empty, Map.empty).
               analyzeStatement(q, Some(from))
-          case FoundTables.Standalone(q) =>
+          case FoundTables.Standalone(q, _) =>
             new Context(scope, None, Environment.empty, Map.empty).
               analyzeStatement(q, None)
         }
