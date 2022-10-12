@@ -1,5 +1,7 @@
 package com.socrata.soql.analyzer2
 
+import scala.language.higherKinds
+
 import com.rojoma.json.v3.ast.JValue
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode}
 import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder, AutomaticJsonCodecBuilder}
