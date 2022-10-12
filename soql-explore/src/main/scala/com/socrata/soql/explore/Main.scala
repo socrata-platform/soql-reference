@@ -187,7 +187,7 @@ object Main extends App {
         val preserveOrder = Option(params.get("preserve_order")).isDefined
         val useSelectRefs = Option(params.get("select_refs")).isDefined
 
-        val map = tableFinder.findTables("one", query(0)) match {
+        val map = tableFinder.findTables("one", query(0), Map.empty) match {
           case tableFinder.Success(map) => map
           case tableFinder.Error.ParseError(name, error) =>
             val msg = name match {
@@ -198,7 +198,9 @@ object Main extends App {
           case tableFinder.Error.NotFound((scope, name)) =>
             return BadRequest ~> Content("text/plain", s"Not found: $scope/$name")
           case tableFinder.Error.PermissionDenied(name) =>
-            return InternalServerError ~> Content("text/plain", "God a permission error somehow?")
+            return InternalServerError ~> Content("text/plain", "Got a permission error somehow?")
+          case tableFinder.Error.RecursiveQuery(canonicalName) =>
+            return InternalServerError ~> Content("text/plain", "Found a recursive query-chain at $canonicalName")
         }
 
         val analysisOrError =
