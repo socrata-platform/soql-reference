@@ -133,8 +133,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         OrderedMap(
           dcn("text") -> NameEntry(cn("text"), TestText),
           dcn("num") -> NameEntry(cn("num"), TestNumber)
-        ),
-        Nil
+        )
       )
     )
 
@@ -225,6 +224,93 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
   }
 
+  test("dataset ordering - direct select") {
+    val tf = tableFinder(
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withOrdering("text")
+    )
+
+    val analysis = analyzeSaved(tf, "aaaa-aaaa")
+
+    val select = analysis.statement match {
+      case select: Select[Int, TestType, TestValue] => select
+      case _ => fail("Expected a select")
+    }
+
+    select must equal (
+      Select(
+        Distinctiveness.Indistinct,
+        OrderedMap(
+          c(1) -> NamedExpr(Column(t(1), dcn("text"), TestText)(NoPosition), cn("text")),
+          c(2) -> NamedExpr(Column(t(1), dcn("num"), TestNumber)(NoPosition), cn("num"))
+        ),
+        FromTable(
+          dtn("aaaa-aaaa"),
+          None,
+          t(1),
+          OrderedMap(
+            dcn("text") -> NameEntry(cn("text"), TestText),
+            dcn("num") -> NameEntry(cn("num"), TestNumber)
+          )
+        ),
+        None, Nil, None,
+        List(
+          OrderBy(Column(t(1), dcn("text"), TestText)(NoPosition),true,true)
+        ),
+        None,None,None,Set.empty
+      )
+    )
+  }
+
+
+  test("dataset ordering - nested select") {
+    val tf = tableFinder(
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withOrdering("text")
+    )
+
+    val analysis = analyze(tf, "aaaa-aaaa", "select *")
+
+    val select = analysis.statement match {
+      case select: Select[Int, TestType, TestValue] => select
+      case _ => fail("Expected a select")
+    }
+
+    select must equal (
+      Select(
+        Distinctiveness.Indistinct,
+        OrderedMap(
+          c(3) -> NamedExpr(Column(t(2),c(1),TestText)(NoPosition),cn("text")),
+          c(4) -> NamedExpr(Column(t(2),c(2),TestNumber)(NoPosition),cn("num"))
+        ),
+        FromStatement(
+          Select(
+            Distinctiveness.Indistinct,
+            OrderedMap(
+              c(1) -> NamedExpr(Column(t(1), dcn("text"), TestText)(NoPosition), cn("text")),
+              c(2) -> NamedExpr(Column(t(1), dcn("num"), TestNumber)(NoPosition), cn("num"))
+            ),
+            FromTable(
+              dtn("aaaa-aaaa"),
+              None,
+              t(1),
+              OrderedMap(
+                dcn("text") -> NameEntry(cn("text"), TestText),
+                dcn("num") -> NameEntry(cn("num"), TestNumber)
+              )
+            ),
+            None, Nil, None,
+            List(
+              OrderBy(Column(t(1), dcn("text"), TestText)(NoPosition),true,true)
+            ),
+            None,None,None,Set.empty
+          ),
+          t(2),
+          None
+        ),
+        None,Nil,None,Nil,None,None,None,Set.empty
+      )
+    )
+  }
+
   test("UDF - simple") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber),
@@ -261,8 +347,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
-          ),
-          Nil
+          )
         ),
         FromStatement(
           Select(
@@ -275,8 +360,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
               OrderedMap(
                 dcn("user") -> NameEntry(cn("user"), TestText),
                 dcn("allowed") -> NameEntry(cn("allowed"), TestBoolean)
-              ),
-              Nil
+              )
             ),
             Some(
               FunctionCall(
@@ -339,8 +423,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
-          ),
-          Nil
+          )
         ),
         FromStatement(
           Select(
@@ -353,8 +436,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
               OrderedMap(
                 dcn("user") -> NameEntry(cn("user"), TestText),
                 dcn("allowed") -> NameEntry(cn("allowed"), TestBoolean)
-              ),
-              Nil
+              )
             ),
             Some(
               FunctionCall(
@@ -416,8 +498,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
-          ),
-          Nil
+          )
         ),
         FromStatement(
           Select(

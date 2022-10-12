@@ -147,21 +147,54 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       )
     }
 
-    def fromTable(scope: RNS, desc: TableDescription.Dataset[CT], alias: Option[(RNS, ResourceName)]): FromTable[RNS, CT] = {
-      for(TableDescription.Ordering(col, _ascending) <- desc.ordering) {
-        val typ = desc.schema(col).typ
-        if(!typeInfo.isOrdered(typ)) {
-          throw Bail(SoQLAnalyzerError.UnorderedOrderBy(scope, Some(desc.canonicalName), typeInfo.typeNameFor(typ), NoPosition))
+    def fromTable(scope: RNS, desc: TableDescription.Dataset[CT], alias: Option[(RNS, ResourceName)]): AtomicFrom[RNS, CT, Nothing] = {
+      if(desc.ordering.isEmpty) {
+        FromTable(
+          desc.name,
+          alias,
+          labelProvider.tableLabel(),
+          columns = desc.schema
+        )
+      } else {
+        for(TableDescription.Ordering(col, _ascending) <- desc.ordering) {
+          val typ = desc.schema(col).typ
+          if(!typeInfo.isOrdered(typ)) {
+            throw Bail(SoQLAnalyzerError.UnorderedOrderBy(scope, Some(desc.canonicalName), typeInfo.typeNameFor(typ), NoPosition))
+          }
         }
-      }
 
-      FromTable(
-        desc.name,
-        alias,
-        labelProvider.tableLabel(),
-        columns = desc.schema,
-        ordering = desc.ordering
-      )
+        val from = FromTable(
+          desc.name,
+          None,
+          labelProvider.tableLabel(),
+          columns = desc.schema
+        )
+
+        val columnLabels = from.columns.map { case _ => labelProvider.columnLabel() }
+
+        FromStatement(
+          Select(
+            Distinctiveness.Indistinct,
+            selectList = OrderedMap() ++ from.columns.iterator.zip(columnLabels).map { case ((dcn, NameEntry(name, typ)), outputLabel) =>
+              outputLabel -> NamedExpr(Column(from.label, dcn, typ)(NoPosition), name)
+            },
+            from,
+            None,
+            Nil,
+            None,
+            desc.ordering.map { case TableDescription.Ordering(dcn, ascending) =>
+              val NameEntry(_, typ) = from.columns(dcn)
+              OrderBy(Column(from.label, dcn, typ)(NoPosition), ascending = ascending, nullLast = ascending)
+            },
+            None,
+            None,
+            None,
+            Set.empty
+          ),
+          labelProvider.tableLabel(),
+          alias
+        )
+      }
     }
 
     def analyzeForFrom(scope: RNS, canonicalName: Option[CanonicalName], rn: ResourceName, position: Position): AtomicFrom[RNS, CT, CV] = {
