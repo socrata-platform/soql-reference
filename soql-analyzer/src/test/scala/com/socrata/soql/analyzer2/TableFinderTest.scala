@@ -27,12 +27,30 @@ class TableFinderTest extends FunSuite with MustMatchers {
       (0, "t4") -> U(0, "select * from @t2"),
       (0, "t5") -> Q(1, "t1", "select *"),
       (0, "t6") -> Q(1, "t2", "select *"), // t2 exists in scope 0 but not in scope 1
+      (0, "bad_one") -> Q(0, "bad_two", "select *"),
+      (0, "bad_two") -> Q(0, "bad_one", "select *"),
+      (0, "bad_three") -> Q(0, "t1", "select * join @bad_four on true"),
+      (0, "bad_four") -> Q(0, "t1", "select * join @bad_three on true"),
+      (0, "bad_five") -> Q(0, "t1", "select * join @bad_six on true"),
+      (0, "bad_six") -> Q(0, "bad_five", "select *"),
       (1, "t1") -> D()
     )
   )
 
   test("can find a table") {
     tables.findTables(0, "select * from @t1", Map.empty).map(_.tableMap) must equal (tables((0, "t1")))
+  }
+
+  test("will reject mutually recursive queries - context") {
+    tables.findTables(0, ResourceName("bad_one")) must equal (tables.Error.RecursiveQuery(List("bad_one","bad_two","bad_one").map(CanonicalName)))
+  }
+
+  test("will reject mutually recursive queries - from") {
+    tables.findTables(0, ResourceName("bad_three")) must equal (tables.Error.RecursiveQuery(List("bad_three","bad_four","bad_three").map(CanonicalName)))
+  }
+
+  test("will reject mutually recursive queries - mixed") {
+    tables.findTables(0, ResourceName("bad_five")) must equal (tables.Error.RecursiveQuery(List("bad_five","bad_six","bad_five").map(CanonicalName)))
   }
 
   test("can fail to find a table") {

@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2
 import com.rojoma.json.v3.ast.JValue
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 import com.rojoma.json.v3.interpolation._
-import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder, SimpleHierarchyEncodeBuilder, SimpleHierarchyDecodeBuilder, InternalTag}
+import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder, SimpleHierarchyEncodeBuilder, SimpleHierarchyDecodeBuilder, InternalTag}
 
 import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, OrderedMapHelper}
@@ -41,11 +41,16 @@ object UnparsedTableDescription {
   case class Dataset[+ColumnType](
     name: DatabaseTableName,
     canonicalName: CanonicalName,
-    schema: OrderedMap[DatabaseColumnName, NameEntry[ColumnType]]
+    schema: OrderedMap[DatabaseColumnName, NameEntry[ColumnType]],
+    ordering: Seq[TableDescription.Ordering]
   ) extends UnparsedTableDescription[Nothing, ColumnType] {
+    // TODO: Make this turn into an InvalidValue decode error if it
+    // fires while json-decoding
+    require(ordering.forall { o => schema.contains(o.column) })
+
     private[analyzer2] def rewriteScopes[RNS, RNS2](scopeMap: Map[RNS, RNS2]) = this
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
-      Right(TableDescription.Dataset(name, canonicalName, schema))
+      Right(TableDescription.Dataset(name, canonicalName, schema, ordering))
     private[analyzer2] type SoQL = Nothing
     private[analyzer2] def soql = ???
   }

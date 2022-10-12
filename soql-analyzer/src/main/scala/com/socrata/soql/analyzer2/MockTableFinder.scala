@@ -13,7 +13,17 @@ import com.socrata.soql.parsing.StandaloneParser
 import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, TableDescription, CanonicalName, TableMap, ParserUtil}
 
 sealed abstract class Thing[+RNS, +CT]
-case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT]
+case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT] {
+  private var orderings_ : List[(String, Boolean)] = Nil
+
+  def withOrdering(column: String, ascending: Boolean = true): D[CT] = {
+    val result = D(schema : _*)
+    result.orderings_ = (column, ascending) :: result.orderings_
+    result
+  }
+
+  def orderings: Seq[(String, Boolean)] = orderings_.reverse
+}
 case class Q[+RNS, +CT](scope: RNS, parent: String, soql: String, params: (String, CT)*) extends Thing[RNS, CT]
 case class U[+RNS, CT](scope: RNS, soql: String, params: (String, CT)*) extends Thing[RNS, CT]
 
@@ -94,13 +104,14 @@ object MockTableFinder {
 class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT]]) extends TableFinder {
   private val tables = raw.iterator.map { case ((scope, rawResourceName), thing) =>
     val converted = thing match {
-      case D(rawSchema @ _*) =>
+      case d@D(rawSchema @ _*) =>
         Dataset(
           DatabaseTableName(rawResourceName),
           CanonicalName(rawResourceName),
           OrderedMap() ++ rawSchema.iterator.map {case (rawColumnName, ct) =>
             ColumnName(rawColumnName) -> ct
-          }
+          },
+          d.orderings.map { case (col, asc) => Ordering(ColumnName(col), asc) }
         )
       case Q(scope, parent, soql, params @ _*) =>
         Query(scope, CanonicalName(rawResourceName), ResourceName(parent), soql, params.iterator.map { case (k, v) => HoleName(k) -> v }.toMap)
