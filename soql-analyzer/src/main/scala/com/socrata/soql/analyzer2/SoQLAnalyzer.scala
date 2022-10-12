@@ -29,8 +29,9 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
   type ScopedResourceName = (RNS, ResourceName)
   type TableMap = com.socrata.soql.analyzer2.TableMap[RNS, CT]
   type FoundTables = com.socrata.soql.analyzer2.FoundTables[RNS, CT]
-  type ParsedTableDescription = com.socrata.soql.analyzer2.ParsedTableDescription[RNS, CT]
+  type TableDescription = com.socrata.soql.analyzer2.TableDescription[RNS, CT]
   type UserParameters = com.socrata.soql.analyzer2.UserParameters[CT, CV]
+  type UserParameterSpecs = com.socrata.soql.analyzer2.UserParameterSpecs[CT]
 
   type UdfParameters = Map[HoleName, Position => Expr[CT, CV]]
 
@@ -38,6 +39,8 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
   def apply(start: FoundTables, userParameters: UserParameters): Either[SoQLAnalyzerError[RNS], SoQLAnalysis[RNS, CT, CV]] = {
     try {
+      validateUserParameters(start.knownUserParameters, userParameters)
+
       val state = new State(start.tableMap, userParameters)
 
       Right(new SoQLAnalysis[RNS, CT, CV](
@@ -50,23 +53,65 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
     }
   }
 
+  private def validateUserParameters(specs: UserParameterSpecs, params: UserParameters): Unit = {
+    // what we're checking here is that all params given which match a
+    // param that exists in the specs, matches the type.  We don't
+    // care about extra parameters (they'll just be ignored) and we
+    // don't care about missing parameters (they'll be complained
+    // about, if relevant, when encountered while typechecking) but we
+    // _do_ care that a user parameter can't change the meaning of a
+    // query by altering what function overload gets selected during
+    // typechecking.
+
+    val UserParameters(qualified, unqualified) = params
+    for {
+      (canonName, params) <- qualified
+      spec <- specs.qualified.get(canonName)
+      (param, value) <- params
+      expectedType <- spec.get(param)
+      givenType = value match {
+        case UserParameters.Null(ct) => ct
+        case UserParameters.Value(v) => typeInfo.hasType.typeOf(v)
+      }
+      if givenType != expectedType
+    } {
+      throw Bail(SoQLAnalyzerError.InvalidParameterType(Some(canonName), param, typeInfo.typeNameFor(expectedType), typeInfo.typeNameFor(givenType)))
+    }
+
+    (specs.unqualified, params.unqualified) match {
+      case (Left(expectedCanonName), _) =>
+      case (Right(spec), params) =>
+        for {
+          (param, value) <- params
+          expectedType <- spec.get(param)
+          givenType = value match {
+            case UserParameters.Null(ct) => ct
+            case UserParameters.Value(v) => typeInfo.hasType.typeOf(v)
+          }
+          if givenType != expectedType
+        } {
+          throw Bail(SoQLAnalyzerError.InvalidParameterType(None, param, typeInfo.typeNameFor(expectedType), typeInfo.typeNameFor(givenType)))
+        }
+    }
+  }
+
   private class State(tableMap: TableMap, userParameters: UserParameters) {
     val labelProvider = new LabelProvider
 
-    def analyze(scope: RNS, query: FoundTables.Query): Statement[RNS, CT, CV] = {
+    def analyze(scope: RNS, query: FoundTables.Query[CT]): Statement[RNS, CT, CV] = {
       val from =
         query match {
           case FoundTables.Saved(rn) =>
             analyzeForFrom(scope, None, rn, NoPosition)
-          case FoundTables.InContext(rn, q) =>
+          case FoundTables.InContext(rn, q, _, parameters) =>
             val from = analyzeForFrom(scope, None, rn, NoPosition)
             new Context(scope, None, Environment.empty, Map.empty).
               analyzeStatement(q, Some(from))
-          case FoundTables.InContextImpersonatingSaved(rn, q, impersonating) =>
+          case FoundTables.InContextImpersonatingSaved(rn, q, _, parameters, impersonating) =>
             val from = analyzeForFrom(scope, None, rn, NoPosition)
             new Context(scope, Some(impersonating), Environment.empty, Map.empty).
               analyzeStatement(q, Some(from))
-          case FoundTables.Standalone(q) =>
+          case FoundTables.Standalone(q, _, parameters) =>
             new Context(scope, None, Environment.empty, Map.empty).
               analyzeStatement(q, None)
         }
@@ -102,7 +147,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       )
     }
 
-    def fromTable(desc: ParsedTableDescription.Dataset[CT], alias: Option[(RNS, ResourceName)]): FromTable[RNS, CT] =
+    def fromTable(desc: TableDescription.Dataset[CT], alias: Option[(RNS, ResourceName)]): FromTable[RNS, CT] =
       FromTable(
         desc.name,
         alias,
@@ -112,15 +157,15 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
     def analyzeForFrom(scope: RNS, canonicalName: Option[CanonicalName], rn: ResourceName, position: Position): AtomicFrom[RNS, CT, CV] = {
       tableMap.find(scope, rn) match {
-        case ds: ParsedTableDescription.Dataset[CT] =>
+        case ds: TableDescription.Dataset[CT] =>
           fromTable(ds, None)
-        case ParsedTableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters) =>
+        case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters) =>
           // so this is basedOn |> parsed
           // so we want to use "basedOn" as the implicit "from" for "parsed"
           val from = analyzeForFrom(scope, None, basedOn, NoPosition /* Yes, actually NoPosition here */)
           new Context(scope, Some(canonicalName), Environment.empty, Map.empty).
             analyzeStatement(parsed, Some(from))
-        case ParsedTableDescription.TableFunction(_, _, _, _, _) =>
+        case TableDescription.TableFunction(_, _, _, _, _) =>
           parameterlessTableFunction(scope, canonicalName, rn, position)
       }
     }
@@ -429,7 +474,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       def analyzeUDF(tableName: TableName, params: Seq[ast.Expression]): AtomicFrom[RNS, CT, CV] = {
         val resource = ResourceName(tableName.nameWithoutPrefix)
         tableMap.find(scope, resource) match {
-          case ParsedTableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs) =>
+          case TableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs) =>
             if(params.length != paramSpecs.size) {
               incorrectNumberOfParameters(resource, expected = params.length, got = paramSpecs.size, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
             }

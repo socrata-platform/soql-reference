@@ -5,7 +5,7 @@ import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 
 import com.socrata.prettyprint.prelude._
 
-class LabelProvider {
+class LabelProvider extends Cloneable {
   private var tables = 0
   private var columns = 0
 
@@ -17,6 +17,9 @@ class LabelProvider {
     columns += 1
     new AutoColumnLabel(columns)
   }
+
+  override def clone(): LabelProvider =
+    super.clone().asInstanceOf[LabelProvider]
 }
 
 object LabelProvider {

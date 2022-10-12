@@ -14,7 +14,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
   val and = TestFunctions.And.monomorphic.get
 
   test("direct query does not add a column") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -23,7 +23,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
   }
 
   test("unordered-on-unordered doesn't change under order preservation") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -32,7 +32,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
   }
 
   test("unordered-on-ordered pipes generates an ordering column") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -42,7 +42,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
   }
 
   test("ordered-on-ordered pipes generates an ordering column") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -52,7 +52,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
   }
 
   test("orderings are blocked by aggregations and do not continue beyond them if not required by a window function") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -76,7 +76,7 @@ select * order by num
   }
 
   test("orderings are blocked by aggregations but continue again beyond them if required") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -100,7 +100,7 @@ select *, row_number() over () as rn order by num
   }
 
   test("simple merge") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -116,7 +116,7 @@ select text + text, num * 2 as num from @this as t order by @t.num limit 10 offs
   }
 
   test("merge - distinct on ordered by different column") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -132,7 +132,7 @@ select distinct text
   }
 
   test("merge - distinct on ordered by same column") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -148,7 +148,7 @@ select distinct text order by text
   }
 
   test("merge - unsimple distinct on ordered") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -164,7 +164,7 @@ select distinct text, num order by text, num
   }
 
   test("merge - distinct aggregate on ordered") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -180,7 +180,7 @@ select distinct text group by text
   }
 
   test("merge - aggregate on non-aggregate") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -196,7 +196,7 @@ select text, count(*) where num = 3 group by text
   }
 
   test("merge - non-aggregate on aggregate") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -212,7 +212,7 @@ select text, count(num) as n group by text having n = 5
   }
 
   test("merge - simple on windowed") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -228,7 +228,7 @@ select text, row_number() over () + 1 limit 5
   }
 
   test("merge - filter on join") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "locowt") -> D("amount" -> TestNumber, "words" -> TestText)
     )
@@ -245,7 +245,7 @@ select text, num, @ct.amount, @ct.words join @locowt as @ct on num = @ct.amount 
   }
 
   test("merge - join on simple") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "locowt") -> D("amount" -> TestNumber, "words" -> TestText)
     )
@@ -262,7 +262,7 @@ select text, num join @locowt as ct on num = @ct.amount order by num
   }
 
   test("merge - implicit group-by") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -278,7 +278,7 @@ select count(*), 1 as x |> select x
   }
 
   test("remove unused columns - simple") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -294,7 +294,7 @@ select text order by num |> select text
   }
 
   test("remove unused columns - preserve implicit group") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 

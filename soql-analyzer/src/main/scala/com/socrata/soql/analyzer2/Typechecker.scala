@@ -132,10 +132,7 @@ class Typechecker[RNS, CT, CV](
         case Some(view) =>
           userParameters.qualified.get(view)
         case None =>
-          userParameters.unqualified match {
-            case Right(vars) => Some(vars)
-            case Left(canon) => userParameters.qualified.get(canon)
-          }
+          Some(userParameters.unqualified)
       }
 
     paramSet.flatMap(_.get(name)) match {

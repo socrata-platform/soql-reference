@@ -20,6 +20,8 @@ trait TestHelper { this: Assertions =>
 
   def xtest(s: String)(f: => Any): Unit = {}
 
+  def tableFinder[RNS](items: ((RNS, String), Thing[RNS, TestType])*) = new MockTableFinder[RNS, TestType](items.toMap)
+
   val analyzer = new SoQLAnalyzer[Int, TestType, TestValue](TestTypeInfo, TestFunctionInfo)
 
   class IsomorphicToMatcher[RNS, CT, CV : HasDoc](right: Statement[RNS, CT, CV]) extends BeMatcher[Statement[RNS, CT, CV]] {
@@ -33,6 +35,15 @@ trait TestHelper { this: Assertions =>
 
   def isomorphicTo[RNS, CT, CV : HasDoc](right: Statement[RNS, CT, CV]) = new IsomorphicToMatcher(right)
 
+  def specFor(params: Map[HoleName, UserParameters.PossibleValue[TestType, TestValue]]): Map[HoleName, TestType] =
+    params.iterator.map { case (hn, cv) =>
+      val typ = cv match {
+        case UserParameters.Null(t) => t
+        case UserParameters.Value(v) => hasType.typeOf(v)
+      }
+      hn -> typ
+    }.toMap
+
   type TF[CT] = TableFinder {
     type ResourceNameScope = Int
     type ColumnType = CT
@@ -45,12 +56,12 @@ trait TestHelper { this: Assertions =>
     }
   }
 
-  def analyze[CT <: TestType](tf: TF[CT], ctx: String, query: String): SoQLAnalysis[Int, TestType, TestValue] = {
+  def analyze(tf: TF[TestType], ctx: String, query: String): SoQLAnalysis[Int, TestType, TestValue] = {
     analyze(tf, ctx, query, UserParameters.empty)
   }
 
-  def analyze[CT <: TestType](tf: TF[CT], ctx: String, query: String, params: UserParameters[TestType, TestValue]): SoQLAnalysis[Int, TestType, TestValue] = {
-    tf.findTables(0, rn(ctx), query) match {
+  def analyze(tf: TF[TestType], ctx: String, query: String, params: UserParameters[TestType, TestValue]): SoQLAnalysis[Int, TestType, TestValue] = {
+    tf.findTables(0, rn(ctx), query, specFor(params.unqualified)) match {
       case tf.Success(start) =>
         finishAnalysis(start, params)
       case e: tf.Error =>
@@ -58,8 +69,8 @@ trait TestHelper { this: Assertions =>
     }
   }
 
-  def analyze[CT <: TestType](tf: TF[CT], ctx: String, query: String, canonicalName: CanonicalName, params: UserParameters[TestType, TestValue]): SoQLAnalysis[Int, TestType, TestValue] = {
-    tf.findTables(0, rn(ctx), query, canonicalName) match {
+  def analyze(tf: TF[TestType], ctx: String, query: String, canonicalName: CanonicalName, params: UserParameters[TestType, TestValue]): SoQLAnalysis[Int, TestType, TestValue] = {
+    tf.findTables(0, rn(ctx), query, Map.empty, canonicalName) match {
       case tf.Success(start) =>
         finishAnalysis(start, params)
       case e: tf.Error =>
@@ -67,12 +78,12 @@ trait TestHelper { this: Assertions =>
     }
   }
 
-  def analyze[CT <: TestType](tf: TF[CT], query: String): SoQLAnalysis[Int, TestType, TestValue] = {
+  def analyze(tf: TF[TestType], query: String): SoQLAnalysis[Int, TestType, TestValue] = {
     analyze(tf, query, UserParameters.empty)
   }
 
-  def analyze[CT <: TestType](tf: TF[CT], query: String, params: UserParameters[TestType, TestValue]): SoQLAnalysis[Int, TestType, TestValue] = {
-    tf.findTables(0, query) match {
+  def analyze(tf: TF[TestType], query: String, params: UserParameters[TestType, TestValue]): SoQLAnalysis[Int, TestType, TestValue] = {
+    tf.findTables(0, query, specFor(params.unqualified)) match {
       case tf.Success(start) =>
         finishAnalysis(start, params)
       case e: tf.Error =>

@@ -16,7 +16,7 @@ import mocktablefinder._
 class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
   test("alias analysis qualifiers are correct") {
     val tf = MockTableFinder.empty[Int, TestType]
-    val tf.Success(start) = tf.findTables(0, "select @bleh.whatever from @single_row")
+    val tf.Success(start) = tf.findTables(0, "select @bleh.whatever from @single_row", Map.empty)
     analyzer(start, UserParameters.empty) match {
       case Right(_) => fail("Expected an error")
       case Left(nsc: SoQLAnalyzerError.TypecheckError.NoSuchColumn[_]) =>
@@ -88,7 +88,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
   }
 
   test("simple context") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -142,7 +142,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
   }
 
   test("untagged parameters in anonymous soql - impersonating a saved query") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
@@ -172,14 +172,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
   }
 
   test("untagged parameters in anonymous soql - anonymous parameters") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
     val analysis = analyze(tf, "aaaa-aaaa", "select param('gnu')",
       UserParameters(
         qualified = Map.empty,
-        unqualified = Right(Map(hn("gnu") -> UserParameters.Value(TestText("Hello world"))))
+        unqualified = Map(hn("gnu") -> UserParameters.Value(TestText("Hello world")))
       )
     )
 
@@ -199,14 +199,13 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
   }
 
   test("untagged parameters in anonymous soql - redirected parameters") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val analysis = analyze(tf, "aaaa-aaaa", "select param('gnu')",
+    val analysis = analyze(tf, "aaaa-aaaa", "select param('gnu')", CanonicalName("bbbb-bbbb"),
       UserParameters(
-        qualified = Map(CanonicalName("bbbb-bbbb") -> Map(hn("gnu") -> UserParameters.Value(TestText("Hello world")))),
-        unqualified = Left(CanonicalName("bbbb-bbbb"))
+        qualified = Map(CanonicalName("bbbb-bbbb") -> Map(hn("gnu") -> UserParameters.Value(TestText("Hello world"))))
       )
     )
 
@@ -226,7 +225,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
   }
 
   test("UDF - simple") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "bbbb-bbbb") -> D("user" -> TestText, "allowed" -> TestBoolean),
       (0, "cccc-cccc") -> U(0, "select 1 from @bbbb-bbbb where user = ?user and allowed limit 1", "user" -> TestText)
@@ -302,7 +301,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
   }
 
   test("UDF - referencing outer column") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "bbbb-bbbb") -> D("user" -> TestText, "allowed" -> TestBoolean),
       (0, "cccc-cccc") -> U(0, "select 1 from @bbbb-bbbb where user = ?user and allowed limit 1", "user" -> TestText)
@@ -378,7 +377,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
   }
 
   test("UDF - some parameters are function calls") {
-    val tf = MockTableFinder(
+    val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "bbbb-bbbb") -> U(0, "select ?a, ?b, ?c, ?d from @single_row", "d" -> TestText, "c" -> TestNumber, "b" -> TestBoolean, "a" -> TestText)
     )

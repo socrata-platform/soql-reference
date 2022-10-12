@@ -5,57 +5,57 @@ import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 
 import com.socrata.soql.ast
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
-import com.socrata.soql.parsing.{StandaloneParser, AbstractParser}
+import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ResourceName, ColumnName, HoleName}
 import com.socrata.soql.BinaryTree
 
-sealed trait ParsedTableDescription[+ResourceNameScope, +ColumnType] {
-  private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]): ParsedTableDescription[RNS2, ColumnType]
+trait TableDescriptionLike {
+  val canonicalName: CanonicalName // This is the canonical name of this query or table; it is assumed to be unique across scopes
+}
+
+sealed trait TableDescription[+ResourceNameScope, +ColumnType] extends TableDescriptionLike {
+  private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]): TableDescription[RNS2, ColumnType]
 
   def asUnparsedTableDescription: UnparsedTableDescription[ResourceNameScope, ColumnType]
 }
 
-object ParsedTableDescription {
-  implicit def jEncode[RNS: JsonEncode, CT: JsonEncode] =
-    new JsonEncode[ParsedTableDescription[RNS, CT]] {
-      def encode(x: ParsedTableDescription[RNS, CT]) =
+object TableDescription {
+  private[analyzer2] def jsonEncode[RNS: JsonEncode, CT: JsonEncode] =
+    new JsonEncode[TableDescription[RNS, CT]] {
+      def encode(x: TableDescription[RNS, CT]) =
         JsonEncode.toJValue(x.asUnparsedTableDescription)
     }
 
-  implicit def jDecode[RNS: JsonDecode, CT: JsonDecode] =
-    new JsonDecode[ParsedTableDescription[RNS, CT]] {
+  private[analyzer2] def jsonDecode[RNS: JsonDecode, CT: JsonDecode](parserParameters: AbstractParser.Parameters) =
+    new JsonDecode[TableDescription[RNS, CT]] {
       def decode(x: JValue) =
         JsonDecode.fromJValue[UnparsedTableDescription[RNS, CT]](x).flatMap { c =>
-          try {
-            Right(c.parse { allowUdfParams =>
-              new StandaloneParser(AbstractParser.defaultParameters.copy(allowHoles = allowUdfParams))
-            })
-          } catch {
-            case _ : LexerParserException =>
-              Left(DecodeError.InvalidValue(JString(c.soql)).prefix("soql"))
+          c.parse(parserParameters).left.map { _ =>
+            DecodeError.InvalidValue(JString(c.soql)).prefix("soql")
           }
         }
     }
 
   case class Dataset[+ColumnType](
     name: DatabaseTableName,
+    canonicalName: CanonicalName,
     schema: OrderedMap[DatabaseColumnName, NameEntry[ColumnType]]
-  ) extends ParsedTableDescription[Nothing, ColumnType] {
+  ) extends TableDescription[Nothing, ColumnType] {
     private[analyzer2] def rewriteScopes[RNS, RNS2](scopeMap: Map[RNS, RNS2]) = this
 
     def asUnparsedTableDescription =
-      UnparsedTableDescription.Dataset(name, schema)
+      UnparsedTableDescription.Dataset(name, canonicalName, schema)
   }
 
   case class Query[+ResourceNameScope, +ColumnType](
     scope: ResourceNameScope, // This scope is to resolve both basedOn and any tables referenced within the soql
-    canonicalName: CanonicalName, // This is the canonical name of this query; it is assumed to be unique across scopes
+    canonicalName: CanonicalName,
     basedOn: ResourceName,
     parsed: BinaryTree[ast.Select],
     unparsed: String,
     parameters: Map[HoleName, ColumnType]
-  ) extends ParsedTableDescription[ResourceNameScope, ColumnType] {
+  ) extends TableDescription[ResourceNameScope, ColumnType] {
     private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]) =
       copy(scope = scopeMap(scope))
 
@@ -65,11 +65,11 @@ object ParsedTableDescription {
 
   case class TableFunction[+ResourceNameScope, +ColumnType](
     scope: ResourceNameScope, // This scope is to resolve any tables referenced within the soql
-    canonicalName: CanonicalName, // This is the canonical name of this UDF; it is assumed to be unique across scopes
+    canonicalName: CanonicalName,
     parsed: BinaryTree[ast.Select],
     unparsed: String,
     parameters: OrderedMap[HoleName, ColumnType]
-  ) extends ParsedTableDescription[ResourceNameScope, ColumnType] {
+  ) extends TableDescription[ResourceNameScope, ColumnType] {
     private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]) =
       copy(scope = scopeMap(scope))
 
