@@ -17,7 +17,7 @@ import com.socrata.soql.BinaryTree
 // has to handle passing through JSONified table descriptions but
 // doesn't care about the actual parse tree itself.
 
-sealed trait UnparsedTableDescription[+ResourceNameScope, +ColumnType] {
+sealed trait UnparsedTableDescription[+ResourceNameScope, +ColumnType] extends TableDescriptionLike {
   private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, TableDescription[ResourceNameScope, ColumnType]]
   private[analyzer2] type SoQL <: String
   private[analyzer2] def soql: SoQL
@@ -40,11 +40,12 @@ object UnparsedTableDescription {
 
   case class Dataset[+ColumnType](
     name: DatabaseTableName,
+    canonicalName: CanonicalName,
     schema: OrderedMap[DatabaseColumnName, NameEntry[ColumnType]]
   ) extends UnparsedTableDescription[Nothing, ColumnType] {
     private[analyzer2] def rewriteScopes[RNS, RNS2](scopeMap: Map[RNS, RNS2]) = this
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
-      Right(TableDescription.Dataset(name, schema))
+      Right(TableDescription.Dataset(name, canonicalName, schema))
     private[analyzer2] type SoQL = Nothing
     private[analyzer2] def soql = ???
   }

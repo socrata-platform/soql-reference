@@ -29,9 +29,10 @@ class UnparsedTableMap[ResourceNameScope, +ColumnType] private[analyzer2] (priva
     new UnparsedTableMap(underlying.iterator.map { case (rns, m) =>
       rns -> m.iterator.map { case (rn, ptd) =>
         val newptd = ptd match {
-          case UnparsedTableDescription.Dataset(name, schema) =>
+          case UnparsedTableDescription.Dataset(name, canonicalName, schema) =>
             UnparsedTableDescription.Dataset(
               tableName(name),
+              canonicalName,
               OrderedMap(schema.iterator.map { case (dcn, ne) =>
                 columnName(name, dcn) -> ne
               }.toSeq : _*)

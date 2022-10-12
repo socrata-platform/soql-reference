@@ -97,6 +97,7 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
       case D(rawSchema @ _*) =>
         Dataset(
           DatabaseTableName(rawResourceName),
+          CanonicalName(rawResourceName),
           OrderedMap() ++ rawSchema.iterator.map {case (rawColumnName, ct) =>
             ColumnName(rawColumnName) -> ct
           }

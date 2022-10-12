@@ -32,35 +32,35 @@ class TableFinderTest extends FunSuite with MustMatchers {
   )
 
   test("can find a table") {
-    tables.findTables(0, "select * from @t1").map(_.tableMap) must equal (tables((0, "t1")))
+    tables.findTables(0, "select * from @t1", Map.empty).map(_.tableMap) must equal (tables((0, "t1")))
   }
 
   test("can fail to find a table") {
-    tables.findTables(0, "select * from @doesnt-exist").map(_.tableMap) must equal (tables.notFound(0, "doesnt-exist"))
+    tables.findTables(0, "select * from @doesnt-exist", Map.empty).map(_.tableMap) must equal (tables.notFound(0, "doesnt-exist"))
   }
 
   test("can find a table implicitly") {
-    tables.findTables(0, ResourceName("t1"), "select key, value").map(_.tableMap) must equal (tables((0, "t1")))
+    tables.findTables(0, ResourceName("t1"), "select key, value", Map.empty).map(_.tableMap) must equal (tables((0, "t1")))
   }
 
   test("can find a joined table") {
-    tables.findTables(0, ResourceName("t1"), "select key, value join @t2 on @t2.key = key").map(_.tableMap) must equal (tables((0, "t1"), (0, "t2")))
+    tables.findTables(0, ResourceName("t1"), "select key, value join @t2 on @t2.key = key", Map.empty).map(_.tableMap) must equal (tables((0, "t1"), (0, "t2")))
   }
 
   test("can find a query that accesses another table") {
-    tables.findTables(0, ResourceName("t1"), "select key, value join @t3 on @t3.key = key").map(_.tableMap) must equal (tables((0, "t1"), (0, "t2"), (0, "t3")))
+    tables.findTables(0, ResourceName("t1"), "select key, value join @t3 on @t3.key = key", Map.empty).map(_.tableMap) must equal (tables((0, "t1"), (0, "t2"), (0, "t3")))
   }
 
   test("can find a query that accesses another table via udf") {
-    tables.findTables(0, ResourceName("t1"), "select key, value join @t4(1,2,3) on @t4.key = key").map(_.tableMap) must equal (tables((0, "t1"), (0, "t2"), (0, "t4")))
+    tables.findTables(0, ResourceName("t1"), "select key, value join @t4(1,2,3) on @t4.key = key", Map.empty).map(_.tableMap) must equal (tables((0, "t1"), (0, "t2"), (0, "t4")))
   }
 
   test("can find a in a different scope") {
-    tables.findTables(0, ResourceName("t1"), "select key, value join @t5 on @t5.key = key").map(_.tableMap) must equal (tables((0, "t1"), (0, "t5"), (1, "t1")))
+    tables.findTables(0, ResourceName("t1"), "select key, value join @t5 on @t5.key = key", Map.empty).map(_.tableMap) must equal (tables((0, "t1"), (0, "t5"), (1, "t1")))
   }
 
   test("can fail to find a query in a different scope") {
-    tables.findTables(0, ResourceName("t1"), "select key, value join @t6 on @t6.key = key").map(_.tableMap) must equal (tables.notFound(1, "t2"))
+    tables.findTables(0, ResourceName("t1"), "select key, value join @t6 on @t6.key = key", Map.empty).map(_.tableMap) must equal (tables.notFound(1, "t2"))
   }
 
   test("can rountdtrip a FoundTables through JSON") {
@@ -83,11 +83,11 @@ class TableFinderTest extends FunSuite with MustMatchers {
       parsed must equal(orig)
     }
 
-    go(tables.findTables(0, "select * from @t1"))
-    go(tables.findTables(0, ResourceName("t1"), "select key, value"))
-    go(tables.findTables(0, ResourceName("t1"), "select key, value join @t2 on @t2.key = key"))
-    go(tables.findTables(0, ResourceName("t1"), "select key, value join @t3 on @t3.key = key"))
-    go(tables.findTables(0, ResourceName("t1"), "select key, value join @t4(1,2,3) on @t4.key = key"))
-    go(tables.findTables(0, ResourceName("t1"), "select key, value join @t5 on @t5.key = key"))
+    go(tables.findTables(0, "select * from @t1", Map.empty))
+    go(tables.findTables(0, ResourceName("t1"), "select key, value", Map.empty))
+    go(tables.findTables(0, ResourceName("t1"), "select key, value join @t2 on @t2.key = key", Map.empty))
+    go(tables.findTables(0, ResourceName("t1"), "select key, value join @t3 on @t3.key = key", Map.empty))
+    go(tables.findTables(0, ResourceName("t1"), "select key, value join @t4(1,2,3) on @t4.key = key", Map.empty))
+    go(tables.findTables(0, ResourceName("t1"), "select key, value join @t5 on @t5.key = key", Map.empty))
   }
 }

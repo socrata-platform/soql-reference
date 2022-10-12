@@ -22,10 +22,15 @@ trait FoundTablesLike[ResourceNameScope, +ColumnType] {
   ): Self[ResourceNameScope, ColumnType]
 }
 
+case class UserParameterSpecs[+ColumnType](
+  qualified: Map[CanonicalName, Map[HoleName, ColumnType]],
+  unqualified: Either[CanonicalName, Map[HoleName, ColumnType]]
+)
+
 final case class FoundTables[ResourceNameScope, +ColumnType] private[analyzer2] (
   tableMap: TableMap[ResourceNameScope, ColumnType],
   initialScope: ResourceNameScope,
-  initialQuery: FoundTables.Query,
+  initialQuery: FoundTables.Query[ColumnType],
   parserParameters: AbstractParser.Parameters
 ) extends FoundTablesLike[ResourceNameScope, ColumnType] {
   type Self[RNS, +CT] = FoundTables[RNS, CT]
@@ -38,13 +43,23 @@ final case class FoundTables[ResourceNameScope, +ColumnType] private[analyzer2] 
       EncodableParameters.fromParams(parserParameters)
     )
 
-  val knownUserParameters: Map[CanonicalName, Map[HoleName, ColumnType]] =
-    tableMap.descriptions.foldLeft(Map.empty[CanonicalName, Map[HoleName, ColumnType]]) { (acc, desc) =>
-      desc match {
-        case _ : TableDescription.Dataset[_] | _ : TableDescription.TableFunction[_, _] => acc
-        case q: TableDescription.Query[_, ColumnType] => acc + (q.canonicalName -> q.parameters)
+  val knownUserParameters: UserParameterSpecs[ColumnType] = {
+    val named =
+      tableMap.descriptions.foldLeft(Map.empty[CanonicalName, Map[HoleName, ColumnType]]) { (acc, desc) =>
+        desc match {
+          case _ : TableDescription.Dataset[_] | _ : TableDescription.TableFunction[_, _] => acc
+          case q: TableDescription.Query[_, ColumnType] => acc + (q.canonicalName -> q.parameters)
+        }
       }
+    initialQuery match {
+      case FoundTables.Saved(_) => UserParameterSpecs(named, Right(Map.empty))
+      case FoundTables.InContext(_, _, _, params) => UserParameterSpecs(named, Right(params))
+      case FoundTables.InContextImpersonatingSaved(_, _, _, params, fake) =>
+        assert(!named.contains(fake)) // the stack while finding tables should prevent this from ever happening
+        UserParameterSpecs(named + (fake -> params), Left(fake))
+      case FoundTables.Standalone(_, _, params) => UserParameterSpecs(named, Right(params))
     }
+  }
 
   final def rewriteDatabaseNames(
     tableName: DatabaseTableName => DatabaseTableName,
@@ -74,31 +89,31 @@ final case class FoundTables[ResourceNameScope, +ColumnType] private[analyzer2] 
 }
 
 object FoundTables {
-  sealed abstract class Query {
-    def asUnparsedQuery: UnparsedFoundTables.Query
+  sealed abstract class Query[+CT] {
+    def asUnparsedQuery: UnparsedFoundTables.Query[CT]
   }
 
-  case class Saved(name: ResourceName) extends Query {
+  case class Saved(name: ResourceName) extends Query[Nothing] {
     def asUnparsedQuery = UnparsedFoundTables.Saved(name)
   }
 
-  case class InContext(parent: ResourceName, soql: BinaryTree[ast.Select], text: String) extends Query {
-    def asUnparsedQuery = UnparsedFoundTables.InContext(parent, text)
+  case class InContext[+CT](parent: ResourceName, soql: BinaryTree[ast.Select], text: String, parameters: Map[HoleName, CT]) extends Query[CT] {
+    def asUnparsedQuery = UnparsedFoundTables.InContext(parent, text, parameters)
   }
-  case class InContextImpersonatingSaved(parent: ResourceName, soql: BinaryTree[ast.Select], text: String, fake: CanonicalName) extends Query {
-    def asUnparsedQuery = UnparsedFoundTables.InContextImpersonatingSaved(parent, text, fake)
+  case class InContextImpersonatingSaved[+CT](parent: ResourceName, soql: BinaryTree[ast.Select], text: String, parameters: Map[HoleName, CT], fake: CanonicalName) extends Query[CT] {
+    def asUnparsedQuery = UnparsedFoundTables.InContextImpersonatingSaved(parent, text, parameters, fake)
   }
-  case class Standalone(soql: BinaryTree[ast.Select], text: String) extends Query {
-    def asUnparsedQuery = UnparsedFoundTables.Standalone(text)
+  case class Standalone[+CT](soql: BinaryTree[ast.Select], text: String, parameters: Map[HoleName, CT]) extends Query[CT] {
+    def asUnparsedQuery = UnparsedFoundTables.Standalone(text, parameters)
   }
 
-  private implicit val queryJsonEncode = new JsonEncode[Query] {
-    def encode(v: Query) = JsonEncode.toJValue(v.asUnparsedQuery)
+  private implicit def queryJsonEncode[CT : JsonEncode] = new JsonEncode[Query[CT]] {
+    def encode(v: Query[CT]) = JsonEncode.toJValue(v.asUnparsedQuery)
   }
-  private def queryJsonDecode(params: AbstractParser.Parameters): JsonDecode[Query] =
-    new JsonDecode[Query] {
+  private def queryJsonDecode[CT : JsonDecode](params: AbstractParser.Parameters): JsonDecode[Query[CT]] =
+    new JsonDecode[Query[CT]] {
       def decode(x: JValue) =
-        JsonDecode[UnparsedFoundTables.Query].decode(x).flatMap { c =>
+        JsonDecode[UnparsedFoundTables.Query[CT]].decode(x).flatMap { c =>
           c.parse(params.copy(allowHoles = false)).left.map { _ =>
             DecodeError.InvalidValue(JString(c.soql)).prefix("soql")
           }
@@ -126,12 +141,12 @@ object FoundTables {
             }
 
           implicit val tableMapDecode = TableMap.jsonDecode[RNS, CT](params)
-          implicit val queryDecode = queryJsonDecode(params)
+          implicit val queryDecode = queryJsonDecode[CT](params)
 
           case class DecodeHelper(
             tableMap: TableMap[RNS, CT],
             initialScope: RNS,
-            initialQuery: FoundTables.Query
+            initialQuery: FoundTables.Query[CT]
           )
 
           AutomaticJsonDecodeBuilder[DecodeHelper].decode(x).map { dh =>

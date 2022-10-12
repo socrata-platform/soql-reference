@@ -10,7 +10,11 @@ import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ResourceName, ColumnName, HoleName}
 import com.socrata.soql.BinaryTree
 
-sealed trait TableDescription[+ResourceNameScope, +ColumnType] {
+trait TableDescriptionLike {
+  val canonicalName: CanonicalName // This is the canonical name of this query or table; it is assumed to be unique across scopes
+}
+
+sealed trait TableDescription[+ResourceNameScope, +ColumnType] extends TableDescriptionLike {
   private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]): TableDescription[RNS2, ColumnType]
 
   def asUnparsedTableDescription: UnparsedTableDescription[ResourceNameScope, ColumnType]
@@ -35,17 +39,18 @@ object TableDescription {
 
   case class Dataset[+ColumnType](
     name: DatabaseTableName,
+    canonicalName: CanonicalName,
     schema: OrderedMap[DatabaseColumnName, NameEntry[ColumnType]]
   ) extends TableDescription[Nothing, ColumnType] {
     private[analyzer2] def rewriteScopes[RNS, RNS2](scopeMap: Map[RNS, RNS2]) = this
 
     def asUnparsedTableDescription =
-      UnparsedTableDescription.Dataset(name, schema)
+      UnparsedTableDescription.Dataset(name, canonicalName, schema)
   }
 
   case class Query[+ResourceNameScope, +ColumnType](
     scope: ResourceNameScope, // This scope is to resolve both basedOn and any tables referenced within the soql
-    canonicalName: CanonicalName, // This is the canonical name of this query; it is assumed to be unique across scopes
+    canonicalName: CanonicalName,
     basedOn: ResourceName,
     parsed: BinaryTree[ast.Select],
     unparsed: String,
@@ -60,7 +65,7 @@ object TableDescription {
 
   case class TableFunction[+ResourceNameScope, +ColumnType](
     scope: ResourceNameScope, // This scope is to resolve any tables referenced within the soql
-    canonicalName: CanonicalName, // This is the canonical name of this UDF; it is assumed to be unique across scopes
+    canonicalName: CanonicalName,
     parsed: BinaryTree[ast.Select],
     unparsed: String,
     parameters: OrderedMap[HoleName, ColumnType]

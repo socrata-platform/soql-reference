@@ -77,9 +77,10 @@ class TableMap[ResourceNameScope, +ColumnType] private[analyzer2] (private val u
     new TableMap(underlying.iterator.map { case (rns, m) =>
       rns -> m.iterator.map { case (rn, ptd) =>
         val newptd = ptd match {
-          case TableDescription.Dataset(name, schema) =>
+          case TableDescription.Dataset(name, canonicalName, schema) =>
             TableDescription.Dataset(
               tableName(name),
+              canonicalName,
               OrderedMap(schema.iterator.map { case (dcn, ne) =>
                 columnName(name, dcn) -> ne
               }.toSeq : _*)
