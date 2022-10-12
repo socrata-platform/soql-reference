@@ -45,12 +45,17 @@ trait TableFinder {
     * representation of Datasets' schemas. */
   sealed trait FinderTableDescription
 
+  case class Ordering(column: ColumnName, ascending: Boolean)
+
   /** A base dataset, or a saved query which is being analyzed opaquely. */
   case class Dataset(
     databaseName: DatabaseTableName,
     canonicalName: CanonicalName,
-    schema: OrderedMap[ColumnName, ColumnType]
+    schema: OrderedMap[ColumnName, ColumnType],
+    ordering: Seq[Ordering]
   ) extends FinderTableDescription {
+    require(ordering.forall { ordering => schema.contains(ordering.column) })
+
     private[analyzer2] def toParsed =
       TableDescription.Dataset(
         databaseName,
@@ -62,6 +67,9 @@ trait TableFinder {
           // before we get to the point of moving over to the
           // actual-database-names world.
           DatabaseColumnName(cn.caseFolded) -> NameEntry(cn, ct)
+        },
+        ordering.map { case Ordering(column, ascending) =>
+          TableDescription.Ordering(DatabaseColumnName(column.caseFolded), ascending)
         }
       )
   }
@@ -199,7 +207,7 @@ trait TableFinder {
       return Error.RecursiveQuery(desc.canonicalName :: stack)
     }
     desc match {
-      case TableDescription.Dataset(_, _, _) => Success(acc)
+      case TableDescription.Dataset(_, _, _, _) => Success(acc)
       case TableDescription.Query(scope, canonicalName, basedOn, tree, _unparsed, _params) =>
         for {
           acc <- walkFromName((scope, basedOn), acc, canonicalName :: stack)

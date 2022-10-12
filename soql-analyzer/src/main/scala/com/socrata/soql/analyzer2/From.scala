@@ -319,14 +319,17 @@ sealed abstract class FromTableLike[+RNS, +CT] extends AtomicFrom[RNS, CT, Nothi
     (tableName.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
 }
 
-case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS, ResourceName)], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[RNS, CT] {
+case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS, ResourceName)], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]], ordering: Seq[TableDescription.Ordering]) extends FromTableLike[RNS, CT] {
+  require(ordering.forall { o => columns.contains(o.column) })
+
   type Self[+RNS, +CT, +CV] = FromTable[RNS, CT]
   def asSelf = this
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     copy(
       tableName = state.convert(this.tableName),
-      columns = OrderedMap() ++ columns.iterator.map { case (n, ne) => state.convert(this.tableName, n) -> ne }
+      columns = OrderedMap() ++ columns.iterator.map { case (n, ne) => state.convert(this.tableName, n) -> ne },
+      ordering = ordering.map { case TableDescription.Ordering(name, ascending) => TableDescription.Ordering(state.convert(this.tableName, name), ascending) }
     )
 
   private[analyzer2] def doRelabel(state: RelabelState) = {
@@ -339,7 +342,7 @@ case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS
   private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
-      case FromTable(thatTableName, thatAlias, thatLabel, thatColumns) =>
+      case FromTable(thatTableName, thatAlias, thatLabel, thatColumns, thatOrdering) =>
         this.tableName == thatTableName &&
           // don't care about aliases
           state.tryAssociate(this.label, thatLabel) &&
@@ -348,6 +351,10 @@ case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS
             thisColName == thatColName &&
               thisEntry.typ == thatEntry.typ
             // don't care about the entry's name
+          } &&
+          this.ordering.length == thatOrdering.length &&
+          this.ordering.zip(thatOrdering).forall { case (TableDescription.Ordering(thisColName, thisAsc), TableDescription.Ordering(thatColName, thatAsc)) =>
+            thisColName == thatColName && thisAsc == thatAsc
           }
       case _ =>
         false
@@ -364,9 +371,11 @@ case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS
   def useSelectListReferences: this.type = this
 }
 
-case class FromVirtualTable[+RNS, +CT](tableName: AutoTableLabel, alias: Option[(RNS, ResourceName)], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[RNS, CT] {
+case class FromVirtualTable[+RNS, +CT](tableName: AutoTableLabel, alias: Option[(RNS, ResourceName)], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]], ordering: Seq[TableDescription.Ordering]) extends FromTableLike[RNS, CT] {
   // This is just like FromTable except it does not participate in the
   // DatabaseName-renaming system.
+
+  require(ordering.forall { o => columns.contains(o.column) })
 
   type Self[+RNS, +CT, +CV] = FromVirtualTable[RNS, CT]
   def asSelf = this
@@ -400,7 +409,7 @@ case class FromVirtualTable[+RNS, +CT](tableName: AutoTableLabel, alias: Option[
   private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
-      case FromTable(thatTableName, thatAlias, thatLabel, thatColumns) =>
+      case FromTable(thatTableName, thatAlias, thatLabel, thatColumns, thatOrdering) =>
         this.tableName == thatTableName &&
           // don't care about aliases
           state.tryAssociate(this.label, thatLabel) &&
@@ -409,6 +418,10 @@ case class FromVirtualTable[+RNS, +CT](tableName: AutoTableLabel, alias: Option[
             thisColName == thatColName &&
               thisEntry.typ == thatEntry.typ
             // don't care about the entry's name
+          } &&
+          this.ordering.length == thatOrdering.length &&
+          this.ordering.zip(thatOrdering).forall { case (TableDescription.Ordering(thisColName, thisAsc), TableDescription.Ordering(thatColName, thatAsc)) =>
+            thisColName == thatColName && thisAsc == thatAsc
           }
       case _ =>
         false

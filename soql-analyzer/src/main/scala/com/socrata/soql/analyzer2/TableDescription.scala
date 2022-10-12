@@ -2,6 +2,7 @@ package com.socrata.soql.analyzer2
 
 import com.rojoma.json.v3.ast.{JValue, JString}
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
+import com.rojoma.json.v3.util.AutomaticJsonCodecBuilder
 
 import com.socrata.soql.ast
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
@@ -37,15 +38,23 @@ object TableDescription {
         }
     }
 
+  case class Ordering(column: DatabaseColumnName, ascending: Boolean)
+  object Ordering {
+    private[analyzer2] implicit val codec = AutomaticJsonCodecBuilder[Ordering]
+  }
+
   case class Dataset[+ColumnType](
     name: DatabaseTableName,
     canonicalName: CanonicalName,
-    schema: OrderedMap[DatabaseColumnName, NameEntry[ColumnType]]
+    schema: OrderedMap[DatabaseColumnName, NameEntry[ColumnType]],
+    ordering: Seq[Ordering]
   ) extends TableDescription[Nothing, ColumnType] {
+    require(ordering.forall { o => schema.contains(o.column) })
+
     private[analyzer2] def rewriteScopes[RNS, RNS2](scopeMap: Map[RNS, RNS2]) = this
 
     def asUnparsedTableDescription =
-      UnparsedTableDescription.Dataset(name, canonicalName, schema)
+      UnparsedTableDescription.Dataset(name, canonicalName, schema, ordering)
   }
 
   case class Query[+ResourceNameScope, +ColumnType](

@@ -147,18 +147,27 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       )
     }
 
-    def fromTable(desc: TableDescription.Dataset[CT], alias: Option[(RNS, ResourceName)]): FromTable[RNS, CT] =
+    def fromTable(scope: RNS, desc: TableDescription.Dataset[CT], alias: Option[(RNS, ResourceName)]): FromTable[RNS, CT] = {
+      for(TableDescription.Ordering(col, _ascending) <- desc.ordering) {
+        val typ = desc.schema(col).typ
+        if(!typeInfo.isOrdered(typ)) {
+          throw Bail(SoQLAnalyzerError.UnorderedOrderBy(scope, Some(desc.canonicalName), typeInfo.typeNameFor(typ), NoPosition))
+        }
+      }
+
       FromTable(
         desc.name,
         alias,
         labelProvider.tableLabel(),
-        columns = desc.schema
+        columns = desc.schema,
+        ordering = desc.ordering
       )
+    }
 
     def analyzeForFrom(scope: RNS, canonicalName: Option[CanonicalName], rn: ResourceName, position: Position): AtomicFrom[RNS, CT, CV] = {
       tableMap.find(scope, rn) match {
         case ds: TableDescription.Dataset[CT] =>
-          fromTable(ds, None)
+          fromTable(scope, ds, None)
         case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters) =>
           // so this is basedOn |> parsed
           // so we want to use "basedOn" as the implicit "from" for "parsed"
