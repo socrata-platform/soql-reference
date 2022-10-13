@@ -9,6 +9,7 @@ import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
+import com.socrata.soql.analyzer2.serialization.{Writable, WriteBuffer}
 
 import DocUtils._
 
@@ -78,6 +79,40 @@ sealed abstract class From[+RNS, +CT, +CV] {
     )._1
 }
 
+object From {
+  implicit def serialize[RNS: Writable, CT: Writable, CV: Writable]: Writable[From[RNS, CT, CV]] = new Writable[From[RNS, CT, CV]] {
+    def writeTo(buffer: WriteBuffer, from: From[RNS, CT, CV]): Unit = {
+      from match {
+        case j: Join[RNS, CT, CV] =>
+          buffer.write(0)
+          Join.serialize[RNS, CT, CV].writeTo(buffer, j)
+        case f: AtomicFrom[RNS, CT, CV] =>
+          buffer.write(1)
+          AtomicFrom.serialize[RNS, CT, CV].writeTo(buffer, f)
+      }
+    }
+  }
+}
+
+object Join {
+  def serialize[RNS: Writable, CT: Writable, CV: Writable]: Writable[Join[RNS, CT, CV]] = new Writable[Join[RNS, CT, CV]] {
+    def writeTo(buffer: WriteBuffer, join: Join[RNS, CT, CV]): Unit = {
+      val afSer = AtomicFrom.serialize[RNS, CT, CV]
+      join.reduce[Unit](
+        f0 => afSer.writeTo(buffer, f0),
+        { (_, rhs) =>
+          val Join(joinType, lateral, _left, right, on) = rhs
+          buffer.write(true)
+          buffer.write(joinType)
+          buffer.write(lateral)
+          afSer.writeTo(buffer, right)
+          buffer.write(on)
+        }
+      )
+      buffer.write(false)
+    }
+  }
+}
 case class Join[+RNS, +CT, +CV](joinType: JoinType, lateral: Boolean, left: From[RNS, CT, CV], right: AtomicFrom[RNS, CT, CV], on: Expr[CT, CV]) extends From[RNS, CT, CV] {
   type Self[+RNS, +CT, +CV] = Join[RNS, CT, CV]
   def asSelf = this
@@ -259,14 +294,20 @@ case class Join[+RNS, +CT, +CV](joinType: JoinType, lateral: Boolean, left: From
     )
 }
 
-sealed abstract class JoinType(val debugDoc: Doc[Nothing])
-object JoinType {
-  case object Inner extends JoinType(d"JOIN")
-  case object LeftOuter extends JoinType(d"LEFT OUTER JOIN")
-  case object RightOuter extends JoinType(d"RIGHT OUTER JOIN")
-  case object FullOuter extends JoinType(d"FULL OUTER JOIN")
+object AtomicFrom {
+  implicit def serialize[RNS: Writable, CT: Writable, CV: Writable]: Writable[AtomicFrom[RNS, CT, CV]] = new Writable[AtomicFrom[RNS, CT, CV]] {
+    def writeTo(buffer: WriteBuffer, from: AtomicFrom[RNS, CT, CV]): Unit = {
+      from match {
+        case ft: FromTable[RNS, CT] =>
+          buffer.write(0)
+          FromTable.serialize[RNS, CT].writeTo(buffer, ft)
+        case fs: FromStatement[RNS, CT, CV] =>
+          buffer.write(1)
+          FromStatement.serialize[RNS, CT, CV].writeTo(buffer, fs)
+      }
+    }
+  }
 }
-
 sealed abstract class AtomicFrom[+RNS, +CT, +CV] extends From[RNS, CT, CV] {
   type Self[+RNS, +CT, +CV] <: AtomicFrom[RNS, CT, CV]
 
@@ -319,6 +360,16 @@ sealed abstract class FromTableLike[+RNS, +CT] extends AtomicFrom[RNS, CT, Nothi
     (tableName.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
 }
 
+object FromTable {
+  implicit def serialize[RNS: Writable, CT: Writable]: Writable[FromTable[RNS, CT]] = new Writable[FromTable[RNS, CT]] {
+    def writeTo(buffer: WriteBuffer, from: FromTable[RNS, CT]): Unit = {
+      buffer.write(from.tableName)
+      buffer.write(from.alias)
+      buffer.write(from.label)
+      buffer.write(from.columns)
+    }
+  }
+}
 case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS, ResourceName)], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[RNS, CT] {
   type Self[+RNS, +CT, +CV] = FromTable[RNS, CT]
   def asSelf = this
@@ -414,6 +465,15 @@ case class FromVirtualTable[+RNS, +CT](tableName: AutoTableLabel, alias: Option[
     }
 }
 
+object FromStatement {
+  implicit def serialize[RNS: Writable, CT: Writable, CV: Writable]: Writable[FromStatement[RNS, CT, CV]] = new Writable[FromStatement[RNS, CT, CV]] {
+    def writeTo(buffer: WriteBuffer, from: FromStatement[RNS, CT, CV]): Unit = {
+      buffer.write(from.statement)
+      buffer.write(from.label)
+      buffer.write(from.alias)
+    }
+  }
+}
 // "alias" is optional here because of chained soql; actually having a
 // real subselect syntactically requires an alias, but `select ... |>
 // select ...` does not.  The alias is just for name-resolution during

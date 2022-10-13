@@ -11,6 +11,7 @@ import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName}
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
+import com.socrata.soql.analyzer2.serialization.{Writable, WriteBuffer}
 
 import DocUtils._
 
@@ -86,6 +87,18 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
   def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]]
 
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV]
+}
+
+object Statement {
+  implicit def serialize[RNS: Writable, CT: Writable, CV: Writable]: Writable[Statement[RNS, CT, CV]] = new Writable[Statement[RNS, CT, CV]] {
+    def writeTo(buffer: WriteBuffer, stmt: Statement[RNS, CT, CV]): Unit = {
+      stmt match {
+        case s: Select[RNS, CT, CV] =>
+          buffer.write(0)
+          Select.serialize[RNS, CT, CV].writeTo(buffer, s)
+      }
+    }
+  }
 }
 
 case class CombinedTables[+RNS, +CT, +CV](
@@ -674,4 +687,36 @@ case class Select[+RNS, +CT, +CV](
       offset.map { o => d"OFFSET $o" },
       search.map { s => Seq(d"SEARCH", Doc(JString(s).toString)).sep }
     ).flatten.sep
+}
+
+object Select {
+  def serialize[RNS: Writable, CT: Writable, CV: Writable] = new Writable[Select[RNS, CT, CV]] {
+    def writeTo(buffer: WriteBuffer, select: Select[RNS, CT, CV]): Unit = {
+      val Select(
+        distinctiveness: Distinctiveness[CT, CV],
+        selectList: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]],
+        from: From[RNS, CT, CV],
+        where: Option[Expr[CT, CV]],
+        groupBy: Seq[Expr[CT, CV]],
+        having: Option[Expr[CT, CV]],
+        orderBy: Seq[OrderBy[CT, CV]],
+        limit: Option[BigInt],
+        offset: Option[BigInt],
+        search: Option[String],
+        hint: Set[SelectHint]
+      ) = select
+
+      buffer.write(distinctiveness)
+      buffer.write(selectList)
+      buffer.write(from)
+      buffer.write(where)
+      buffer.write(groupBy)
+      buffer.write(having)
+      buffer.write(orderBy)
+      buffer.write(limit)
+      buffer.write(offset)
+      buffer.write(search)
+      buffer.write(hint)
+    }
+  }
 }

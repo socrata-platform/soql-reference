@@ -308,4 +308,44 @@ select count(*), 1 as x |> select x
 
     analysis.removeUnusedColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
+
+  test("haha") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "names") -> D("num" -> TestNumber, "first" -> TestText, "last" -> TestText),
+      (0, "join") -> Q(0, "names", "SELECT first, last, @twocol.text JOIN @twocol ON num = @twocol.num")
+    )
+
+    val analysis = analyze(tf, "join", """
+select * where first = 'Tom'
+""")
+
+    println(analysis.statement.debugDoc)
+
+    implicit object wt extends serialization.Writable[TestType] {
+      def writeTo(buf: serialization.WriteBuffer, t: TestType) {
+        buf.write(t.toString)
+      }
+    }
+
+    implicit object wv extends serialization.Writable[TestValue] {
+      def writeTo(buf: serialization.WriteBuffer, t: TestValue) {
+        buf.write(t.toString)
+      }
+    }
+
+    val wb = new serialization.WriteBuffer()
+    wb.write(analysis.statement)
+
+    val buf = new java.io.ByteArrayOutputStream
+    val cos = com.google.protobuf.CodedOutputStream.newInstance(buf)
+    wb.writeTo(cos)
+    cos.flush()
+
+    val p = new ProcessBuilder("hd").inheritIO().redirectInput(ProcessBuilder.Redirect.PIPE).start()
+    val os = p.getOutputStream()
+    buf.writeTo(os)
+    os.close()
+    p.waitFor()
+  }
 }

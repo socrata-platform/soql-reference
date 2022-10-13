@@ -8,7 +8,8 @@ import com.socrata.prettyprint.Pretty
 
 import com.socrata.soql.collection._
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.typechecker.{HasType, HasDoc}
+import com.socrata.soql.typechecker.{FunctionInfo, HasType, HasDoc}
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 import DocUtils._
 
@@ -48,6 +49,48 @@ sealed abstract class Expr[+CT, +CV] extends Product {
   // early.
   override final lazy val hashCode: Int = scala.runtime.ScalaRunTime._hashCode(this)
 }
+object Expr {
+  implicit def serialize[CT: Writable, CV: Writable]: Writable[Expr[CT, CV]] = new Writable[Expr[CT, CV]] {
+    def writeTo(buffer: WriteBuffer, t: Expr[CT, CV]): Unit =
+      t match {
+        case c : Column[CT] =>
+          buffer.write(0)
+          Column.serialize[CT].writeTo(buffer, c)
+        case slr: SelectListReference[CT] =>
+          buffer.write(1)
+          SelectListReference.serialize[CT].writeTo(buffer, slr)
+        case lv: LiteralValue[CT, CV] =>
+          buffer.write(2)
+          LiteralValue.serialize[CT, CV].writeTo(buffer, lv)
+        case nl: NullLiteral[CT] =>
+          buffer.write(3)
+          NullLiteral.serialize[CT].writeTo(buffer, nl)
+        case fc: FunctionCall[CT, CV] =>
+          buffer.write(4)
+          FunctionCall.serialize[CT, CV].writeTo(buffer, fc)
+        case afc: AggregateFunctionCall[CT, CV] =>
+          buffer.write(5)
+          AggregateFunctionCall.serialize[CT, CV].writeTo(buffer, afc)
+        case wfc: WindowedFunctionCall[CT, CV] =>
+          buffer.write(6)
+          WindowedFunctionCall.serialize[CT, CV].writeTo(buffer, wfc)
+      }
+  }
+
+  implicit def deserialize[CT: Readable, CV: Readable](implicit hasType: HasType[CV, CT], functionInfo: FunctionInfo[CT]): Readable[Expr[CT, CV]] = new Readable[Expr[CT, CV]] {
+    def readFrom(buffer: ReadBuffer): Expr[CT, CV] =
+      buffer.read[Int]() match {
+        case 0 => Column.deserialize[CT].readFrom(buffer)
+        case 1 => SelectListReference.deserialize[CT].readFrom(buffer)
+        case 2 => LiteralValue.deserialize[CT, CV].readFrom(buffer)
+        case 3 => NullLiteral.deserialize[CT].readFrom(buffer)
+        case 4 => FunctionCall.deserialize[CT, CV].readFrom(buffer)
+        case 5 => AggregateFunctionCall.deserialize[CT, CV].readFrom(buffer)
+        case 6 => WindowedFunctionCall.deserialize[CT, CV].readFrom(buffer)
+      }
+  }
+}
+
 final case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
   type Self[+CT, +CV] = Column[CT]
 
@@ -89,6 +132,29 @@ final case class Column[+CT](table: TableLabel, column: ColumnLabel, typ: CT)(va
   def find(predicate: Expr[CT, Nothing] => Boolean): Option[Expr[CT, Nothing]] = Some(this).filter(predicate)
 }
 
+object Column {
+  def serialize[CT : Writable] = new Writable[Column[CT]] {
+    def writeTo(buffer: WriteBuffer, c: Column[CT]): Unit = {
+      buffer.write(c.table)
+      buffer.write(c.column)
+      buffer.write(c.typ)
+      buffer.write(c.position)
+    }
+  }
+
+  def deserialize[CT : Readable] = new Readable[Column[CT]] {
+    def readFrom(buffer: ReadBuffer): Column[CT] = {
+      Column(
+        table = buffer.read[TableLabel](),
+        column = buffer.read[ColumnLabel](),
+        typ = buffer.read[CT]()
+      )(
+        buffer.read[Position]()
+      )
+    }
+  }
+}
+
 final case class SelectListReference[+CT](index: Int, isAggregated: Boolean, isWindowed: Boolean, typ: CT)(val position: Position) extends Expr[CT, Nothing] {
   type Self[+CT, +CV] = SelectListReference[CT]
 
@@ -113,6 +179,31 @@ final case class SelectListReference[+CT](index: Int, isAggregated: Boolean, isW
   private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = p)
 
   def find(predicate: Expr[CT, Nothing] => Boolean): Option[Expr[CT, Nothing]] = Some(this).filter(predicate)
+}
+
+object SelectListReference {
+  def serialize[CT : Writable] = new Writable[SelectListReference[CT]] {
+    def writeTo(buffer: WriteBuffer, slr: SelectListReference[CT]): Unit = {
+      buffer.write(slr.index)
+      buffer.write(slr.isAggregated)
+      buffer.write(slr.isWindowed)
+      buffer.write(slr.typ)
+      buffer.write(slr.position)
+    }
+  }
+
+  def deserialize[CT : Readable] = new Readable[SelectListReference[CT]] {
+    def readFrom(buffer: ReadBuffer): SelectListReference[CT] = {
+      SelectListReference(
+        index = buffer.read[Int](),
+        isAggregated = buffer.read[Boolean](),
+        isWindowed = buffer.read[Boolean](),
+        typ = buffer.read[CT]()
+      )(
+        buffer.read[Position]()
+      )
+    }
+  }
 }
 
 sealed abstract class Literal[+CT, +CV] extends Expr[CT, CV] {
@@ -143,6 +234,26 @@ final case class LiteralValue[+CT, +CV](value: CV)(val position: Position)(impli
 
   private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = p)
 }
+
+object LiteralValue {
+  def serialize[CT, CV: Writable] = new Writable[LiteralValue[CT, CV]] {
+    def writeTo(buffer: WriteBuffer, lv: LiteralValue[CT, CV]): Unit = {
+      buffer.write(lv.value)
+      buffer.write(lv.position)
+    }
+  }
+
+  def deserialize[CT, CV: Readable](implicit ev: HasType[CV, CT]) = new Readable[LiteralValue[CT, CV]] {
+    def readFrom(buffer: ReadBuffer): LiteralValue[CT, CV] = {
+      LiteralValue(
+        buffer.read[CV]()
+      )(
+        buffer.read[Position]()
+      )
+    }
+  }
+}
+
 final case class NullLiteral[+CT](typ: CT)(val position: Position) extends Literal[CT, Nothing] {
   type Self[+CT, +CV] = NullLiteral[CT]
 
@@ -154,6 +265,24 @@ final case class NullLiteral[+CT](typ: CT)(val position: Position) extends Liter
   def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
 
   private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = p)
+}
+object NullLiteral {
+  def serialize[CT: Writable] = new Writable[NullLiteral[CT]] {
+    def writeTo(buffer: WriteBuffer, nl: NullLiteral[CT]): Unit = {
+      buffer.write(nl.typ)
+      buffer.write(nl.position)
+    }
+  }
+
+  def deserialize[CT: Readable] = new Readable[NullLiteral[CT]] {
+    def readFrom(buffer: ReadBuffer): NullLiteral[CT] = {
+      NullLiteral(
+        buffer.read[CT]()
+      )(
+        buffer.read[Position]()
+      )
+    }
+  }
 }
 
 sealed trait FuncallLike[+CT, +CV] extends Expr[CT, CV] with Product {
@@ -207,6 +336,35 @@ final case class FunctionCall[+CT, +CV](
 
   private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = p, functionNamePosition)
 }
+object FunctionCall {
+  def serialize[CT: Writable, CV: Writable] = new Writable[FunctionCall[CT, CV]] {
+    def writeTo(buffer: WriteBuffer, fc: FunctionCall[CT, CV]): Unit = {
+      buffer.write(fc.function.function.identity)
+      buffer.write(fc.function.bindings)
+      buffer.write(fc.args)
+      buffer.write(fc.position)
+      buffer.write(fc.functionNamePosition)
+    }
+  }
+
+  def deserialize[CT: Readable, CV: Readable](implicit ht: HasType[CV, CT], fi: FunctionInfo[CT]) = new Readable[FunctionCall[CT, CV]] {
+    def readFrom(buffer: ReadBuffer): FunctionCall[CT, CV] = {
+      val function = fi.functionsByIdentity(buffer.read[String]())
+      val bindings = buffer.read[Map[String, CT]]()
+      val args = buffer.read[Seq[Expr[CT, CV]]]()
+      val position = buffer.read[Position]()
+      val functionNamePosition = buffer.read[Position]()
+      FunctionCall(
+        function = MonomorphicFunction(function, bindings),
+        args = args
+      )(
+        position,
+        functionNamePosition
+      )
+    }
+  }
+}
+
 final case class AggregateFunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
   args: Seq[Expr[CT, CV]],
@@ -277,6 +435,41 @@ final case class AggregateFunctionCall[+CT, +CV](
 
   private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = p, functionNamePosition)
 }
+object AggregateFunctionCall {
+  def serialize[CT: Writable, CV: Writable] = new Writable[AggregateFunctionCall[CT, CV]] {
+    def writeTo(buffer: WriteBuffer, afc: AggregateFunctionCall[CT, CV]): Unit = {
+      buffer.write(afc.function.function.identity)
+      buffer.write(afc.function.bindings)
+      buffer.write(afc.args)
+      buffer.write(afc.distinct)
+      buffer.write(afc.filter)
+      buffer.write(afc.position)
+      buffer.write(afc.functionNamePosition)
+    }
+  }
+
+  def deserialize[CT: Readable, CV: Readable](implicit ht: HasType[CV, CT], fi: FunctionInfo[CT]) = new Readable[AggregateFunctionCall[CT, CV]] {
+    def readFrom(buffer: ReadBuffer): AggregateFunctionCall[CT, CV] = {
+      val function = fi.functionsByIdentity(buffer.read[String]())
+      val bindings = buffer.read[Map[String, CT]]()
+      val args = buffer.read[Seq[Expr[CT, CV]]]()
+      val distinct = buffer.read[Boolean]()
+      val filter = buffer.read[Option[Expr[CT, CV]]]()
+      val position = buffer.read[Position]()
+      val functionNamePosition = buffer.read[Position]()
+      AggregateFunctionCall(
+        MonomorphicFunction(function, bindings),
+        args,
+        distinct,
+        filter
+      )(
+        position,
+        functionNamePosition
+      )
+    }
+  }
+}
+
 final case class WindowedFunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
   args: Seq[Expr[CT, CV]],
@@ -380,6 +573,47 @@ final case class WindowedFunctionCall[+CT, +CV](
   private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = p, functionNamePosition)
 }
 
+object WindowedFunctionCall {
+  def serialize[CT: Writable, CV: Writable] = new Writable[WindowedFunctionCall[CT, CV]] {
+    def writeTo(buffer: WriteBuffer, wfc: WindowedFunctionCall[CT, CV]): Unit = {
+      buffer.write(wfc.function.function.identity)
+      buffer.write(wfc.function.bindings)
+      buffer.write(wfc.args)
+      buffer.write(wfc.filter)
+      buffer.write(wfc.partitionBy)
+      buffer.write(wfc.orderBy)
+      buffer.write(wfc.frame)(Writable.option(Frame.serialize))
+      buffer.write(wfc.position)
+      buffer.write(wfc.functionNamePosition)
+    }
+  }
+
+  def deserialize[CT: Readable, CV: Readable](implicit ht: HasType[CV, CT], fi: FunctionInfo[CT]) = new Readable[WindowedFunctionCall[CT, CV]] {
+    def readFrom(buffer: ReadBuffer): WindowedFunctionCall[CT, CV] = {
+      val function = fi.functionsByIdentity(buffer.read[String]())
+      val bindings = buffer.read[Map[String, CT]]()
+      val args = buffer.read[Seq[Expr[CT, CV]]]()
+      val filter = buffer.read[Option[Expr[CT, CV]]]()
+      val partitionBy = buffer.read[Seq[Expr[CT, CV]]]()
+      val orderBy = buffer.read[Seq[OrderBy[CT, CV]]]()
+      val frame = buffer.read[Option[Frame]]()(Readable.option(Frame.serialize))
+      val position = buffer.read[Position]()
+      val functionNamePosition = buffer.read[Position]()
+      WindowedFunctionCall(
+        MonomorphicFunction(function, bindings),
+        args,
+        filter,
+        partitionBy,
+        orderBy,
+        frame
+      )(
+        position,
+        functionNamePosition
+      )
+    }
+  }
+}
+
 case class Frame(
   context: FrameContext,
   start: FrameBound,
@@ -400,11 +634,51 @@ case class Frame(
     ).flatten.sep
 }
 
+object Frame {
+  implicit object serialize extends Writable[Frame] with Readable[Frame] {
+    def writeTo(buffer: WriteBuffer, t: Frame): Unit = {
+      buffer.write(t.context)(FrameContext.serialize)
+      buffer.write(t.start)(FrameBound.serialize)
+      buffer.write(t.end)
+      buffer.write(t.exclusion)(Writable.option(FrameExclusion.serialize))
+    }
+
+    def readFrom(buffer: ReadBuffer): Frame = {
+      Frame(
+        context = buffer.read[FrameContext]()(FrameContext.serialize),
+        start = buffer.read[FrameBound]()(FrameBound.serialize),
+        end = buffer.read[Option[FrameBound]](),
+        exclusion = buffer.read[Option[FrameExclusion]]()(Readable.option(FrameExclusion.serialize))
+      )
+    }
+  }
+}
+
 sealed abstract class FrameContext(val debugDoc: Doc[Nothing])
 object FrameContext {
   case object Range extends FrameContext(d"RANGE")
   case object Rows extends FrameContext(d"ROWS")
   case object Groups extends FrameContext(d"GROUPS")
+
+  implicit object serialize extends Writable[FrameContext] with Readable[FrameContext] {
+    def writeTo(buffer: WriteBuffer, t: FrameContext): Unit = {
+      val tag = t match {
+        case Range => 0
+        case Rows => 1
+        case Groups => 2
+      }
+      buffer.write(tag)
+    }
+
+  def readFrom(buffer: ReadBuffer): FrameContext = {
+      buffer.read[Int]() match {
+        case 0 => Range
+        case 1 => Rows
+        case 2 => Groups
+        case other => fail("Unknown frame context " + other)
+      }
+    }
+  }
 }
 
 sealed abstract class FrameBound {
@@ -426,6 +700,36 @@ object FrameBound {
   case object UnboundedFollowing extends FrameBound {
     def debugDoc = d"UNBOUNDED FOLLOWING"
   }
+
+  implicit object serialize extends Writable[FrameBound] with Readable[FrameBound] {
+    def writeTo(buffer: WriteBuffer, t: FrameBound): Unit = {
+      t match {
+        case UnboundedPreceding =>
+          buffer.write(0)
+        case Preceding(n) =>
+          buffer.write(1)
+          buffer.write(n)
+        case CurrentRow =>
+          buffer.write(2)
+        case Following(n) =>
+          buffer.write(3)
+          buffer.write(n)
+        case UnboundedFollowing =>
+          buffer.write(4)
+      }
+    }
+
+    def readFrom(buffer: ReadBuffer): FrameBound = {
+      buffer.read[Int]() match {
+        case 0 => UnboundedPreceding
+        case 1 => Preceding(buffer.read[Long]())
+        case 2 => CurrentRow
+        case 3 => Following(buffer.read[Long]())
+        case 4 => UnboundedFollowing
+        case other => fail("Unknown frame bound tag: " + other)
+      }
+    }
+  }
 }
 
 sealed abstract class FrameExclusion(val debugDoc: Doc[Nothing])
@@ -434,4 +738,26 @@ object FrameExclusion {
   case object Group extends FrameExclusion(d"GROUP")
   case object Ties extends FrameExclusion(d"TIES")
   case object NoOthers extends FrameExclusion(d"NO OTHERS")
+
+  implicit object serialize extends Writable[FrameExclusion] with Readable[FrameExclusion] {
+    def writeTo(buffer: WriteBuffer, t: FrameExclusion): Unit = {
+      val tag = t match {
+        case CurrentRow => 0
+        case Group => 1
+        case Ties => 2
+        case NoOthers => 3
+      }
+      buffer.write(tag)
+    }
+
+    def readFrom(buffer: ReadBuffer): FrameExclusion = {
+      buffer.read[Int]() match {
+        case 0 => CurrentRow
+        case 1 => Group
+        case 2 => Ties
+        case 3 => NoOthers
+        case other => fail("Unknown frame exclusion tag: " + other)
+      }
+    }
+  }
 }
