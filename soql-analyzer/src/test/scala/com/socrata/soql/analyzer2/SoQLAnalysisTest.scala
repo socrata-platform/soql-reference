@@ -309,7 +309,7 @@ select count(*), 1 as x |> select x
     analysis.removeUnusedColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("haha") {
+  test("simple (de)serialization") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "names") -> D("num" -> TestNumber, "first" -> TestText, "last" -> TestText),
@@ -320,32 +320,8 @@ select count(*), 1 as x |> select x
 select * where first = 'Tom'
 """)
 
-    println(analysis.statement.debugDoc)
-
-    implicit object wt extends serialization.Writable[TestType] {
-      def writeTo(buf: serialization.WriteBuffer, t: TestType) {
-        buf.write(t.toString)
-      }
-    }
-
-    implicit object wv extends serialization.Writable[TestValue] {
-      def writeTo(buf: serialization.WriteBuffer, t: TestValue) {
-        buf.write(t.toString)
-      }
-    }
-
-    val wb = new serialization.WriteBuffer()
-    wb.write(analysis.statement)
-
-    val buf = new java.io.ByteArrayOutputStream
-    val cos = com.google.protobuf.CodedOutputStream.newInstance(buf)
-    wb.writeTo(cos)
-    cos.flush()
-
-    val p = new ProcessBuilder("hd").inheritIO().redirectInput(ProcessBuilder.Redirect.PIPE).start()
-    val os = p.getOutputStream()
-    buf.writeTo(os)
-    os.close()
-    p.waitFor()
+    implicit val mfDeser = com.socrata.soql.functions.MonomorphicFunction.deserialize(TestFunctionInfo)
+    val deser = serialization.ReadBuffer.read[Statement[Int, TestType, TestValue]](serialization.WriteBuffer.write(analysis.statement).bytes)
+    deser must equal (analysis.statement)
   }
 }

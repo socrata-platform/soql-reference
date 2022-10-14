@@ -4,6 +4,7 @@ import com.rojoma.json.v3.ast.JString
 import com.rojoma.json.v3.codec.JsonEncode
 import com.socrata.prettyprint.prelude._
 
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.typechecker.HasDoc
 
@@ -25,6 +26,20 @@ object TestType {
   implicit object jEncode extends JsonEncode[TestType] {
     def encode(t: TestType) = JString(t.name.name)
   }
+
+  implicit object serialize extends Readable[TestType] with Writable[TestType] {
+    def writeTo(buffer: WriteBuffer, typ: TestType): Unit = {
+      buffer.write(typ.name)
+    }
+
+    def readFrom(buffer: ReadBuffer): TestType = {
+      val name = buffer.read[TypeName]()
+      typesByName.get(name) match {
+        case Some(t) => t
+        case None => fail("Unknown type " + JString(name.name))
+      }
+    }
+  }
 }
 
 sealed trait TestValue {
@@ -34,6 +49,34 @@ sealed trait TestValue {
 object TestValue {
   implicit object hasDoc extends HasDoc[TestValue] {
     def docOf(v: TestValue) = v.doc
+  }
+
+  implicit object serialize extends Readable[TestValue] with Writable[TestValue] {
+    def writeTo(buffer: WriteBuffer, v: TestValue): Unit = {
+      v match {
+        case TestText(s) =>
+          buffer.write(0)
+          buffer.write(s)
+        case TestBoolean(b) =>
+          buffer.write(1)
+          buffer.write(b)
+        case TestNumber(n) =>
+          buffer.write(2)
+          buffer.write(n)
+        case TestNull =>
+          buffer.write(3)
+      }
+    }
+
+    def readFrom(buffer: ReadBuffer): TestValue = {
+      buffer.read[Int]() match {
+        case 0 => TestText(buffer.read[String]())
+        case 1 => TestBoolean(buffer.read[Boolean]())
+        case 2 => TestNumber(buffer.read[Int]())
+        case 3 => TestNull
+        case other => fail("Unknown value tag " + other)
+      }
+    }
   }
 }
 
