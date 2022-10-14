@@ -175,7 +175,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         FromStatement(
           Select(
             Distinctiveness.Indistinct,
-            selectList = OrderedMap() ++ from.columns.iterator.zip(columnLabels).map { case ((dcn, NameEntry(name, typ)), outputLabel) =>
+            selectList = OrderedMap() ++ from.columns.iterator.zip(columnLabels.iterator).map { case ((dcn, NameEntry(name, typ)), outputLabel) =>
               outputLabel -> NamedExpr(Column(from.label, dcn, typ)(NoPosition), name)
             },
             from,

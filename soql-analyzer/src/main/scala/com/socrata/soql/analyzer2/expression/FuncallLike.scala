@@ -1,5 +1,6 @@
 package com.socrata.soql.analyzer2.expression
 
+import scala.language.higherKinds
 import scala.util.parsing.input.Position
 
 import com.socrata.soql.analyzer2._

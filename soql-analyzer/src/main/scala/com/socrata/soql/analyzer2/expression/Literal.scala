@@ -1,5 +1,6 @@
 package com.socrata.soql.analyzer2.expression
 
+import scala.language.higherKinds
 import com.socrata.soql.analyzer2._
 
 trait LiteralImpl[+CT, +CV] { this: Literal[CT, CV] =>

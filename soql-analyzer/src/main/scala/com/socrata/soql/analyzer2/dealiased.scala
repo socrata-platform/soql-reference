@@ -14,7 +14,6 @@ package object dealiased {
   type AtomicFrom[+CT, +CV] = a2.AtomicFrom[Any, CT, CV]
   type FromTableLike[+CT] = a2.FromTableLike[Any, CT]
   type FromTable[+CT] = a2.FromTable[Any, CT]
-  type FromVirtualTable[+CT] = a2.FromVirtualTable[Any, CT]
   type FromStatement[+CT, +CV] = a2.FromStatement[Any, CT, CV]
   type FromSingleRow = a2.FromSingleRow[Any]
 
