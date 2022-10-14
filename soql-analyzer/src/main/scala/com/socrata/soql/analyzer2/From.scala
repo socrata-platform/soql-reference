@@ -99,7 +99,7 @@ object From {
     }
   }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV: Readable](implicit ev: Readable[Expr[CT, CV]]): Readable[From[RNS, CT, CV]] = new Readable[From[RNS, CT, CV]] {
+  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[From[RNS, CT, CV]] = new Readable[From[RNS, CT, CV]] {
     def readFrom(buffer: ReadBuffer): From[RNS, CT, CV] = {
       buffer.read[Int]() match {
         case 0 => buffer.read[Join[RNS, CT, CV]]()

@@ -364,7 +364,7 @@ trait OSelectImpl { this: Select.type =>
     }
   }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV: Readable](implicit ev: Readable[Expr[CT, CV]]) = new Readable[Select[RNS, CT, CV]] {
+  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]) = new Readable[Select[RNS, CT, CV]] {
     def readFrom(buffer: ReadBuffer): Select[RNS, CT, CV] = {
       Select(
         distinctiveness = buffer.read[Distinctiveness[CT, CV]](),

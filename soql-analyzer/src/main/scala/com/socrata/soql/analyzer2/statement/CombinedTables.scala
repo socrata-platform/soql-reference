@@ -95,7 +95,7 @@ trait OCombinedTablesImpl { this: CombinedTables.type =>
       }
     }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV: Readable](implicit ev: Readable[Expr[CT, CV]]): Readable[CombinedTables[RNS, CT, CV]] =
+  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[CombinedTables[RNS, CT, CV]] =
     new Readable[CombinedTables[RNS, CT, CV]] {
       def readFrom(buffer: ReadBuffer): CombinedTables[RNS, CT, CV] = {
         CombinedTables(

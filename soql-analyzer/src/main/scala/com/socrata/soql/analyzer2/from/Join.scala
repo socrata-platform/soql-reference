@@ -210,7 +210,7 @@ trait OJoinImpl { this: Join.type =>
     }
   }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV: Readable](implicit ev: Readable[Expr[CT, CV]]): Readable[Join[RNS, CT, CV]] =
+  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[Join[RNS, CT, CV]] =
     new Readable[Join[RNS, CT, CV]] {
       def readFrom(buffer: ReadBuffer): Join[RNS, CT, CV] = {
         val afDer = AtomicFrom.deserialize[RNS, CT, CV]

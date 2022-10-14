@@ -82,7 +82,7 @@ trait OFromStatementImpl { this: FromStatement.type =>
     }
   }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV: Readable](implicit ev: Readable[Expr[CT, CV]]): Readable[FromStatement[RNS, CT, CV]] =
+  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[FromStatement[RNS, CT, CV]] =
     new Readable[FromStatement[RNS, CT, CV]] {
       def readFrom(buffer: ReadBuffer): FromStatement[RNS, CT, CV] =
         FromStatement(

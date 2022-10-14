@@ -106,7 +106,7 @@ trait OCTEImpl { this: CTE.type =>
       }
     }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV: Readable](implicit ev: Readable[Expr[CT, CV]]): Readable[CTE[RNS, CT, CV]] =
+  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[CTE[RNS, CT, CV]] =
     new Readable[CTE[RNS, CT, CV]] {
       def readFrom(buffer: ReadBuffer): CTE[RNS, CT, CV] = {
         CTE(

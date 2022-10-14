@@ -54,7 +54,7 @@ trait OAtomicFromImpl { this: AtomicFrom.type =>
     }
   }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV: Readable](implicit ev: Readable[Expr[CT, CV]]): Readable[AtomicFrom[RNS, CT, CV]] = new Readable[AtomicFrom[RNS, CT, CV]] {
+  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[AtomicFrom[RNS, CT, CV]] = new Readable[AtomicFrom[RNS, CT, CV]] {
     def readFrom(buffer: ReadBuffer): AtomicFrom[RNS, CT, CV] = {
       buffer.read[Int]() match {
         case 0 => buffer.read[FromTable[RNS, CT]]()
