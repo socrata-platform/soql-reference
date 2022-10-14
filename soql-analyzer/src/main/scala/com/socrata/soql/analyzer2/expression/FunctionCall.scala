@@ -55,28 +55,20 @@ trait FunctionCallImpl[+CT, +CV] { this: FunctionCall[CT, CV] =>
 trait OFunctionCallImpl { this: FunctionCall.type =>
   implicit def serialize[CT: Writable, CV: Writable] = new Writable[FunctionCall[CT, CV]] {
     def writeTo(buffer: WriteBuffer, fc: FunctionCall[CT, CV]): Unit = {
-      buffer.write(fc.function.function.identity)
-      buffer.write(fc.function.bindings)
+      buffer.write(fc.function)
       buffer.write(fc.args)
       buffer.write(fc.position)
       buffer.write(fc.functionNamePosition)
     }
   }
 
-  implicit def deserialize[CT: Readable, CV: Readable](implicit ht: HasType[CV, CT], fi: FunctionInfo[CT]) = new Readable[FunctionCall[CT, CV]] {
+  implicit def deserialize[CT: Readable, CV](implicit fi: Readable[MonomorphicFunction[CT]], e: Readable[Expr[CT, CV]]) = new Readable[FunctionCall[CT, CV]] {
     def readFrom(buffer: ReadBuffer): FunctionCall[CT, CV] = {
-      val function = fi.functionsByIdentity(buffer.read[String]())
-      val bindings = buffer.read[Map[String, CT]]()
+      val function = buffer.read[MonomorphicFunction[CT]]()
       val args = buffer.read[Seq[Expr[CT, CV]]]()
       val position = buffer.read[Position]()
       val functionNamePosition = buffer.read[Position]()
-      FunctionCall(
-        function = MonomorphicFunction(function, bindings),
-        args = args
-      )(
-        position,
-        functionNamePosition
-      )
+      FunctionCall(function, args)(position, functionNamePosition)
     }
   }
 }

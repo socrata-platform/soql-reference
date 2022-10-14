@@ -80,8 +80,7 @@ trait AggregateFunctionCallImpl[+CT, +CV] { this: AggregateFunctionCall[CT, CV] 
 trait OAggregateFunctionCallImpl { this: AggregateFunctionCall.type =>
   implicit def serialize[CT: Writable, CV: Writable] = new Writable[AggregateFunctionCall[CT, CV]] {
     def writeTo(buffer: WriteBuffer, afc: AggregateFunctionCall[CT, CV]): Unit = {
-      buffer.write(afc.function.function.identity)
-      buffer.write(afc.function.bindings)
+      buffer.write(afc.function)
       buffer.write(afc.args)
       buffer.write(afc.distinct)
       buffer.write(afc.filter)
@@ -90,17 +89,16 @@ trait OAggregateFunctionCallImpl { this: AggregateFunctionCall.type =>
     }
   }
 
-  implicit def deserialize[CT: Readable, CV: Readable](implicit ht: HasType[CV, CT], fi: FunctionInfo[CT]) = new Readable[AggregateFunctionCall[CT, CV]] {
+  implicit def deserialize[CT: Readable, CV](implicit mf: Readable[MonomorphicFunction[CT]], e: Readable[Expr[CT, CV]]) = new Readable[AggregateFunctionCall[CT, CV]] {
     def readFrom(buffer: ReadBuffer): AggregateFunctionCall[CT, CV] = {
-      val function = fi.functionsByIdentity(buffer.read[String]())
-      val bindings = buffer.read[Map[String, CT]]()
+      val function = buffer.read[MonomorphicFunction[CT]]()
       val args = buffer.read[Seq[Expr[CT, CV]]]()
       val distinct = buffer.read[Boolean]()
       val filter = buffer.read[Option[Expr[CT, CV]]]()
       val position = buffer.read[Position]()
       val functionNamePosition = buffer.read[Position]()
       AggregateFunctionCall(
-        MonomorphicFunction(function, bindings),
+        function,
         args,
         distinct,
         filter

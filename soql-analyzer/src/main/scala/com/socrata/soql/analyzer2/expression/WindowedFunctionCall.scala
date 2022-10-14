@@ -109,8 +109,7 @@ trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
 trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
   implicit def serialize[CT: Writable, CV: Writable] = new Writable[WindowedFunctionCall[CT, CV]] {
     def writeTo(buffer: WriteBuffer, wfc: WindowedFunctionCall[CT, CV]): Unit = {
-      buffer.write(wfc.function.function.identity)
-      buffer.write(wfc.function.bindings)
+      buffer.write(wfc.function)
       buffer.write(wfc.args)
       buffer.write(wfc.filter)
       buffer.write(wfc.partitionBy)
@@ -121,10 +120,9 @@ trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
     }
   }
 
-  implicit def deserialize[CT: Readable, CV: Readable](implicit ht: HasType[CV, CT], fi: FunctionInfo[CT]) = new Readable[WindowedFunctionCall[CT, CV]] {
+  implicit def deserialize[CT: Readable, CV](implicit mf: Readable[MonomorphicFunction[CT]], e: Readable[Expr[CT, CV]]) = new Readable[WindowedFunctionCall[CT, CV]] {
     def readFrom(buffer: ReadBuffer): WindowedFunctionCall[CT, CV] = {
-      val function = fi.functionsByIdentity(buffer.read[String]())
-      val bindings = buffer.read[Map[String, CT]]()
+      val function = buffer.read[MonomorphicFunction[CT]]()
       val args = buffer.read[Seq[Expr[CT, CV]]]()
       val filter = buffer.read[Option[Expr[CT, CV]]]()
       val partitionBy = buffer.read[Seq[Expr[CT, CV]]]()
@@ -133,7 +131,7 @@ trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
       val position = buffer.read[Position]()
       val functionNamePosition = buffer.read[Position]()
       WindowedFunctionCall(
-        MonomorphicFunction(function, bindings),
+        function,
         args,
         filter,
         partitionBy,

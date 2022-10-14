@@ -77,7 +77,7 @@ object Expr {
       }
   }
 
-  implicit def deserialize[CT: Readable, CV: Readable](implicit hasType: HasType[CV, CT], functionInfo: FunctionInfo[CT]): Readable[Expr[CT, CV]] = new Readable[Expr[CT, CV]] {
+  implicit def deserialize[CT: Readable, CV: Readable](implicit hasType: HasType[CV, CT], functionInfo: Readable[MonomorphicFunction[CT]]): Readable[Expr[CT, CV]] = new Readable[Expr[CT, CV]] {
     def readFrom(buffer: ReadBuffer): Expr[CT, CV] =
       buffer.read[Int]() match {
         case 0 => buffer.read[Column[CT]]()
