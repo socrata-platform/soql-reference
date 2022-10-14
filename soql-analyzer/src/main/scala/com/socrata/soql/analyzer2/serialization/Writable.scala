@@ -6,7 +6,7 @@ import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ResourceName, TypeName, ColumnName}
 import com.socrata.soql.parsing.SoQLPosition
 
-trait Writable[-T] {
+trait Writable[T] {
   def writeTo(buffer: WriteBuffer, t: T): Unit
 }
 object Writable {
