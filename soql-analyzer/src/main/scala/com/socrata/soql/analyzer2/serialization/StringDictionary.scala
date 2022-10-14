@@ -4,8 +4,8 @@ import scala.collection.{mutable => scm}
 
 import com.google.protobuf.{CodedOutputStream, CodedInputStream}
 
-class StringDictionary private (indexes: scm.LinkedHashMap[String, Int], strings: scm.ArrayBuffer[String]) {
-  def this() = this(new scm.LinkedHashMap[String, Int], new scm.ArrayBuffer[String])
+class StringDictionary private (indexes: scm.Map[String, Int], strings: scm.ArrayBuffer[String]) {
+  def this() = this(new scm.HashMap[String, Int], new scm.ArrayBuffer[String])
 
   def add(s: String): Int = {
     val n = strings.length
@@ -29,7 +29,7 @@ class StringDictionary private (indexes: scm.LinkedHashMap[String, Int], strings
 
 object StringDictionary {
   def readFrom(stream: CodedInputStream): StringDictionary = {
-    val indexes = new scm.LinkedHashMap[String, Int]
+    val indexes = new scm.HashMap[String, Int]
     val strings = new scm.ArrayBuffer[String]
     var n = stream.readUInt32()
     while(n != 0) {
