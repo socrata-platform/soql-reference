@@ -321,7 +321,7 @@ select * where first = 'Tom'
 """)
 
     implicit val mfDeser = com.socrata.soql.functions.MonomorphicFunction.deserialize(TestFunctionInfo)
-    val deser = serialization.ReadBuffer.read[Statement[Int, TestType, TestValue]](serialization.WriteBuffer.write(analysis.statement).bytes)
+    val deser = serialization.ReadBuffer.read[Statement[Int, TestType, TestValue]](serialization.WriteBuffer.asBytes(analysis.statement))
     deser must equal (analysis.statement)
   }
 }

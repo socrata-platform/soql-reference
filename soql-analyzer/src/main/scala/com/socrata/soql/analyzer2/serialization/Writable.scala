@@ -2,6 +2,8 @@ package com.socrata.soql.analyzer2.serialization
 
 import scala.util.parsing.input.{Position, NoPosition}
 
+import java.io.OutputStream
+
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ResourceName, TypeName, ColumnName}
 import com.socrata.soql.parsing.SoQLPosition

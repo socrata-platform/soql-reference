@@ -2,7 +2,7 @@ package com.socrata.soql.analyzer2.serialization
 
 import scala.util.parsing.input.{Position, NoPosition}
 
-import java.io.IOException
+import java.io.{IOException, InputStream}
 
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ResourceName, TypeName, ColumnName}

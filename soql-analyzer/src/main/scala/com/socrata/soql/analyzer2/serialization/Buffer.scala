@@ -12,9 +12,11 @@ object Version {
   // delete them when they're obsolete in order to find places that
   // are still using them!
   case object V0 extends Version
+
+  val current = V0
 }
 
-class WriteBuffer(val version: Version = Version.V0) {
+class WriteBuffer private (val version: Version) {
   private[serialization] val strings = new StringDictionary
   private val rawData = new VisibleByteArrayOutputStream
   private[serialization] val data = CodedOutputStream.newInstance(rawData)
@@ -24,7 +26,7 @@ class WriteBuffer(val version: Version = Version.V0) {
     this
   }
 
-  def writeTo(stream: CodedOutputStream): Unit = {
+  private def writeTo(stream: CodedOutputStream): Unit = {
     val tag = version match {
       case Version.V0 => 0
     }
@@ -34,26 +36,28 @@ class WriteBuffer(val version: Version = Version.V0) {
     stream.writeRawBytes(rawData.asByteBuffer)
   }
 
-  def writeTo(stream: OutputStream): Unit = {
+  private def writeTo(stream: OutputStream): Unit = {
     val cos = CodedOutputStream.newInstance(stream)
     writeTo(cos)
     cos.flush()
   }
-
-  def bytes: Array[Byte] = {
-    val baos = new ByteArrayOutputStream
-    writeTo(baos)
-    baos.toByteArray
-  }
 }
 
 object WriteBuffer {
-  def write[T : Writable](t: T): WriteBuffer = new WriteBuffer().write(t)
+  def asBytes[T : Writable](t: T, version: Version = Version.current): Array[Byte] = {
+    val baos = new ByteArrayOutputStream
+    write(baos, t, version)
+    baos.toByteArray
+  }
+
+  def write[T : Writable](os: OutputStream, t: T, version: Version = Version.current): Unit = {
+    new WriteBuffer(version).write(t).writeTo(os)
+  }
 }
 
-class ReadBuffer(stream: CodedInputStream) {
-  def this(is: InputStream) = this(CodedInputStream.newInstance(is))
-  def this(bytes: Array[Byte]) = this(new ByteArrayInputStream(bytes))
+class ReadBuffer private (stream: CodedInputStream) {
+  private def this(is: InputStream) = this(CodedInputStream.newInstance(is))
+  private def this(bytes: Array[Byte]) = this(new ByteArrayInputStream(bytes))
 
   val version =
     stream.readUInt32() match {
