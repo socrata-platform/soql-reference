@@ -2,7 +2,7 @@ package com.socrata.soql.analyzer2.serialization
 
 import scala.util.parsing.input.{Position, NoPosition}
 
-import com.socrata.soql.collection.OrderedMap
+import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ResourceName, TypeName, ColumnName}
 import com.socrata.soql.parsing.SoQLPosition
 
@@ -82,6 +82,13 @@ object Writable {
       for(t <- ts) {
         buffer.write(t)
       }
+    }
+  }
+
+  implicit def nonEmptySeq[T : Writable] = new Writable[NonEmptySeq[T]] {
+    def writeTo(buffer: WriteBuffer, ts: NonEmptySeq[T]): Unit = {
+      buffer.write(ts.head)
+      buffer.write(ts.tail)
     }
   }
 

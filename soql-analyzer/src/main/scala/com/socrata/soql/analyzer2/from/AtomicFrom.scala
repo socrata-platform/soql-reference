@@ -43,10 +43,13 @@ trait OAtomicFromImpl { this: AtomicFrom.type =>
       from match {
         case ft: FromTable[RNS, CT] =>
           buffer.write(0)
-          FromTable.serialize[RNS, CT].writeTo(buffer, ft)
+          buffer.write(ft)
         case fs: FromStatement[RNS, CT, CV] =>
           buffer.write(1)
-          FromStatement.serialize[RNS, CT, CV].writeTo(buffer, fs)
+          buffer.write(fs)
+        case fsr: FromSingleRow[RNS] =>
+          buffer.write(2)
+          buffer.write(fsr)
       }
     }
   }

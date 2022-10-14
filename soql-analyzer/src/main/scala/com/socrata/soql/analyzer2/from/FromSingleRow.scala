@@ -63,3 +63,13 @@ trait FromSingleRowImpl[+RNS] { this: FromSingleRow[RNS] =>
   def debugDoc(implicit ev: HasDoc[Nothing]) =
     (d"(SELECT)" +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
 }
+
+trait OFromSingleRowImpl { this: FromSingleRow.type =>
+  implicit def serialize[RNS: Writable]: Writable[FromSingleRow[RNS]] =
+    new Writable[FromSingleRow[RNS]] {
+      def writeTo(buffer: WriteBuffer, fsr: FromSingleRow[RNS]): Unit = {
+        buffer.write(fsr.label)
+        buffer.write(fsr.alias)
+      }
+    }
+}

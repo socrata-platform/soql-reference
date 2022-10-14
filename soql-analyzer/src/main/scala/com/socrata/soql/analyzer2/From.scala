@@ -85,10 +85,16 @@ object From {
       from match {
         case j: Join[RNS, CT, CV] =>
           buffer.write(0)
-          Join.serialize[RNS, CT, CV].writeTo(buffer, j)
-        case f: AtomicFrom[RNS, CT, CV] =>
+          buffer.write(j)
+        case ft: FromTable[RNS, CT] =>
           buffer.write(1)
-          AtomicFrom.serialize[RNS, CT, CV].writeTo(buffer, f)
+          buffer.write(ft)
+        case fs: FromStatement[RNS, CT, CV] =>
+          buffer.write(2)
+          buffer.write(fs)
+        case fsr: FromSingleRow[RNS] =>
+          buffer.write(3)
+          buffer.write(fsr)
       }
     }
   }
@@ -134,3 +140,4 @@ case class FromStatement[+RNS, +CT, +CV](statement: Statement[RNS, CT, CV], labe
 }
 
 case class FromSingleRow[+RNS](label: TableLabel, alias: Option[(RNS, ResourceName)]) extends AtomicFrom[RNS, Nothing, Nothing] with from.FromSingleRowImpl[RNS]
+object FromSingleRow extends from.OFromSingleRowImpl

@@ -4,7 +4,7 @@ import scala.util.parsing.input.{Position, NoPosition}
 
 import java.io.IOException
 
-import com.socrata.soql.collection.OrderedMap
+import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ResourceName, TypeName, ColumnName}
 import com.socrata.soql.parsing.SoQLPosition
 
@@ -90,6 +90,14 @@ object Readable {
         vb += buffer.read[T]()
       }
       vb.result()
+    }
+  }
+
+  implicit def nonEmptySeq[T : Readable] = new Readable[NonEmptySeq[T]] {
+    def readFrom(buffer: ReadBuffer): NonEmptySeq[T] = {
+      val head = buffer.read[T]()
+      val tail = buffer.read[Seq[T]]()
+      NonEmptySeq(head, tail)
     }
   }
 

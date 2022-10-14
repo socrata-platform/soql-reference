@@ -3,6 +3,7 @@ package com.socrata.soql.analyzer2.statement
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
+import com.socrata.soql.analyzer2.serialization.{Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName}
 import com.socrata.soql.functions.MonomorphicFunction
@@ -91,4 +92,13 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
       }.encloseNesting(d"(", d",", d")")
     ).sep.nest(2)
   }
+}
+
+trait OValuesImpl { this: Values.type =>
+  implicit def serialize[CT, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[Values[CT, CV]] =
+    new Writable[Values[CT, CV]] {
+      def writeTo(buffer: WriteBuffer, values: Values[CT, CV]): Unit = {
+        buffer.write(values.values)
+      }
+    }
 }

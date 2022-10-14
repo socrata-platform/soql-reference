@@ -95,7 +95,16 @@ object Statement {
       stmt match {
         case s: Select[RNS, CT, CV] =>
           buffer.write(0)
-          Select.serialize[RNS, CT, CV].writeTo(buffer, s)
+          buffer.write(s)
+        case v: Values[CT, CV] =>
+          buffer.write(1)
+          buffer.write(v)
+        case ct: CombinedTables[RNS, CT, CV] =>
+          buffer.write(2)
+          buffer.write(ct)
+        case cte: CTE[RNS, CT, CV] =>
+          buffer.write(3)
+          buffer.write(cte)
       }
     }
   }
@@ -108,6 +117,7 @@ case class CombinedTables[+RNS, +CT, +CV](
 ) extends Statement[RNS, CT, CV] with statement.CombinedTablesImpl[RNS, CT, CV] {
   require(left.schema.values.map(_.typ) == right.schema.values.map(_.typ))
 }
+object CombinedTables extends statement.OCombinedTablesImpl
 
 case class CTE[+RNS, +CT, +CV](
   definitionLabel: AutoTableLabel,
@@ -115,6 +125,7 @@ case class CTE[+RNS, +CT, +CV](
   materializedHint: MaterializedHint,
   useQuery: Statement[RNS, CT, CV]
 ) extends Statement[RNS, CT, CV] with statement.CTEImpl[RNS, CT, CV]
+object CTE extends statement.OCTEImpl
 
 case class Values[+CT, +CV](
   values: NonEmptySeq[NonEmptySeq[Expr[CT, CV]]]
@@ -122,6 +133,7 @@ case class Values[+CT, +CV](
   require(values.tail.forall(_.length == values.head.length))
   require(values.tail.forall(_.iterator.zip(values.head.iterator).forall { case (a, b) => a.typ == b.typ }))
 }
+object Values extends statement.OValuesImpl
 
 case class Select[+RNS, +CT, +CV](
   distinctiveness: Distinctiveness[CT, CV],

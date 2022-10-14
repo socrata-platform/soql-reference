@@ -3,6 +3,7 @@ package com.socrata.soql.analyzer2.statement
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
+import com.socrata.soql.analyzer2.serialization.{Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
@@ -82,4 +83,15 @@ trait CombinedTablesImpl[+RNS, +CT, +CV] { this: CombinedTables[RNS, CT, CV] =>
   override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]] = {
     left.debugDoc.encloseNesting(d"(", d")") +#+ op.debugDoc +#+ right.debugDoc.encloseNesting(d"(", d")")
   }
+}
+
+trait OCombinedTablesImpl { this: CombinedTables.type =>
+  implicit def serialize[RNS: Writable, CT: Writable, CV: Writable]: Writable[CombinedTables[RNS, CT, CV]] =
+    new Writable[CombinedTables[RNS, CT, CV]] {
+      def writeTo(buffer: WriteBuffer, ct: CombinedTables[RNS, CT, CV]): Unit = {
+        buffer.write(ct.op)
+        buffer.write(ct.left)
+        buffer.write(ct.right)
+      }
+    }
 }
