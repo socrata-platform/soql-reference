@@ -51,6 +51,7 @@ sealed abstract class Expr[+CT, +CV] extends Product {
 }
 object Expr {
   implicit def serialize[CT: Writable, CV: Writable]: Writable[Expr[CT, CV]] = new Writable[Expr[CT, CV]] {
+    implicit val self = this
     def writeTo(buffer: WriteBuffer, t: Expr[CT, CV]): Unit =
       t match {
         case c : Column[CT] =>
@@ -78,6 +79,7 @@ object Expr {
   }
 
   implicit def deserialize[CT: Readable, CV: Readable](implicit hasType: HasType[CV, CT], functionInfo: Readable[MonomorphicFunction[CT]]): Readable[Expr[CT, CV]] = new Readable[Expr[CT, CV]] {
+    implicit val self = this
     def readFrom(buffer: ReadBuffer): Expr[CT, CV] =
       buffer.read[Int]() match {
         case 0 => buffer.read[Column[CT]]()

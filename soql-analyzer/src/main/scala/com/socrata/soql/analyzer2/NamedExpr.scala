@@ -12,7 +12,7 @@ case class NamedExpr[+CT, +CV](expr: Expr[CT, CV], name: ColumnName) {
 }
 
 object NamedExpr {
-  implicit def serialize[CT: Writable, CV: Writable] = new Writable[NamedExpr[CT, CV]] {
+  implicit def serialize[CT, CV](implicit ev: Writable[Expr[CT, CV]]) = new Writable[NamedExpr[CT, CV]] {
     def writeTo(buffer: WriteBuffer, ne: NamedExpr[CT, CV]): Unit = {
       buffer.write(ne.expr)
       buffer.write(ne.name)

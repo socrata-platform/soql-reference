@@ -74,7 +74,7 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
 }
 
 trait OFromStatementImpl { this: FromStatement.type =>
-  implicit def serialize[RNS: Writable, CT: Writable, CV: Writable]: Writable[FromStatement[RNS, CT, CV]] = new Writable[FromStatement[RNS, CT, CV]] {
+  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[FromStatement[RNS, CT, CV]] = new Writable[FromStatement[RNS, CT, CV]] {
     def writeTo(buffer: WriteBuffer, from: FromStatement[RNS, CT, CV]): Unit = {
       buffer.write(from.statement)
       buffer.write(from.label)

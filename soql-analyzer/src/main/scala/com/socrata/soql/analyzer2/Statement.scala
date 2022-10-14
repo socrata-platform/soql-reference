@@ -90,7 +90,7 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
 }
 
 object Statement {
-  implicit def serialize[RNS: Writable, CT: Writable, CV: Writable]: Writable[Statement[RNS, CT, CV]] = new Writable[Statement[RNS, CT, CV]] {
+  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[Statement[RNS, CT, CV]] = new Writable[Statement[RNS, CT, CV]] {
     def writeTo(buffer: WriteBuffer, stmt: Statement[RNS, CT, CV]): Unit = {
       stmt match {
         case s: Select[RNS, CT, CV] =>

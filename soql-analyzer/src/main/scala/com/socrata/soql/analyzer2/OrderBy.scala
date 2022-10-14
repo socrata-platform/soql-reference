@@ -28,7 +28,7 @@ case class OrderBy[+CT, +CV](expr: Expr[CT, CV], ascending: Boolean, nullLast: B
 }
 
 object OrderBy {
-  implicit def serializeWrite[CT : Writable, CV: Writable] = new Writable[OrderBy[CT, CV]] {
+  implicit def serializeWrite[CT, CV](implicit ev: Writable[Expr[CT, CV]]) = new Writable[OrderBy[CT, CV]] {
     def writeTo(buffer: WriteBuffer, ob: OrderBy[CT, CV]): Unit = {
       buffer.write(ob.expr)
       buffer.write(ob.ascending)

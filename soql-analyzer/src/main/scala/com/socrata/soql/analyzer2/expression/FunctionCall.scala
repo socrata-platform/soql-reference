@@ -53,7 +53,7 @@ trait FunctionCallImpl[+CT, +CV] { this: FunctionCall[CT, CV] =>
 }
 
 trait OFunctionCallImpl { this: FunctionCall.type =>
-  implicit def serialize[CT: Writable, CV: Writable] = new Writable[FunctionCall[CT, CV]] {
+  implicit def serialize[CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]) = new Writable[FunctionCall[CT, CV]] {
     def writeTo(buffer: WriteBuffer, fc: FunctionCall[CT, CV]): Unit = {
       buffer.write(fc.function)
       buffer.write(fc.args)

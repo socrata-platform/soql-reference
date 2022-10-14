@@ -334,7 +334,7 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
 }
 
 trait OSelectImpl { this: Select.type =>
-  implicit def serialize[RNS: Writable, CT: Writable, CV: Writable] = new Writable[Select[RNS, CT, CV]] {
+  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]) = new Writable[Select[RNS, CT, CV]] {
     def writeTo(buffer: WriteBuffer, select: Select[RNS, CT, CV]): Unit = {
       val Select(
         distinctiveness: Distinctiveness[CT, CV],

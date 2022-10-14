@@ -61,7 +61,7 @@ object Distinctiveness {
       Some(exprs.map(_.debugDoc).encloseNesting(d"DISTINCT ON (", d",", d")"))
   }
 
-  implicit def serialize[CT: Writable, CV: Writable] = new Writable[Distinctiveness[CT, CV]] {
+  implicit def serialize[CT, CV](implicit ev: Writable[Expr[CT, CV]]) = new Writable[Distinctiveness[CT, CV]] {
     def writeTo(buffer: WriteBuffer, d: Distinctiveness[CT, CV]): Unit = {
       d match {
         case Indistinct =>

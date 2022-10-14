@@ -38,7 +38,7 @@ trait AtomicFromImpl[+RNS, +CT, +CV] { this: AtomicFrom[RNS, CT, CV] =>
 }
 
 trait OAtomicFromImpl { this: AtomicFrom.type =>
-  implicit def serialize[RNS: Writable, CT: Writable, CV: Writable]: Writable[AtomicFrom[RNS, CT, CV]] = new Writable[AtomicFrom[RNS, CT, CV]] {
+  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[AtomicFrom[RNS, CT, CV]] = new Writable[AtomicFrom[RNS, CT, CV]] {
     def writeTo(buffer: WriteBuffer, from: AtomicFrom[RNS, CT, CV]): Unit = {
       from match {
         case ft: FromTable[RNS, CT] =>

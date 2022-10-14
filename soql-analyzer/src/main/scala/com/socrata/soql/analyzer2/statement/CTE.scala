@@ -96,7 +96,7 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
 }
 
 trait OCTEImpl { this: CTE.type =>
-  implicit def serialize[RNS: Writable, CT: Writable, CV: Writable]: Writable[CTE[RNS, CT, CV]] =
+  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[CTE[RNS, CT, CV]] =
     new Writable[CTE[RNS, CT, CV]] {
       def writeTo(buffer: WriteBuffer, ct: CTE[RNS, CT, CV]): Unit = {
         buffer.write(ct.definitionLabel)

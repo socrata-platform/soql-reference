@@ -107,7 +107,7 @@ trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
 }
 
 trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
-  implicit def serialize[CT: Writable, CV: Writable] = new Writable[WindowedFunctionCall[CT, CV]] {
+  implicit def serialize[CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]) = new Writable[WindowedFunctionCall[CT, CV]] {
     def writeTo(buffer: WriteBuffer, wfc: WindowedFunctionCall[CT, CV]): Unit = {
       buffer.write(wfc.function)
       buffer.write(wfc.args)

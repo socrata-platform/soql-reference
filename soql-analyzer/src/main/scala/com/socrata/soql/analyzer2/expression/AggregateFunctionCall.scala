@@ -78,7 +78,7 @@ trait AggregateFunctionCallImpl[+CT, +CV] { this: AggregateFunctionCall[CT, CV] 
 }
 
 trait OAggregateFunctionCallImpl { this: AggregateFunctionCall.type =>
-  implicit def serialize[CT: Writable, CV: Writable] = new Writable[AggregateFunctionCall[CT, CV]] {
+  implicit def serialize[CT: Writable, CV](implicit expr: Writable[Expr[CT, CV]]) = new Writable[AggregateFunctionCall[CT, CV]] {
     def writeTo(buffer: WriteBuffer, afc: AggregateFunctionCall[CT, CV]): Unit = {
       buffer.write(afc.function)
       buffer.write(afc.args)

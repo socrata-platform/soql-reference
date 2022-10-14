@@ -86,7 +86,7 @@ trait CombinedTablesImpl[+RNS, +CT, +CV] { this: CombinedTables[RNS, CT, CV] =>
 }
 
 trait OCombinedTablesImpl { this: CombinedTables.type =>
-  implicit def serialize[RNS: Writable, CT: Writable, CV: Writable]: Writable[CombinedTables[RNS, CT, CV]] =
+  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[CombinedTables[RNS, CT, CV]] =
     new Writable[CombinedTables[RNS, CT, CV]] {
       def writeTo(buffer: WriteBuffer, ct: CombinedTables[RNS, CT, CV]): Unit = {
         buffer.write(ct.op)

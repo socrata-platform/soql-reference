@@ -193,7 +193,7 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
 }
 
 trait OJoinImpl { this: Join.type =>
-  implicit def serialize[RNS: Writable, CT: Writable, CV: Writable]: Writable[Join[RNS, CT, CV]] = new Writable[Join[RNS, CT, CV]] {
+  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[Join[RNS, CT, CV]] = new Writable[Join[RNS, CT, CV]] {
     def writeTo(buffer: WriteBuffer, join: Join[RNS, CT, CV]): Unit = {
       val afSer = AtomicFrom.serialize[RNS, CT, CV]
       buffer.write(join.reduce[Int](_ => 0, (n, _) => n + 1))

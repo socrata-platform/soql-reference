@@ -80,7 +80,7 @@ sealed abstract class From[+RNS, +CT, +CV] {
 }
 
 object From {
-  implicit def serialize[RNS: Writable, CT: Writable, CV: Writable]: Writable[From[RNS, CT, CV]] = new Writable[From[RNS, CT, CV]] {
+  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[From[RNS, CT, CV]] = new Writable[From[RNS, CT, CV]] {
     def writeTo(buffer: WriteBuffer, from: From[RNS, CT, CV]): Unit = {
       from match {
         case j: Join[RNS, CT, CV] =>
