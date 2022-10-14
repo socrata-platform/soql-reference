@@ -6,7 +6,7 @@ import scala.annotation.tailrec
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.analyzer2.serialization.{Writable, WriteBuffer}
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
@@ -71,4 +71,24 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
 
   def debugDoc(implicit ev: HasDoc[CV]) =
     (statement.debugDoc.encloseNesting(d"(", d")") +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
+}
+
+trait OFromStatementImpl { this: FromStatement.type =>
+  implicit def serialize[RNS: Writable, CT: Writable, CV: Writable]: Writable[FromStatement[RNS, CT, CV]] = new Writable[FromStatement[RNS, CT, CV]] {
+    def writeTo(buffer: WriteBuffer, from: FromStatement[RNS, CT, CV]): Unit = {
+      buffer.write(from.statement)
+      buffer.write(from.label)
+      buffer.write(from.alias)
+    }
+  }
+
+  implicit def deserialize[RNS: Readable, CT: Readable, CV: Readable](implicit ev: Readable[Expr[CT, CV]]): Readable[FromStatement[RNS, CT, CV]] =
+    new Readable[FromStatement[RNS, CT, CV]] {
+      def readFrom(buffer: ReadBuffer): FromStatement[RNS, CT, CV] =
+        FromStatement(
+          statement = buffer.read[Statement[RNS, CT, CV]](),
+          label = buffer.read[AutoTableLabel](),
+          alias = buffer.read[Option[(RNS, ResourceName)]]()
+        )
+    }
 }

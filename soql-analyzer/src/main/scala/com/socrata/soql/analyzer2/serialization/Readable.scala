@@ -35,6 +35,17 @@ object Readable {
     }
   }
 
+  implicit object bigint extends Readable[BigInt] {
+    def readFrom(buffer: ReadBuffer): BigInt = {
+      try {
+        BigInt(string.readFrom(buffer))
+      } catch {
+        case e: NumberFormatException =>
+          fail("Invalid serialized BigInt")
+      }
+    }
+  }
+
   implicit object string extends Readable[String] {
     def readFrom(buffer: ReadBuffer): String = {
       buffer.strings(buffer.data.readUInt32())

@@ -6,7 +6,7 @@ import scala.annotation.tailrec
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.analyzer2.serialization.{Writable, WriteBuffer}
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
@@ -50,6 +50,17 @@ trait OAtomicFromImpl { this: AtomicFrom.type =>
         case fsr: FromSingleRow[RNS] =>
           buffer.write(2)
           buffer.write(fsr)
+      }
+    }
+  }
+
+  implicit def deserialize[RNS: Readable, CT: Readable, CV: Readable](implicit ev: Readable[Expr[CT, CV]]): Readable[AtomicFrom[RNS, CT, CV]] = new Readable[AtomicFrom[RNS, CT, CV]] {
+    def readFrom(buffer: ReadBuffer): AtomicFrom[RNS, CT, CV] = {
+      buffer.read[Int]() match {
+        case 0 => buffer.read[FromTable[RNS, CT]]()
+        case 1 => buffer.read[FromStatement[RNS, CT, CV]]()
+        case 2 => buffer.read[FromSingleRow[RNS]]()
+        case other => fail("Unknown atomic from tag " + other)
       }
     }
   }

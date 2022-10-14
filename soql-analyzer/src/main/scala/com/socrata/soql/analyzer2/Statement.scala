@@ -11,7 +11,7 @@ import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName}
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
-import com.socrata.soql.analyzer2.serialization.{Writable, WriteBuffer}
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 import DocUtils._
 
@@ -105,6 +105,18 @@ object Statement {
         case cte: CTE[RNS, CT, CV] =>
           buffer.write(3)
           buffer.write(cte)
+      }
+    }
+  }
+
+  implicit def deserialize[RNS: Readable, CT: Readable, CV: Readable](implicit ev: Readable[Expr[CT, CV]]): Readable[Statement[RNS, CT, CV]] = new Readable[Statement[RNS, CT, CV]] {
+    def readFrom(buffer: ReadBuffer): Statement[RNS, CT, CV] = {
+      buffer.read[Int]() match {
+        case 0 => buffer.read[Select[RNS, CT, CV]]()
+        case 1 => buffer.read[Values[CT, CV]]()
+        case 2 => buffer.read[CombinedTables[RNS, CT, CV]]()
+        case 3 => buffer.read[CTE[RNS, CT, CV]]()
+        case other => fail("Unknown statement tag " + other)
       }
     }
   }

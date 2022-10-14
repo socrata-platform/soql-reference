@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2.statement
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.analyzer2.serialization.{Writable, WriteBuffer}
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
@@ -92,6 +92,17 @@ trait OCombinedTablesImpl { this: CombinedTables.type =>
         buffer.write(ct.op)
         buffer.write(ct.left)
         buffer.write(ct.right)
+      }
+    }
+
+  implicit def deserialize[RNS: Readable, CT: Readable, CV: Readable](implicit ev: Readable[Expr[CT, CV]]): Readable[CombinedTables[RNS, CT, CV]] =
+    new Readable[CombinedTables[RNS, CT, CV]] {
+      def readFrom(buffer: ReadBuffer): CombinedTables[RNS, CT, CV] = {
+        CombinedTables(
+          op = buffer.read[TableFunc](),
+          left = buffer.read[Statement[RNS, CT, CV]](),
+          right = buffer.read[Statement[RNS, CT, CV]]()
+        )
       }
     }
 }

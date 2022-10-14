@@ -5,7 +5,7 @@ import scala.annotation.tailrec
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.analyzer2.serialization.{Writable, WriteBuffer}
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
@@ -196,18 +196,44 @@ trait OJoinImpl { this: Join.type =>
   implicit def serialize[RNS: Writable, CT: Writable, CV: Writable]: Writable[Join[RNS, CT, CV]] = new Writable[Join[RNS, CT, CV]] {
     def writeTo(buffer: WriteBuffer, join: Join[RNS, CT, CV]): Unit = {
       val afSer = AtomicFrom.serialize[RNS, CT, CV]
+      buffer.write(join.reduce[Int](_ => 0, (n, _) => n + 1))
       join.reduce[Unit](
         f0 => afSer.writeTo(buffer, f0),
         { (_, rhs) =>
           val Join(joinType, lateral, _left, right, on) = rhs
-          buffer.write(true)
           buffer.write(joinType)
           buffer.write(lateral)
           afSer.writeTo(buffer, right)
           buffer.write(on)
         }
       )
-      buffer.write(false)
     }
   }
+
+  implicit def deserialize[RNS: Readable, CT: Readable, CV: Readable](implicit ev: Readable[Expr[CT, CV]]): Readable[Join[RNS, CT, CV]] =
+    new Readable[Join[RNS, CT, CV]] {
+      def readFrom(buffer: ReadBuffer): Join[RNS, CT, CV] = {
+        val afDer = AtomicFrom.deserialize[RNS, CT, CV]
+        val joins = buffer.read[Int]()
+        if(joins < 1) fail("Invalid join count " + joins)
+
+        @tailrec
+        def loop(left: From[RNS, CT, CV], n: Int): Join[RNS, CT, CV] = {
+          val j = Join(
+            joinType = buffer.read[JoinType](),
+            lateral = buffer.read[Boolean](),
+            left = left,
+            right = afDer.readFrom(buffer),
+            on = buffer.read[Expr[CT, CV]]()
+          )
+
+          if(n > 1) {
+            loop(j, n-1)
+          } else {
+            j
+          }
+        }
+        loop(afDer.readFrom(buffer), joins)
+      }
+    }
 }

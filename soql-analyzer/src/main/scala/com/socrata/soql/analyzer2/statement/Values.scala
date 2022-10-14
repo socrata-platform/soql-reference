@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2.statement
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.analyzer2.serialization.{Writable, WriteBuffer}
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName}
 import com.socrata.soql.functions.MonomorphicFunction
@@ -99,6 +99,13 @@ trait OValuesImpl { this: Values.type =>
     new Writable[Values[CT, CV]] {
       def writeTo(buffer: WriteBuffer, values: Values[CT, CV]): Unit = {
         buffer.write(values.values)
+      }
+    }
+
+  implicit def deserialize[CT, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[Values[CT, CV]] =
+    new Readable[Values[CT, CV]] {
+      def readFrom(buffer: ReadBuffer): Values[CT, CV] = {
+        Values(buffer.read[NonEmptySeq[NonEmptySeq[Expr[CT, CV]]]]())
       }
     }
 }

@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2.statement
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.analyzer2.serialization.{Writable, WriteBuffer}
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
@@ -103,6 +103,18 @@ trait OCTEImpl { this: CTE.type =>
         buffer.write(ct.definitionQuery)
         buffer.write(ct.materializedHint)
         buffer.write(ct.useQuery)
+      }
+    }
+
+  implicit def deserialize[RNS: Readable, CT: Readable, CV: Readable](implicit ev: Readable[Expr[CT, CV]]): Readable[CTE[RNS, CT, CV]] =
+    new Readable[CTE[RNS, CT, CV]] {
+      def readFrom(buffer: ReadBuffer): CTE[RNS, CT, CV] = {
+        CTE(
+          definitionLabel = buffer.read[AutoTableLabel](),
+          definitionQuery = buffer.read[Statement[RNS, CT, CV]](),
+          materializedHint = buffer.read[MaterializedHint](),
+          useQuery = buffer.read[Statement[RNS, CT, CV]]()
+        )
       }
     }
 }

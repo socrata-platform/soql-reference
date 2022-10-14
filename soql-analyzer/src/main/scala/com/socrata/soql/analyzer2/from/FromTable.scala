@@ -5,7 +5,7 @@ import scala.annotation.tailrec
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.analyzer2.serialization.{Writable, WriteBuffer}
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
@@ -63,6 +63,17 @@ trait OFromTableImpl { this: FromTable.type =>
       buffer.write(from.alias)
       buffer.write(from.label)
       buffer.write(from.columns)
+    }
+  }
+
+  implicit def deserialize[RNS: Readable, CT: Readable]: Readable[FromTable[RNS, CT]] = new Readable[FromTable[RNS, CT]] {
+    def readFrom(buffer: ReadBuffer): FromTable[RNS, CT] = {
+      FromTable(
+        tableName = buffer.read[DatabaseTableName](),
+        alias = buffer.read[Option[(RNS, ResourceName)]](),
+        label = buffer.read[AutoTableLabel](),
+        columns = buffer.read[OrderedMap[DatabaseColumnName, NameEntry[CT]]]()
+      )
     }
   }
 }

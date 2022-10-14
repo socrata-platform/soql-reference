@@ -10,7 +10,7 @@ import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ResourceName, ColumnName}
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
-import com.socrata.soql.analyzer2.serialization.{Writable, WriteBuffer}
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 import DocUtils._
 
@@ -361,6 +361,24 @@ trait OSelectImpl { this: Select.type =>
       buffer.write(offset)
       buffer.write(search)
       buffer.write(hint)
+    }
+  }
+
+  implicit def deserialize[RNS: Readable, CT: Readable, CV: Readable](implicit ev: Readable[Expr[CT, CV]]) = new Readable[Select[RNS, CT, CV]] {
+    def readFrom(buffer: ReadBuffer): Select[RNS, CT, CV] = {
+      Select(
+        distinctiveness = buffer.read[Distinctiveness[CT, CV]](),
+        selectList = buffer.read[OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]]](),
+        from = buffer.read[From[RNS, CT, CV]](),
+        where = buffer.read[Option[Expr[CT, CV]]](),
+        groupBy = buffer.read[Seq[Expr[CT, CV]]](),
+        having = buffer.read[Option[Expr[CT, CV]]](),
+        orderBy = buffer.read[Seq[OrderBy[CT, CV]]](),
+        limit = buffer.read[Option[BigInt]](),
+        offset = buffer.read[Option[BigInt]](),
+        search = buffer.read[Option[String]](),
+        hint = buffer.read[Set[SelectHint]]()
+      )
     }
   }
 }

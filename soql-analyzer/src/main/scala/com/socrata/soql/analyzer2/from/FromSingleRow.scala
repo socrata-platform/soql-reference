@@ -5,7 +5,7 @@ import scala.annotation.tailrec
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.analyzer2.serialization.{Writable, WriteBuffer}
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
@@ -70,6 +70,16 @@ trait OFromSingleRowImpl { this: FromSingleRow.type =>
       def writeTo(buffer: WriteBuffer, fsr: FromSingleRow[RNS]): Unit = {
         buffer.write(fsr.label)
         buffer.write(fsr.alias)
+      }
+    }
+
+  implicit def deserialize[RNS: Readable]: Readable[FromSingleRow[RNS]] =
+    new Readable[FromSingleRow[RNS]] {
+      def readFrom(buffer: ReadBuffer): FromSingleRow[RNS] = {
+        FromSingleRow(
+          label = buffer.read[AutoTableLabel](),
+          alias = buffer.read[Option[(RNS, ResourceName)]]()
+        )
       }
     }
 }
