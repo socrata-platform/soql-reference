@@ -87,6 +87,7 @@ object Expr {
         case 4 => buffer.read[FunctionCall[CT, CV]]()
         case 5 => buffer.read[AggregateFunctionCall[CT, CV]]()
         case 6 => buffer.read[WindowedFunctionCall[CT, CV]]()
+        case other => fail("Unknown expression tag " + other)
       }
   }
 }
