@@ -371,6 +371,8 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
               case ast.Materialized(_) => SelectHint.Materialized
               case ast.NoRollup(_) => SelectHint.NoRollup
               case ast.NoChainMerge(_) => SelectHint.NoChainMerge
+              case ast.CompoundRollup(_) => SelectHint.CompoundRollup
+              case ast.RollupAtJoin(_) => SelectHint.RollupAtJoin
             }
           }.toSet
         )
