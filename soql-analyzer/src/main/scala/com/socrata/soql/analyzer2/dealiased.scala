@@ -1,5 +1,8 @@
 package com.socrata.soql.analyzer2
 
+// I'm not sure this is actually useful, but in a world where we don't
+// care about RNS anymore (e.g., SQL generation) we can import things
+// from dealiased and not need to bother with setting RNS everywhere.
 package object dealiased {
   import com.socrata.soql.{analyzer2 => a2}
 
