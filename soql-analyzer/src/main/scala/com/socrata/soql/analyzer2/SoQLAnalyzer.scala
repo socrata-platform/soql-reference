@@ -121,7 +121,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
     def intoStatement(from: AtomicFrom[RNS, CT, CV]): Statement[RNS, CT, CV] = {
       val selectList =
         from match {
-          case from: FromTableLike[RNS, CT] =>
+          case from: FromTable[RNS, CT] =>
             from.columns.map { case (label, NameEntry(name, typ)) =>
               labelProvider.columnLabel() -> NamedExpr(Column(from.label, label, typ)(NoPosition), name)
             }
@@ -386,7 +386,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             case _: FromSingleRow[RNS] => new UntypedDatasetContext {
               val columns = OrderedSet.empty
             }
-            case t: FromTableLike[RNS, CT] => new UntypedDatasetContext {
+            case t: FromTable[RNS, CT] => new UntypedDatasetContext {
               val columns = OrderedSet() ++ t.columns.valuesIterator.map(_.name)
             }
             case s: FromStatement[RNS, CT, CV] => new UntypedDatasetContext {

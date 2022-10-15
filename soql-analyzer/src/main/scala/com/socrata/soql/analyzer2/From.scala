@@ -126,10 +126,8 @@ object Join extends from.OJoinImpl
 sealed abstract class AtomicFrom[+RNS, +CT, +CV] extends From[RNS, CT, CV] with from.AtomicFromImpl[RNS, CT, CV]
 object AtomicFrom extends from.OAtomicFromImpl
 
-sealed abstract class FromTableLike[+RNS, +CT] extends AtomicFrom[RNS, CT, Nothing] with from.FromTableLikeImpl[RNS, CT]
-
 object FromTable extends from.OFromTableImpl
-case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS, ResourceName)], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[RNS, CT] with from.FromTableImpl[RNS, CT]
+case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS, ResourceName)], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends AtomicFrom[RNS, CT, Nothing] with from.FromTableImpl[RNS, CT]
 
 // "alias" is optional here because of chained soql; actually having a
 // real subselect syntactically requires an alias, but `select ... |>
