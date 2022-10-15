@@ -156,6 +156,8 @@ object RecursiveDescentParser {
   val MATERIALIZED = new Keyword("MATERIALIZED")
   val NO_ROLLUP = new Keyword("NO_ROLLUP")
   val NO_CHAIN_MERGE = new Keyword("NO_CHAIN_MERGE")
+  val COMPOUND_ROLLUP = new Keyword("COMPOUND_ROLLUP")
+  val ROLLUP_AT_JOIN = new Keyword("ROLLUP_AT_JOIN")
 
   sealed abstract class NullPlacement
   case object First extends NullPlacement
