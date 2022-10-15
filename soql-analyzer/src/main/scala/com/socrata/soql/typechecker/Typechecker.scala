@@ -32,6 +32,8 @@ class Typechecker[Type, Value](val typeInfo: TypeInfo[Type, Value], functionInfo
           // (as if there were no alias at all) to make error messages that much clearer.  This will only catch
           // semi-implicitly assigned aliases, so it's better anyway.
           Right(Seq(typed.ColumnRef(aQual, col, typ)(r.position)))
+        case (None, Some(typed.ColumnRef(aQual, name, typ))) if name == col && qual != aQual =>
+          typecheck(e, Map.empty, from) // TODO: Revisit aliases from multiple schemas
         case (None, Some(tree)) =>
           Right(Seq(tree))
         case (_, None) | (Some(_), _) =>
