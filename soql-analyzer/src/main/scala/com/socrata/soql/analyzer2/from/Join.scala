@@ -194,8 +194,9 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
 
 trait OJoinImpl { this: Join.type =>
   implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[Join[RNS, CT, CV]] = new Writable[Join[RNS, CT, CV]] {
+    val afSer = AtomicFrom.serialize[RNS, CT, CV]
+
     def writeTo(buffer: WriteBuffer, join: Join[RNS, CT, CV]): Unit = {
-      val afSer = AtomicFrom.serialize[RNS, CT, CV]
       buffer.write(join.reduce[Int](_ => 0, (n, _) => n + 1))
       join.reduce[Unit](
         f0 => afSer.writeTo(buffer, f0),
@@ -212,8 +213,9 @@ trait OJoinImpl { this: Join.type =>
 
   implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[Join[RNS, CT, CV]] =
     new Readable[Join[RNS, CT, CV]] {
+      val afDer = AtomicFrom.deserialize[RNS, CT, CV]
+
       def readFrom(buffer: ReadBuffer): Join[RNS, CT, CV] = {
-        val afDer = AtomicFrom.deserialize[RNS, CT, CV]
         val joins = buffer.read[Int]()
         if(joins < 1) fail("Invalid join count " + joins)
 
