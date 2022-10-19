@@ -13,7 +13,15 @@ import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable,
 
 import DocUtils._
 
-sealed abstract class Expr[+CT, +CV] extends Product {
+private[analyzer2] trait HashedExpr { this: Product =>
+  // Since this is completely immutable, cache the hashCode rather
+  // than recomputing, as these trees can be quite deep.  This is a
+  // mixin so it can be computed after the various case classes are
+  // fully constructed.
+  override final val hashCode: Int = scala.runtime.ScalaRunTime._hashCode(this)
+}
+
+sealed abstract class Expr[+CT, +CV] extends Product { this: HashedExpr =>
   type Self[+CT, +CV] <: Expr[CT, CV]
 
   val typ: CT
@@ -42,12 +50,6 @@ sealed abstract class Expr[+CT, +CV] extends Product {
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]]
 
   final def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean = find(_ == e).isDefined
-
-  // Since this is completely immutable, cache the hashCode rather
-  // than recomputing, as these trees can be quite deep.  Annoying
-  // that it has to be lazy, but otherwise this gets initialized too
-  // early.
-  override final lazy val hashCode: Int = scala.runtime.ScalaRunTime._hashCode(this)
 }
 object Expr {
   implicit def serialize[CT: Writable, CV: Writable]: Writable[Expr[CT, CV]] = new Writable[Expr[CT, CV]] {
@@ -105,6 +107,7 @@ final case class Column[+CT](
 ) extends
     Expr[CT, Nothing]
     with expression.ColumnImpl[CT]
+    with HashedExpr
 object Column extends expression.OColumnImpl
 
 /********* Select list reference *********/
@@ -119,13 +122,15 @@ final case class SelectListReference[+CT](
 ) extends
     Expr[CT, Nothing]
     with expression.SelectListReferenceImpl[CT]
+    with HashedExpr
 object SelectListReference extends expression.OSelectListReferenceImpl
 
 /********* Literal *********/
 
 sealed abstract class Literal[+CT, +CV]
     extends Expr[CT, CV]
-    with expression.LiteralImpl[CT, CV]
+    with expression.LiteralImpl[CT, CV] { this: HashedExpr =>
+}
 
 /********* Literal value *********/
 
@@ -138,6 +143,7 @@ final case class LiteralValue[+CT, +CV](
 ) extends
     Literal[CT, CV]
     with expression.LiteralValueImpl[CT, CV]
+    with HashedExpr
 {
   // these need to be here and not in the impl for variance reasons
   val typ = ev.typeOf(value)
@@ -154,11 +160,13 @@ final case class NullLiteral[+CT](
 ) extends
     Literal[CT, Nothing]
     with expression.NullLiteralImpl[CT]
+    with HashedExpr
 object NullLiteral extends expression.ONullLiteralImpl
 
 /********* FuncallLike *********/
 
-sealed abstract class FuncallLike[+CT, +CV] extends Expr[CT, CV] with Product
+sealed abstract class FuncallLike[+CT, +CV] extends Expr[CT, CV] with Product { this: HashedExpr =>
+}
 
 /********* Function call *********/
 
@@ -171,6 +179,7 @@ final case class FunctionCall[+CT, +CV](
 ) extends
     FuncallLike[CT, CV]
     with expression.FunctionCallImpl[CT, CV]
+    with HashedExpr
 object FunctionCall extends expression.OFunctionCallImpl
 
 /********* Aggregate function call *********/
@@ -186,6 +195,7 @@ final case class AggregateFunctionCall[+CT, +CV](
 ) extends
     FuncallLike[CT, CV]
     with expression.AggregateFunctionCallImpl[CT, CV]
+    with HashedExpr
 {
   require(function.isAggregate)
 }
@@ -206,6 +216,7 @@ final case class WindowedFunctionCall[+CT, +CV](
 ) extends
     FuncallLike[CT, CV]
     with expression.WindowedFunctionCallImpl[CT, CV]
+    with HashedExpr
 {
   require(function.needsWindow || function.isAggregate)
 }
