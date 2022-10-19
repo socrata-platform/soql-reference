@@ -25,6 +25,20 @@ class LabelProvider extends Cloneable {
 }
 
 object LabelProvider {
+  implicit object serialize extends Writable[LabelProvider] with Readable[LabelProvider] {
+    def writeTo(buffer: WriteBuffer, lp: LabelProvider): Unit = {
+      buffer.write(lp.tables)
+      buffer.write(lp.columns)
+    }
+
+    def readFrom(buffer: ReadBuffer): LabelProvider = {
+      val result = new LabelProvider
+      result.tables = buffer.read[Int]()
+      result.columns = buffer.read[Int]()
+      result
+    }
+  }
+
   private[analyzer2] def subscript(n: Int): String = {
     val nStr = n.toString
     val sb = new StringBuilder(nStr.length)
