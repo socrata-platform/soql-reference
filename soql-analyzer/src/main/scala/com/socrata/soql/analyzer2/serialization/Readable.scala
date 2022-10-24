@@ -106,9 +106,15 @@ object Readable {
 
   implicit def nonEmptySeq[T : Readable] = new Readable[NonEmptySeq[T]] {
     def readFrom(buffer: ReadBuffer): NonEmptySeq[T] = {
+      var n = buffer.data.readUInt32()
+      if(n == 0) fail("Expected non-empty seq")
       val head = buffer.read[T]()
-      val tail = buffer.read[Seq[T]]()
-      NonEmptySeq(head, tail)
+      val vb = Vector.newBuilder[T]
+      while(n != 1) {
+        n -= 1
+        vb += buffer.read[T]()
+      }
+      NonEmptySeq(head, vb.result())
     }
   }
 

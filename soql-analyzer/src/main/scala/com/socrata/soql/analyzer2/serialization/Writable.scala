@@ -89,8 +89,11 @@ object Writable {
 
   implicit def nonEmptySeq[T : Writable] = new Writable[NonEmptySeq[T]] {
     def writeTo(buffer: WriteBuffer, ts: NonEmptySeq[T]): Unit = {
+      buffer.data.writeUInt32NoTag(ts.tail.length + 1)
       buffer.write(ts.head)
-      buffer.write(ts.tail)
+      for(t <- ts.tail) {
+        buffer.write(t)
+      }
     }
   }
 
