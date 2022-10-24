@@ -89,6 +89,8 @@ object Writable {
 
   implicit def nonEmptySeq[T : Writable] = new Writable[NonEmptySeq[T]] {
     def writeTo(buffer: WriteBuffer, ts: NonEmptySeq[T]): Unit = {
+      // Guarantee: this will produce the same serialization as a Seq
+      // with the same contents
       buffer.data.writeUInt32NoTag(ts.tail.length + 1)
       buffer.write(ts.head)
       for(t <- ts.tail) {
@@ -99,6 +101,8 @@ object Writable {
 
   implicit def set[T : Writable] = new Writable[Set[T]] {
     def writeTo(buffer: WriteBuffer, ts: Set[T]): Unit = {
+      // Guarantee: this will produce the same serialization as a Seq
+      // with the same contents (up to ordering)
       buffer.data.writeUInt32NoTag(ts.size)
       for(t <- ts) {
         buffer.write(t)
@@ -108,6 +112,8 @@ object Writable {
 
   implicit def map[T : Writable, U: Writable] = new Writable[Map[T, U]] {
     def writeTo(buffer: WriteBuffer, m: Map[T, U]): Unit = {
+      // Guarantee: this will produce the same serialization as a Seq
+      // with the same (pairs of) contents (up to ordering)
       buffer.data.writeUInt32NoTag(m.size)
       for((k, v) <- m) {
         buffer.write(k)
@@ -118,6 +124,8 @@ object Writable {
 
   implicit def orderdMap[T : Writable, U: Writable] = new Writable[OrderedMap[T, U]] {
     def writeTo(buffer: WriteBuffer, m: OrderedMap[T, U]): Unit = {
+      // Guarantee: this will produce the same serialization as a Map
+      // with the same contents (up to ordering)
       buffer.data.writeUInt32NoTag(m.size)
       for((k, v) <- m) {
         buffer.write(k)
@@ -128,6 +136,8 @@ object Writable {
 
   implicit def option[T : Writable] = new Writable[Option[T]] {
     def writeTo(buffer: WriteBuffer, m: Option[T]): Unit = {
+      // Guarantee: this will produce the same serialization as a Seq
+      // with the same contents
       m match {
         case None =>
           buffer.data.writeUInt32NoTag(0)
