@@ -2,7 +2,7 @@ package com.socrata.metanalyze2
 
 import java.nio.charset.StandardCharsets
 
-import com.rojoma.json.v3.util.{JsonUtil, JsonKey, AlternativeJsonKey, AutomaticJsonCodecBuilder}
+import com.rojoma.json.v3.util.{JsonUtil, JsonKey, AlternativeJsonKey, AutomaticJsonCodecBuilder, WrapperFieldCodec, WrapperJsonCodec}
 import com.rojoma.simplearm.v2._
 import com.rojoma.sql.v1.{JdbcConnectionProvider, Query, AutomaticSqlTypeBuilder}
 
@@ -59,7 +59,11 @@ object Main extends App {
     case class LensColumnId(id: Int)
     object LensColumnId { implicit val ast = AutomaticSqlTypeBuilder[LensColumnId] }
     case class DomainId(id: Int)
-    object DomainId { implicit val ast = AutomaticSqlTypeBuilder[DomainId] }
+    object DomainId {
+      implicit val ast = AutomaticSqlTypeBuilder[DomainId]
+      implicit val codec = WrapperJsonCodec[DomainId](DomainId(_), _.id)
+      implicit val fCodec = WrapperFieldCodec[DomainId]({ s => DomainId(Integer.parseInt(s)) }, _.id.toString)
+    }
 
     case class Lens(
       id: LensId,
@@ -274,12 +278,13 @@ where
     for(uid <- views) {
       tableFinder.findTables(domainId, ResourceName(uid)) match {
         case tableFinder.Success(tm) =>
-          analyzer(tm, UserParameters.emptyFor(tm)) match {
-            case Right(analysis) =>
-              log.info(analysis.removeUnusedColumns.merge(SoQLFunctions.And.monomorphic.get).preserveOrdering(SoQLFunctions.RowNumber.monomorphic.get).useSelectListReferences.statement.debugStr)
-            case Left(err) =>
-              log.info("Error: {}", err)
-          }
+          println(JsonUtil.renderJson(mocktablefinder.MockTableFinder(tm), pretty = true))
+          // analyzer(tm, UserParameters.emptyFor(tm)) match {
+          //   case Right(analysis) =>
+          //     log.info(analysis.removeUnusedColumns.merge(SoQLFunctions.And.monomorphic.get).preserveOrdering(SoQLFunctions.RowNumber.monomorphic.get).useSelectListReferences.statement.debugStr)
+          //   case Left(err) =>
+          //     log.info("Error: {}", err)
+          // }
         case other =>
           log.info("{}", other)
       }
