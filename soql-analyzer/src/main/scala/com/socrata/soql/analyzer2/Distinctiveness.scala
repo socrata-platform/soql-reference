@@ -4,6 +4,7 @@ import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.collection._
 import com.socrata.soql.typechecker.HasDoc
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 sealed trait Distinctiveness[+CT, +CV] {
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Distinctiveness[CT, CV]
@@ -58,5 +59,30 @@ object Distinctiveness {
 
     def debugDoc(implicit ev: HasDoc[CV]) =
       Some(exprs.map(_.debugDoc).encloseNesting(d"DISTINCT ON (", d",", d")"))
+  }
+
+  implicit def serialize[CT, CV](implicit ev: Writable[Expr[CT, CV]]) = new Writable[Distinctiveness[CT, CV]] {
+    def writeTo(buffer: WriteBuffer, d: Distinctiveness[CT, CV]): Unit = {
+      d match {
+        case Indistinct =>
+          buffer.write(0)
+        case FullyDistinct =>
+          buffer.write(1)
+        case On(exprs) =>
+          buffer.write(2)
+          buffer.write(exprs)
+      }
+    }
+  }
+
+  implicit def deserialize[CT, CV](implicit ev: Readable[Expr[CT, CV]]) = new Readable[Distinctiveness[CT, CV]] {
+    def readFrom(buffer: ReadBuffer): Distinctiveness[CT, CV] = {
+      buffer.read[Int]() match {
+        case 0 => Indistinct
+        case 1 => FullyDistinct
+        case 2 => On(buffer.read[Seq[Expr[CT, CV]]]())
+        case other => fail("Unknown distinctiveness tag " + other)
+      }
+    }
   }
 }

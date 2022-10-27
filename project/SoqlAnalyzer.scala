@@ -6,7 +6,7 @@ object SoqlAnalyzer {
     name := "soql-analyzer",
     libraryDependencies ++= Seq(
       // These two are only used by analysis-serialization
-      "com.google.protobuf" % "protobuf-java" % "2.4.1" % "optional",
+      "com.google.protobuf" % "protobuf-java" % "2.6.1" % "optional",
       "net.sf.trove4j" % "trove4j" % "3.0.3" % "optional",
 
       "com.rojoma" %% "rojoma-json-v3" % "3.13.0",

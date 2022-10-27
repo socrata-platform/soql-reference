@@ -9,6 +9,7 @@ import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 import DocUtils._
 
@@ -78,457 +79,79 @@ sealed abstract class From[+RNS, +CT, +CV] {
     )._1
 }
 
-case class Join[+RNS, +CT, +CV](joinType: JoinType, lateral: Boolean, left: From[RNS, CT, CV], right: AtomicFrom[RNS, CT, CV], on: Expr[CT, CV]) extends From[RNS, CT, CV] {
-  type Self[+RNS, +CT, +CV] = Join[RNS, CT, CV]
-  def asSelf = this
-
-  // The difference between a lateral and a non-lateral join is the
-  // environment assumed while typechecking; in a non-lateral join
-  // it's something like:
-  //    val checkedLeft = left.typeCheckIn(enclosingEnv)
-  //    val checkedRight = right.typeCheckIn(enclosingEnv)
-  // whereas in a lateral join it's like
-  //    val checkedLeft = left.typecheckIn(enclosingEnv)
-  //    val checkedRight = right.typecheckIn(checkedLeft.extendEnvironment(previousFromEnv))
-  // In both cases the "next" FROM env (where "on" is typechecked) is
-  //    val nextFromEnv = checkedRight.extendEnvironment(checkedLeft.extendEnvironment(previousFromEnv))
-  // which is what this `extendEnvironment` function does, rewritten
-  // as a loop so that a lot of joins don't use a lot of stack.
-  private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]): Either[AddScopeError, Environment[CT2]] = {
-    type Stack = List[Environment[CT2] => Either[AddScopeError, Environment[CT2]]]
-
-    @tailrec
-    def loop(stack: Stack, self: From[RNS, CT, CV]): (Stack, AtomicFrom[RNS, CT, CV]) = {
-      self match {
+object From {
+  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[From[RNS, CT, CV]] = new Writable[From[RNS, CT, CV]] {
+    def writeTo(buffer: WriteBuffer, from: From[RNS, CT, CV]): Unit = {
+      from match {
         case j: Join[RNS, CT, CV] =>
-          loop(j.right.addToEnvironment[CT2] _ :: stack, j.left)
-        case other: AtomicFrom[RNS, CT, CV] =>
-          (stack, other)
+          buffer.write(0)
+          buffer.write(j)
+        case ft: FromTable[RNS, CT] =>
+          buffer.write(1)
+          buffer.write(ft)
+        case fs: FromStatement[RNS, CT, CV] =>
+          buffer.write(2)
+          buffer.write(fs)
+        case fsr: FromSingleRow[RNS] =>
+          buffer.write(3)
+          buffer.write(fsr)
       }
     }
-
-    var (stack, leftmost) = loop(Nil, this)
-    leftmost.extendEnvironment(base) match {
-      case Right(e0) =>
-        var env = e0
-        while(!stack.isEmpty) {
-          stack.head(env) match {
-            case Left(err) => return Left(err)
-            case Right(e) => env = e
-          }
-          stack = stack.tail
-        }
-        Right(env)
-      case Left(err) =>
-        Left(err)
-    }
   }
 
-  type ReduceResult[+RNS, +CT, +CV] = Join[RNS, CT, CV]
-
-  override def reduceMap[S, RNS2, CT2, CV2](
-    base: AtomicFrom[RNS, CT, CV] => (S, AtomicFrom[RNS2, CT2, CV2]),
-    combine: (S, JoinType, Boolean, From[RNS2, CT2, CV2], AtomicFrom[RNS, CT, CV], Expr[CT, CV]) => (S, Join[RNS2, CT2, CV2])
-  ): (S, ReduceResult[RNS2, CT2, CV2]) = {
-    type Stack = List[(S, From[RNS2, CT2, CV2]) => (S, Join[RNS2, CT2, CV2])]
-
-    @tailrec
-    def loop(self: From[RNS, CT, CV], stack: Stack): (S, From[RNS2, CT2, CV2]) = {
-      self match {
-        case Join(joinType, lateral, left, right, on) =>
-          loop(left, { (s, newLeft) => combine(s, joinType, lateral, newLeft, right, on) } :: stack)
-        case leftmost: AtomicFrom[RNS, CT, CV] =>
-          stack.foldLeft[(S, From[RNS2, CT2, CV2])](base(leftmost)) { (acc, f) =>
-            val (s, left) = acc
-            f(s, left)
-          }
+  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[From[RNS, CT, CV]] = new Readable[From[RNS, CT, CV]] {
+    def readFrom(buffer: ReadBuffer): From[RNS, CT, CV] = {
+      buffer.read[Int]() match {
+        case 0 => buffer.read[Join[RNS, CT, CV]]()
+        case 1 => buffer.read[FromTable[RNS, CT]]()
+        case 2 => buffer.read[FromStatement[RNS, CT, CV]]()
+        case 3 => buffer.read[FromSingleRow[RNS]]()
+        case other => fail("Unknown from tag " + other)
       }
     }
-
-    loop(this, Nil).asInstanceOf[(S, Join[RNS2, CT2, CV2])]
   }
-
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
-    reduce[Map[TableLabel, Set[ColumnLabel]]](
-      _.columnReferences,
-      (acc, join) => acc.mergeWith(join.right.columnReferences)(_ ++ _).mergeWith(join.on.columnReferences)(_ ++ _)
-    )
-
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]): Self[RNS, CT, CV] =
-    map[RNS, CT, CV](
-      _.doRemoveUnusedColumns(used),
-      { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, right.doRemoveUnusedColumns(used), on) }
-    )
-
-  private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName] = {
-    reduce[Map[AutoTableLabel, DatabaseTableName]] (
-      { other => other.realTables },
-      { (acc, j) => acc ++ j.right.realTables }
-    )
-  }
-
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Join[RNS, CT, CV] = {
-    map[RNS, CT, CV](
-       _.doRewriteDatabaseNames(state),
-       { (joinType, lateral, left, right, on) =>
-         val newRight = right.doRewriteDatabaseNames(state)
-         val newOn = on.doRewriteDatabaseNames(state)
-         Join(joinType, lateral, left, newRight, newOn)
-       }
-    )
-  }
-
-  private[analyzer2] def doRelabel(state: RelabelState): Join[RNS, CT, CV] = {
-    map[RNS, CT, CV](
-      _.doRelabel(state),
-      { (joinType, lateral, left, right, on) =>
-        val newRight = right.doRelabel(state)
-        val newOn = on.doRelabel(state)
-        Join(joinType, lateral, left, newRight, newOn)
-      }
-    )
-  }
-
-  def useSelectListReferences: Join[RNS, CT, CV] = {
-    map[RNS, CT, CV](
-      _.useSelectListReferences,
-      { (joinType, lateral, left, right, on) =>
-        val newRight = right.useSelectListReferences
-        Join(joinType, lateral, left, newRight, on)
-      }
-    )
-  }
-
-  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
-    map[RNS2, CT, CV](
-      _.mapAlias(f),
-      { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, right.mapAlias(f), on) },
-    )
-
-  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
-    reduce[Option[Expr[CT, CV]]](
-      _.find(predicate),
-      { (acc, join) => acc.orElse(join.right.find(predicate)).orElse(join.on.find(predicate)) }
-    )
-  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
-    reduce[Boolean](_.contains(e), { (acc, join) => acc || join.right.contains(e) || join.on.contains(e) })
-
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[(TableLabel, AutoColumnLabel)], Self[RNS, CT2, CV]) = {
-    // JOIN builds a new table, which is unordered (hence false, false)
-    val result = map[RNS, CT2, CV](
-      { _.preserveOrdering(provider, rowNumberFunction, false, false)._2 },
-      { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, right.preserveOrdering(provider, rowNumberFunction, false, false)._2, on) },
-    )
-    (None, result)
-  }
-
-  private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
-    // TODO: make this constant-stack if it ever gets used outside of tests
-    that match {
-      case Join(thatJoinType, thatLateral, thatLeft, thatRight, thatOn) =>
-        this.joinType == thatJoinType &&
-          this.lateral == thatLateral &&
-          this.left.findIsomorphism(state, thatLeft) &&
-          this.right.findIsomorphism(state, thatRight) &&
-          this.on.findIsomorphism(state, thatOn)
-      case _ =>
-        false
-    }
-
-  def debugDoc(implicit ev: HasDoc[CV]) =
-    reduce[Doc[Annotation[RNS, CT]]](
-      _.debugDoc,
-      { (leftDoc, j) =>
-        val Join(joinType, lateral, _left, right, on) = j
-        Seq(
-          leftDoc,
-          Seq(
-            Some(joinType.debugDoc),
-            if(lateral) Some(d"LATERAL") else None,
-            Some(right.debugDoc),
-            Some(d"ON"),
-            Some(on.debugDoc)
-          ).flatten.hsep
-        ).sep
-      },
-    )
 }
 
-sealed abstract class JoinType(val debugDoc: Doc[Nothing])
-object JoinType {
-  case object Inner extends JoinType(d"JOIN")
-  case object LeftOuter extends JoinType(d"LEFT OUTER JOIN")
-  case object RightOuter extends JoinType(d"RIGHT OUTER JOIN")
-  case object FullOuter extends JoinType(d"FULL OUTER JOIN")
-}
+case class Join[+RNS, +CT, +CV](
+  joinType: JoinType,
+  lateral: Boolean,
+  left: From[RNS, CT, CV],
+  right: AtomicFrom[RNS, CT, CV],
+  on: Expr[CT, CV]
+) extends
+    From[RNS, CT, CV]
+    with from.JoinImpl[RNS, CT, CV]
+object Join extends from.OJoinImpl
 
-sealed abstract class AtomicFrom[+RNS, +CT, +CV] extends From[RNS, CT, CV] {
-  type Self[+RNS, +CT, +CV] <: AtomicFrom[RNS, CT, CV]
+sealed abstract class AtomicFrom[+RNS, +CT, +CV] extends From[RNS, CT, CV] with from.AtomicFromImpl[RNS, CT, CV]
+object AtomicFrom extends from.OAtomicFromImpl
 
-  val alias: Option[(RNS, ResourceName)]
-  val label: TableLabel
-
-  private[analyzer2] val scope: Scope[CT]
-
-  private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]) = {
-    addToEnvironment(base.extend)
-  }
-  private[analyzer2] def addToEnvironment[CT2 >: CT](env: Environment[CT2]) = {
-    env.addScope(alias.map(_._2), scope)
-  }
-
-  private[analyzer2] def reAlias[RNS2 >: RNS](newAlias: Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV]
-
-  type ReduceResult[+RNS, +CT, +CV] = AtomicFrom[RNS, CT, CV]
-  override def reduceMap[S, RNS2, CT2, CV2](
-    base: AtomicFrom[RNS, CT, CV] => (S, AtomicFrom[RNS2, CT2, CV2]),
-    combine: (S, JoinType, Boolean, From[RNS2, CT2, CV2], AtomicFrom[RNS, CT, CV], Expr[CT, CV]) => (S, Join[RNS2, CT2, CV2])
-  ): (S, ReduceResult[RNS2, CT2, CV2]) =
-    base(this)
-}
-
-sealed abstract class FromTableLike[+RNS, +CT] extends AtomicFrom[RNS, CT, Nothing] {
-  type Self[+RNS, +CT, +CV] <: FromTableLike[RNS, CT]
-
-  val tableName: TableLabel
-  val label: TableLabel
-  val columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]
-
-  def find(predicate: Expr[CT, Nothing] => Boolean) = None
-  def contains[CT2 >: CT, CV](e: Expr[CT2, CV]): Boolean =
-    false
-
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
-
-  private[analyzer2] override final val scope: Scope[CT] = Scope(columns, label)
-
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[(TableLabel, AutoColumnLabel)], Self[RNS, CT2, Nothing]) =
-    (None, asSelf)
-
-  def debugDoc(implicit ev: HasDoc[Nothing]) =
-    (tableName.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
-}
-
-case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS, ResourceName)], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[RNS, CT] {
-  type Self[+RNS, +CT, +CV] = FromTable[RNS, CT]
-  def asSelf = this
-
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
-    copy(
-      tableName = state.convert(this.tableName),
-      columns = OrderedMap() ++ columns.iterator.map { case (n, ne) => state.convert(this.tableName, n) -> ne }
-    )
-
-  private[analyzer2] def doRelabel(state: RelabelState) = {
-    copy(label = state.convert(label))
-  }
-
-  // A table has its columns whether or not they're selected, so this is just "this"
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]) = this
-
-  private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
-    // TODO: make this constant-stack if it ever gets used outside of tests
-    that match {
-      case FromTable(thatTableName, thatAlias, thatLabel, thatColumns) =>
-        this.tableName == thatTableName &&
-          // don't care about aliases
-          state.tryAssociate(this.label, thatLabel) &&
-          this.columns.size == thatColumns.size &&
-          this.columns.iterator.zip(thatColumns.iterator).forall { case ((thisColName, thisEntry), (thatColName, thatEntry)) =>
-            thisColName == thatColName &&
-              thisEntry.typ == thatEntry.typ
-            // don't care about the entry's name
-          }
-      case _ =>
-        false
-    }
-
-  private[analyzer2] def realTables = Map(label -> tableName)
-
-  private[analyzer2] def reAlias[RNS2](newAlias: Option[(RNS2, ResourceName)]): FromTable[RNS2, CT] =
-    copy(alias = newAlias)
-
-  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, Nothing] =
-    copy(alias = f(alias))
-
-  def useSelectListReferences: this.type = this
-}
-
-case class FromVirtualTable[+RNS, +CT](tableName: AutoTableLabel, alias: Option[(RNS, ResourceName)], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends FromTableLike[RNS, CT] {
-  // This is just like FromTable except it does not participate in the
-  // DatabaseName-renaming system.
-
-  type Self[+RNS, +CT, +CV] = FromVirtualTable[RNS, CT]
-  def asSelf = this
-
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]) = this
-
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
-
-  private[analyzer2] def doRelabel(state: RelabelState) = {
-    copy(tableName = state.convert(tableName), label = state.convert(label))
-  }
-
-  private[analyzer2] def realTables = Map.empty
-
-  private[analyzer2] def reAlias[RNS2](newAlias: Option[(RNS2, ResourceName)]): FromVirtualTable[RNS2, CT] =
-    copy(alias = newAlias)
-
-  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, Nothing] =
-    copy(alias = f(alias))
-
-  def useSelectListReferences: this.type = this
-
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[(TableLabel, AutoColumnLabel)], Self[RNS, CT2, Nothing]) =
-    (None, this)
-
-  private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
-    // TODO: make this constant-stack if it ever gets used outside of tests
-    that match {
-      case FromTable(thatTableName, thatAlias, thatLabel, thatColumns) =>
-        this.tableName == thatTableName &&
-          // don't care about aliases
-          state.tryAssociate(this.label, thatLabel) &&
-          this.columns.size == thatColumns.size &&
-          this.columns.iterator.zip(thatColumns.iterator).forall { case ((thisColName, thisEntry), (thatColName, thatEntry)) =>
-            thisColName == thatColName &&
-              thisEntry.typ == thatEntry.typ
-            // don't care about the entry's name
-          }
-      case _ =>
-        false
-    }
-}
+object FromTable extends from.OFromTableImpl
+case class FromTable[+RNS, +CT](
+  tableName: DatabaseTableName,
+  alias: Option[(RNS, ResourceName)],
+  label: AutoTableLabel,
+  columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]
+) extends AtomicFrom[RNS, CT, Nothing] with from.FromTableImpl[RNS, CT]
 
 // "alias" is optional here because of chained soql; actually having a
 // real subselect syntactically requires an alias, but `select ... |>
 // select ...` does not.  The alias is just for name-resolution during
 // analysis anyway...
-case class FromStatement[+RNS, +CT, +CV](statement: Statement[RNS, CT, CV], label: TableLabel, alias: Option[(RNS, ResourceName)]) extends AtomicFrom[RNS, CT, CV] {
-  type Self[+RNS, +CT, +CV] = FromStatement[RNS, CT, CV]
-  def asSelf = this
-
+case class FromStatement[+RNS, +CT, +CV](
+  statement: Statement[RNS, CT, CV],
+  label: AutoTableLabel,
+  alias: Option[(RNS, ResourceName)]
+) extends AtomicFrom[RNS, CT, CV] with from.FromStatementImpl[RNS, CT, CV] {
+  // I'm not sure why this needs to be here.  The typechecker gets
+  // confused about calling Scope.apply if it lives in
+  // FromStatementImpl
   private[analyzer2] val scope: Scope[CT] = Scope(statement.schema, label)
-
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = statement.columnReferences
-
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]): Self[RNS, CT, CV] = {
-    copy(statement = statement.doRemoveUnusedColumns(used, Some(label)))
-  }
-
-  def find(predicate: Expr[CT, CV] => Boolean) = statement.find(predicate)
-  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
-    statement.contains(e)
-
-  private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
-    // TODO: make this constant-stack if it ever gets used outside of tests
-    that match {
-      case FromStatement(thatStatement, thatLabel, thatAlias) =>
-        state.tryAssociate(this.label, thatLabel) &&
-          this.statement.findIsomorphism(state, Some(this.label), Some(thatLabel), thatStatement)
-        // don't care about aliases
-      case _ =>
-        false
-    }
-
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
-    copy(statement = statement.doRewriteDatabaseNames(state))
-
-  def useSelectListReferences = copy(statement = statement.useSelectListReferences)
-
-  private[analyzer2] def doRelabel(state: RelabelState) = {
-    copy(statement = statement.doRelabel(state),
-         label = state.convert(label))
-  }
-
-  private[analyzer2] def reAlias[RNS2 >: RNS](newAlias: Option[(RNS2, ResourceName)]): FromStatement[RNS2, CT, CV] =
-    copy(alias = newAlias)
-
-  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
-    copy(statement = statement.mapAlias(f), alias = f(alias))
-
-  private[analyzer2] def realTables = Map.empty
-
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[(TableLabel, AutoColumnLabel)], Self[RNS, CT2, CV]) = {
-    val (orderColumn, stmt) =
-      statement.preserveOrdering(provider, rowNumberFunction, wantOutputOrdered, wantOrderingColumn)
-
-    (orderColumn.map((label, _)), copy(statement = stmt))
-  }
-
-  def debugDoc(implicit ev: HasDoc[CV]) =
-    (statement.debugDoc.encloseNesting(d"(", d")") +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
 }
+object FromStatement extends from.OFromStatementImpl
 
-case class FromSingleRow[+RNS](label: TableLabel, alias: Option[(RNS, ResourceName)]) extends AtomicFrom[RNS, Nothing, Nothing] {
-  type Self[+RNS, +CT, +CV] = FromSingleRow[RNS]
-  def asSelf = this
-
-  private[analyzer2] val scope: Scope[Nothing] =
-    Scope(
-      OrderedMap.empty[ColumnLabel, NameEntry[Nothing]],
-      label
-    )
-
-  def useSelectListReferences = this
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]) = this
-
-  def find(predicate: Expr[Nothing, Nothing] => Boolean) = None
-  def contains[CT, CV](e: Expr[CT, CV]): Boolean = false
-
-  private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
-    that match {
-      case FromSingleRow(thatLabel, thatAlias) =>
-        state.tryAssociate(this.label, thatLabel)
-        // don't care about aliases
-      case _ =>
-        false
-    }
-
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
-
-  private[analyzer2] def doRelabel(state: RelabelState) = {
-    copy(label = state.convert(label))
-  }
-
-  private[analyzer2] def reAlias[RNS2 >: RNS](newAlias: Option[(RNS2, ResourceName)]): FromSingleRow[RNS2] =
-    copy(alias = newAlias)
-
-  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, Nothing, Nothing] =
-    copy(alias = f(alias))
-
-  private[analyzer2] def realTables = Map.empty
-
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
-
-  private[analyzer2] override def preserveOrdering[CT2](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[(TableLabel, AutoColumnLabel)], Self[RNS, Nothing, Nothing]) =
-    (None, this)
-
-  def debugDoc(implicit ev: HasDoc[Nothing]) =
-    (d"(SELECT)" +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
-}
+case class FromSingleRow[+RNS](
+  label: AutoTableLabel,
+  alias: Option[(RNS, ResourceName)]
+) extends AtomicFrom[RNS, Nothing, Nothing] with from.FromSingleRowImpl[RNS]
+object FromSingleRow extends from.OFromSingleRowImpl

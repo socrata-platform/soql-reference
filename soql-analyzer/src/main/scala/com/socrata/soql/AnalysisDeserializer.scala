@@ -303,6 +303,10 @@ class AnalysisDeserializer[C, T](columnDeserializer: String => C, typeDeserializ
             NoRollup(pos)
           case 3 =>
             NoChainMerge(pos)
+          case 4 =>
+            CompoundRollup(pos)
+          case 5 =>
+            RollupAtJoin(pos)
         }
       }
 

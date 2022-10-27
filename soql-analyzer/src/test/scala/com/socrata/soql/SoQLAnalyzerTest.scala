@@ -765,4 +765,47 @@ SELECT visits, @x2.zx
       case _ => throw new Exception("Second selection should have been a column ref")
     }
   }
+
+  test("distinct, indistinct should be mergeable but the merger does not support this yet") {
+    val analysis = analyzer.analyzeFullQueryBinary("SELECT distinct name_first |> SELECT name_first")
+    val notMerged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    notMerged must equal (analysis)
+  }
+
+  test("distinct on is not mergeable") {
+    val analysis = analyzer.analyzeFullQueryBinary("SELECT name_first, name_last |> SELECT distinct on(name_first) name_first, name_last")
+    val notMerged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    notMerged must equal (analysis)
+  }
+
+  test("join is merged") {
+    val analysis1 = analyzer.analyzeFullQueryBinary(
+      """SELECT name_first,name_last |>
+           SELECT name_last JOIN (SELECT name_last FROM @aaaa-aaaa |> select name_last) as a1 ON name_last = @a1.name_last""")
+    val analysis2 = analyzer.analyzeFullQueryBinary("""SELECT name_last JOIN (SELECT name_last FROM @aaaa-aaaa) as a1 ON name_last = @a1.name_last""")
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1)
+    merged must equal (analysis2)
+  }
+
+  test("join of right side of chain is merged") {
+    val analysis1 = analyzer.analyzeFullQueryBinary(
+      """SELECT name_first,name_last |>
+           SELECT hint(no_chain_merge) name_last JOIN (SELECT name_last FROM @aaaa-aaaa |> select name_last) as a1 ON name_last = @a1.name_last""")
+    val analysis2 = analyzer.analyzeFullQueryBinary("""SELECT name_first,name_last |>
+           SELECT name_last JOIN (SELECT name_last FROM @aaaa-aaaa) as a1 ON name_last = @a1.name_last""")
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1).map(deHints)
+    merged must equal (analysis2)
+  }
+
+  test("no_chain_merge work in join subanalysis") {
+    val analysis = analyzer.analyzeFullQueryBinary(
+      """SELECT hint(no_chain_merge) name_first,name_last |>
+           SELECT name_last JOIN (SELECT name_last FROM @aaaa-aaaa |> SELECT hint(no_chain_merge) distinct name_last) as a1 ON name_last = @a1.name_last""")
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    merged must equal (analysis)
+  }
+
+  private def deHints[Id, Type](analysis: SoQLAnalysis[Id, Type]): SoQLAnalysis[Id, Type] = {
+    analysis.copy(hints = Nil)
+  }
 }

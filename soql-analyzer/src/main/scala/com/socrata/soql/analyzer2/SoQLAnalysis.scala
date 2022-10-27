@@ -2,10 +2,12 @@ package com.socrata.soql.analyzer2
 
 import com.socrata.soql.functions.MonomorphicFunction
 
+import com.socrata.soql.analyzer2.serialization.{ReadBuffer, WriteBuffer, Readable, Writable}
+
 class SoQLAnalysis[RNS, CT, CV] private (
   val labelProvider: LabelProvider,
   val statement: Statement[RNS, CT, CV],
-  usesSelectListReferences: Boolean
+  private val usesSelectListReferences: Boolean
 ) {
   private[analyzer2] def this(labelProvider: LabelProvider, statement: Statement[RNS, CT, CV]) =
     this(labelProvider, statement, false)
@@ -13,8 +15,13 @@ class SoQLAnalysis[RNS, CT, CV] private (
   /** Rewrite the analysis plumbing through enough information to
     * preserve table-ordering (except across joins and aggregates,
     * which of course destroy ordering). */
-  def preserveOrdering(rowNumberFunction: MonomorphicFunction[CT]): SoQLAnalysis[RNS, CT, CV] =
-    copy(statement = statement.preserveOrdering(labelProvider, rowNumberFunction, true, false)._2)
+  def preserveOrdering(rowNumberFunction: MonomorphicFunction[CT]): SoQLAnalysis[RNS, CT, CV] = {
+    val nlp = labelProvider.clone()
+    copy(
+      labelProvider = nlp,
+      statement = statement.preserveOrdering(nlp, rowNumberFunction, true, false)._2
+    )
+  }
 
   /** Simplify subselects on a best-effort basis. */
   def merge(and: MonomorphicFunction[CT]): SoQLAnalysis[RNS, CT, CV] =
@@ -38,4 +45,25 @@ class SoQLAnalysis[RNS, CT, CV] private (
     usesSelectListReferences: Boolean = this.usesSelectListReferences
   ) =
     new SoQLAnalysis(labelProvider, statement, usesSelectListReferences)
+}
+
+object SoQLAnalysis {
+  implicit def serialize[RNS, CT, CV](implicit ev: Writable[Statement[RNS, CT, CV]]): Writable[SoQLAnalysis[RNS, CT, CV]] =
+    new Writable[SoQLAnalysis[RNS, CT, CV]] {
+      def writeTo(buffer: WriteBuffer, analysis: SoQLAnalysis[RNS, CT, CV]): Unit = {
+        buffer.write(analysis.labelProvider)
+        buffer.write(analysis.statement)
+        buffer.write(analysis.usesSelectListReferences)
+      }
+    }
+
+  implicit def deserialize[RNS, CT, CV](implicit ev: Readable[Statement[RNS, CT, CV]]): Readable[SoQLAnalysis[RNS, CT, CV]] =
+    new Readable[SoQLAnalysis[RNS, CT, CV]] {
+      def readFrom(buffer: ReadBuffer): SoQLAnalysis[RNS, CT, CV] =
+        new SoQLAnalysis(
+          buffer.read[LabelProvider](),
+          buffer.read[Statement[RNS, CT, CV]](),
+          buffer.read[Boolean]()
+        )
+    }
 }

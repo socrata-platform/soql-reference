@@ -454,7 +454,9 @@ object SoQLFunctions {
   )
 
   val Substring = mf("substring", FunctionName("substring"), Seq(SoQLText, SoQLNumber), Seq(SoQLNumber), SoQLText)(
-    "Get a substring of a specified length of a text from a start index (1 base)"
+    "Get a substring of a specified length of a text from a start index (1 base). If length is not supplied, it returns the rest of the string.",
+    Example("Get a substring from the second character to the rest of the string", "substring('world', 2) => 'orld'", ""),
+    Example("Get a substring from the second character with a length of one", "substring('world', 2, 1) => 'o'", "")
   )
 
   val Chr = mf("chr", FunctionName("chr"), Seq(SoQLNumber), Seq.empty, SoQLText)(

@@ -3,21 +3,22 @@ package com.socrata.soql.analyzer2
 import com.rojoma.json.v3.ast.JValue
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 import com.rojoma.json.v3.interpolation._
-import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder, SimpleHierarchyEncodeBuilder, SimpleHierarchyDecodeBuilder, InternalTag}
+import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder, SimpleHierarchyEncodeBuilder, SimpleHierarchyDecodeBuilder, InternalTag}
 
 import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, OrderedMapHelper}
 import com.socrata.soql.environment.{ResourceName, ColumnName, HoleName}
+import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.BinaryTree
 
 // This class exists purely to be the JSON-serialized form of
-// ParsedTableDescriptions, but it can also be used by something that
+// TableDescriptions, but it can also be used by something that
 // has to handle passing through JSONified table descriptions but
 // doesn't care about the actual parse tree itself.
 
-sealed trait UnparsedTableDescription[+ResourceNameScope, +ColumnType] {
-  private[analyzer2] def parse(parser: Boolean => AbstractParser): ParsedTableDescription[ResourceNameScope, ColumnType]
+sealed trait UnparsedTableDescription[+ResourceNameScope, +ColumnType] extends TableDescriptionLike {
+  private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, TableDescription[ResourceNameScope, ColumnType]]
   private[analyzer2] type SoQL <: String
   private[analyzer2] def soql: SoQL
 }
@@ -39,11 +40,17 @@ object UnparsedTableDescription {
 
   case class Dataset[+ColumnType](
     name: DatabaseTableName,
-    schema: OrderedMap[DatabaseColumnName, NameEntry[ColumnType]]
+    canonicalName: CanonicalName,
+    schema: OrderedMap[DatabaseColumnName, NameEntry[ColumnType]],
+    ordering: Seq[TableDescription.Ordering]
   ) extends UnparsedTableDescription[Nothing, ColumnType] {
+    // TODO: Make this turn into an InvalidValue decode error if it
+    // fires while json-decoding
+    require(ordering.forall { o => schema.contains(o.column) })
+
     private[analyzer2] def rewriteScopes[RNS, RNS2](scopeMap: Map[RNS, RNS2]) = this
-    private[analyzer2] def parse(f: Boolean => AbstractParser): ParsedTableDescription.Dataset[ColumnType] =
-      ParsedTableDescription.Dataset(name, schema)
+    private[analyzer2] def parse(params: AbstractParser.Parameters) =
+      Right(TableDescription.Dataset(name, canonicalName, schema, ordering))
     private[analyzer2] type SoQL = Nothing
     private[analyzer2] def soql = ???
   }
@@ -75,15 +82,17 @@ object UnparsedTableDescription {
     private[analyzer2] type SoQL = String
     private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]) =
       copy(scope = scopeMap(scope))
-    private[analyzer2] def parse(parser: Boolean => AbstractParser): ParsedTableDescription.Query[ResourceNameScope, ColumnType] =
-      ParsedTableDescription.Query(
-        scope,
-        canonicalName,
-        basedOn,
-        parser(false).binaryTreeSelect(soql),
-        soql,
-        parameters
-      )
+    private[analyzer2] def parse(params: AbstractParser.Parameters) =
+      ParserUtil(soql, params.copy(allowHoles = false)).map { parsed =>
+        TableDescription.Query(
+          scope,
+          canonicalName,
+          basedOn,
+          parsed,
+          soql,
+          parameters
+        )
+      }
   }
   object Query {
     private[UnparsedTableDescription] def encode[RNS: JsonEncode, CT: JsonEncode] =
@@ -103,14 +112,16 @@ object UnparsedTableDescription {
     private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]) =
       copy(scope = scopeMap(scope))
 
-    private[analyzer2] def parse(parser: Boolean => AbstractParser): ParsedTableDescription.TableFunction[ResourceNameScope, ColumnType] =
-      ParsedTableDescription.TableFunction(
-        scope,
-        canonicalName,
-        parser(false).binaryTreeSelect(soql),
-        soql,
-        parameters
-      )
+    private[analyzer2] def parse(params: AbstractParser.Parameters) =
+      ParserUtil(soql, params.copy(allowHoles = true)).map { parsed =>
+        TableDescription.TableFunction(
+          scope,
+          canonicalName,
+          parsed,
+          soql,
+          parameters
+        )
+      }
   }
 
   object TableFunction {

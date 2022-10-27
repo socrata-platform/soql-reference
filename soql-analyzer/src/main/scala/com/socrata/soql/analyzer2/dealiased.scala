@@ -1,5 +1,8 @@
 package com.socrata.soql.analyzer2
 
+// I'm not sure this is actually useful, but in a world where we don't
+// care about RNS anymore (e.g., SQL generation) we can import things
+// from dealiased and not need to bother with setting RNS everywhere.
 package object dealiased {
   import com.socrata.soql.{analyzer2 => a2}
 
@@ -12,9 +15,7 @@ package object dealiased {
   type From[+CT, +CV] = a2.From[Any, CT, CV]
   type Join[+CT, +CV] = a2.Join[Any, CT, CV]
   type AtomicFrom[+CT, +CV] = a2.AtomicFrom[Any, CT, CV]
-  type FromTableLike[+CT] = a2.FromTableLike[Any, CT]
   type FromTable[+CT] = a2.FromTable[Any, CT]
-  type FromVirtualTable[+CT] = a2.FromVirtualTable[Any, CT]
   type FromStatement[+CT, +CV] = a2.FromStatement[Any, CT, CV]
   type FromSingleRow = a2.FromSingleRow[Any]
 

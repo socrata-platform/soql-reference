@@ -7,16 +7,49 @@ import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, AutomaticJsonDecodeB
 
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName}
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 case class LabelEntry[+CT](label: ColumnLabel, @JsonKey("type") typ: CT)
 object LabelEntry {
   implicit def jEncode[CT: JsonEncode] = AutomaticJsonEncodeBuilder[LabelEntry[CT]]
   implicit def jDecode[CT: JsonDecode] = AutomaticJsonDecodeBuilder[LabelEntry[CT]]
+
+  implicit def serialize[CT: Writable] = new Writable[LabelEntry[CT]] {
+    def writeTo(buffer: WriteBuffer, ne: LabelEntry[CT]): Unit = {
+      buffer.write(ne.label)
+      buffer.write(ne.typ)
+    }
+  }
+
+  implicit def deserialize[CT: Readable] = new Readable[LabelEntry[CT]] {
+    def readFrom(buffer: ReadBuffer): LabelEntry[CT] = {
+      LabelEntry(
+        buffer.read[ColumnLabel](),
+        buffer.read[CT]()
+      )
+    }
+  }
 }
 case class NameEntry[+CT](name: ColumnName, @JsonKey("type") typ: CT)
 object NameEntry {
   implicit def jEncode[CT: JsonEncode] = AutomaticJsonEncodeBuilder[NameEntry[CT]]
   implicit def jDecode[CT: JsonDecode] = AutomaticJsonDecodeBuilder[NameEntry[CT]]
+
+  implicit def serialize[CT: Writable] = new Writable[NameEntry[CT]] {
+    def writeTo(buffer: WriteBuffer, ne: NameEntry[CT]): Unit = {
+      buffer.write(ne.name)
+      buffer.write(ne.typ)
+    }
+  }
+
+  implicit def deserialize[CT: Readable] = new Readable[NameEntry[CT]] {
+    def readFrom(buffer: ReadBuffer): NameEntry[CT] = {
+      NameEntry(
+        buffer.read[ColumnName](),
+        buffer.read[CT]()
+      )
+    }
+  }
 }
 
 case class Entry[+CT](name: ColumnName, label: ColumnLabel, typ: CT)

@@ -1,5 +1,5 @@
 lazy val root = (project in file(".")).
-  settings(Seq(publishArtifact := false)).
+  settings(BuildSettings.buildSettings ++ Seq(publishArtifact := false)).
   aggregate (soqlEnvironment, soqlParser, soqlAnalyzer, soqlTypes, soqlStdlib, soqlToy, soqlPack, metanalyze2)
 
 lazy val soqlEnvironment = (project in file("soql-environment")).

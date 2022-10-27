@@ -164,7 +164,6 @@ where
 
     val tableFinder = new TableFinder {
       type ColumnType = SoQLType
-      type ParseError = Nothing
       type ResourceNameScope = DomainId
 
       def parse(soql: String, udfParamsAllowed: Boolean) =
@@ -185,7 +184,7 @@ where
             replacement
         }
 
-      def lookup(scope: DomainId, name: ResourceName): Either[LookupError, TableDescription] = {
+      def lookup(scope: DomainId, name: ResourceName): Either[LookupError, FinderTableDescription] = {
         log.info(s"Looking up $scope : $name")
         lensP.query(LensSpace(scope, name.name)).run(_.nextOption()) match {
           case Some(lens) =>
@@ -219,12 +218,14 @@ where
               }
               Right(Dataset(
                 DatabaseTableName(lens.uid),
+                CanonicalName(lens.uid),
                 OrderedMap(
                   ColumnName(":id") -> SoQLID,
                   ColumnName(":version") -> SoQLVersion,
                   ColumnName(":created_at") -> SoQLFixedTimestamp,
                   ColumnName(":updated_at") -> SoQLFixedTimestamp
-                ) ++ schema
+                ) ++ schema,
+                Nil // TODO: scrape out ordering from the lens
               ))
             } else {
               val queryString = lens.queryString.getOrElse {
@@ -269,11 +270,16 @@ where
       case None => throw new Exception("No such domain : " + domainName)
     }
     log.info("{}", domainId)
+    val analyzer = new SoQLAnalyzer[DomainId, SoQLType, SoQLValue](SoQLTypeInfo, SoQLFunctionInfo)
     for(uid <- views) {
       tableFinder.findTables(domainId, ResourceName(uid)) match {
         case tableFinder.Success(tm) =>
-          val analysis = new SoQLAnalyzer(SoQLTypeInfo, SoQLFunctionInfo)(tm, UserParameters.emptyFor(tm))
-          log.info(analysis.removeUnusedColumns.merge(SoQLFunctions.And.monomorphic.get).preserveOrdering(SoQLFunctions.RowNumber.monomorphic.get).useSelectListReferences.statement.debugStr)
+          analyzer(tm, UserParameters.emptyFor(tm)) match {
+            case Right(analysis) =>
+              log.info(analysis.removeUnusedColumns.merge(SoQLFunctions.And.monomorphic.get).preserveOrdering(SoQLFunctions.RowNumber.monomorphic.get).useSelectListReferences.statement.debugStr)
+            case Left(err) =>
+              log.info("Error: {}", err)
+          }
         case other =>
           log.info("{}", other)
       }
