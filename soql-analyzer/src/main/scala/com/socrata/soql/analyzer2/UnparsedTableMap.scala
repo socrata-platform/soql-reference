@@ -21,7 +21,6 @@ class UnparsedTableMap[ResourceNameScope, +ColumnType] private[analyzer2] (priva
       }.toMap
     }.toMap))
 
-
   def rewriteDatabaseNames(
     tableName: DatabaseTableName => DatabaseTableName,
     columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
@@ -62,5 +61,26 @@ object UnparsedTableMap {
           new UnparsedTableMap(fields.toMap)
         }
     }
+
+  private[analyzer2] def asMockTableFinder[String, CT](self: UnparsedTableMap[String, CT]): mocktablefinder.MockTableFinder[String, CT] = {
+    new mocktablefinder.MockTableFinder[String, CT](
+      self.underlying.iterator.flatMap { case (rns, resources) =>
+        resources.iterator.map { case (rn, desc) =>
+          val thing =
+            desc match {
+              case UnparsedTableDescription.Dataset(_name, _canonicalName, schema, ordering) =>
+                mocktablefinder.D(schema.valuesIterator.map { case NameEntry(n, t) => n.name -> t }.toSeq : _*)
+              case UnparsedTableDescription.Query(scope, canonicalName, basedOn, soql, parameters) =>
+                mocktablefinder.Q(scope, basedOn.name, soql, parameters.toSeq.map { case (hn, ct) => hn.name -> ct } : _*).
+                  withCanonicalName(canonicalName.name)
+              case UnparsedTableDescription.TableFunction(scope, canonicalName, soql, parameters) =>
+                mocktablefinder.U(scope, soql, parameters.toSeq.map { case (hn, ct) => hn.name -> ct } : _*).
+                  withCanonicalName(canonicalName.name)
+            }
+          (rns, rn.name) -> thing
+        }
+      }.toMap
+    )
+  }
 }
 
