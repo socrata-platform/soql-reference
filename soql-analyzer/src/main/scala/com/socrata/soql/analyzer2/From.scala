@@ -127,13 +127,22 @@ sealed abstract class AtomicFrom[+RNS, +CT, +CV] extends From[RNS, CT, CV] with 
 object AtomicFrom extends from.OAtomicFromImpl
 
 object FromTable extends from.OFromTableImpl
-case class FromTable[+RNS, +CT](tableName: DatabaseTableName, alias: Option[(RNS, ResourceName)], label: AutoTableLabel, columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]) extends AtomicFrom[RNS, CT, Nothing] with from.FromTableImpl[RNS, CT]
+case class FromTable[+RNS, +CT](
+  tableName: DatabaseTableName,
+  alias: Option[(RNS, ResourceName)],
+  label: AutoTableLabel,
+  columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]
+) extends AtomicFrom[RNS, CT, Nothing] with from.FromTableImpl[RNS, CT]
 
 // "alias" is optional here because of chained soql; actually having a
 // real subselect syntactically requires an alias, but `select ... |>
 // select ...` does not.  The alias is just for name-resolution during
 // analysis anyway...
-case class FromStatement[+RNS, +CT, +CV](statement: Statement[RNS, CT, CV], label: AutoTableLabel, alias: Option[(RNS, ResourceName)]) extends AtomicFrom[RNS, CT, CV] with from.FromStatementImpl[RNS, CT, CV] {
+case class FromStatement[+RNS, +CT, +CV](
+  statement: Statement[RNS, CT, CV],
+  label: AutoTableLabel,
+  alias: Option[(RNS, ResourceName)]
+) extends AtomicFrom[RNS, CT, CV] with from.FromStatementImpl[RNS, CT, CV] {
   // I'm not sure why this needs to be here.  The typechecker gets
   // confused about calling Scope.apply if it lives in
   // FromStatementImpl
@@ -141,5 +150,8 @@ case class FromStatement[+RNS, +CT, +CV](statement: Statement[RNS, CT, CV], labe
 }
 object FromStatement extends from.OFromStatementImpl
 
-case class FromSingleRow[+RNS](label: AutoTableLabel, alias: Option[(RNS, ResourceName)]) extends AtomicFrom[RNS, Nothing, Nothing] with from.FromSingleRowImpl[RNS]
+case class FromSingleRow[+RNS](
+  label: AutoTableLabel,
+  alias: Option[(RNS, ResourceName)]
+) extends AtomicFrom[RNS, Nothing, Nothing] with from.FromSingleRowImpl[RNS]
 object FromSingleRow extends from.OFromSingleRowImpl
