@@ -56,6 +56,19 @@ trait TestHelper { this: Assertions =>
     }
   }
 
+  def analyzeSaved(tf: TF[TestType], ctx: String): SoQLAnalysis[Int, TestType, TestValue] = {
+    analyzeSaved(tf, ctx, UserParameters.empty)
+  }
+
+  def analyzeSaved(tf: TF[TestType], ctx: String, params: UserParameters[TestType, TestValue]): SoQLAnalysis[Int, TestType, TestValue] = {
+    tf.findTables(0, rn(ctx)) match {
+      case tf.Success(start) =>
+        finishAnalysis(start, params)
+      case e: tf.Error =>
+        fail(e.toString)
+    }
+  }
+
   def analyze(tf: TF[TestType], ctx: String, query: String): SoQLAnalysis[Int, TestType, TestValue] = {
     analyze(tf, ctx, query, UserParameters.empty)
   }

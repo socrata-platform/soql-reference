@@ -33,6 +33,8 @@ object Expression {
 
   def escapeString(s: String): String = "'" + s.replaceAll("'", "''") + "'"
 
+  private def foldDashes(s: String) = s.replaceAll("-","_")
+
   private def findIdentsAndLiterals(e: Expression): Seq[String] = e match {
     case v: Literal => Vector(v.toString)
     case ColumnOrAliasRef(aliasOpt, name) => aliasOpt ++: Vector(name.name)
@@ -65,7 +67,7 @@ object Expression {
     case Hole.SavedQuery(name, None) =>
       Vector("param", name.name)
     case Hole.SavedQuery(name, Some(v)) =>
-      Vector("param", v, name.name)
+      Vector("param", foldDashes(v), name.name)
   }
 
   private def findIdentsAndLiterals(windowFunctionInfo: Option[WindowFunctionInfo]): Seq[String] =  {

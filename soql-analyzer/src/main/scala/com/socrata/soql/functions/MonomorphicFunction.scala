@@ -1,7 +1,12 @@
 package com.socrata.soql.functions
 
 import scala.collection.compat.immutable.LazyList
+
+import com.rojoma.json.v3.ast.JString
+
+import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.environment.FunctionName
+import com.socrata.soql.typechecker.FunctionInfo
 
 case class MonomorphicFunction[+Type](function: Function[Type], bindings: Map[String, Type]) {
   def this(identity: String, name: FunctionName, parameters: Seq[Type], repeated: Seq[Type], result: Type, isAggregate: Boolean = false, needsWindow: Boolean = false)(documentation: String, examples: Example*) =
@@ -43,5 +48,26 @@ case class MonomorphicFunction[+Type](function: Function[Type], bindings: Map[St
     sb.append(parameters.mkString("", " -> ", " -> "))
     sb.append(result)
     sb.toString
+  }
+}
+
+object MonomorphicFunction {
+  implicit def serialize[T: Writable] = new Writable[MonomorphicFunction[T]] {
+    def writeTo(buffer: WriteBuffer, mf: MonomorphicFunction[T]): Unit = {
+      buffer.write(mf.function.identity)
+      buffer.write(mf.bindings)
+    }
+  }
+
+  def deserialize[T: Readable](fi: FunctionInfo[T]) = new Readable[MonomorphicFunction[T]] {
+    def readFrom(buffer: ReadBuffer): MonomorphicFunction[T] = {
+      val identity = buffer.read[String]()
+      fi.functionsByIdentity.get(identity) match {
+        case Some(f) =>
+          MonomorphicFunction(f, buffer.read[Map[String, T]]())
+        case None =>
+          fail("Unknown function " + JString(identity))
+      }
+    }
   }
 }

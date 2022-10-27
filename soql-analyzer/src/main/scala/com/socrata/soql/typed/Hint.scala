@@ -22,6 +22,22 @@ case class NoRollup(position: Position) extends Hint[Nothing, Nothing] {
   override def toString: String = "no_rollup"
 }
 
+case class CompoundRollup(position: Position) extends Hint[Nothing, Nothing] {
+  def typ = None
+
+  def mapColumnIds[NewColumnId](f: (Nothing, Qualifier) => NewColumnId) = this
+
+  override def toString: String = "compound_rollup"
+}
+
+case class RollupAtJoin(position: Position) extends Hint[Nothing, Nothing] {
+  def typ = None
+
+  def mapColumnIds[NewColumnId](f: (Nothing, Qualifier) => NewColumnId) = this
+
+  override def toString: String = "rollup_at_join"
+}
+
 case class NoChainMerge(position: Position) extends Hint[Nothing, Nothing] {
   def typ = None
 

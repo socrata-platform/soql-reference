@@ -308,4 +308,20 @@ select count(*), 1 as x |> select x
 
     analysis.removeUnusedColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
+
+  test("simple (de)serialization") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "names") -> D("num" -> TestNumber, "first" -> TestText, "last" -> TestText),
+      (0, "join") -> Q(0, "names", "SELECT first, last, @twocol.text JOIN @twocol ON num = @twocol.num")
+    )
+
+    val analysis = analyze(tf, "join", """
+select * where first = 'Tom'
+""")
+
+    implicit val mfDeser = com.socrata.soql.functions.MonomorphicFunction.deserialize(TestFunctionInfo)
+    val deser = serialization.ReadBuffer.read[SoQLAnalysis[Int, TestType, TestValue]](serialization.WriteBuffer.asBytes(analysis))
+    deser.statement must equal (analysis.statement)
+  }
 }

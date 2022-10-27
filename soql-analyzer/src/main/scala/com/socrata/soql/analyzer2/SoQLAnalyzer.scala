@@ -121,7 +121,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
     def intoStatement(from: AtomicFrom[RNS, CT, CV]): Statement[RNS, CT, CV] = {
       val selectList =
         from match {
-          case from: FromTableLike[RNS, CT] =>
+          case from: FromTable[RNS, CT] =>
             from.columns.map { case (label, NameEntry(name, typ)) =>
               labelProvider.columnLabel() -> NamedExpr(Column(from.label, label, typ)(NoPosition), name)
             }
@@ -147,21 +147,54 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       )
     }
 
-    def fromTable(scope: RNS, desc: TableDescription.Dataset[CT], alias: Option[(RNS, ResourceName)]): FromTable[RNS, CT] = {
-      for(TableDescription.Ordering(col, _ascending) <- desc.ordering) {
-        val typ = desc.schema(col).typ
-        if(!typeInfo.isOrdered(typ)) {
-          throw Bail(SoQLAnalyzerError.UnorderedOrderBy(scope, Some(desc.canonicalName), typeInfo.typeNameFor(typ), NoPosition))
+    def fromTable(scope: RNS, desc: TableDescription.Dataset[CT], alias: Option[(RNS, ResourceName)]): AtomicFrom[RNS, CT, Nothing] = {
+      if(desc.ordering.isEmpty) {
+        FromTable(
+          desc.name,
+          alias,
+          labelProvider.tableLabel(),
+          columns = desc.schema
+        )
+      } else {
+        for(TableDescription.Ordering(col, _ascending) <- desc.ordering) {
+          val typ = desc.schema(col).typ
+          if(!typeInfo.isOrdered(typ)) {
+            throw Bail(SoQLAnalyzerError.UnorderedOrderBy(scope, Some(desc.canonicalName), typeInfo.typeNameFor(typ), NoPosition))
+          }
         }
-      }
 
-      FromTable(
-        desc.name,
-        alias,
-        labelProvider.tableLabel(),
-        columns = desc.schema,
-        ordering = desc.ordering
-      )
+        val from = FromTable(
+          desc.name,
+          None,
+          labelProvider.tableLabel(),
+          columns = desc.schema
+        )
+
+        val columnLabels = from.columns.map { case _ => labelProvider.columnLabel() }
+
+        FromStatement(
+          Select(
+            Distinctiveness.Indistinct,
+            selectList = OrderedMap() ++ from.columns.iterator.zip(columnLabels.iterator).map { case ((dcn, NameEntry(name, typ)), outputLabel) =>
+              outputLabel -> NamedExpr(Column(from.label, dcn, typ)(NoPosition), name)
+            },
+            from,
+            None,
+            Nil,
+            None,
+            desc.ordering.map { case TableDescription.Ordering(dcn, ascending) =>
+              val NameEntry(_, typ) = from.columns(dcn)
+              OrderBy(Column(from.label, dcn, typ)(NoPosition), ascending = ascending, nullLast = ascending)
+            },
+            None,
+            None,
+            None,
+            Set.empty
+          ),
+          labelProvider.tableLabel(),
+          alias
+        )
+      }
     }
 
     def analyzeForFrom(scope: RNS, canonicalName: Option[CanonicalName], rn: ResourceName, position: Position): AtomicFrom[RNS, CT, CV] = {
@@ -338,6 +371,8 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
               case ast.Materialized(_) => SelectHint.Materialized
               case ast.NoRollup(_) => SelectHint.NoRollup
               case ast.NoChainMerge(_) => SelectHint.NoChainMerge
+              case ast.CompoundRollup(_) => SelectHint.CompoundRollup
+              case ast.RollupAtJoin(_) => SelectHint.RollupAtJoin
             }
           }.toSet
         )
@@ -353,7 +388,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             case _: FromSingleRow[RNS] => new UntypedDatasetContext {
               val columns = OrderedSet.empty
             }
-            case t: FromTableLike[RNS, CT] => new UntypedDatasetContext {
+            case t: FromTable[RNS, CT] => new UntypedDatasetContext {
               val columns = OrderedSet() ++ t.columns.valuesIterator.map(_.name)
             }
             case s: FromStatement[RNS, CT, CV] => new UntypedDatasetContext {

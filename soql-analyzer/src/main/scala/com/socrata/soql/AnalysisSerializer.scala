@@ -325,6 +325,12 @@ class AnalysisSerializer[C,T](serializeColumn: C => String, serializeType: T => 
         case h: NoChainMerge =>
           writePosition(h.position)
           out.writeRawByte(3)
+        case h: CompoundRollup =>
+          writePosition(h.position)
+          out.writeRawByte(4)
+        case h: RollupAtJoin =>
+          writePosition(h.position)
+          out.writeRawByte(5)
       }
     }
 

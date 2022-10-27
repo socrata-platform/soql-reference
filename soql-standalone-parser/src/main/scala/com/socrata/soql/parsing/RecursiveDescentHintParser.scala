@@ -2,8 +2,8 @@ package com.socrata.soql.parsing
 
 import scala.annotation.tailrec
 import scala.util.parsing.input.Position
-import com.socrata.soql.ast.{Hint, Materialized, NoChainMerge, NoRollup}
-import com.socrata.soql.parsing.RecursiveDescentParser.{AHint, ParseResult, Reader}
+import com.socrata.soql.ast.{CompoundRollup, Hint, Materialized, NoChainMerge, NoRollup, RollupAtJoin}
+import com.socrata.soql.parsing.RecursiveDescentParser.{AHint, COMPOUND_ROLLUP, ParseResult, Reader}
 import com.socrata.soql.tokens.{COMMA, LPAREN, RPAREN}
 
 trait RecursiveDescentHintParser { this: RecursiveDescentParser =>
@@ -30,6 +30,10 @@ trait RecursiveDescentHintParser { this: RecursiveDescentParser =>
         ParseResult(reader.rest, (NoRollup(x.position), x.position))
       case x@RecursiveDescentParser.NO_CHAIN_MERGE() =>
         ParseResult(reader.rest, (NoChainMerge(x.position), x.position))
+      case x@RecursiveDescentParser.COMPOUND_ROLLUP() =>
+        ParseResult(reader.rest, (CompoundRollup(x.position), x.position))
+      case x@RecursiveDescentParser.ROLLUP_AT_JOIN() =>
+        ParseResult(reader.rest, (RollupAtJoin(x.position), x.position))
       case _ => fail(reader, AHint)
     }
 
