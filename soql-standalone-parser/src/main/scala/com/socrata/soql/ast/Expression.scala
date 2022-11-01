@@ -297,7 +297,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
         d"${parameters(0).doc} LIKE ${parameters(1).doc}"
       case SpecialFunctions.NotLike =>
         d"${parameters(0).doc} NOT LIKE ${parameters(1).doc}"
-      case SpecialFunctions.CountDistinct =>
+      case SpecialFunctions.CountDistinct if parameters.length == 1 =>
         functionDoc(d"count(DISTINCT " ++ parameters(0).doc ++ d")")
       case SpecialFunctions.Case =>
         val whens = parameters.dropRight(2).grouped(2).map { case Seq(a, b) =>
