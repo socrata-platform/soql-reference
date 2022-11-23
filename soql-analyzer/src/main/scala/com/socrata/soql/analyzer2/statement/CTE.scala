@@ -72,7 +72,7 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
     that: Statement[RNS2, CT2, CV2]
   ): Boolean =
     that match {
-      case CTE(thatDefLabel, thatDefQuery, thatMatrHint, thatUseQuery) =>
+      case CTE(thatDefLabel, _thatDefAlias, thatDefQuery, thatMatrHint, thatUseQuery) =>
         state.tryAssociate(this.definitionLabel, thatDefLabel) &&
           this.definitionQuery.findIsomorphism(state, Some(this.definitionLabel), Some(thatDefLabel), thatDefQuery) &&
           this.materializedHint == thatMatrHint &&
@@ -81,8 +81,8 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
         false
     }
 
-  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
-    copy(definitionQuery = definitionQuery.mapAlias(f), useQuery = useQuery.mapAlias(f))
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
+    copy(definitionQuery = definitionQuery.mapAlias(f), definitionAlias = f(definitionAlias), useQuery = useQuery.mapAlias(f))
 
   override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]] =
     Seq(
@@ -93,6 +93,16 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
       definitionQuery.debugDoc.encloseNesting(d"(", d")"),
       useQuery.debugDoc
     ).sep
+
+  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
+    definitionQuery.doLabelMap(state)
+    val tr = LabelMap.TableReference(None, None)
+    state.tableMap += definitionLabel -> tr
+    for((columnLabel, NameEntry(name, _typ)) <- definitionQuery.schema) {
+      state.columnMap += (definitionLabel, columnLabel) -> (tr, name)
+    }
+    useQuery.doLabelMap(state)
+  }
 }
 
 trait OCTEImpl { this: CTE.type =>
@@ -100,6 +110,7 @@ trait OCTEImpl { this: CTE.type =>
     new Writable[CTE[RNS, CT, CV]] {
       def writeTo(buffer: WriteBuffer, ct: CTE[RNS, CT, CV]): Unit = {
         buffer.write(ct.definitionLabel)
+        buffer.write(ct.definitionAlias)
         buffer.write(ct.definitionQuery)
         buffer.write(ct.materializedHint)
         buffer.write(ct.useQuery)
@@ -111,6 +122,7 @@ trait OCTEImpl { this: CTE.type =>
       def readFrom(buffer: ReadBuffer): CTE[RNS, CT, CV] = {
         CTE(
           definitionLabel = buffer.read[AutoTableLabel](),
+          definitionAlias = buffer.read[Option[ResourceName]](),
           definitionQuery = buffer.read[Statement[RNS, CT, CV]](),
           materializedHint = buffer.read[MaterializedHint](),
           useQuery = buffer.read[Statement[RNS, CT, CV]]()

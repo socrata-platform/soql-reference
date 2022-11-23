@@ -74,23 +74,45 @@ class Typechecker[RNS, CT, CV](
       case ast.FunctionCall(ast.SpecialFunctions.Parens, Seq(param), None, None) =>
         check(param)
       case fc@ast.FunctionCall(ast.SpecialFunctions.Subscript, Seq(base, ast.StringLiteral(prop)), None, None) =>
-        check(base).flatMap { basePossibilities =>
-          val asFieldAccesses = basePossibilities.flatMap { basePossibility =>
-            val typ = basePossibility.typ
-            val fnName = ast.SpecialFunctions.Field(typeInfo.typeNameFor(typ), prop)
-            checkFuncall(fc.copy(functionName = fnName, parameters = Seq(base))(fc.position, fc.functionNamePosition)).
-              getOrElse(Nil) // ignore errors here, it'll make us fall back to a raw subscript
+        // experimental, currently disabled: allow expressions of the
+        // form `a.b` to reference column b on table a.  Get rid of
+        // the "if false" in the match to enable this.
+        val asColumnRef =
+          base match {
+            case ast.ColumnOrAliasRef(None, name) if false =>
+              // ok, this _might_ be a table column reference actually!
+              check(ast.ColumnOrAliasRef(Some("_" + name), ColumnName(prop))(fc.position)) match {
+                case Right(checked) => Some(checked)
+                case Left(_) => None
+              }
+            case _ =>
+              None
           }
 
-          val rawSubscript = checkFuncall(fc)
-          if(asFieldAccesses.isEmpty) {
-            rawSubscript
-          } else {
-            rawSubscript match {
-              case Left(_) => Right(asFieldAccesses)
-              case Right(asSubscripts) => squash(asFieldAccesses ++ asSubscripts, fc.position)
+        val asExpr =
+          check(base).flatMap { basePossibilities =>
+            val asFieldAccesses = basePossibilities.flatMap { basePossibility =>
+              val typ = basePossibility.typ
+              val fnName = ast.SpecialFunctions.Field(typeInfo.typeNameFor(typ), prop)
+              checkFuncall(fc.copy(functionName = fnName, parameters = Seq(base))(fc.position, fc.functionNamePosition)).
+                getOrElse(Nil) // ignore errors here, it'll make us fall back to a raw subscript
+            }
+
+            val rawSubscript = checkFuncall(fc)
+            if(asFieldAccesses.isEmpty) {
+              rawSubscript
+            } else {
+              rawSubscript match {
+                case Left(_) => Right(asFieldAccesses)
+                case Right(asSubscripts) => squash(asFieldAccesses ++ asSubscripts, fc.position)
+              }
             }
           }
+
+        (asColumnRef, asExpr) match {
+          case (Some(_), Right(_)) => throw new Exception("oops") // TODO: ambiguous
+          case (Some(checked), Left(_)) => Right(checked)
+          case (None, other) => other
         }
       case fc: ast.FunctionCall =>
         checkFuncall(fc).flatMap(squash(_, fc.position))

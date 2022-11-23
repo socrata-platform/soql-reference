@@ -19,7 +19,7 @@ import com.socrata.http.server.util.{StrongEntityTag, Precondition}
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2.mocktablefinder._
-import com.socrata.soql.analyzer2.{SoQLAnalyzer, UserParameters, Annotation, Statement}
+import com.socrata.soql.analyzer2.{SoQLAnalyzer, UserParameters, Annotation, Statement, ScopedResourceName}
 import com.socrata.soql.types._
 import com.socrata.soql.functions.{SoQLTypeInfo, SoQLFunctionInfo, SoQLFunctions}
 import com.socrata.soql.types.obfuscation.CryptProvider
@@ -191,11 +191,11 @@ object Main extends App {
           case tableFinder.Success(map) => map
           case tableFinder.Error.ParseError(name, error) =>
             val msg = name match {
-              case Some((scope, name)) => s"Parse error in saved query ${scope}/${name}: $error"
+              case Some(ScopedResourceName(scope, name)) => s"Parse error in saved query ${scope}/${name}: $error"
               case None => s"Parse error: $error"
             }
             return BadRequest ~> Content("text/plain", msg)
-          case tableFinder.Error.NotFound((scope, name)) =>
+          case tableFinder.Error.NotFound(ScopedResourceName(scope, name)) =>
             return BadRequest ~> Content("text/plain", s"Not found: $scope/$name")
           case tableFinder.Error.PermissionDenied(name) =>
             return InternalServerError ~> Content("text/plain", "Got a permission error somehow?")

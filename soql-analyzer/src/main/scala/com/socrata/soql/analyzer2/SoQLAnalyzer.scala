@@ -23,10 +23,12 @@ import com.socrata.soql.exceptions.AliasAnalysisException
 object SoQLAnalyzer {
   private val This = ResourceName("this")
   private val SingleRow = ResourceName("single_row")
+
+  private val SpecialNames = Set(This, SingleRow)
 }
 
 class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: FunctionInfo[CT]) {
-  type ScopedResourceName = (RNS, ResourceName)
+  type ScopedResourceName = com.socrata.soql.analyzer2.ScopedResourceName[RNS]
   type TableMap = com.socrata.soql.analyzer2.TableMap[RNS, CT]
   type FoundTables = com.socrata.soql.analyzer2.FoundTables[RNS, CT]
   type TableDescription = com.socrata.soql.analyzer2.TableDescription[RNS, CT]
@@ -102,18 +104,18 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       val from =
         query match {
           case FoundTables.Saved(rn) =>
-            analyzeForFrom(scope, None, rn, NoPosition)
+            analyzeForFrom(ScopedResourceName(scope, rn), None, NoPosition)
           case FoundTables.InContext(rn, q, _, parameters) =>
-            val from = analyzeForFrom(scope, None, rn, NoPosition)
+            val from = analyzeForFrom(ScopedResourceName(scope, rn), None, NoPosition)
             new Context(scope, None, Environment.empty, Map.empty).
-              analyzeStatement(q, Some(from))
+              analyzeStatement(None, q, Some(from))
           case FoundTables.InContextImpersonatingSaved(rn, q, _, parameters, impersonating) =>
-            val from = analyzeForFrom(scope, None, rn, NoPosition)
+            val from = analyzeForFrom(ScopedResourceName(scope, rn), None, NoPosition)
             new Context(scope, Some(impersonating), Environment.empty, Map.empty).
-              analyzeStatement(q, Some(from))
+              analyzeStatement(None, q, Some(from))
           case FoundTables.Standalone(q, _, parameters) =>
             new Context(scope, None, Environment.empty, Map.empty).
-              analyzeStatement(q, None)
+              analyzeStatement(None, q, None)
         }
       intoStatement(from)
     }
@@ -147,11 +149,12 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       )
     }
 
-    def fromTable(scope: RNS, desc: TableDescription.Dataset[CT], alias: Option[(RNS, ResourceName)]): AtomicFrom[RNS, CT, Nothing] = {
+    def fromTable(srn: ScopedResourceName, desc: TableDescription.Dataset[CT]): AtomicFrom[RNS, CT, Nothing] = {
       if(desc.ordering.isEmpty) {
         FromTable(
           desc.name,
-          alias,
+          srn,
+          None,
           labelProvider.tableLabel(),
           columns = desc.schema
         )
@@ -159,12 +162,13 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         for(TableDescription.Ordering(col, _ascending) <- desc.ordering) {
           val typ = desc.schema(col).typ
           if(!typeInfo.isOrdered(typ)) {
-            throw Bail(SoQLAnalyzerError.UnorderedOrderBy(scope, Some(desc.canonicalName), typeInfo.typeNameFor(typ), NoPosition))
+            throw Bail(SoQLAnalyzerError.UnorderedOrderBy(srn.scope, Some(desc.canonicalName), typeInfo.typeNameFor(typ), NoPosition))
           }
         }
 
         val from = FromTable(
           desc.name,
+          srn,
           None,
           labelProvider.tableLabel(),
           columns = desc.schema
@@ -192,39 +196,48 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             Set.empty
           ),
           labelProvider.tableLabel(),
-          alias
+          Some(srn),
+          None
         )
       }
     }
 
-    def analyzeForFrom(scope: RNS, canonicalName: Option[CanonicalName], rn: ResourceName, position: Position): AtomicFrom[RNS, CT, CV] = {
-      tableMap.find(scope, rn) match {
-        case ds: TableDescription.Dataset[CT] =>
-          fromTable(scope, ds, None)
-        case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters) =>
-          // so this is basedOn |> parsed
-          // so we want to use "basedOn" as the implicit "from" for "parsed"
-          val from = analyzeForFrom(scope, None, basedOn, NoPosition /* Yes, actually NoPosition here */)
-          new Context(scope, Some(canonicalName), Environment.empty, Map.empty).
-            analyzeStatement(parsed, Some(from))
-        case TableDescription.TableFunction(_, _, _, _, _) =>
-          parameterlessTableFunction(scope, canonicalName, rn, position)
+    def analyzeForFrom(name: ScopedResourceName, canonicalName: Option[CanonicalName], position: Position): AtomicFrom[RNS, CT, CV] = {
+      if(name.name == SoQLAnalyzer.SingleRow) {
+        FromSingleRow(labelProvider.tableLabel(), None)
+      } else if(name.name == SoQLAnalyzer.This) {
+        // analyzeSelection will handle @this in the correct
+        // position...
+        illegalThisReference(name.scope, canonicalName, position)
+      } else {
+        tableMap.find(name) match {
+          case ds: TableDescription.Dataset[CT] =>
+            fromTable(name, ds)
+          case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters) =>
+            // so this is basedOn |> parsed
+            // so we want to use "basedOn" as the implicit "from" for "parsed"
+            val from = analyzeForFrom(ScopedResourceName(scope, basedOn), None, NoPosition /* Yes, actually NoPosition here */)
+            new Context(scope, Some(canonicalName), Environment.empty, Map.empty).
+              analyzeStatement(Some(name), parsed, Some(from))
+          case TableDescription.TableFunction(_, _, _, _, _) =>
+            parameterlessTableFunction(name.scope, canonicalName, name.name, position)
+        }
       }
     }
 
     class Context(scope: RNS, canonicalName: Option[CanonicalName], enclosingEnv: Environment[CT], udfParams: UdfParameters) {
       private def withEnv(env: Environment[CT]) = new Context(scope, canonicalName, env, udfParams)
 
-      def analyzeStatement(q: BinaryTree[ast.Select], from0: Option[AtomicFrom[RNS, CT, CV]]): FromStatement[RNS, CT, CV] = {
+      def analyzeStatement(srn: Option[ScopedResourceName], q: BinaryTree[ast.Select], from0: Option[AtomicFrom[RNS, CT, CV]]): FromStatement[RNS, CT, CV] = {
         q match {
           case Leaf(select) =>
-            analyzeSelection(select, from0)
+            analyzeSelection(srn, select, from0)
           case PipeQuery(left, right) =>
-            val newInput = analyzeStatement(left, from0)
-            analyzeStatement(right, Some(newInput))
+            val newInput = analyzeStatement(None, left, from0)
+            analyzeStatement(srn, right, Some(newInput))
           case other: TrueOp[ast.Select] =>
-            val lhs = intoStatement(analyzeStatement(other.left, from0))
-            val rhs = intoStatement(analyzeStatement(other.right, None))
+            val lhs = intoStatement(analyzeStatement(None, other.left, from0))
+            val rhs = intoStatement(analyzeStatement(None, other.right, None))
 
             if(lhs.schema.values.map(_.typ) != rhs.schema.values.map(_.typ)) {
               tableOpTypeMismatch(
@@ -234,7 +247,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
               )
             }
 
-            FromStatement(CombinedTables(opify(other), lhs, rhs), labelProvider.tableLabel(), None)
+            FromStatement(CombinedTables(opify(other), lhs, rhs), labelProvider.tableLabel(), srn, None)
         }
       }
 
@@ -249,7 +262,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         }
       }
 
-      def analyzeSelection(select: ast.Select, from0: Option[AtomicFrom[RNS, CT, CV]]): FromStatement[RNS, CT, CV] = {
+      def analyzeSelection(srn: Option[ScopedResourceName], select: ast.Select, from0: Option[AtomicFrom[RNS, CT, CV]]): FromStatement[RNS, CT, CV] = {
         val ast.Select(
           distinct,
           selection,
@@ -379,7 +392,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
         verifyAggregatesAndWindowFunctions(stmt)
 
-        FromStatement(stmt, labelProvider.tableLabel(), None)
+        FromStatement(stmt, labelProvider.tableLabel(), srn, None)
       }
 
       def collectNamesForAnalysis(from: From[RNS, CT, CV]): AliasAnalysis.AnalysisContext = {
@@ -400,7 +413,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           from.alias match {
             case None =>
               acc + (TableName.PrimaryTable.qualifier -> contextFrom(from))
-            case Some((_scope, alias)) =>
+            case Some(alias) =>
               val acc1 =
                 if(acc.isEmpty) {
                   acc + (TableName.PrimaryTable.qualifier -> contextFrom(from))
@@ -440,28 +453,28 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             // No context and no from; this is an error
             noDataSource(NoPosition /* TODO: NEED POS INFO FROM AST */)
           case (Some(prev), Some(tn)) =>
+            tn.aliasWithoutPrefix.foreach(ensureLegalAlias(_, NoPosition /* TODO: NEED POS INFO FROM AST */))
             val rn = ResourceName(tn.nameWithoutPrefix)
             if(rn == SoQLAnalyzer.This) {
               // chained query: {something} |> select ... from @this [as alias]
-              prev.reAlias(Some((scope, ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix)))))
+              prev.reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
             } else {
               // chained query: {something} |> select ... from somethingThatIsNotThis
               // this is an error
               chainWithFrom(NoPosition /* TODO: NEED POS INFO FROM AST */)
             }
           case (None, Some(tn)) =>
+            tn.aliasWithoutPrefix.foreach(ensureLegalAlias(_, NoPosition /* TODO: NEED POS INFO FROM AST */))
             val rn = ResourceName(tn.nameWithoutPrefix)
             val alias = ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))
             if(rn == SoQLAnalyzer.This) {
               // standalone query: select ... from @this.  But it's standalone, so this is an error
               fromThisWithoutContext(NoPosition /* TODO: NEED POS INFO FROM AST */)
-            } else if(rn == SoQLAnalyzer.SingleRow) {
-              FromSingleRow(labelProvider.tableLabel(), Some((scope, alias)))
             } else {
               // standalone query: select ... from sometable ...
               // n.b., sometable may actually be a query
-              analyzeForFrom(scope, canonicalName, rn, NoPosition /* TODO: NEED POS INFO FROM AST */).
-                reAlias(Some((scope, alias)))
+              analyzeForFrom(ScopedResourceName(scope, rn), canonicalName, NoPosition /* TODO: NEED POS INFO FROM AST */).
+                reAlias(Some(alias))
             }
           case (Some(input), None) =>
             // chained query: {something} |> {the thing we're analyzing}
@@ -506,18 +519,30 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       def analyzeJoinSelect(js: ast.JoinSelect): AtomicFrom[RNS, CT, CV] = {
         js match {
           case ast.JoinTable(tn) =>
-            analyzeForFrom(scope, canonicalName, ResourceName(tn.nameWithoutPrefix), NoPosition /* TODO: NEED POS INFO FROM AST */).
-              reAlias(Some((scope, ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix)))))
-          case ast.JoinQuery(select, alias) =>
-            analyzeStatement(select, None).reAlias(Some((scope, ResourceName(alias.substring(1)))))
+            tn.aliasWithoutPrefix.foreach(ensureLegalAlias(_, NoPosition /* TODO: NEED POS INFO FROM AST */))
+            analyzeForFrom(ScopedResourceName(scope, ResourceName(tn.nameWithoutPrefix)), canonicalName, NoPosition /* TODO: NEED POS INFO FROM AST */).
+              reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
+          case ast.JoinQuery(select, rawAlias) =>
+            val alias = rawAlias.substring(1)
+            ensureLegalAlias(alias, NoPosition /* TODO: NEED POS INFO FROM AST */)
+            analyzeStatement(None, select, None).reAlias(Some(ResourceName(alias)))
           case ast.JoinFunc(tn, params) =>
-            analyzeUDF(tn, params)
+            tn.aliasWithoutPrefix.foreach(ensureLegalAlias(_, NoPosition /* TODO: NEED POS INFO FROM AST */))
+            analyzeUDF(ResourceName(tn.nameWithoutPrefix), params).
+              reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
         }
       }
 
-      def analyzeUDF(tableName: TableName, params: Seq[ast.Expression]): AtomicFrom[RNS, CT, CV] = {
-        val resource = ResourceName(tableName.nameWithoutPrefix)
-        tableMap.find(scope, resource) match {
+      def ensureLegalAlias(candidate: String, position: Position): Unit = {
+        val rnCandidate = ResourceName(candidate)
+        if(SoQLAnalyzer.SpecialNames(rnCandidate)) {
+          reservedTableName(rnCandidate, position)
+        }
+      }
+
+      def analyzeUDF(resource: ResourceName, params: Seq[ast.Expression]): AtomicFrom[RNS, CT, CV] = {
+        val srn = ScopedResourceName(scope, resource)
+        tableMap.find(srn) match {
           case TableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs) =>
             if(params.length != paramSpecs.size) {
               incorrectNumberOfParameters(resource, expected = params.length, got = paramSpecs.size, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
@@ -560,7 +585,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
                 val useQuery =
                   new Context(udfScope, Some(udfCanonicalName), Environment.empty, innerUdfParams)
-                    .analyzeStatement(parsed, None)
+                    .analyzeStatement(None, parsed, None)
 
                 FromStatement(
                   Select(
@@ -571,7 +596,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
                     Join(
                       JoinType.Inner,
                       true,
-                      FromStatement(outOfLineParamsQuery, outOfLineParamsLabel, None),
+                      FromStatement(outOfLineParamsQuery, outOfLineParamsLabel, None, None),
                       useQuery,
                       typeInfo.literalBoolean(true, NoPosition)
                     ),
@@ -585,7 +610,8 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
                     Set.empty
                   ),
                   labelProvider.tableLabel(),
-                  Some((scope, ResourceName(tableName.aliasWithoutPrefix.getOrElse(tableName.nameWithoutPrefix))))
+                  Some(srn),
+                  None
                 )
 
               case None =>
@@ -594,8 +620,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
                 // additional joining.
                 val innerUdfParams = inlineParams.withValuesMapped { c => c.reposition _ }.toMap
                 new Context(udfScope, Some(udfCanonicalName), Environment.empty, innerUdfParams)
-                  .analyzeStatement(parsed, None)
-                  .reAlias(Some((scope, ResourceName(tableName.aliasWithoutPrefix.getOrElse(tableName.nameWithoutPrefix)))))
+                  .analyzeStatement(Some(srn), parsed, None)
             }
           case _ =>
             // Non-UDF
@@ -696,6 +721,8 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         throw Bail(SoQLAnalyzerError.UngroupedColumnReference(scope, canonicalName, pos))
       def windowFunctionNotAllowed(name: FunctionName, pos: Position): Nothing =
         throw Bail(SoQLAnalyzerError.WindowFunctionNotAllowed(scope, canonicalName, name, pos))
+      def reservedTableName(name: ResourceName, pos: Position): Nothing =
+        throw Bail(SoQLAnalyzerError.ReservedTableName(scope, canonicalName, name, pos))
       def augmentAliasAnalysisException(aae: AliasAnalysisException): Nothing = {
         import com.socrata.soql.{exceptions => SE}
 
@@ -719,6 +746,8 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       def augmentTypecheckException(tce: SoQLAnalyzerError.TypecheckError[RNS]): Nothing =
         throw Bail(tce)
     }
+    def illegalThisReference(scope: RNS, canonicalName: Option[CanonicalName], position: Position): Nothing =
+      throw Bail(SoQLAnalyzerError.IllegalThisReference(scope, canonicalName, position))
     def parameterlessTableFunction(scope: RNS, canonicalName: Option[CanonicalName], name: ResourceName, position: Position): Nothing =
       throw Bail(SoQLAnalyzerError.ParameterlessTableFunction(scope, canonicalName, name, position))
   }

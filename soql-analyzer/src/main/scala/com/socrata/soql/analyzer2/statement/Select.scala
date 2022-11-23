@@ -210,8 +210,12 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
     }
   }
 
-  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
     copy(from = from.mapAlias(f))
+
+  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
+    from.doLabelMap(state)
+  }
 
   def useSelectListReferences: Self[RNS, CT, CV] = {
     val selectListIndices = selectList.valuesIterator.map(_.expr).toVector.zipWithIndex.reverseIterator.toMap

@@ -9,7 +9,7 @@ import com.socrata.soql.environment.{ResourceName, ColumnName}
 
 sealed abstract class Annotation[+RNS, +CT]
 object Annotation {
-  case class TableAliasDefinition[+RNS](name: Option[(RNS, ResourceName)], label: TableLabel) extends Annotation[RNS, Nothing]
+  case class TableAliasDefinition[+RNS](name: Option[ResourceName], label: TableLabel) extends Annotation[RNS, Nothing]
   case class ColumnAliasDefinition(name: ColumnName, label: ColumnLabel) extends Annotation[Nothing, Nothing]
   case class TableDefinition(label: TableLabel) extends Annotation[Nothing, Nothing]
   case class ColumnRef(table: TableLabel, label: ColumnLabel) extends Annotation[Nothing, Nothing]

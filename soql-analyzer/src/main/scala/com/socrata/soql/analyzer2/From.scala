@@ -24,6 +24,8 @@ sealed abstract class From[+RNS, +CT, +CV] {
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV]
 
+  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit
+
   private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]): Self[RNS, CT, CV]
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
@@ -47,7 +49,7 @@ sealed abstract class From[+RNS, +CT, +CV] {
   final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder = debugDoc.layoutSmart().toStringBuilder(sb)
   def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]]
 
-  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV]
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV]
 
   type ReduceResult[+RNS, +CT, +CV] <: From[RNS, CT, CV]
 
@@ -129,7 +131,8 @@ object AtomicFrom extends from.OAtomicFromImpl
 object FromTable extends from.OFromTableImpl
 case class FromTable[+RNS, +CT](
   tableName: DatabaseTableName,
-  alias: Option[(RNS, ResourceName)],
+  definiteResourceName: ScopedResourceName[RNS],
+  alias: Option[ResourceName],
   label: AutoTableLabel,
   columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]
 ) extends AtomicFrom[RNS, CT, Nothing] with from.FromTableImpl[RNS, CT]
@@ -141,7 +144,8 @@ case class FromTable[+RNS, +CT](
 case class FromStatement[+RNS, +CT, +CV](
   statement: Statement[RNS, CT, CV],
   label: AutoTableLabel,
-  alias: Option[(RNS, ResourceName)]
+  resourceName: Option[ScopedResourceName[RNS]],
+  alias: Option[ResourceName]
 ) extends AtomicFrom[RNS, CT, CV] with from.FromStatementImpl[RNS, CT, CV] {
   // I'm not sure why this needs to be here.  The typechecker gets
   // confused about calling Scope.apply if it lives in
@@ -152,6 +156,6 @@ object FromStatement extends from.OFromStatementImpl
 
 case class FromSingleRow[+RNS](
   label: AutoTableLabel,
-  alias: Option[(RNS, ResourceName)]
+  alias: Option[ResourceName]
 ) extends AtomicFrom[RNS, Nothing, Nothing] with from.FromSingleRowImpl[RNS]
 object FromSingleRow extends from.OFromSingleRowImpl
