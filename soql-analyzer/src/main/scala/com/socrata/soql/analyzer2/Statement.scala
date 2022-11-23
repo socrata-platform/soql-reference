@@ -86,7 +86,7 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
     debugDoc.layoutSmart().toStringBuilder(sb)
   def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]]
 
-  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV]
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV]
 
   final def labelMap: LabelMap[RNS] = {
     val state = new LabelMapState[RNS]
@@ -141,7 +141,7 @@ object CombinedTables extends statement.OCombinedTablesImpl
 
 case class CTE[+RNS, +CT, +CV](
   definitionLabel: AutoTableLabel,
-  definitionAlias: Option[(RNS, ResourceName)],
+  definitionAlias: Option[ResourceName], // can this ever be not-some?  If not, perhaps mapAlias's type needs changing
   definitionQuery: Statement[RNS, CT, CV],
   materializedHint: MaterializedHint,
   useQuery: Statement[RNS, CT, CV]

@@ -37,6 +37,9 @@ class TableFinderTest extends FunSuite with MustMatchers {
     )
   )
 
+  def notFound(scope: Int, name: String) =
+    tables.Error.NotFound(QualifiedResourceName(scope, ResourceName(name)))
+
   test("can find a table") {
     tables.findTables(0, "select * from @t1", Map.empty).map(_.tableMap) must equal (tables((0, "t1")))
   }
@@ -54,7 +57,7 @@ class TableFinderTest extends FunSuite with MustMatchers {
   }
 
   test("can fail to find a table") {
-    tables.findTables(0, "select * from @doesnt-exist", Map.empty).map(_.tableMap) must equal (tables.notFound(0, "doesnt-exist"))
+    tables.findTables(0, "select * from @doesnt-exist", Map.empty).map(_.tableMap) must equal (notFound(0, "doesnt-exist"))
   }
 
   test("can find a table implicitly") {
@@ -78,7 +81,7 @@ class TableFinderTest extends FunSuite with MustMatchers {
   }
 
   test("can fail to find a query in a different scope") {
-    tables.findTables(0, ResourceName("t1"), "select key, value join @t6 on @t6.key = key", Map.empty).map(_.tableMap) must equal (tables.notFound(1, "t2"))
+    tables.findTables(0, ResourceName("t1"), "select key, value join @t6 on @t6.key = key", Map.empty).map(_.tableMap) must equal (notFound(1, "t2"))
   }
 
   test("can rountdtrip a FoundTables through JSON") {

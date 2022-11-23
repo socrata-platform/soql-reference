@@ -81,7 +81,7 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
         false
     }
 
-  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
     copy(definitionQuery = definitionQuery.mapAlias(f), definitionAlias = f(definitionAlias), useQuery = useQuery.mapAlias(f))
 
   override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]] =
@@ -96,9 +96,10 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
 
   private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
     definitionQuery.doLabelMap(state)
-    state.tableMap += definitionLabel -> definitionAlias
+    val tr = LabelMap.TableReference(None, None)
+    state.tableMap += definitionLabel -> tr
     for((columnLabel, NameEntry(name, _typ)) <- definitionQuery.schema) {
-      state.columnMap += (definitionLabel, columnLabel) -> (definitionAlias, name)
+      state.columnMap += (definitionLabel, columnLabel) -> (tr, name)
     }
     useQuery.doLabelMap(state)
   }
@@ -121,7 +122,7 @@ trait OCTEImpl { this: CTE.type =>
       def readFrom(buffer: ReadBuffer): CTE[RNS, CT, CV] = {
         CTE(
           definitionLabel = buffer.read[AutoTableLabel](),
-          definitionAlias = buffer.read[Option[(RNS, ResourceName)]](),
+          definitionAlias = buffer.read[Option[ResourceName]](),
           definitionQuery = buffer.read[Statement[RNS, CT, CV]](),
           materializedHint = buffer.read[MaterializedHint](),
           useQuery = buffer.read[Statement[RNS, CT, CV]]()

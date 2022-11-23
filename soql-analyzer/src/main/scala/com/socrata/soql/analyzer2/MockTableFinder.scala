@@ -10,7 +10,7 @@ import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.StandaloneParser
-import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, TableDescription, CanonicalName, TableMap, ParserUtil, FoundTables, UnparsedFoundTables, UnparsedTableMap}
+import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, TableDescription, CanonicalName, TableMap, ParserUtil, FoundTables, UnparsedFoundTables, UnparsedTableMap, QualifiedResourceName}
 
 sealed abstract class Thing[+RNS, +CT]
 case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT] {
@@ -127,7 +127,7 @@ object MockTableFinder {
 }
 
 class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT]]) extends TableFinder {
-  private val tables: Map[(RNS, ResourceName), FinderTableDescription] = raw.iterator.map { case ((scope, rawResourceName), thing) =>
+  private val tables: Map[QualifiedResourceName, FinderTableDescription] = raw.iterator.map { case ((scope, rawResourceName), thing) =>
     val converted = thing match {
       case d@D(rawSchema @ _*) =>
         Dataset(
@@ -143,14 +143,14 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
       case u@U(scope, soql, params @ _*) =>
         TableFunction(scope, CanonicalName(u.canonicalName.getOrElse(rawResourceName)), soql, OrderedMap() ++ params.iterator.map { case (k,v) => HoleName(k) -> v })
     }
-      (scope, ResourceName(rawResourceName)) -> converted
+    QualifiedResourceName(scope, ResourceName(rawResourceName)) -> converted
   }.toMap
 
   type ResourceNameScope = RNS
   type ColumnType = CT
 
-  protected def lookup(scope: RNS, name: ResourceName): Either[LookupError, FinderTableDescription] = {
-    tables.get((scope, name)) match {
+  protected def lookup(name: QualifiedResourceName): Either[LookupError, FinderTableDescription] = {
+    tables.get(name) match {
       case Some(schema) =>
         Right(schema)
       case None =>
@@ -179,7 +179,7 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
     val r = names.foldLeft(TableMap.empty[RNS, CT]) { (tableMap, scopeName) =>
       val (scope, n) = scopeName
       val name = ResourceName(n)
-      tableMap + ((scope, name) -> parsed(tables((scope, name))))
+      tableMap + (QualifiedResourceName(scope, name) -> parsed(tables(QualifiedResourceName(scope, name))))
     }
 
     if(r.size != names.length) {
@@ -188,7 +188,4 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
 
     Success(r)
   }
-
-  def notFound(scope: RNS, name: String) =
-    Error.NotFound((scope, ResourceName(name)))
 }

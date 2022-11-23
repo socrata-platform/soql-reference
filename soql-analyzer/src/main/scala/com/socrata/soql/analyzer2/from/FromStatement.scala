@@ -31,7 +31,7 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
   private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
-      case FromStatement(thatStatement, thatLabel, thatAlias) =>
+      case FromStatement(thatStatement, thatLabel, thatResourceName, thatAlias) =>
         state.tryAssociate(this.label, thatLabel) &&
           this.statement.findIsomorphism(state, Some(this.label), Some(thatLabel), thatStatement)
         // don't care about aliases
@@ -49,19 +49,20 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
          label = state.convert(label))
   }
 
-  private[analyzer2] def reAlias[RNS2 >: RNS](newAlias: Option[(RNS2, ResourceName)]): FromStatement[RNS2, CT, CV] =
+  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromStatement[RNS, CT, CV] =
     copy(alias = newAlias)
 
-  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
     copy(statement = statement.mapAlias(f), alias = f(alias))
 
   private[analyzer2] def realTables = statement.realTables
 
   private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
     statement.doLabelMap(state)
-    state.tableMap += label -> alias
-    for((columnLabel, NameEntry(name, _typ)) <- statement.schema) {
-      state.columnMap += (label, columnLabel) -> (alias, name)
+    val tr = LabelMap.TableReference(resourceName, alias)
+    state.tableMap += label -> tr
+    for((columnLabel, NameEntry(columnName, _typ)) <- statement.schema) {
+      state.columnMap += (label, columnLabel) -> (tr, columnName)
     }
   }
 
@@ -86,6 +87,7 @@ trait OFromStatementImpl { this: FromStatement.type =>
     def writeTo(buffer: WriteBuffer, from: FromStatement[RNS, CT, CV]): Unit = {
       buffer.write(from.statement)
       buffer.write(from.label)
+      buffer.write(from.resourceName)
       buffer.write(from.alias)
     }
   }
@@ -96,7 +98,8 @@ trait OFromStatementImpl { this: FromStatement.type =>
         FromStatement(
           statement = buffer.read[Statement[RNS, CT, CV]](),
           label = buffer.read[AutoTableLabel](),
-          alias = buffer.read[Option[(RNS, ResourceName)]]()
+          resourceName = buffer.read[Option[QualifiedResourceName[RNS]]](),
+          alias = buffer.read[Option[ResourceName]]()
         )
     }
 }

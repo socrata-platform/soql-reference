@@ -139,8 +139,8 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
     )
   }
 
-  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
-    map[RNS2, CT, CV](
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
+    map[RNS, CT, CV](
       _.mapAlias(f),
       { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, right.mapAlias(f), on) },
     )

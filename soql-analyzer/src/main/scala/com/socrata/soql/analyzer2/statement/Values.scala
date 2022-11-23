@@ -59,7 +59,7 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
   def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
     values.exists(_.exists(_.contains(e)))
 
-  def mapAlias[RNS2](f: Option[(Nothing, ResourceName)] => Option[(RNS2, ResourceName)]) = this
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]) = this
 
   private[analyzer2] def realTables = Map.empty[AutoTableLabel, DatabaseTableName]
 

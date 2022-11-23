@@ -34,7 +34,7 @@ trait TableFinder {
   type ResourceNameScope
 
   /** Look up the given `name` in the given `scope` */
-  protected def lookup(scope: ResourceNameScope, name: ResourceName): Either[LookupError, FinderTableDescription]
+  protected def lookup(name: QualifiedResourceName): Either[LookupError, FinderTableDescription]
 
   /** Parameters used to parse SoQL */
   protected val parserParameters: AbstractParser.Parameters = AbstractParser.defaultParameters
@@ -90,7 +90,7 @@ trait TableFinder {
     parameters: OrderedMap[HoleName, ColumnType]
   ) extends FinderTableDescription
 
-  type ScopedResourceName = (ResourceNameScope, ResourceName)
+  type QualifiedResourceName = com.socrata.soql.analyzer2.QualifiedResourceName[ResourceNameScope]
 
   sealed trait LookupError
   object LookupError {
@@ -110,9 +110,9 @@ trait TableFinder {
     override final def flatMap[U](f: Nothing => Result[U]): this.type = this
   }
   object Error {
-    case class ParseError(name: Option[ScopedResourceName], error: TableFinder.this.ParseError) extends Error
-    case class NotFound(name: ScopedResourceName) extends Error
-    case class PermissionDenied(name: ScopedResourceName) extends Error
+    case class ParseError(name: Option[QualifiedResourceName], error: TableFinder.this.ParseError) extends Error
+    case class NotFound(name: QualifiedResourceName) extends Error
+    case class PermissionDenied(name: QualifiedResourceName) extends Error
     case class RecursiveQuery(canonicalName: Seq[CanonicalName]) extends Error
   }
 
@@ -130,7 +130,7 @@ trait TableFinder {
 
   /** Find all tables referenced from the given SoQL on name that provides an implicit context. */
   final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String, parameters: Map[HoleName, ColumnType]): Result[FoundTables[ResourceNameScope, ColumnType]] = {
-    walkFromName((scope, resourceName), TableMap.empty, Nil) match {
+    walkFromName(QualifiedResourceName(scope, resourceName), TableMap.empty, Nil) match {
       case Success(acc) => walkSoQL(scope, FoundTables.InContext(resourceName, _, _, parameters), text, acc, Nil)
       case err: Error => err
     }
@@ -143,7 +143,7 @@ trait TableFinder {
     * to be found, and we want that parameter map to be editable.
     */
   final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String, parameters: Map[HoleName, ColumnType], impersonating: CanonicalName): Result[FoundTables[ResourceNameScope, ColumnType]] = {
-    walkFromName((scope, resourceName), TableMap.empty, List(impersonating)) match {
+    walkFromName(QualifiedResourceName(scope, resourceName), TableMap.empty, List(impersonating)) match {
       case Success(acc) => walkSoQL(scope, FoundTables.InContextImpersonatingSaved(resourceName, _, _, parameters, impersonating), text, acc, List(impersonating))
       case err: Error => err
     }
@@ -151,14 +151,14 @@ trait TableFinder {
 
   /** Find all tables referenced from the given name. */
   final def findTables(scope: ResourceNameScope, resourceName: ResourceName): Result[FoundTables[ResourceNameScope, ColumnType]] = {
-    walkFromName((scope, resourceName), TableMap.empty, Nil).map { acc =>
+    walkFromName(QualifiedResourceName(scope, resourceName), TableMap.empty, Nil).map { acc =>
       FoundTables(acc, scope, FoundTables.Saved(resourceName), parserParameters)
     }
   }
 
   // A pair of helpers that lift the abstract functions into the Result world
-  private def doLookup(scopedName: ScopedResourceName): Result[TableDescription[ResourceNameScope, ColumnType]] = {
-    lookup(scopedName._1, scopedName._2) match {
+  private def doLookup(scopedName: QualifiedResourceName): Result[TableDescription[ResourceNameScope, ColumnType]] = {
+    lookup(scopedName) match {
       case Right(ds: Dataset) =>
         Success(ds.toParsed)
       case Right(Query(scope, canonicalName, basedOn, text, params)) =>
@@ -169,14 +169,14 @@ trait TableFinder {
     }
   }
 
-  private def parse(name: Option[ScopedResourceName], text: String, udfParamsAllowed: Boolean): Result[BinaryTree[ast.Select]] = {
+  private def parse(name: Option[QualifiedResourceName], text: String, udfParamsAllowed: Boolean): Result[BinaryTree[ast.Select]] = {
     ParserUtil(text, parserParameters.copy(allowHoles = udfParamsAllowed)) match {
       case Right(tree) => Success(tree)
       case Left(err) => Error.ParseError(name, err)
     }
   }
 
-  private def walkFromName(scopedName: ScopedResourceName, acc: TableMap, stack: List[CanonicalName]): Result[TableMap] = {
+  private def walkFromName(scopedName: QualifiedResourceName, acc: TableMap, stack: List[CanonicalName]): Result[TableMap] = {
     acc.get(scopedName) match {
       case Some(desc) =>
         if(stack.contains(desc.canonicalName)) {
@@ -196,8 +196,8 @@ trait TableFinder {
     }
   }
 
-  private def isSpecialTableName(scopedName: ScopedResourceName): Boolean = {
-    val (_, name) = scopedName
+  private def isSpecialTableName(scopedName: QualifiedResourceName): Boolean = {
+    val QualifiedResourceName(_, name) = scopedName
     val prefixedName = TableName.SodaFountainPrefix + name.caseFolded
     TableName.reservedNames.contains(prefixedName)
   }
@@ -210,7 +210,7 @@ trait TableFinder {
       case TableDescription.Dataset(_, _, _, _) => Success(acc)
       case TableDescription.Query(scope, canonicalName, basedOn, tree, _unparsed, _params) =>
         for {
-          acc <- walkFromName((scope, basedOn), acc, canonicalName :: stack)
+          acc <- walkFromName(QualifiedResourceName(scope, basedOn), acc, canonicalName :: stack)
           acc <- walkTree(scope, tree, acc, canonicalName :: stack)
         } yield acc
       case TableDescription.TableFunction(scope, canonicalName, tree, _unparsed, _params) =>
@@ -258,7 +258,7 @@ trait TableFinder {
     var acc = acc0
 
     for(tn <- from) {
-      val scopedName = (scope, ResourceName(tn.nameWithoutPrefix))
+      val scopedName = QualifiedResourceName(scope, ResourceName(tn.nameWithoutPrefix))
       walkFromName(scopedName, acc, stack) match {
         case Success(newAcc) =>
           acc = newAcc
@@ -271,11 +271,11 @@ trait TableFinder {
       val newAcc =
         join.from match {
           case ast.JoinTable(tn) =>
-            walkFromName((scope, ResourceName(tn.nameWithoutPrefix)), acc, stack)
+            walkFromName(QualifiedResourceName(scope, ResourceName(tn.nameWithoutPrefix)), acc, stack)
           case ast.JoinQuery(q, _) =>
             walkTree(scope, q, acc, stack)
           case ast.JoinFunc(f, _) =>
-            walkFromName((scope, ResourceName(f.nameWithoutPrefix)), acc, stack)
+            walkFromName(QualifiedResourceName(scope, ResourceName(f.nameWithoutPrefix)), acc, stack)
         }
 
       newAcc match {

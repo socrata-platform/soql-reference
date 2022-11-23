@@ -82,7 +82,7 @@ trait CombinedTablesImpl[+RNS, +CT, +CV] { this: CombinedTables[RNS, CT, CV] =>
   def useSelectListReferences = copy(left = left.useSelectListReferences, right = right.useSelectListReferences)
   def unuseSelectListReferences = copy(left = left.unuseSelectListReferences, right = right.unuseSelectListReferences)
 
-  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV] =
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
     copy(left = left.mapAlias(f), right = right.mapAlias(f))
 
   override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]] = {

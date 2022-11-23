@@ -81,7 +81,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       )
     )
 
-    select.from must equal (FromSingleRow(t(1), Some((0, rn("single_row")))))
+    select.from must equal (FromSingleRow(t(1), Some(rn("single_row"))))
 
     // and the rest is empty
     val Select(Distinctiveness.Indistinct, _, _, None, Nil, None, Nil, None, None, None, _) = select
@@ -128,6 +128,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     select.from must equal (
       FromTable(
         dtn("aaaa-aaaa"),
+        QualifiedResourceName(0, rn("aaaa-aaaa")),
         None,
         t(1),
         OrderedMap(
@@ -245,6 +246,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         ),
         FromTable(
           dtn("aaaa-aaaa"),
+          QualifiedResourceName(0, rn("aaaa-aaaa")),
           None,
           t(1),
           OrderedMap(
@@ -290,6 +292,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             ),
             FromTable(
               dtn("aaaa-aaaa"),
+              QualifiedResourceName(0, rn("aaaa-aaaa")),
               None,
               t(1),
               OrderedMap(
@@ -304,6 +307,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             None,None,None,Set.empty
           ),
           t(2),
+          Some(QualifiedResourceName(0, rn("aaaa-aaaa"))),
           None
         ),
         None,Nil,None,Nil,None,None,None,Set.empty
@@ -343,7 +347,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         JoinType.Inner,
         true,
         FromTable(
-          dtn("aaaa-aaaa"), None, t(1),
+          dtn("aaaa-aaaa"), QualifiedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
@@ -355,7 +359,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             OrderedMap(c(1) -> NamedExpr(LiteralValue(TestNumber(1))(NoPosition), cn("_1"))),
             FromTable(
               dtn("bbbb-bbbb"),
-              Some((0,rn("bbbb-bbbb"))),
+              QualifiedResourceName(0,rn("bbbb-bbbb")),
+              Some(rn("bbbb-bbbb")),
               t(2),
               OrderedMap(
                 dcn("user") -> NameEntry(cn("user"), TestText),
@@ -380,7 +385,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             Nil, None, Nil, Some(1), None, None, Set.empty
           ),
           t(3),
-          Some((0, rn("cccc-cccc")))
+          Some(QualifiedResourceName(0, rn("cccc-cccc"))),
+          Some(rn("cccc-cccc"))
         ),
         LiteralValue(TestBoolean(true))(NoPosition)
       )
@@ -419,7 +425,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         JoinType.Inner,
         true,
         FromTable(
-          dtn("aaaa-aaaa"), None, t(1),
+          dtn("aaaa-aaaa"), QualifiedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
@@ -431,7 +437,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             OrderedMap(c(1) -> NamedExpr(LiteralValue(TestNumber(1))(NoPosition), cn("_1"))),
             FromTable(
               dtn("bbbb-bbbb"),
-              Some((0,rn("bbbb-bbbb"))),
+              QualifiedResourceName(0,rn("bbbb-bbbb")),
+              Some(rn("bbbb-bbbb")),
               t(2),
               OrderedMap(
                 dcn("user") -> NameEntry(cn("user"), TestText),
@@ -456,7 +463,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             Nil, None, Nil, Some(1), None, None, Set.empty
           ),
           t(3),
-          Some((0, rn("cccc-cccc")))
+          Some(QualifiedResourceName(0, rn("cccc-cccc"))),
+          Some(rn("cccc-cccc"))
         ),
         LiteralValue(TestBoolean(true))(NoPosition)
       )
@@ -494,7 +502,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         JoinType.Inner,
         true,
         FromTable(
-          dtn("aaaa-aaaa"), None, t(1),
+          dtn("aaaa-aaaa"), QualifiedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
@@ -529,7 +537,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     )
                   )
                 ),
-                t(2), None
+                t(2), None, None
               ),
               FromStatement(
                 Select(
@@ -540,16 +548,16 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     c(3) -> NamedExpr(LiteralValue(TestNumber(5))(NoPosition), cn("c")),
                     c(4) -> NamedExpr(Column(t(2),dcn("column1"),TestText)(NoPosition), cn("d"))
                   ),
-                  FromSingleRow(t(3), Some((0,rn("single_row")))),
+                  FromSingleRow(t(3), Some(rn("single_row"))),
                   None,Nil,None,Nil,None,None,None,Set()
                 ),
-                t(4), None
+                t(4), None, None
               ),
               LiteralValue(TestBoolean(true))(NoPosition)
             ),
             None,Nil,None,Nil,None,None,None,Set()
           ),
-          t(5),Some((0,rn("bbbb-bbbb")))
+          t(5),Some(QualifiedResourceName(0,rn("bbbb-bbbb"))), Some(rn("bbbb-bbbb"))
         ),
         LiteralValue(TestBoolean(true))(NoPosition)
       )

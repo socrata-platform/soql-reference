@@ -35,10 +35,10 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
       case select: Select[RNS, CT, CV] =>
         debug("select")
         select.copy(from = mergeFrom(select.from)) match {
-          case b@Select(_, _, Unjoin(FromStatement(a: Select[RNS, CT, CV], aLabel, aAlias), bRejoin), _, _, _, _, _, _, _, _) =>
+          case b@Select(_, _, Unjoin(FromStatement(a: Select[RNS, CT, CV], aLabel, aResourceName, aAlias), bRejoin), _, _, _, _, _, _, _, _) =>
             // This privileges the first query in b's FROM because our
             // queries are frequently constructed in a chain.
-            mergeSelects(a, aLabel, aAlias, b, bRejoin) match {
+            mergeSelects(a, aLabel, aResourceName, aAlias, b, bRejoin) match {
               case None =>
                 debug("declained to merge")
                 b
@@ -64,7 +64,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
 
   private def mergeAtomicFrom(from: AtomicFrom[RNS, CT, CV]): AtomicFrom[RNS, CT, CV] = {
     from match {
-      case FromStatement(stmt, label, alias) => FromStatement(doMerge(stmt), label, alias)
+      case s@FromStatement(stmt, _, _, _) => s.copy(statement = doMerge(stmt))
       case other => other
     }
   }
@@ -98,7 +98,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
 
   private def rewrite(from: AtomicFrom[RNS, CT, CV], xform: ExprRewriter): AtomicFrom[RNS, CT, CV] =
     from match {
-      case fs@FromStatement(s, _, _) => fs.copy(statement = rewrite(s, xform))
+      case fs@FromStatement(s, _, _, _) => fs.copy(statement = rewrite(s, xform))
       case other => other
     }
 
@@ -128,7 +128,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
     d.withValuesMapped { ne => ne.copy(expr = xform(ne.expr)) }
 
   private def mergeSelects(
-    a: Select[RNS, CT, CV], aLabel: TableLabel, aAlias: Option[(RNS, ResourceName)],
+    a: Select[RNS, CT, CV], aLabel: TableLabel, aResourceName: Option[QualifiedResourceName[RNS]], aAlias: Option[ResourceName],
     b: Select[RNS, CT, CV], bRejoin: FromRewriter
   ): Option[Statement[RNS, CT, CV]] =
     // If we decide to merge this, we're going to create some flavor of
