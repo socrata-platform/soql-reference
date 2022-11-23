@@ -87,6 +87,14 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
   def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]]
 
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV]
+
+  final def labelMap: LabelMap[RNS] = {
+    val state = new LabelMapState[RNS]
+    doLabelMap(state)
+    state.build()
+  }
+
+  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit
 }
 
 object Statement {
@@ -133,6 +141,7 @@ object CombinedTables extends statement.OCombinedTablesImpl
 
 case class CTE[+RNS, +CT, +CV](
   definitionLabel: AutoTableLabel,
+  definitionAlias: Option[(RNS, ResourceName)],
   definitionQuery: Statement[RNS, CT, CV],
   materializedHint: MaterializedHint,
   useQuery: Statement[RNS, CT, CV]

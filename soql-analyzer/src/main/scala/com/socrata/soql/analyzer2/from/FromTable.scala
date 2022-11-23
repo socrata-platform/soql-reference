@@ -72,6 +72,13 @@ trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
   def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, CT, Nothing] =
     copy(alias = f(alias))
 
+  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
+    state.tableMap += label -> alias
+    for((columnLabel, NameEntry(name, _typ)) <- columns) {
+      state.columnMap += (label, columnLabel) -> (alias, name)
+    }
+  }
+
   def useSelectListReferences: this.type = this
 }
 

@@ -25,7 +25,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
       case c@CombinedTables(_, left, right) =>
         debug("combined tables")
         c.copy(left = doMerge(left), right = doMerge(right))
-      case cte@CTE(_defLabel, defQ, _label, useQ) =>
+      case cte@CTE(_defLabel, _defAlias, defQ, _label, useQ) =>
         // TODO: maybe make this not a CTE at all, sometimes?
         debug("CTE")
         cte.copy(definitionQuery = doMerge(defQ), useQuery = doMerge(useQ))
@@ -116,7 +116,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
           limit, offset, search, hint)
       case Values(vs) => Values(vs.map(_.map(xform)))
       case CombinedTables(op, left, right) => CombinedTables(op, rewrite(left, xform), rewrite(right, xform))
-      case CTE(defLbl, defQ, useLbl, useQ) => CTE(defLbl, rewrite(defQ, xform), useLbl, rewrite(useQ, xform))
+      case CTE(defLbl, defAlias, defQ, useLbl, useQ) => CTE(defLbl, defAlias, rewrite(defQ, xform), useLbl, rewrite(useQ, xform))
     }
   private def rewrite(d: Distinctiveness[CT, CV], xform: ExprRewriter): Distinctiveness[CT, CV] =
     d match {

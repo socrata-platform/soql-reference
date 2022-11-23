@@ -92,6 +92,10 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
       }.encloseNesting(d"(", d",", d")")
     ).sep.nest(2)
   }
+
+  private[analyzer2] def doLabelMap[RNS](state: LabelMapState[RNS]): Unit = {
+    // no interior queries, nothing to do
+  }
 }
 
 trait OValuesImpl { this: Values.type =>

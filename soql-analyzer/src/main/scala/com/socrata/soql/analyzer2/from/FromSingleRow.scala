@@ -52,6 +52,11 @@ trait FromSingleRowImpl[+RNS] { this: FromSingleRow[RNS] =>
 
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
 
+  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
+    state.tableMap += label -> alias
+    // no columns
+  }
+
   private[analyzer2] override def preserveOrdering[CT2](
     provider: LabelProvider,
     rowNumberFunction: MonomorphicFunction[CT2],

@@ -57,6 +57,14 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
 
   private[analyzer2] def realTables = statement.realTables
 
+  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
+    statement.doLabelMap(state)
+    state.tableMap += label -> alias
+    for((columnLabel, NameEntry(name, _typ)) <- statement.schema) {
+      state.columnMap += (label, columnLabel) -> (alias, name)
+    }
+  }
+
   private[analyzer2] override def preserveOrdering[CT2 >: CT](
     provider: LabelProvider,
     rowNumberFunction: MonomorphicFunction[CT2],
