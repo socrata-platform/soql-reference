@@ -15,6 +15,8 @@ trait FromSingleRowImpl[+RNS] { this: FromSingleRow[RNS] =>
   type Self[+RNS, +CT, +CV] = FromSingleRow[RNS]
   def asSelf = this
 
+  val resourceName = None
+
   private[analyzer2] val scope: Scope[Nothing] =
     Scope(
       OrderedMap.empty[ColumnLabel, NameEntry[Nothing]],
@@ -42,15 +44,20 @@ trait FromSingleRowImpl[+RNS] { this: FromSingleRow[RNS] =>
     copy(label = state.convert(label))
   }
 
-  private[analyzer2] def reAlias[RNS2 >: RNS](newAlias: Option[(RNS2, ResourceName)]): FromSingleRow[RNS2] =
+  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromSingleRow[RNS] =
     copy(alias = newAlias)
 
-  def mapAlias[RNS2](f: Option[(RNS, ResourceName)] => Option[(RNS2, ResourceName)]): Self[RNS2, Nothing, Nothing] =
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, Nothing, Nothing] =
     copy(alias = f(alias))
 
   private[analyzer2] def realTables = Map.empty[AutoTableLabel, DatabaseTableName]
 
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
+
+  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
+    state.tableMap += label -> LabelMap.TableReference(resourceName, alias)
+    // no columns
+  }
 
   private[analyzer2] override def preserveOrdering[CT2](
     provider: LabelProvider,
@@ -78,7 +85,7 @@ trait OFromSingleRowImpl { this: FromSingleRow.type =>
       def readFrom(buffer: ReadBuffer): FromSingleRow[RNS] = {
         FromSingleRow(
           label = buffer.read[AutoTableLabel](),
-          alias = buffer.read[Option[(RNS, ResourceName)]]()
+          alias = buffer.read[Option[ResourceName]]()
         )
       }
     }

@@ -188,9 +188,9 @@ where
             replacement
         }
 
-      def lookup(scope: DomainId, name: ResourceName): Either[LookupError, FinderTableDescription] = {
-        log.info(s"Looking up $scope : $name")
-        lensP.query(LensSpace(scope, name.name)).run(_.nextOption()) match {
+      def lookup(srn: ScopedResourceName): Either[LookupError, FinderTableDescription] = {
+        log.info(s"Looking up ${srn.scope} : ${srn.name}")
+        lensP.query(LensSpace(srn.scope, srn.name.name)).run(_.nextOption()) match {
           case Some(lens) =>
             log.info(s"Found ${lens.uid}")
             val columns = lensColumnP.query(lens.id).run { results =>

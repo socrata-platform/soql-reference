@@ -15,7 +15,8 @@ import com.socrata.soql.typechecker.HasDoc
 trait AtomicFromImpl[+RNS, +CT, +CV] { this: AtomicFrom[RNS, CT, CV] =>
   type Self[+RNS, +CT, +CV] <: AtomicFrom[RNS, CT, CV]
 
-  val alias: Option[(RNS, ResourceName)]
+  val resourceName: Option[ScopedResourceName[RNS]]
+  val alias: Option[ResourceName]
   val label: TableLabel
 
   private[analyzer2] val scope: Scope[CT]
@@ -24,10 +25,10 @@ trait AtomicFromImpl[+RNS, +CT, +CV] { this: AtomicFrom[RNS, CT, CV] =>
     addToEnvironment(base.extend)
   }
   private[analyzer2] def addToEnvironment[CT2 >: CT](env: Environment[CT2]) = {
-    env.addScope(alias.map(_._2), scope)
+    env.addScope(alias, scope)
   }
 
-  private[analyzer2] def reAlias[RNS2 >: RNS](newAlias: Option[(RNS2, ResourceName)]): Self[RNS2, CT, CV]
+  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): Self[RNS, CT, CV]
 
   type ReduceResult[+RNS, +CT, +CV] = AtomicFrom[RNS, CT, CV]
   override def reduceMap[S, RNS2, CT2, CV2](

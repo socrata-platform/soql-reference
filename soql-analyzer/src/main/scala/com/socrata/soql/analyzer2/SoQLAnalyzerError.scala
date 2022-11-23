@@ -140,6 +140,19 @@ object SoQLAnalyzerError {
     position: Position
   ) extends AnalysisError[RNS]
 
+  case class IllegalThisReference[+RNS](
+    scope: RNS,
+    canonicalName: Option[CanonicalName],
+    position: Position
+  ) extends AnalysisError[RNS]
+
+  case class ReservedTableName[+RNS](
+    scope: RNS,
+    canonicalName: Option[CanonicalName],
+    name: ResourceName,
+    position: Position
+  ) extends AnalysisError[RNS]
+
   sealed trait TypecheckError[+RNS] extends AnalysisError[RNS]
   object TypecheckError {
     case class NoSuchColumn[+RNS](
