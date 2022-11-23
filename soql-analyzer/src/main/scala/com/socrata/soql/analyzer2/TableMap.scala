@@ -22,7 +22,7 @@ trait TableMapLike[ResourceNameScope, +ColumnType] extends Any {
 
 class TableMap[ResourceNameScope, +ColumnType] private[analyzer2] (private val underlying: Map[ResourceNameScope, Map[ResourceName, TableDescription[ResourceNameScope, ColumnType]]]) extends AnyVal with TableMapLike[ResourceNameScope, ColumnType] {
   type Self[RNS, +CT] = TableMap[RNS, CT]
-  type QualifiedResourceName = com.socrata.soql.analyzer2.QualifiedResourceName[ResourceNameScope]
+  type ScopedResourceName = com.socrata.soql.analyzer2.ScopedResourceName[ResourceNameScope]
 
   def asUnparsedTableMap: UnparsedTableMap[ResourceNameScope, ColumnType] =
     new UnparsedTableMap(underlying.iterator.map { case (rns, m) =>
@@ -31,27 +31,27 @@ class TableMap[ResourceNameScope, +ColumnType] private[analyzer2] (private val u
       }.toMap
     }.toMap)
 
-  def contains(name: QualifiedResourceName) =
+  def contains(name: ScopedResourceName) =
     underlying.get(name.scope) match {
       case Some(resources) => resources.contains(name.name)
       case None => false
     }
 
-  def get(name: QualifiedResourceName) = underlying.get(name.scope).flatMap(_.get(name.name))
+  def get(name: ScopedResourceName) = underlying.get(name.scope).flatMap(_.get(name.name))
 
-  def getOrElse[CT2 >: ColumnType](name: QualifiedResourceName)(orElse: => TableDescription[ResourceNameScope, CT2]) = get(name).getOrElse(orElse)
+  def getOrElse[CT2 >: ColumnType](name: ScopedResourceName)(orElse: => TableDescription[ResourceNameScope, CT2]) = get(name).getOrElse(orElse)
 
   def size = underlying.valuesIterator.map(_.size).sum
 
-  def +[CT2 >: ColumnType](kv: (QualifiedResourceName, TableDescription[ResourceNameScope, CT2])): TableMap[ResourceNameScope, CT2] = {
-    val (QualifiedResourceName(rns, rn), desc) = kv
+  def +[CT2 >: ColumnType](kv: (ScopedResourceName, TableDescription[ResourceNameScope, CT2])): TableMap[ResourceNameScope, CT2] = {
+    val (ScopedResourceName(rns, rn), desc) = kv
     underlying.get(rns) match {
       case Some(resources) => new TableMap(underlying + (rns -> (resources + (rn -> desc))))
       case None => new TableMap(underlying + (rns -> Map(rn -> desc)))
     }
   }
 
-  def find(name: QualifiedResourceName): TableDescription[ResourceNameScope, ColumnType] = {
+  def find(name: ScopedResourceName): TableDescription[ResourceNameScope, ColumnType] = {
     getOrElse(name) {
       throw new NoSuchElementException(s"TableMap: No such key: ${name.scope}:${name.name}")
     }

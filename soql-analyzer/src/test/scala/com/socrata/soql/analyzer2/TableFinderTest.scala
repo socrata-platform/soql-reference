@@ -38,7 +38,7 @@ class TableFinderTest extends FunSuite with MustMatchers {
   )
 
   def notFound(scope: Int, name: String) =
-    tables.Error.NotFound(QualifiedResourceName(scope, ResourceName(name)))
+    tables.Error.NotFound(ScopedResourceName(scope, ResourceName(name)))
 
   test("can find a table") {
     tables.findTables(0, "select * from @t1", Map.empty).map(_.tableMap) must equal (tables((0, "t1")))

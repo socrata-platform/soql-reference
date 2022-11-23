@@ -98,7 +98,7 @@ trait OFromStatementImpl { this: FromStatement.type =>
         FromStatement(
           statement = buffer.read[Statement[RNS, CT, CV]](),
           label = buffer.read[AutoTableLabel](),
-          resourceName = buffer.read[Option[QualifiedResourceName[RNS]]](),
+          resourceName = buffer.read[Option[ScopedResourceName[RNS]]](),
           alias = buffer.read[Option[ResourceName]]()
         )
     }

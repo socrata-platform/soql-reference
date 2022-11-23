@@ -128,7 +128,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
     d.withValuesMapped { ne => ne.copy(expr = xform(ne.expr)) }
 
   private def mergeSelects(
-    a: Select[RNS, CT, CV], aLabel: TableLabel, aResourceName: Option[QualifiedResourceName[RNS]], aAlias: Option[ResourceName],
+    a: Select[RNS, CT, CV], aLabel: TableLabel, aResourceName: Option[ScopedResourceName[RNS]], aAlias: Option[ResourceName],
     b: Select[RNS, CT, CV], bRejoin: FromRewriter
   ): Option[Statement[RNS, CT, CV]] =
     // If we decide to merge this, we're going to create some flavor of

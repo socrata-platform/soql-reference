@@ -131,7 +131,7 @@ object AtomicFrom extends from.OAtomicFromImpl
 object FromTable extends from.OFromTableImpl
 case class FromTable[+RNS, +CT](
   tableName: DatabaseTableName,
-  definiteResourceName: QualifiedResourceName[RNS],
+  definiteResourceName: ScopedResourceName[RNS],
   alias: Option[ResourceName],
   label: AutoTableLabel,
   columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]
@@ -144,7 +144,7 @@ case class FromTable[+RNS, +CT](
 case class FromStatement[+RNS, +CT, +CV](
   statement: Statement[RNS, CT, CV],
   label: AutoTableLabel,
-  resourceName: Option[QualifiedResourceName[RNS]],
+  resourceName: Option[ScopedResourceName[RNS]],
   alias: Option[ResourceName]
 ) extends AtomicFrom[RNS, CT, CV] with from.FromStatementImpl[RNS, CT, CV] {
   // I'm not sure why this needs to be here.  The typechecker gets

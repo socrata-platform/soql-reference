@@ -15,7 +15,7 @@ import com.socrata.soql.typechecker.HasDoc
 trait AtomicFromImpl[+RNS, +CT, +CV] { this: AtomicFrom[RNS, CT, CV] =>
   type Self[+RNS, +CT, +CV] <: AtomicFrom[RNS, CT, CV]
 
-  val resourceName: Option[QualifiedResourceName[RNS]]
+  val resourceName: Option[ScopedResourceName[RNS]]
   val alias: Option[ResourceName]
   val label: TableLabel
 

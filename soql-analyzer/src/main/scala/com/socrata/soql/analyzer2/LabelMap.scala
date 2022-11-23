@@ -19,7 +19,7 @@ class LabelMap[+RNS] private[analyzer2] (
 object LabelMap {
   @NullForNone
   case class TableReference[+RNS](
-    resourceName: Option[QualifiedResourceName[RNS]],
+    resourceName: Option[ScopedResourceName[RNS]],
     alias: Option[ResourceName]
   )
   object TableReference {
