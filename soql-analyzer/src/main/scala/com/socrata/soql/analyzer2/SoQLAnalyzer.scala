@@ -23,6 +23,8 @@ import com.socrata.soql.exceptions.AliasAnalysisException
 object SoQLAnalyzer {
   private val This = ResourceName("this")
   private val SingleRow = ResourceName("single_row")
+
+  private val SpecialNames = Set(This, SingleRow)
 }
 
 class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: FunctionInfo[CT]) {
@@ -198,17 +200,25 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
     }
 
     def analyzeForFrom(scope: RNS, canonicalName: Option[CanonicalName], rn: ResourceName, position: Position): AtomicFrom[RNS, CT, CV] = {
-      tableMap.find(scope, rn) match {
-        case ds: TableDescription.Dataset[CT] =>
-          fromTable(scope, ds, None)
-        case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters) =>
-          // so this is basedOn |> parsed
-          // so we want to use "basedOn" as the implicit "from" for "parsed"
-          val from = analyzeForFrom(scope, None, basedOn, NoPosition /* Yes, actually NoPosition here */)
-          new Context(scope, Some(canonicalName), Environment.empty, Map.empty).
-            analyzeStatement(parsed, Some(from))
-        case TableDescription.TableFunction(_, _, _, _, _) =>
-          parameterlessTableFunction(scope, canonicalName, rn, position)
+      if(rn == SoQLAnalyzer.SingleRow) {
+        FromSingleRow(labelProvider.tableLabel(), None)
+      } else if(rn == SoQLAnalyzer.This) {
+        // analyzeSelection will handle @this in the correct
+        // position...
+        illegalThisReference(scope, canonicalName, position)
+      } else {
+        tableMap.find(scope, rn) match {
+          case ds: TableDescription.Dataset[CT] =>
+            fromTable(scope, ds, None)
+          case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters) =>
+            // so this is basedOn |> parsed
+            // so we want to use "basedOn" as the implicit "from" for "parsed"
+            val from = analyzeForFrom(scope, None, basedOn, NoPosition /* Yes, actually NoPosition here */)
+            new Context(scope, Some(canonicalName), Environment.empty, Map.empty).
+              analyzeStatement(parsed, Some(from))
+          case TableDescription.TableFunction(_, _, _, _, _) =>
+            parameterlessTableFunction(scope, canonicalName, rn, position)
+        }
       }
     }
 
@@ -440,6 +450,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             // No context and no from; this is an error
             noDataSource(NoPosition /* TODO: NEED POS INFO FROM AST */)
           case (Some(prev), Some(tn)) =>
+            tn.aliasWithoutPrefix.foreach(ensureLegalAlias(_, NoPosition /* TODO: NEED POS INFO FROM AST */))
             val rn = ResourceName(tn.nameWithoutPrefix)
             if(rn == SoQLAnalyzer.This) {
               // chained query: {something} |> select ... from @this [as alias]
@@ -450,13 +461,12 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
               chainWithFrom(NoPosition /* TODO: NEED POS INFO FROM AST */)
             }
           case (None, Some(tn)) =>
+            tn.aliasWithoutPrefix.foreach(ensureLegalAlias(_, NoPosition /* TODO: NEED POS INFO FROM AST */))
             val rn = ResourceName(tn.nameWithoutPrefix)
             val alias = ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))
             if(rn == SoQLAnalyzer.This) {
               // standalone query: select ... from @this.  But it's standalone, so this is an error
               fromThisWithoutContext(NoPosition /* TODO: NEED POS INFO FROM AST */)
-            } else if(rn == SoQLAnalyzer.SingleRow) {
-              FromSingleRow(labelProvider.tableLabel(), Some((scope, alias)))
             } else {
               // standalone query: select ... from sometable ...
               // n.b., sometable may actually be a query
@@ -506,12 +516,22 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       def analyzeJoinSelect(js: ast.JoinSelect): AtomicFrom[RNS, CT, CV] = {
         js match {
           case ast.JoinTable(tn) =>
+            tn.aliasWithoutPrefix.foreach(ensureLegalAlias(_, NoPosition /* TODO: NEED POS INFO FROM AST */))
             analyzeForFrom(scope, canonicalName, ResourceName(tn.nameWithoutPrefix), NoPosition /* TODO: NEED POS INFO FROM AST */).
               reAlias(Some((scope, ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix)))))
-          case ast.JoinQuery(select, alias) =>
-            analyzeStatement(select, None).reAlias(Some((scope, ResourceName(alias.substring(1)))))
+          case ast.JoinQuery(select, rawAlias) =>
+            val alias = rawAlias.substring(1)
+            ensureLegalAlias(alias, NoPosition /* TODO: NEED POS INFO FROM AST */)
+            analyzeStatement(select, None).reAlias(Some((scope, ResourceName(alias))))
           case ast.JoinFunc(tn, params) =>
             analyzeUDF(tn, params)
+        }
+      }
+
+      def ensureLegalAlias(candidate: String, position: Position): Unit = {
+        val rnCandidate = ResourceName(candidate)
+        if(SoQLAnalyzer.SpecialNames(rnCandidate)) {
+          reservedTableName(rnCandidate, position)
         }
       }
 
@@ -696,6 +716,8 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         throw Bail(SoQLAnalyzerError.UngroupedColumnReference(scope, canonicalName, pos))
       def windowFunctionNotAllowed(name: FunctionName, pos: Position): Nothing =
         throw Bail(SoQLAnalyzerError.WindowFunctionNotAllowed(scope, canonicalName, name, pos))
+      def reservedTableName(name: ResourceName, pos: Position): Nothing =
+        throw Bail(SoQLAnalyzerError.ReservedTableName(scope, canonicalName, name, pos))
       def augmentAliasAnalysisException(aae: AliasAnalysisException): Nothing = {
         import com.socrata.soql.{exceptions => SE}
 
@@ -719,6 +741,8 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       def augmentTypecheckException(tce: SoQLAnalyzerError.TypecheckError[RNS]): Nothing =
         throw Bail(tce)
     }
+    def illegalThisReference(scope: RNS, canonicalName: Option[CanonicalName], position: Position): Nothing =
+      throw Bail(SoQLAnalyzerError.IllegalThisReference(scope, canonicalName, position))
     def parameterlessTableFunction(scope: RNS, canonicalName: Option[CanonicalName], name: ResourceName, position: Position): Nothing =
       throw Bail(SoQLAnalyzerError.ParameterlessTableFunction(scope, canonicalName, name, position))
   }
