@@ -1,11 +1,12 @@
 package com.socrata.soql.types
 
+import java.util.Base64
+
 import com.google.common.collect.{Interner, Interners}
 import com.rojoma.json.v3.io.{CompactJsonWriter, JsonReader}
 import com.socrata.thirdparty.geojson.JtsCodecs
 import com.vividsolutions.jts.geom.{Geometry, GeometryFactory}
 import com.vividsolutions.jts.io.{WKBWriter, WKBReader, WKTReader}
-import javax.xml.bind.DatatypeConverter.{parseBase64Binary, printBase64Binary}
 
 import SoQLGeometryLike._
 
@@ -60,10 +61,9 @@ trait SoQLGeometryLike[T <: Geometry] {
   }
 
   // Fast Base64 WKB representation (for CJSON transport)
-  // See http://java-performance.info/base64-encoding-and-decoding-performance/
   object Wkb64Rep {
-    def unapply(text: String): Option[T] = WkbRep.unapply(parseBase64Binary(text))
-    def apply(geom: T): String           = printBase64Binary(WkbRep.apply(geom))
+    def unapply(text: String): Option[T] = WkbRep.unapply(Base64.getDecoder.decode(text))
+    def apply(geom: T): String           = Base64.getEncoder.encodeToString(WkbRep.apply(geom))
   }
 
   object EWktRep {
