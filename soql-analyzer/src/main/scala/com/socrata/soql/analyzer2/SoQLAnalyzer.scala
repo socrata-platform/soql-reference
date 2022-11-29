@@ -121,19 +121,26 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
     }
 
     def intoStatement(from: AtomicFrom[RNS, CT, CV]): Statement[RNS, CT, CV] = {
-      val selectList =
-        from match {
-          case from: FromTable[RNS, CT] =>
+      from match {
+        case from: FromTable[RNS, CT] =>
+          selectFromFrom(
             from.columns.map { case (label, NameEntry(name, typ)) =>
               labelProvider.columnLabel() -> NamedExpr(Column(from.label, label, typ)(NoPosition), name)
-            }
-          case from: FromSingleRow[RNS] =>
-            OrderedMap.empty[AutoColumnLabel, NamedExpr[CT, CV]]
-          case from: FromStatement[RNS, CT, CV] =>
-            // Just short-circuit it and return the underlying Statement
-            return from.statement
-        }
+            },
+            from
+          )
+        case from: FromSingleRow[RNS] =>
+          selectFromFrom(OrderedMap.empty[AutoColumnLabel, NamedExpr[CT, CV]], from)
+        case from: FromStatement[RNS, CT, CV] =>
+          // Just short-circuit it and return the underlying Statement
+          from.statement
+      }
+    }
 
+    def selectFromFrom(
+      selectList: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]],
+      from: AtomicFrom[RNS, CT, CV]
+    ): Statement[RNS, CT, CV] = {
       Select(
         distinctiveness = Distinctiveness.Indistinct,
         selectList = selectList,
