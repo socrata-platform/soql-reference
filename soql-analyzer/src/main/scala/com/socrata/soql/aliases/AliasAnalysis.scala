@@ -84,7 +84,7 @@ object AliasAnalysis extends AliasAnalysis {
     val exceptedColumnNames = new mutable.HashSet[ColumnName]
     for((column, position) <- exceptions) {
       if(exceptedColumnNames.contains(column)) throw RepeatedException(column, position)
-      if(!columns.contains(column)) throw NoSuchColumn(column, position)
+      if(!columns.contains(column)) throw new NoSuchColumn.RealNoSuchColumn(qual, column, position)
       exceptedColumnNames += column
     }
     for {

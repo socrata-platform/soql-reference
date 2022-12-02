@@ -2,10 +2,12 @@ package com.socrata.soql.types
 
 import java.net.{URI, URISyntaxException}
 
+import com.socrata.prettyprint.prelude._
 import com.google.protobuf.{CodedInputStream, CodedOutputStream}
 import com.ibm.icu.util.CaseInsensitiveString
-import com.rojoma.json.v3.ast.{JArray, JObject, JValue}
+import com.rojoma.json.v3.ast.{JArray, JObject, JValue, JString}
 import com.rojoma.json.v3.io.JsonReaderException
+import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, JsonKey, JsonUtil}
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.types.obfuscation.{CryptProvider, Obfuscator}
@@ -78,14 +80,29 @@ object SoQLType {
       SoQLType.typesByName(name) // post-analysis, the fake types are gone
     }
   }
+
+  implicit object jEncode extends JsonEncode[SoQLType] {
+    def encode(t: SoQLType) = JString(t.name.name)
+  }
+
+  implicit object jDecode extends JsonDecode[SoQLType] {
+    def decode(x: JValue) = x match {
+      case JString(name) => typesByName.get(TypeName(name)).toRight(DecodeError.InvalidValue(got = x))
+      case other => Left(DecodeError.InvalidType(expected = JString, got = other.jsonType))
+    }
+  }
 }
 
 sealed trait SoQLValue {
   def typ: SoQLType
+  def doc(cryptProvider: CryptProvider): Doc[Nothing]
 }
 
 case class SoQLID(value: Long) extends SoQLValue {
   def typ = SoQLID
+
+  def doc(cryptProvider: CryptProvider) =
+    Doc(new SoQLID.StringRep(cryptProvider)(this))
 }
 case object SoQLID extends SoQLType("row_identifier") {
   private def prefix = "row-"
@@ -134,6 +151,9 @@ case object SoQLID extends SoQLType("row_identifier") {
 
 case class SoQLVersion(value: Long) extends SoQLValue {
   def typ = SoQLVersion
+
+  def doc(cryptProvider: CryptProvider) =
+    Doc(new SoQLVersion.StringRep(cryptProvider)(this))
 }
 case object SoQLVersion extends SoQLType("row_version") {
   private def prefix = "rv-"
@@ -161,20 +181,30 @@ case object SoQLVersion extends SoQLType("row_version") {
 
 case class SoQLText(value: String) extends SoQLValue {
   def typ = SoQLText
+
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(value).toString)
 }
 case object SoQLText extends SoQLType("text")
 
 case class SoQLBoolean(value: Boolean) extends SoQLValue {
   def typ = SoQLBoolean
+
+  def doc(cryptProvider: CryptProvider) =
+    Doc(if(value) "true" else "false")
 }
 case object SoQLBoolean extends SoQLType("boolean") {
-  val canonicalTrue = SoQLBoolean(true)
-  val canonicalFalse = SoQLBoolean(false)
-  def canonicalValue(b: Boolean) = if(b) canonicalTrue else canonicalFalse
+  val canonicalTrue = new SoQLBoolean(true)
+  val canonicalFalse = new SoQLBoolean(false)
+  def apply(b: Boolean) = if(b) canonicalTrue else canonicalFalse
+  def canonicalValue(b: Boolean) = apply(b)
 }
 
 case class SoQLNumber(value: java.math.BigDecimal) extends SoQLValue {
   def typ = SoQLNumber
+
+  def doc(cryptProvider: CryptProvider) =
+    Doc(value.toString)
 
   override def equals(that: Any) =
     that match {
@@ -188,16 +218,22 @@ case object SoQLNumber extends SoQLType("number")
 
 case class SoQLMoney(value: java.math.BigDecimal) extends SoQLValue {
   def typ = SoQLMoney
+  def doc(cryptProvider: CryptProvider) =
+    Doc(value.toString)
 }
 case object SoQLMoney extends SoQLType("money")
 
 case class SoQLDouble(value: Double) extends SoQLValue {
   def typ = SoQLDouble
+  def doc(cryptProvider: CryptProvider) =
+    Doc(value.toString)
 }
 case object SoQLDouble extends SoQLType("double")
 
 case class SoQLFixedTimestamp(value: DateTime) extends SoQLValue {
   def typ = SoQLFixedTimestamp
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(SoQLFixedTimestamp.StringRep(value)).toString)
 }
 case object SoQLFixedTimestamp extends SoQLType("fixed_timestamp") {
   object StringRep {
@@ -220,6 +256,8 @@ case object SoQLFixedTimestamp extends SoQLType("fixed_timestamp") {
 
 case class SoQLFloatingTimestamp(value: LocalDateTime) extends SoQLValue {
   def typ = SoQLFloatingTimestamp
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(SoQLFloatingTimestamp.StringRep(value)).toString)
 }
 case object SoQLFloatingTimestamp extends SoQLType("floating_timestamp") {
   object StringRep {
@@ -239,6 +277,8 @@ case object SoQLFloatingTimestamp extends SoQLType("floating_timestamp") {
 
 case class SoQLDate(value: LocalDate) extends SoQLValue {
   def typ = SoQLDate
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(SoQLDate.StringRep(value)).toString)
 }
 case object SoQLDate extends SoQLType("date") {
   object StringRep {
@@ -258,6 +298,8 @@ case object SoQLDate extends SoQLType("date") {
 
 case class SoQLTime(value: LocalTime) extends SoQLValue {
   def typ = SoQLTime
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(SoQLTime.StringRep(value)).toString)
 }
 case object SoQLTime extends SoQLType("time") {
   object StringRep {
@@ -277,6 +319,8 @@ case object SoQLTime extends SoQLType("time") {
 
 case class SoQLInterval(value: Period) extends SoQLValue {
   def typ = SoQLInterval
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(SoQLInterval.StringRep(value)).toString)
 }
 
 case object SoQLInterval extends SoQLType("interval") {
@@ -301,21 +345,29 @@ case object SoQLInterval extends SoQLType("interval") {
 
 case class SoQLObject(value: JObject) extends SoQLValue {
   def typ = SoQLObject
+  def doc(cryptProvider: CryptProvider) =
+    Doc(value.toString)
 }
 case object SoQLObject extends SoQLType("object")
 
 case class SoQLArray(value: JArray) extends SoQLValue {
   def typ = SoQLArray
+  def doc(cryptProvider: CryptProvider) =
+    Doc(value.toString)
 }
 case object SoQLArray extends SoQLType("array")
 
 case class SoQLJson(value: JValue) extends SoQLValue {
   def typ = SoQLJson
+  def doc(cryptProvider: CryptProvider) =
+    Doc(value.toString)
 }
 case object SoQLJson extends SoQLType("json")
 
 case class SoQLPoint(value: Point) extends SoQLValue {
   def typ = SoQLPoint
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(SoQLPoint.WktRep(value)).toString)
 }
 case object SoQLPoint extends SoQLType("point") with SoQLGeometryLike[Point] {
   override protected val Treified = classOf[Point]
@@ -323,6 +375,8 @@ case object SoQLPoint extends SoQLType("point") with SoQLGeometryLike[Point] {
 
 case class SoQLMultiLine(value: MultiLineString) extends SoQLValue {
   def typ = SoQLMultiLine
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(SoQLMultiLine.WktRep(value)).toString)
 }
 case object SoQLMultiLine extends SoQLType("multiline") with SoQLGeometryLike[MultiLineString] {
   override protected val Treified = classOf[MultiLineString]
@@ -330,6 +384,8 @@ case object SoQLMultiLine extends SoQLType("multiline") with SoQLGeometryLike[Mu
 
 case class SoQLMultiPolygon(value: MultiPolygon) extends SoQLValue {
   def typ = SoQLMultiPolygon
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(SoQLMultiPolygon.WktRep(value)).toString)
 }
 case object SoQLMultiPolygon extends SoQLType("multipolygon") with SoQLGeometryLike[MultiPolygon] {
   override protected val Treified = classOf[MultiPolygon]
@@ -337,6 +393,8 @@ case object SoQLMultiPolygon extends SoQLType("multipolygon") with SoQLGeometryL
 
 case class SoQLPolygon(value: Polygon) extends SoQLValue {
   def typ = SoQLPolygon
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(SoQLPolygon.WktRep(value)).toString)
 }
 case object SoQLPolygon extends SoQLType("polygon") with SoQLGeometryLike[Polygon] {
   override protected val Treified = classOf[Polygon]
@@ -344,6 +402,8 @@ case object SoQLPolygon extends SoQLType("polygon") with SoQLGeometryLike[Polygo
 
 case class SoQLMultiPoint(value: MultiPoint) extends SoQLValue {
   def typ = SoQLMultiPoint
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(SoQLMultiPoint.WktRep(value)).toString)
 }
 case object SoQLMultiPoint extends SoQLType("multipoint") with SoQLGeometryLike[MultiPoint] {
   override protected val Treified = classOf[MultiPoint]
@@ -351,6 +411,8 @@ case object SoQLMultiPoint extends SoQLType("multipoint") with SoQLGeometryLike[
 
 case class SoQLLine(value: LineString) extends SoQLValue {
   def typ = SoQLLine
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(SoQLLine.WktRep(value)).toString)
 }
 case object SoQLLine extends SoQLType("line") with SoQLGeometryLike[LineString] {
   override protected val Treified = classOf[LineString]
@@ -358,11 +420,15 @@ case object SoQLLine extends SoQLType("line") with SoQLGeometryLike[LineString] 
 
 case class SoQLBlob(value: String) extends SoQLValue {
   def typ = SoQLBlob
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(value).toString)
 }
 case object SoQLBlob extends SoQLType("blob")
 
 case class SoQLPhoto(value: String) extends SoQLValue {
   def typ = SoQLPhoto
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(value).toString)
 }
 case object SoQLPhoto extends SoQLType("photo")
 
@@ -371,6 +437,8 @@ case class SoQLLocation(latitude: Option[java.math.BigDecimal],
                         @JsonKey("human_address") address: Option[String]
 ) extends SoQLValue {
   def typ = SoQLLocation
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(SoQLLocation.jCodec.encode(this).toString).toString)
 }
 
 case object SoQLLocation extends SoQLType("location") {
@@ -391,11 +459,14 @@ case object SoQLLocation extends SoQLType("location") {
 case object SoQLNull extends SoQLType("null") with SoQLValue {
   override def isPassableTo(that: SoQLType) = true
   def typ = this
+  def doc(cryptProvider: CryptProvider) = d"NULL"
 }
 
 case class SoQLPhone(@JsonKey("phone_number") phoneNumber: Option[String],
                      @JsonKey("phone_type") phoneType: Option[String]) extends SoQLValue {
   def typ = SoQLPhone
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(SoQLPhone.jCodec.encode(this).toString).toString)
 }
 
 case object SoQLPhone extends SoQLType("phone") {
@@ -423,6 +494,8 @@ case object SoQLPhone extends SoQLType("phone") {
 case class SoQLUrl(@JsonKey("url") url: Option[String],
                    @JsonKey("description") description: Option[String]) extends SoQLValue {
   def typ = SoQLUrl
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(SoQLUrl.jCodec.encode(this).toString).toString)
 }
 
 case object SoQLUrl extends SoQLType("url") {
@@ -474,6 +547,8 @@ case class SoQLDocument(@JsonKey("file_id") fileId: String,
                         @JsonKey("content_type") contentType: Option[String],
                         @JsonKey("filename") filename: Option[String]) extends SoQLValue {
   def typ = SoQLDocument
+  def doc(cryptProvider: CryptProvider) =
+    Doc(JString(SoQLDocument.jCodec.encode(this).toString).toString)
 }
 
 case object SoQLDocument extends SoQLType("document") {

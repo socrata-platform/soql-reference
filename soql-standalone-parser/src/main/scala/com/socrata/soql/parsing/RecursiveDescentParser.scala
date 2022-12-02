@@ -5,7 +5,7 @@ import scala.collection.compat.immutable.LazyList
 import scala.util.parsing.input.Position
 import scala.annotation.tailrec
 
-import com.socrata.NonEmptySeq
+import com.socrata.soql.collection.NonEmptySeq
 import com.socrata.soql.ast._
 import com.socrata.soql.tokens._
 import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, ast, tokens}
@@ -139,12 +139,17 @@ object RecursiveDescentParser {
   val LAST = new Keyword("LAST")
   val RANGE = new Keyword("RANGE")
   val ROWS = new Keyword("ROWS")
+  val GROUPS = new Keyword("GROUPS")
   val UNBOUNDED = new Keyword("UNBOUNDED")
   val PRECEDING = new Keyword("PRECEDING")
   val CURRENT = new Keyword("CURRENT")
   val ROW = new Keyword("ROW")
   val FOLLOWING = new Keyword("FOLLOWING")
   val FILTER = new Keyword("FILTER")
+  val EXCLUDE = new Keyword("EXCLUDE")
+  val TIES = new Keyword("TIES")
+  val NO = new Keyword("NO")
+  val OTHERS = new Keyword("OTHERS")
 
   // Hints
   val HINT = new Keyword("HINT")
@@ -202,8 +207,9 @@ object RecursiveDescentParser {
   private val PARTITIONBY_SET = s(APartitionBy)
   private val ASC_DESC_SET = s(ASC(), DESC())
   private val NULL_NULLS_SET = s(NULL(), NULLS())
-  private val RANGE_ROWS_SET = s(RANGE(), ROWS())
+  private val RANGE_ROWS_GROUPS_SET = s(RANGE(), ROWS(), GROUPS())
   private val OVER_SET = s(OVER())
+  private val EXCLUDE_SET = s(EXCLUDE())
   private val FILTER_SET = s(FILTER())
   private val DOT_LBRACKET_SET = s(DOT(), LBRACKET())
 
@@ -676,7 +682,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           r2.first match {
             case AS() =>
               // now we must see an identifier...
-              val ParseResult(r3, identPos) = alias(r2.rest)
+              val ParseResult(r3, identPos) = alias(r2.rest, e)
               result += SelectedExpression(e, Some(identPos))
               loop(r3, commaFirst = true)
             case _ =>
@@ -694,11 +700,13 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     ParseResult(finalReader, result.result())
   }
 
-  private def alias(reader: Reader): ParseResult[(ColumnName, Position)] = {
-    reader.first match {
-      case i: Identifier =>
+  private def alias(reader: Reader, forExpr: Expression): ParseResult[(ColumnName, Position)] = {
+    (reader.first, forExpr) match {
+      case (i: Identifier, _) =>
         ParseResult(reader.rest, (ColumnName(i.value), i.position))
-      case si: SystemIdentifier =>
+      case (si: SystemIdentifier, ColumnOrAliasRef(_, cn)) if ColumnName(si.value) == cn =>
+        ParseResult(reader.rest, (ColumnName(si.value), si.position))
+      case (si: SystemIdentifier, _) =>
         val cn = ColumnName(si.value)
         if(parameters.systemColumnAliasesAllowed.contains(cn)) {
           ParseResult(reader.rest, (cn, si.position))
@@ -1110,31 +1118,65 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
 
   private def windowFrameClause(reader: Reader): ParseResult[Seq[Expression]] = {
     reader.first match {
-      case r@(RANGE() | ROWS()) =>
+      case r@(RANGE() | ROWS() | GROUPS()) =>
         reader.rest.first match {
           case b@BETWEEN() =>
             val ParseResult(r2, fa) = frameStartEnd(reader.rest.rest)
             r2.first match {
               case a@AND() =>
-                frameStartEnd(r2.rest).map { fb =>
-                  Seq(tokenToLiteral(r), tokenToLiteral(b)) ++ fa ++ Seq(tokenToLiteral(a)) ++ fb
+                val ParseResult(r3, clauseStart) = frameStartEnd(r2.rest)
+                frameExclusion(r3).map { excl =>
+                  Seq(tokenToLiteral(r), tokenToLiteral(b)) ++ fa ++ Seq(tokenToLiteral(a)) ++ clauseStart ++ excl
                 }
               case _ =>
                 fail(r2, AND())
             }
           case UNBOUNDED() | CURRENT() =>
-            frameStartEnd(reader.rest).map { fb =>
-              tokenToLiteral(r) +: fb
+            val ParseResult(r2, clauseStart) = frameStartEnd(reader.rest)
+            frameExclusion(r2).map { excl =>
+              tokenToLiteral(r) +: (clauseStart ++ excl)
             }
           case _: IntegerLiteral =>
-            frameStartEnd(reader.rest).map { fb =>
-              tokenToLiteral(r) +: fb
+            val ParseResult(r2, clauseStart) = frameStartEnd(reader.rest)
+            frameExclusion(r2).map { excl =>
+              tokenToLiteral(r) +: (clauseStart ++ excl)
             }
           case _ =>
             fail(reader.rest, BETWEEN(), UNBOUNDED(), CURRENT(), AnIntegerLiteral)
         }
       case _ =>
-        reader.addAlternates(RANGE_ROWS_SET)
+        reader.addAlternates(RANGE_ROWS_GROUPS_SET)
+        ParseResult(reader, Nil)
+    }
+  }
+
+  private def frameExclusion(reader: Reader): ParseResult[Seq[Expression]] = {
+    reader.first match {
+      case r@EXCLUDE() =>
+        reader.rest.first match {
+          case r2@CURRENT() =>
+            reader.rest.rest.first match {
+              case r3@ROW() =>
+                ParseResult(reader.rest.rest.rest, Seq(tokenToLiteral(r), tokenToLiteral(r2), tokenToLiteral(r3)))
+              case _ =>
+                fail(reader.rest.rest, ROW())
+            }
+          case r2@GROUP() =>
+            ParseResult(reader.rest.rest, Seq(tokenToLiteral(r), tokenToLiteral(r2)))
+          case r2@TIES() =>
+            ParseResult(reader.rest.rest, Seq(tokenToLiteral(r), tokenToLiteral(r2)))
+          case r2@NO() =>
+            reader.rest.rest.first match {
+              case r3@OTHERS() =>
+                ParseResult(reader.rest.rest.rest, Seq(tokenToLiteral(r), tokenToLiteral(r2), tokenToLiteral(r3)))
+              case _ =>
+                fail(reader.rest.rest, OTHERS())
+            }
+          case _ =>
+            fail(reader.rest, CURRENT(), GROUP(), TIES(), NO())
+        }
+      case _ =>
+        reader.addAlternates(EXCLUDE_SET)
         ParseResult(reader, Nil)
     }
   }

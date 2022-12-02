@@ -1,20 +1,88 @@
 package com.socrata.soql.functions
 
+import org.joda.time.{DateTime, LocalDateTime, LocalDate, LocalTime, Period}
+import com.vividsolutions.jts.geom.{LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon}
+
 import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.typed
 import com.socrata.soql.types._
-import com.socrata.soql.typechecker.TypeInfo
+import com.socrata.soql.typechecker.{TypeInfo, TypeInfo2, HasType}
+import com.socrata.soql.ast
+import com.socrata.soql.analyzer2
 
 import scala.util.parsing.input.Position
 
-object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] {
+object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLType, SoQLValue] {
   val typeParameterUniverse = OrderedSet(SoQLType.typePreferences : _*)
 
+  implicit object hasType extends HasType[SoQLValue, SoQLType] {
+    def typeOf(cv: SoQLValue) = cv.typ
+  }
+
+  def potentialExprs(l: ast.Literal) =
+    l match {
+      case ast.NullLiteral() => typeParameterUniverse.iterator.map(analyzer2.NullLiteral(_)(l.position)).toVector
+      case ast.BooleanLiteral(b) => Seq(analyzer2.LiteralValue(SoQLBoolean(b))(l.position))
+      case ast.NumberLiteral(n) =>
+        val baseNumber = analyzer2.LiteralValue(SoQLNumber(n.bigDecimal))(l.position)
+        Seq(
+          baseNumber,
+          analyzer2.FunctionCall(numberToMoneyFunc, Seq(baseNumber))(l.position, l.position),
+          analyzer2.FunctionCall(numberToDoubleFunc, Seq(baseNumber))(l.position, l.position),
+        )
+      case ast.StringLiteral(s) =>
+        val baseString = analyzer2.LiteralValue(SoQLText(s))(l.position)
+        val results = Seq.newBuilder[analyzer2.Expr[SoQLType, SoQLValue]]
+        results += baseString
+        for {
+          conversion <- stringConversions
+          v <- conversion.test(s)
+          expr <- conversion.exprs
+        } {
+          results += expr(v, l.position)
+        }
+        results += analyzer2.FunctionCall(textToBlobFunc, Seq(baseString))(l.position, l.position)
+        results += analyzer2.FunctionCall(textToPhotoFunc, Seq(baseString))(l.position, l.position)
+        results.result()
+    }
+
+  def boolType = SoQLBoolean.t
   def booleanLiteralExpr(b: Boolean, pos: Position) = Seq(typed.BooleanLiteral(b, SoQLBoolean.t)(pos))
 
   private def getMonomorphically(f: Function[SoQLType]): MonomorphicFunction[SoQLType] =
     f.monomorphic.getOrElse(sys.error(f.identity + " not monomorphic?"))
+
+  private def funcExpr(f: MonomorphicFunction[SoQLType]) = { (t: SoQLValue, pos: Position) =>
+    analyzer2.FunctionCall(f, Seq(analyzer2.LiteralValue(t)(pos)))(pos, pos)
+  }
+
+  private def textToFixedTimestampExpr(dt: DateTime, pos: Position) =
+    analyzer2.LiteralValue(SoQLFixedTimestamp(dt))(pos)
+  private def textToFloatingTimestampExpr(ldt: LocalDateTime, pos: Position) =
+    analyzer2.LiteralValue(SoQLFloatingTimestamp(ldt))(pos)
+  private def textToDateExpr(d: LocalDate, pos: Position) =
+    analyzer2.LiteralValue(SoQLDate(d))(pos)
+  private def textToTimeExpr(t: LocalTime, pos: Position) =
+    analyzer2.LiteralValue(SoQLTime(t))(pos)
+  private def textToIntervalExpr(p: Period, pos: Position) =
+    analyzer2.LiteralValue(SoQLInterval(p))(pos)
+  private def textToNumberExpr(s: SoQLText, pos: Position) =
+    analyzer2.LiteralValue(SoQLNumber(new java.math.BigDecimal(s.value)))(pos)
+  private def textToMoneyExpr(s: SoQLText, pos: Position) =
+    analyzer2.LiteralValue(SoQLMoney(new java.math.BigDecimal(s.value)))(pos)
+  private def textToPointExpr(p: Point, pos: Position) =
+    analyzer2.LiteralValue(SoQLPoint(p))(pos)
+  private def textToMultiPointExpr(mp: MultiPoint, pos: Position) =
+    analyzer2.LiteralValue(SoQLMultiPoint(mp))(pos)
+  private def textToLineExpr(l: LineString, pos: Position) =
+    analyzer2.LiteralValue(SoQLLine(l))(pos)
+  private def textToMultiLineExpr(ml: MultiLineString, pos: Position) =
+    analyzer2.LiteralValue(SoQLMultiLine(ml))(pos)
+  private def textToPolygonExpr(p: Polygon, pos: Position) =
+    analyzer2.LiteralValue(SoQLPolygon(p))(pos)
+  private def textToMultiPolygonExpr(mp: MultiPolygon, pos: Position) =
+    analyzer2.LiteralValue(SoQLMultiPolygon(mp))(pos)
 
   private val textToFixedTimestampFunc = getMonomorphically(SoQLFunctions.TextToFixedTimestamp)
   private val textToFloatingTimestampFunc = getMonomorphically(SoQLFunctions.TextToFloatingTimestamp)
@@ -66,25 +134,47 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] {
       false
   }
 
-  val stringConversions = Seq[(String => Boolean, Seq[MonomorphicFunction[SoQLType]])](
-    (SoQLFixedTimestamp.StringRep.unapply(_).isDefined, Seq(textToFixedTimestampFunc)),
-    (SoQLFloatingTimestamp.StringRep.unapply(_).isDefined, Seq(textToFloatingTimestampFunc)),
-    (SoQLDate.StringRep.unapply(_).isDefined, Seq(textToDateFunc)),
-    (SoQLTime.StringRep.unapply(_).isDefined, Seq(textToTimeFunc)),
-    (SoQLInterval.StringRep.unapply(_).isDefined, Seq(textToIntervalFunc)),
-    (SoQLID.isPossibleId, Seq(textToRowIdFunc)),
-    (SoQLVersion.isPossibleVersion, Seq(textToRowVersionFunc)),
-    (isNumberLiteral, Seq(textToNumberFunc, textToMoneyFunc)),
-    (SoQLPoint.WktRep.unapply(_).isDefined, Seq(textToPointFunc)),
-    (SoQLMultiPoint.WktRep.unapply(_).isDefined, Seq(textToMultiPointFunc)),
-    (SoQLLine.WktRep.unapply(_).isDefined, Seq(textToLineFunc)),
-    (SoQLMultiLine.WktRep.unapply(_).isDefined, Seq(textToMultiLineFunc)),
-    (SoQLPolygon.WktRep.unapply(_).isDefined, Seq(textToPolygonFunc)),
-    (SoQLMultiPolygon.WktRep.unapply(_).isDefined, Seq(textToMultiPolygonFunc)),
-    (SoQLPhone.isPossible, Seq(textToPhoneFunc)),
-    (SoQLUrl.isPossible, Seq(textToUrlFunc)),
-    (SoQLLocation.isPossibleLocation, Seq(textToLocationFunc)),
-    (isBooleanLiteral, Seq(textToBooleanFunc))
+  // This is a bit icky now; it can be simplified when/if the old type tree format goes away
+  sealed abstract class Conversions {
+    type TestResult
+    def test(s: String): Option[TestResult]
+    val functions: Seq[MonomorphicFunction[SoQLType]]
+    val exprs: Seq[(TestResult, Position) => analyzer2.Expr[SoQLType, SoQLValue]]
+  }
+  object Conversions {
+    def apply[T](tst: String => Option[T], fs: Seq[MonomorphicFunction[SoQLType]], es: Seq[(T, Position) => analyzer2.Expr[SoQLType, SoQLValue]]) = new Conversions {
+      type TestResult = T
+      def test(s: String) = tst(s)
+      val functions = fs
+      val exprs = es
+    }
+    def simple(tst: String => Boolean, fs: Seq[MonomorphicFunction[SoQLType]], es: Seq[(SoQLText, Position) => analyzer2.Expr[SoQLType, SoQLValue]]) = new Conversions {
+      type TestResult = String
+      def test(s: String) = if(tst(s)) Some(s) else None
+      val functions = fs
+      val exprs = es.map { ef => (s: String, pos: Position) => ef(SoQLText(s), pos) }
+    }
+  }
+
+  val stringConversions = Seq[Conversions](
+    Conversions(SoQLFixedTimestamp.StringRep.unapply(_), Seq(textToFixedTimestampFunc), Seq(textToFixedTimestampExpr _)),
+    Conversions(SoQLFloatingTimestamp.StringRep.unapply(_), Seq(textToFloatingTimestampFunc), Seq(textToFloatingTimestampExpr _)),
+    Conversions(SoQLDate.StringRep.unapply(_), Seq(textToDateFunc), Seq(textToDateExpr _)),
+    Conversions(SoQLTime.StringRep.unapply(_), Seq(textToTimeFunc), Seq(textToTimeExpr _)),
+    Conversions(SoQLInterval.StringRep.unapply(_), Seq(textToIntervalFunc), Seq(textToIntervalExpr _)),
+    Conversions.simple(SoQLID.isPossibleId, Seq(textToRowIdFunc), Seq(funcExpr(textToRowIdFunc))),
+    Conversions.simple(SoQLVersion.isPossibleVersion, Seq(textToRowVersionFunc), Seq(funcExpr(textToRowVersionFunc))),
+    Conversions.simple(isNumberLiteral, Seq(textToNumberFunc, textToMoneyFunc), Seq(textToNumberExpr, textToMoneyExpr)),
+    Conversions(SoQLPoint.WktRep.unapply(_), Seq(textToPointFunc), Seq(textToPointExpr _)),
+    Conversions(SoQLMultiPoint.WktRep.unapply(_), Seq(textToMultiPointFunc), Seq(textToMultiPointExpr _)),
+    Conversions(SoQLLine.WktRep.unapply(_), Seq(textToLineFunc), Seq(textToLineExpr _)),
+    Conversions(SoQLMultiLine.WktRep.unapply(_), Seq(textToMultiLineFunc), Seq(textToMultiLineExpr _)),
+    Conversions(SoQLPolygon.WktRep.unapply(_), Seq(textToPolygonFunc), Seq(textToPolygonExpr _)),
+    Conversions(SoQLMultiPolygon.WktRep.unapply(_), Seq(textToMultiPolygonFunc), Seq(textToMultiPolygonExpr _)),
+    Conversions.simple(SoQLPhone.isPossible, Seq(textToPhoneFunc), Seq(funcExpr(textToPhoneFunc))),
+    Conversions.simple(SoQLUrl.isPossible, Seq(textToUrlFunc), Seq(funcExpr(textToUrlFunc))),
+    Conversions.simple(SoQLLocation.isPossibleLocation, Seq(textToLocationFunc), Seq(funcExpr(textToLocationFunc))),
+    Conversions.simple(isBooleanLiteral, Seq(textToBooleanFunc), Seq(funcExpr(textToBooleanFunc)))
   )
 
   def stringLiteralExpr(s: String, pos: Position) = {
@@ -92,9 +182,9 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] {
     val results = Seq.newBuilder[typed.CoreExpr[Nothing, SoQLType]]
     results += baseString
     results ++= (for {
-      (test, funcs) <- stringConversions
-      if test(s)
-      func <- funcs
+      conversion <- stringConversions
+      if conversion.test(s).isDefined
+      func <- conversion.functions
     } yield typed.FunctionCall(func, Seq(baseString), None, None)(pos, pos))
     results += typed.FunctionCall(textToBlobFunc, Seq(baseString), None, None)(pos, pos)
     results += typed.FunctionCall(textToPhotoFunc, Seq(baseString), None, None)(pos, pos)
@@ -122,6 +212,9 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] {
   def isGroupable(typ: SoQLType): Boolean = SoQLTypeClasses.Equatable(typ)
 
   def typeOf(value: SoQLValue) = value.typ
+
+  def literalBoolean(b: Boolean, pos: Position) =
+    analyzer2.LiteralValue(SoQLBoolean(b))(pos)
 
   def literalExprFor(value: SoQLValue, pos: Position) =
     value match {

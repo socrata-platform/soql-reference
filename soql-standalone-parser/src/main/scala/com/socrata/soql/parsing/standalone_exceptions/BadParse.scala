@@ -6,7 +6,7 @@ import scala.util.parsing.input.Position
 import com.socrata.soql.parsing.RecursiveDescentParser
 import com.socrata.soql.parsing.RecursiveDescentParser.{Reader, ParseException}
 
-case class BadParse(message: String, position: Position) extends Exception(message)
+case class BadParse(message: String, position: Position) extends LexerParserException(message)
 
 object BadParse {
   class ExpectedToken(val reader: Reader)

@@ -1,6 +1,6 @@
 package com.socrata.soql.parsing
 
-import com.socrata.NonEmptySeq
+import com.socrata.soql.collection.NonEmptySeq
 
 import scala.reflect.ClassTag
 import scala.util.parsing.combinator.{PackratParsers, Parsers}

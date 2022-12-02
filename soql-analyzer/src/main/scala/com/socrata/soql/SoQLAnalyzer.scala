@@ -13,7 +13,6 @@ import com.socrata.soql.environment._
 import com.socrata.soql.collection._
 import com.socrata.soql.typed.{ColumnRef, CoreExpr, Qualifier, TypedLiteral}
 import Select._
-import com.socrata.NonEmptySeq
 import com.socrata.soql.mapping.ColumnIdMapper
 
 case class AnalysisContext[Type, Value](schemas: Map[String, DatasetContext[Type]], parameters: ParameterSpec[Type, Value]) {
