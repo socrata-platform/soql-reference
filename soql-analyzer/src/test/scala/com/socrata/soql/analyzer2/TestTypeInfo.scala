@@ -13,21 +13,21 @@ object TestTypeInfo extends TypeInfo2[TestType, TestValue] {
     }
 
     def literalBoolean(b: Boolean, position: Position): Expr[TestType, TestValue] =
-      LiteralValue(TestBoolean(b))(position)
+      LiteralValue(TestBoolean(b))(new AtomicPositionInfo(position))
 
     def potentialExprs(l: ast.Literal): Seq[Expr[TestType, TestValue]] =
       l match {
         case ast.StringLiteral(s) =>
           val asInt =
             try {
-              Some(LiteralValue(TestNumber(s.toInt))(l.position))
+              Some(LiteralValue(TestNumber(s.toInt))(new AtomicPositionInfo(l.position)))
             } catch {
               case _ : NumberFormatException => None
             }
-          Seq(LiteralValue(TestText(s))(l.position)) ++ asInt
-        case ast.NumberLiteral(n) => Seq(LiteralValue(TestNumber(n.toInt))(l.position))
-        case ast.BooleanLiteral(b) => Seq(LiteralValue(TestBoolean(b))(l.position))
-        case ast.NullLiteral() => typeParameterUniverse.iterator.map(NullLiteral(_)(l.position)).toVector
+          Seq(LiteralValue(TestText(s))(new AtomicPositionInfo(l.position))) ++ asInt
+        case ast.NumberLiteral(n) => Seq(LiteralValue(TestNumber(n.toInt))(new AtomicPositionInfo(l.position)))
+        case ast.BooleanLiteral(b) => Seq(LiteralValue(TestBoolean(b))(new AtomicPositionInfo(l.position)))
+        case ast.NullLiteral() => typeParameterUniverse.iterator.map(NullLiteral(_)(new AtomicPositionInfo(l.position))).toVector
       }
 
     def typeParameterUniverse: OrderedSet[TestType] = OrderedSet(

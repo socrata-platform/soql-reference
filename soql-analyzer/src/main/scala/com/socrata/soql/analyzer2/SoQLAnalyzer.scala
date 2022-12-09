@@ -125,7 +125,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         case from: FromTable[RNS, CT] =>
           selectFromFrom(
             from.columns.map { case (label, NameEntry(name, typ)) =>
-              labelProvider.columnLabel() -> NamedExpr(Column(from.label, label, typ)(NoPosition), name)
+              labelProvider.columnLabel() -> NamedExpr(Column(from.label, label, typ)(AtomicPositionInfo.None), name)
             },
             from
           )
@@ -187,7 +187,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           Select(
             Distinctiveness.Indistinct,
             selectList = OrderedMap() ++ from.columns.iterator.zip(columnLabels.iterator).map { case ((dcn, NameEntry(name, typ)), outputLabel) =>
-              outputLabel -> NamedExpr(Column(from.label, dcn, typ)(NoPosition), name)
+              outputLabel -> NamedExpr(Column(from.label, dcn, typ)(AtomicPositionInfo.None), name)
             },
             from,
             None,
@@ -195,7 +195,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             None,
             desc.ordering.map { case TableDescription.Ordering(dcn, ascending) =>
               val NameEntry(_, typ) = from.columns(dcn)
-              OrderBy(Column(from.label, dcn, typ)(NoPosition), ascending = ascending, nullLast = ascending)
+              OrderBy(Column(from.label, dcn, typ)(AtomicPositionInfo.None), ascending = ascending, nullLast = ascending)
             },
             None,
             None,
@@ -339,7 +339,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           }
           val checked = finalState.typecheck(expr)
           if(!typeInfo.isGroupable(checked.typ)) {
-            invalidGroupBy(checked.typ, checked.position)
+            invalidGroupBy(checked.typ, checked.position.logicalPosition)
           }
           checked
         }
@@ -350,7 +350,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           }
           val checked = finalState.typecheck(expr)
           if(!typeInfo.isOrdered(checked.typ)) {
-            unorderedOrderBy(checked.typ, checked.position)
+            unorderedOrderBy(checked.typ, checked.position.logicalPosition)
           }
           OrderBy(checked, ascending, nullLast)
         }
@@ -364,7 +364,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             } else { // distinct on without an order by implicitly orders by the distinct columns
               for(expr <- exprs) {
                 if(!typeInfo.isOrdered(expr.typ)) {
-                  unorderedOrderBy(expr.typ, expr.position)
+                  unorderedOrderBy(expr.typ, expr.position.logicalPosition)
                 }
               }
             }
@@ -580,7 +580,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
                 val outOfLineParamsLabel = labelProvider.tableLabel()
                 val innerUdfParams =
                   outOfLineParamsQuery.schema.keys.lazyZip(outOfLineParams).map { case (colLabel, (name, expr)) =>
-                    name -> { (p: Position) => Column(outOfLineParamsLabel, colLabel, expr.typ)(p) }
+                    name -> { (p: Position) => Column(outOfLineParamsLabel, colLabel, expr.typ)(new AtomicPositionInfo(p)) }
                   }.toMap ++ inlineParams.withValuesMapped { c =>
                     // reposition the inline parameter so that if an
                     // error is reported while typechecking (or,
@@ -598,7 +598,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
                   Select(
                     Distinctiveness.Indistinct,
                     OrderedMap() ++ useQuery.statement.schema.iterator.map { case (label, NameEntry(name, typ)) =>
-                      labelProvider.columnLabel() -> NamedExpr(Column(useQuery.label, label, typ)(NoPosition), name)
+                      labelProvider.columnLabel() -> NamedExpr(Column(useQuery.label, label, typ)(AtomicPositionInfo.None), name)
                     },
                     Join(
                       JoinType.Inner,
@@ -664,7 +664,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           case AggregateFunctionCall(f, args, _distinct, filter) if allowAggregates =>
             args.foreach(verifyAggregatesAndWindowFunctions(_, false, false, groupBys))
           case agg: AggregateFunctionCall[CT, CV] =>
-            aggregateFunctionNotAllowed(agg.function.name, agg.functionNamePosition)
+            aggregateFunctionNotAllowed(agg.function.name, agg.position.functionNamePosition)
           case w@WindowedFunctionCall(f, args, filter, partitionBy, orderBy, _frame) if allowWindow =>
             // Fun fact: this order by does not have the same no-literals restriction as a select's order-by
             val subExprsAreAggregates = allowAggregates && w.isAggregated
@@ -672,7 +672,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             partitionBy.foreach(verifyAggregatesAndWindowFunctions(_, subExprsAreAggregates, false, groupBys))
             orderBy.foreach { ob => verifyAggregatesAndWindowFunctions(ob.expr, subExprsAreAggregates, false, groupBys) }
           case wfc: WindowedFunctionCall[CT, CV] =>
-            windowFunctionNotAllowed(wfc.function.name, wfc.functionNamePosition)
+            windowFunctionNotAllowed(wfc.function.name, wfc.position.functionNamePosition)
           case e: Expr[CT, CV] if allowAggregates && groupBys.contains(e) =>
             // ok, we want an aggregate and this is an expression from the GROUP BY clause
           case FunctionCall(_f, args) =>
@@ -681,7 +681,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           case c@Column(_table, _col, _typ) if allowAggregates =>
             // Column reference, but it's not from the group by clause.
             // Fail!
-            ungroupedColumnReference(c.position)
+            ungroupedColumnReference(c.position.logicalPosition)
           case _ =>
             // ok
         }

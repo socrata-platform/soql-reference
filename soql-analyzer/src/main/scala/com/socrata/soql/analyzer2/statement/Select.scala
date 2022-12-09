@@ -173,7 +173,7 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
     val wantSubqueryOrdered = (isWindowed || wantOutputOrdered) && !isAggregated && distinctiveness == Distinctiveness.Indistinct
     from.preserveOrdering(provider, rowNumberFunction, wantSubqueryOrdered, wantSubqueryOrdered) match {
       case (Some((table, column)), newFrom) =>
-        val col = Column(table, column, rowNumberFunction.result)(NoPosition)
+        val col = Column(table, column, rowNumberFunction.result)(AtomicPositionInfo.None)
 
         val orderedSelf = copy(
           from = newFrom,
@@ -198,7 +198,7 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
 
           val rowNumberLabel = provider.columnLabel()
           val newSelf = copy(
-            selectList = selectList + (rowNumberLabel -> NamedExpr(WindowedFunctionCall(rowNumberFunction, Nil, None, Nil, Nil, None)(NoPosition, NoPosition), freshName("order"))),
+            selectList = selectList + (rowNumberLabel -> NamedExpr(WindowedFunctionCall(rowNumberFunction, Nil, None, Nil, Nil, None)(FuncallPositionInfo.None), freshName("order"))),
             from = newFrom
           )
 
@@ -226,7 +226,7 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
           c // don't bother rewriting column references
         case e =>
           selectListIndices.get(e) match {
-            case Some(idx) => SelectListReference(idx + 1, e.isAggregated, e.isWindowed, e.typ)(e.position)
+            case Some(idx) => SelectListReference(idx + 1, e.isAggregated, e.isWindowed, e.typ)(e.position.asAtomic)
             case None => e
           }
       }
@@ -249,7 +249,7 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
     def unnumericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
       e match {
         case r@SelectListReference(idxPlusOne, _, _, _) =>
-          selectListIndices(idxPlusOne - 1).reposition(r.position)
+          selectListIndices(idxPlusOne - 1).reposition(r.position.logicalPosition)
         case other =>
           other
       }
