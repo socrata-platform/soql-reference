@@ -25,7 +25,7 @@ sealed abstract class Expr[+CT, +CV] extends Product { this: HashedExpr =>
   type Self[+CT, +CV] <: Expr[CT, CV]
 
   val typ: CT
-  val position: Position
+  val position: PositionInfo
 
   val size: Int
 
@@ -96,6 +96,10 @@ object Expr {
   }
 }
 
+sealed abstract class AtomicExpr[+CT, +CV] extends Expr[CT, CV] with Product { this: HashedExpr =>
+  override val position: AtomicPositionInfo
+}
+
 /********* Column *********/
 
 final case class Column[+CT](
@@ -103,9 +107,9 @@ final case class Column[+CT](
   column: ColumnLabel,
   typ: CT
 )(
-  val position: Position
+  val position: AtomicPositionInfo
 ) extends
-    Expr[CT, Nothing]
+    AtomicExpr[CT, Nothing]
     with expression.ColumnImpl[CT]
     with HashedExpr
 object Column extends expression.OColumnImpl
@@ -118,9 +122,9 @@ final case class SelectListReference[+CT](
   isWindowed: Boolean,
   typ: CT
 )(
-  val position: Position
+  val position: AtomicPositionInfo
 ) extends
-    Expr[CT, Nothing]
+    AtomicExpr[CT, Nothing]
     with expression.SelectListReferenceImpl[CT]
     with HashedExpr
 object SelectListReference extends expression.OSelectListReferenceImpl
@@ -128,7 +132,7 @@ object SelectListReference extends expression.OSelectListReferenceImpl
 /********* Literal *********/
 
 sealed abstract class Literal[+CT, +CV]
-    extends Expr[CT, CV]
+    extends AtomicExpr[CT, CV]
     with expression.LiteralImpl[CT, CV] { this: HashedExpr =>
 }
 
@@ -137,7 +141,7 @@ sealed abstract class Literal[+CT, +CV]
 final case class LiteralValue[+CT, +CV](
   value: CV
 )(
-  val position: Position
+  val position: AtomicPositionInfo
 )(
   implicit ev: HasType[CV, CT]
 ) extends
@@ -147,7 +151,7 @@ final case class LiteralValue[+CT, +CV](
 {
   // these need to be here and not in the impl for variance reasons
   val typ = ev.typeOf(value)
-  private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = p)
+  private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = position.logicallyReposition(p))
 }
 object LiteralValue extends expression.OLiteralValueImpl
 
@@ -156,7 +160,7 @@ object LiteralValue extends expression.OLiteralValueImpl
 final case class NullLiteral[+CT](
   typ: CT
 )(
-  val position: Position
+  val position: AtomicPositionInfo
 ) extends
     Literal[CT, Nothing]
     with expression.NullLiteralImpl[CT]
@@ -166,6 +170,7 @@ object NullLiteral extends expression.ONullLiteralImpl
 /********* FuncallLike *********/
 
 sealed abstract class FuncallLike[+CT, +CV] extends Expr[CT, CV] with Product { this: HashedExpr =>
+  override val position: FuncallPositionInfo
 }
 
 /********* Function call *********/
@@ -174,8 +179,7 @@ final case class FunctionCall[+CT, +CV](
   function: MonomorphicFunction[CT],
   args: Seq[Expr[CT, CV]]
 )(
-  val position: Position,
-  val functionNamePosition: Position
+  val position: FuncallPositionInfo
 ) extends
     FuncallLike[CT, CV]
     with expression.FunctionCallImpl[CT, CV]
@@ -190,8 +194,7 @@ final case class AggregateFunctionCall[+CT, +CV](
   distinct: Boolean,
   filter: Option[Expr[CT, CV]]
 )(
-  val position: Position,
-  val functionNamePosition: Position
+  val position: FuncallPositionInfo
 ) extends
     FuncallLike[CT, CV]
     with expression.AggregateFunctionCallImpl[CT, CV]
@@ -211,8 +214,7 @@ final case class WindowedFunctionCall[+CT, +CV](
   orderBy: Seq[OrderBy[CT, CV]], // ditto thus
   frame: Option[Frame]
 )(
-  val position: Position,
-  val functionNamePosition: Position
+  val position: FuncallPositionInfo
 ) extends
     FuncallLike[CT, CV]
     with expression.WindowedFunctionCallImpl[CT, CV]

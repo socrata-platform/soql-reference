@@ -29,7 +29,7 @@ trait SelectListReferenceImpl[+CT] { this: SelectListReference[CT] =>
   protected def doDebugDoc(implicit ev: HasDoc[Nothing]) =
     Doc(index).annotate(Annotation.SelectListReference(index))
 
-  private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = p)
+  private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = position.logicallyReposition(p))
 
   def find(predicate: Expr[CT, Nothing] => Boolean): Option[Expr[CT, Nothing]] = Some(this).filter(predicate)
 }
@@ -53,7 +53,7 @@ trait OSelectListReferenceImpl { this: SelectListReference.type =>
         isWindowed = buffer.read[Boolean](),
         typ = buffer.read[CT]()
       )(
-        buffer.read[Position]()
+        buffer.read[AtomicPositionInfo]()
       )
     }
   }

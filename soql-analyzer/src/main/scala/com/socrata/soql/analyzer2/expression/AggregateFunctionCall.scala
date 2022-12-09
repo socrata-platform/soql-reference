@@ -55,11 +55,11 @@ trait AggregateFunctionCallImpl[+CT, +CV] { this: AggregateFunctionCall[CT, CV] 
     this.copy(
       args = args.map(_.doRewriteDatabaseNames(state)),
       filter = filter.map(_.doRewriteDatabaseNames(state))
-    )(position, functionNamePosition)
+    )(position)
 
   private[analyzer2] def doRelabel(state: RelabelState) =
     copy(args = args.map(_.doRelabel(state)),
-         filter = filter.map(_.doRelabel(state)))(position, functionNamePosition)
+         filter = filter.map(_.doRelabel(state)))(position)
 
   protected def doDebugDoc(implicit ev: HasDoc[CV]) = {
     val preArgs = Seq(
@@ -74,7 +74,7 @@ trait AggregateFunctionCallImpl[+CT, +CV] { this: AggregateFunctionCall[CT, CV] 
     args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs)
   }
 
-  private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = p, functionNamePosition)
+  private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = position.logicallyReposition(p))
 }
 
 trait OAggregateFunctionCallImpl { this: AggregateFunctionCall.type =>
@@ -85,7 +85,6 @@ trait OAggregateFunctionCallImpl { this: AggregateFunctionCall.type =>
       buffer.write(afc.distinct)
       buffer.write(afc.filter)
       buffer.write(afc.position)
-      buffer.write(afc.functionNamePosition)
     }
   }
 
@@ -95,7 +94,7 @@ trait OAggregateFunctionCallImpl { this: AggregateFunctionCall.type =>
       val args = buffer.read[Seq[Expr[CT, CV]]]()
       val distinct = buffer.read[Boolean]()
       val filter = buffer.read[Option[Expr[CT, CV]]]()
-      val position = buffer.read[Position]()
+      val position = buffer.read[FuncallPositionInfo]()
       val functionNamePosition = buffer.read[Position]()
       AggregateFunctionCall(
         function,
@@ -103,8 +102,7 @@ trait OAggregateFunctionCallImpl { this: AggregateFunctionCall.type =>
         distinct,
         filter
       )(
-        position,
-        functionNamePosition
+        position
       )
     }
   }

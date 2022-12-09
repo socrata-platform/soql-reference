@@ -44,7 +44,7 @@ trait ColumnImpl[+CT] { this: Column[CT] =>
     (table.debugDoc ++ d"." ++ column.debugDoc).
       annotate(Annotation.ColumnRef(table, column))
 
-  private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = p)
+  private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = position.logicallyReposition(p))
 
   def find(predicate: Expr[CT, Nothing] => Boolean): Option[Expr[CT, Nothing]] = Some(this).filter(predicate)
 }
@@ -66,7 +66,7 @@ trait OColumnImpl { this: Column.type =>
         column = buffer.read[ColumnLabel](),
         typ = buffer.read[CT]()
       )(
-        buffer.read[Position]()
+        buffer.read[AtomicPositionInfo]()
       )
     }
   }

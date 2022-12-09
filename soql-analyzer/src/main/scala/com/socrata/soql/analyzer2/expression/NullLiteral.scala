@@ -18,7 +18,7 @@ trait NullLiteralImpl[+CT] { this: NullLiteral[CT] =>
   def doRelabel(state: RelabelState) = this
   def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
 
-  private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = p)
+  private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = position.logicallyReposition(p))
 }
 
 trait ONullLiteralImpl { this: NullLiteral.type =>
@@ -34,7 +34,7 @@ trait ONullLiteralImpl { this: NullLiteral.type =>
       NullLiteral(
         buffer.read[CT]()
       )(
-        buffer.read[Position]()
+        buffer.read[AtomicPositionInfo]()
       )
     }
   }
