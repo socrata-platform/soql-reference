@@ -558,37 +558,22 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             //    @bleh(x, y, z)
             // to
             //    select * from (values (x,y,z)) join lateral (udfexpansion) on true
-            // though this only happens for params which expand to function calls.
-            // Literal and column refs just get inlined into the udfexpansion.
+            // Possibly we'll want a rewrite pass that inlines constants and
+            // maybe simple column references into the udf expansion, 
 
             val typecheckedParams =
               OrderedMap() ++ params.lazyZip(paramSpecs).map { case (expr, (name, typ)) =>
                 name -> typecheck(expr, Map.empty, Some(typ))
               }
 
-            val (outOfLineParams, inlineParams) = typecheckedParams.partition { case (_name, e) =>
-                e match {
-                  case _ : FuncallLike[CT, CV] => true
-                  case _ : Column[CT] | _ : Literal[CT, CV] => false
-                  case _ : SelectListReference[CT] => throw new Exception("Impossible: select list reference out of typechecking")
-                }
-              }
-
-            NonEmptySeq.fromSeq(outOfLineParams.values.toVector) match {
-              case Some(outOfLineValues) =>
-                val outOfLineParamsQuery = Values(NonEmptySeq(outOfLineValues))
+            NonEmptySeq.fromSeq(typecheckedParams.values.toVector) match {
+              case Some(typecheckedExprs) =>
+                val outOfLineParamsQuery = Values(NonEmptySeq(typecheckedExprs))
                 val outOfLineParamsLabel = labelProvider.tableLabel()
                 val innerUdfParams =
-                  outOfLineParamsQuery.schema.keys.lazyZip(outOfLineParams).map { case (colLabel, (name, expr)) =>
+                  outOfLineParamsQuery.schema.keys.lazyZip(typecheckedParams).map { case (colLabel, (name, expr)) =>
                     name -> { (p: Position) => Column(outOfLineParamsLabel, colLabel, expr.typ)(new AtomicPositionInfo(p)) }
-                  }.toMap ++ inlineParams.withValuesMapped { c =>
-                    // reposition the inline parameter so that if an
-                    // error is reported while typechecking (or,
-                    // eventually, running) the UDF body, it gets
-                    // reported at the parameter-use-site rather than
-                    // the parameter-call-site.
-                    c.reposition _
-                  }
+                  }.toMap
 
                 val useQuery =
                   new Context(udfScope, Some(udfCanonicalName), Environment.empty, innerUdfParams)
@@ -622,11 +607,10 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
                 )
 
               case None =>
-                // There are no out-of-line values, so we can just
+                // There are no parameters, so we can just
                 // expand the UDF without introducing a layer of
                 // additional joining.
-                val innerUdfParams = inlineParams.withValuesMapped { c => c.reposition _ }.toMap
-                new Context(udfScope, Some(udfCanonicalName), Environment.empty, innerUdfParams)
+                new Context(udfScope, Some(udfCanonicalName), Environment.empty, Map.empty)
                   .analyzeStatement(Some(srn), parsed, None)
             }
           case _ =>
