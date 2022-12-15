@@ -331,11 +331,11 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
     select.selectList must equal (
       OrderedMap(
-        c(2) -> NamedExpr(
+        c(3) -> NamedExpr(
           Column(t(1), dcn("text"), TestText)(AtomicPositionInfo.None),
           cn("text")
         ),
-        c(3) -> NamedExpr(
+        c(4) -> NamedExpr(
           Column(t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None),
           cn("num")
         )
@@ -356,37 +356,55 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         FromStatement(
           Select(
             Distinctiveness.Indistinct,
-            OrderedMap(c(1) -> NamedExpr(LiteralValue(TestNumber(1))(AtomicPositionInfo.None), cn("_1"))),
-            FromTable(
-              dtn("bbbb-bbbb"),
-              ScopedResourceName(0,rn("bbbb-bbbb")),
-              Some(rn("bbbb-bbbb")),
-              t(2),
-              OrderedMap(
-                dcn("user") -> NameEntry(cn("user"), TestText),
-                dcn("allowed") -> NameEntry(cn("allowed"), TestBoolean)
-              )
+            OrderedMap(
+              c(2) -> NamedExpr(Column(t(4),c(1),TestNumber)(AtomicPositionInfo.None), cn("_1"))
             ),
-            Some(
-              FunctionCall(
-                TestFunctions.And.monomorphic.get,
-                Seq(
-                  FunctionCall(
-                    MonomorphicFunction(TestFunctions.Eq, Map("a" -> TestText)),
-                    Seq(
-                      Column(t(2),dcn("user"),TestText)(AtomicPositionInfo.None),
-                      LiteralValue(TestText("bob"))(AtomicPositionInfo.None)
+            Join(
+              JoinType.Inner,
+              true,
+              FromStatement(
+                Values(NonEmptySeq(NonEmptySeq(LiteralValue(TestText("bob"))(AtomicPositionInfo.None),Nil),Nil)),
+                t(2), None, None
+              ),
+              FromStatement(
+                Select(
+                  Distinctiveness.Indistinct,
+                  OrderedMap(
+                    c(1) -> NamedExpr(LiteralValue(TestNumber(1))(AtomicPositionInfo.None),cn("_1"))
+                  ),
+                  FromTable(
+                    dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")),Some(rn("bbbb-bbbb")),
+                    t(3),
+                    OrderedMap(
+                      dcn("user") -> NameEntry(cn("user"),TestText),
+                      dcn("allowed") -> NameEntry(cn("allowed"),TestBoolean)
                     )
-                  )(FuncallPositionInfo.None),
-                  Column(t(2),dcn("allowed"),TestBoolean)(AtomicPositionInfo.None)
-                )
-              )(FuncallPositionInfo.None)
+                  ),
+                  Some(
+                    FunctionCall(
+                      TestFunctions.And.monomorphic.get,
+                      Seq(
+                        FunctionCall(
+                          MonomorphicFunction(TestFunctions.Eq, Map("a" -> TestText)),
+                          Seq(
+                            Column(t(3),dcn("user"),TestText)(AtomicPositionInfo.None),
+                            Column(t(2),dcn("column1"),TestText)(AtomicPositionInfo.None)
+                          )
+                        )(FuncallPositionInfo.None),
+                        Column(t(3),dcn("allowed"),TestBoolean)(AtomicPositionInfo.None)
+                      )
+                    )(FuncallPositionInfo.None)
+                  ),
+                  Nil,None,Nil,Some(1),None,None,Set.empty
+                ),
+                t(4), None, None
+              ),
+              LiteralValue(TestBoolean(true))(AtomicPositionInfo.None)
             ),
-            Nil, None, Nil, Some(1), None, None, Set.empty
+            None,Nil,None,Nil,None,None,None,Set.empty
           ),
-          t(3),
-          Some(ScopedResourceName(0, rn("cccc-cccc"))),
-          Some(rn("cccc-cccc"))
+          t(5),
+          Some(ScopedResourceName(0,rn("cccc-cccc"))),Some(rn("cccc-cccc"))
         ),
         LiteralValue(TestBoolean(true))(AtomicPositionInfo.None)
       )
@@ -409,11 +427,11 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
     select.selectList must equal (
       OrderedMap(
-        c(2) -> NamedExpr(
+        c(3) -> NamedExpr(
           Column(t(1), dcn("text"), TestText)(AtomicPositionInfo.None),
           cn("text")
         ),
-        c(3) -> NamedExpr(
+        c(4) -> NamedExpr(
           Column(t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None),
           cn("num")
         )
@@ -434,37 +452,55 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         FromStatement(
           Select(
             Distinctiveness.Indistinct,
-            OrderedMap(c(1) -> NamedExpr(LiteralValue(TestNumber(1))(AtomicPositionInfo.None), cn("_1"))),
-            FromTable(
-              dtn("bbbb-bbbb"),
-              ScopedResourceName(0,rn("bbbb-bbbb")),
-              Some(rn("bbbb-bbbb")),
-              t(2),
-              OrderedMap(
-                dcn("user") -> NameEntry(cn("user"), TestText),
-                dcn("allowed") -> NameEntry(cn("allowed"), TestBoolean)
-              )
+            OrderedMap(
+              c(2) -> NamedExpr(Column(t(4),c(1),TestNumber)(AtomicPositionInfo.None), cn("_1"))
             ),
-            Some(
-              FunctionCall(
-                TestFunctions.And.monomorphic.get,
-                Seq(
-                  FunctionCall(
-                    MonomorphicFunction(TestFunctions.Eq, Map("a" -> TestText)),
-                    Seq(
-                      Column(t(2),dcn("user"),TestText)(AtomicPositionInfo.None),
-                      Column(t(1),dcn("text"),TestText)(AtomicPositionInfo.None)
+            Join(
+              JoinType.Inner,
+              true,
+              FromStatement(
+                Values(NonEmptySeq(NonEmptySeq(Column(t(1),dcn("text"),TestText)(AtomicPositionInfo.None),Nil),Nil)),
+                t(2), None, None
+              ),
+              FromStatement(
+                Select(
+                  Distinctiveness.Indistinct,
+                  OrderedMap(
+                    c(1) -> NamedExpr(LiteralValue(TestNumber(1))(AtomicPositionInfo.None),cn("_1"))
+                  ),
+                  FromTable(
+                    dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")),Some(rn("bbbb-bbbb")),
+                    t(3),
+                    OrderedMap(
+                      dcn("user") -> NameEntry(cn("user"),TestText),
+                      dcn("allowed") -> NameEntry(cn("allowed"),TestBoolean)
                     )
-                  )(FuncallPositionInfo.None),
-                  Column(t(2),dcn("allowed"),TestBoolean)(AtomicPositionInfo.None)
-                )
-              )(FuncallPositionInfo.None)
+                  ),
+                  Some(
+                    FunctionCall(
+                      TestFunctions.And.monomorphic.get,
+                      Seq(
+                        FunctionCall(
+                          MonomorphicFunction(TestFunctions.Eq, Map("a" -> TestText)),
+                          Seq(
+                            Column(t(3),dcn("user"),TestText)(AtomicPositionInfo.None),
+                            Column(t(2),dcn("column1"),TestText)(AtomicPositionInfo.None)
+                          )
+                        )(FuncallPositionInfo.None),
+                        Column(t(3),dcn("allowed"),TestBoolean)(AtomicPositionInfo.None)
+                      )
+                    )(FuncallPositionInfo.None)
+                  ),
+                  Nil,None,Nil,Some(1),None,None,Set.empty
+                ),
+                t(4), None, None
+              ),
+              LiteralValue(TestBoolean(true))(AtomicPositionInfo.None)
             ),
-            Nil, None, Nil, Some(1), None, None, Set.empty
+            None,Nil,None,Nil,None,None,None,Set.empty
           ),
-          t(3),
-          Some(ScopedResourceName(0, rn("cccc-cccc"))),
-          Some(rn("cccc-cccc"))
+          t(5),
+          Some(ScopedResourceName(0,rn("cccc-cccc"))),Some(rn("cccc-cccc"))
         ),
         LiteralValue(TestBoolean(true))(AtomicPositionInfo.None)
       )
@@ -529,10 +565,12 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                         Seq(LiteralValue(TestText("hello"))(AtomicPositionInfo.None))
                       )(FuncallPositionInfo.None),
                       Seq(
+                        LiteralValue(TestNumber(5))(AtomicPositionInfo.None),
                         FunctionCall(
                           TestFunctions.castIdentitiesByType(TestBoolean).monomorphic.get,
                           Seq(LiteralValue(TestBoolean(true))(AtomicPositionInfo.None))
-                        )(FuncallPositionInfo.None)
+                        )(FuncallPositionInfo.None),
+                        Column(t(1), dcn("text"), TestText)(AtomicPositionInfo.None)
                       )
                     )
                   )
@@ -543,9 +581,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                 Select(
                   Distinctiveness.Indistinct,
                   OrderedMap(
-                    c(1) -> NamedExpr(Column(t(1),dcn("text"),TestText)(AtomicPositionInfo.None), cn("a")),
-                    c(2) -> NamedExpr(Column(t(2),dcn("column2"),TestBoolean)(AtomicPositionInfo.None), cn("b")),
-                    c(3) -> NamedExpr(LiteralValue(TestNumber(5))(AtomicPositionInfo.None), cn("c")),
+                    c(1) -> NamedExpr(Column(t(2),dcn("column4"),TestText)(AtomicPositionInfo.None), cn("a")),
+                    c(2) -> NamedExpr(Column(t(2),dcn("column3"),TestBoolean)(AtomicPositionInfo.None), cn("b")),
+                    c(3) -> NamedExpr(Column(t(2),dcn("column2"),TestNumber)(AtomicPositionInfo.None), cn("c")),
                     c(4) -> NamedExpr(Column(t(2),dcn("column1"),TestText)(AtomicPositionInfo.None), cn("d"))
                   ),
                   FromSingleRow(t(3), Some(rn("single_row"))),
@@ -615,9 +653,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       case _ => fail("Expected a join to a subquery")
     }
 
-    val lit = subquery.where match {
-      case Some(FunctionCall(_, Seq(lit@LiteralValue(_), _))) => lit
-      case _ => fail("Expected a function call with exactly 2 args in the where, the left hand of which is literal")
+    val lit = subquery.from match {
+      case Join(_, _, FromStatement(Values(NonEmptySeq(NonEmptySeq(lit@LiteralValue(_), Nil), Nil)), _, _, _), _, _) => lit
+      case _ => fail("Expected a join to a values")
     }
 
     lit.position.physicalPosition.longString must equal(
@@ -626,8 +664,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     lit.position.logicalPosition.longString must equal(
-      """select 1 from @single-row where ?x = 5
-        |                                ^""".stripMargin
+      """select * join @bbbb-bbbb(7) on true
+        |                         ^""".stripMargin
     )
   }
 }
