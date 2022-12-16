@@ -1,5 +1,7 @@
 package com.socrata.soql.analyzer2
 
+import scala.collection.compat._
+
 import com.rojoma.json.v3.ast.JValue
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 import com.rojoma.json.v3.interpolation._
@@ -17,11 +19,7 @@ import com.socrata.soql.BinaryTree
 // has to handle passing through JSONified table descriptions but
 // doesn't care about the actual parse tree itself.
 
-sealed trait UnparsedTableDescription[+ResourceNameScope, +ColumnType] extends TableDescriptionLike {
-  private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, TableDescription[ResourceNameScope, ColumnType]]
-  private[analyzer2] type SoQL <: String
-  private[analyzer2] def soql: SoQL
-}
+sealed trait UnparsedTableDescription[+ResourceNameScope, +ColumnType] extends TableDescriptionLike
 
 object UnparsedTableDescription {
   implicit def jEncode[RNS: JsonEncode, CT: JsonEncode] =
@@ -41,23 +39,23 @@ object UnparsedTableDescription {
   case class Dataset[+ColumnType](
     name: DatabaseTableName,
     canonicalName: CanonicalName,
-    schema: OrderedMap[DatabaseColumnName, NameEntry[ColumnType]],
+    columns: OrderedMap[DatabaseColumnName, TableDescription.DatasetColumnInfo[ColumnType]],
     ordering: Seq[TableDescription.Ordering]
   ) extends UnparsedTableDescription[Nothing, ColumnType] {
+    val hiddenColumns = columns.values.flatMap { case TableDescription.DatasetColumnInfo(name, _, hidden) =>
+      if(hidden) Some(name) else None
+    }.to(Set)
+
     // TODO: Make this turn into an InvalidValue decode error if it
     // fires while json-decoding
-    require(ordering.forall { o => schema.contains(o.column) })
+    require(ordering.forall { o => columns.contains(o.column) })
 
     private[analyzer2] def rewriteScopes[RNS, RNS2](scopeMap: Map[RNS, RNS2]) = this
-    private[analyzer2] def parse(params: AbstractParser.Parameters) =
-      Right(TableDescription.Dataset(name, canonicalName, schema, ordering))
-    private[analyzer2] type SoQL = Nothing
-    private[analyzer2] def soql = ???
   }
   object Dataset {
     private[UnparsedTableDescription] def encode[CT: JsonEncode]: JsonEncode[Dataset[CT]] =
       new JsonEncode[Dataset[CT]] {
-        implicit val schemaEncode = OrderedMapHelper.jsonEncode[DatabaseColumnName, NameEntry[CT]]
+        implicit val schemaEncode = OrderedMapHelper.jsonEncode[DatabaseColumnName, TableDescription.DatasetColumnInfo[CT]]
         val encoder = AutomaticJsonEncodeBuilder[Dataset[CT]]
 
         def encode(ds: Dataset[CT]): JValue = encoder.encode(ds)
@@ -65,11 +63,16 @@ object UnparsedTableDescription {
 
     private[UnparsedTableDescription] def decode[CT: JsonDecode]: JsonDecode[Dataset[CT]] =
       new JsonDecode[Dataset[CT]] {
-        implicit val schemaDecode = OrderedMapHelper.jsonDecode[DatabaseColumnName, NameEntry[CT]]
+        implicit val schemaDecode = OrderedMapHelper.jsonDecode[DatabaseColumnName, TableDescription.DatasetColumnInfo[CT]]
         val decoder = AutomaticJsonDecodeBuilder[Dataset[CT]]
 
         def decode(v: JValue) = decoder.decode(v)
       }
+  }
+
+  sealed trait SoQLUnparsedTableDescription[+ResourceNameScope, +ColumnType] extends UnparsedTableDescription[ResourceNameScope, ColumnType] {
+    def soql: String
+    private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, TableDescription[ResourceNameScope, ColumnType]]
   }
 
   case class Query[+ResourceNameScope, +ColumnType](
@@ -77,8 +80,9 @@ object UnparsedTableDescription {
     canonicalName: CanonicalName, // This is the canonical name of this query; it is assumed to be unique across scopes
     basedOn: ResourceName,
     soql: String,
-    parameters: Map[HoleName, ColumnType]
-  ) extends UnparsedTableDescription[ResourceNameScope, ColumnType] {
+    parameters: Map[HoleName, ColumnType],
+    hiddenColumns: Set[ColumnName]
+  ) extends SoQLUnparsedTableDescription[ResourceNameScope, ColumnType] {
     private[analyzer2] type SoQL = String
     private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]) =
       copy(scope = scopeMap(scope))
@@ -90,7 +94,8 @@ object UnparsedTableDescription {
           basedOn,
           parsed,
           soql,
-          parameters
+          parameters,
+          hiddenColumns
         )
       }
   }
@@ -105,8 +110,9 @@ object UnparsedTableDescription {
     scope: ResourceNameScope, // This scope is to resolve any tables referenced within the soql
     canonicalName: CanonicalName, // This is the canonical name of this UDF; it is assumed to be unique across scopes
     soql: String,
-    parameters: OrderedMap[HoleName, ColumnType]
-  ) extends UnparsedTableDescription[ResourceNameScope, ColumnType] {
+    parameters: OrderedMap[HoleName, ColumnType],
+    hiddenColumns: Set[ColumnName]
+  ) extends SoQLUnparsedTableDescription[ResourceNameScope, ColumnType] {
     private[analyzer2] type SoQL = String
 
     private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]) =
@@ -119,7 +125,8 @@ object UnparsedTableDescription {
           canonicalName,
           parsed,
           soql,
-          parameters
+          parameters,
+          hiddenColumns
         )
       }
   }

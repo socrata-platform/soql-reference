@@ -668,4 +668,62 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         |                         ^""".stripMargin
     )
   }
+
+  test("Hidden columns - an unordered table") {
+    val tf1 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber).withHiddenColumns("n2")
+    )
+    val analysis1 = analyzeSaved(tf1, "aaaa-aaaa")
+
+    val tf2 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber)
+    )
+    val analysis2 = analyzeSaved(tf2, "aaaa-aaaa")
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Hidden columns - table with a hidden ordering") {
+    val tf1 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber).withHiddenColumns("n2").withOrdering("n2")
+    )
+    val analysis1 = analyzeSaved(tf1, "aaaa-aaaa")
+
+    val tf2 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber)
+    )
+    val analysis2 = analyze(tf2, "aaaa-aaaa", "select n1 order by n2").merge(TestFunctions.And.monomorphic.get)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Hidden columns - within a query on a sorted table") {
+    val tf1 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber).withHiddenColumns("n2").withOrdering("n2")
+    )
+    val analysis1 = analyze(tf1, "aaaa-aaaa", "select n1 * 5")
+
+    val tf2 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber)
+    )
+    val analysis2 = analyze(tf2, "aaaa-aaaa", "select n1 order by n2 |> select n1 * 5")
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Hidden columns - within a UDF") {
+    val tf1 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
+      (0, "udf") -> U(0, "select n1, n2 from @aaaa-aaaa where n2 = ?x", "x" -> TestNumber).withHiddenColumns("n2")
+    )
+    val analysis1 = analyze(tf1, "select @udf.* from @single_row join @udf(5) on true")
+
+    val tf2 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
+      (0, "udf") -> U(0, "select n1, n2 from @aaaa-aaaa where n2 = ?x |> select n1", "x" -> TestNumber)
+    )
+    val analysis2 = analyze(tf2, "select @udf.n1 from @single_row join @udf(5) on true")
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
 }
