@@ -372,7 +372,11 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
                 }
               }
             }
-          case _ =>
+          case Distinctiveness.FullyDistinct =>
+            for(missingOb <- checkedOrderBys.find { ob => !finalState.namedExprs.values.exists(_ == ob.expr) }) {
+              orderByMustBeSelected(missingOb.expr.position.logicalPosition)
+            }
+          case Distinctiveness.Indistinct =>
             // all well
         }
 
@@ -711,6 +715,8 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         throw Bail(SoQLAnalyzerError.IncorrectNumberOfUdfParameters(scope, canonicalName, forUdf, expected, got, position))
       def distinctOnMustBePrefixOfOrderBy(position: Position): Nothing =
         throw Bail(SoQLAnalyzerError.DistinctNotPrefixOfOrderBy(scope, canonicalName, position))
+      def orderByMustBeSelected(position: Position): Nothing =
+        throw Bail(SoQLAnalyzerError.OrderByMustBeSelectedWhenDistinct(scope, canonicalName, position))
       def invalidGroupBy(typ: CT, position: Position): Nothing =
         throw Bail(SoQLAnalyzerError.InvalidGroupBy(scope, canonicalName, typeInfo.typeNameFor(typ), position))
       def unorderedOrderBy(typ: CT, position: Position): Nothing =
