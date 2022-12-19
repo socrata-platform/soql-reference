@@ -652,7 +652,6 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
                 FromStatement(
                   Select(
                     Distinctiveness.Indistinct,
-                    // note: we're adding the column mask here
                     OrderedMap() ++ useQuery.statement.schema.iterator.map { case (label, NameEntry(name, typ)) =>
                       labelProvider.columnLabel() -> NamedExpr(Column(useQuery.label, label, typ)(AtomicPositionInfo.None), name)
                     },
