@@ -407,36 +407,63 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
         verifyAggregatesAndWindowFunctions(stmt)
 
-        val unfilteredFrom = FromStatement(stmt, labelProvider.tableLabel(), srn, None)
-
         if(hiddenColumns.isEmpty) {
-          unfilteredFrom
+          FromStatement(stmt, labelProvider.tableLabel(), srn, None)
         } else {
+          // ok, this is a little unpleasant, thanks to DISTINCT.
+          stmt.distinctiveness match {
+            case Distinctiveness.Indistinct | Distinctiveness.On(_) =>
+              // easy case - just filter the select-list
+              val filteredStmt = stmt.copy(
+                selectList = stmt.selectList.filter {
+                  case (_, NamedExpr(_, cn)) => !hiddenColumns.contains(cn)
+                }
+              )
+              FromStatement(filteredStmt, labelProvider.tableLabel(), srn, None)
+            case Distinctiveness.FullyDistinct =>
+              // This works because IF a DISTINCT statement has an
+              // order by, those order by clauses MUST appear in the
+              // select list.  So we just need to find those columns
+              // and order by the relevant column-refs.  We'll
+              // actually lift the ORDER BY (together with any
+              // LIMIT/OFFSET) entirely into the superquery.
+
+              val unfilteredFrom = FromStatement(stmt.copy(orderBy = Nil, limit = None, offset = None), labelProvider.tableLabel(), srn, None)
+              val filteredStmt =
+                Select(
+                  Distinctiveness.Indistinct,
+                  stmt.selectList.flatMap { case (label, NamedExpr(expr, cn)) =>
+                    if(hiddenColumns(cn)) {
+                      None
+                    } else {
+                      Some(labelProvider.columnLabel() -> NamedExpr(Column(unfilteredFrom.label, label, expr.typ)(AtomicPositionInfo.None), cn))
+                    }
+                  },
+                  unfilteredFrom,
+                  None,
+                  Nil,
+                  None,
+                  stmt.orderBy.map { ob =>
+                    val (columnLabel, columnTyp) =
+                      stmt.selectList.iterator.collect { case (label, NamedExpr(expr, cn)) if expr == ob.expr =>
+                        (label, expr.typ)
+                      }.nextOption.getOrElse {
+                        throw new Exception("Internal error: found an order by whose expr is not in the select list??")
+                      }
+
+                    ob.copy(expr = Column(unfilteredFrom.label, columnLabel, columnTyp)(AtomicPositionInfo.None))
+                  },
+                  limit = stmt.limit,
+                  offset = stmt.offset,
+                  search = None,
+                  hint = Set.empty
+                )
+              FromStatement(filteredStmt, labelProvider.tableLabel(), None, None)
+          }
           // Separate wrapper select because otherwise filtering
           // columns can change the result-size when DISTINCT is in
           // play.  When it isn't, merging should usually get rid of
           // the wrapper.
-          val filteredStmt =
-            Select(
-              Distinctiveness.Indistinct,
-              stmt.selectList.flatMap { case (label, NamedExpr(expr, cn)) =>
-                if(hiddenColumns(cn)) {
-                  None
-                } else {
-                  Some(labelProvider.columnLabel() -> NamedExpr(Column(unfilteredFrom.label, label, expr.typ)(AtomicPositionInfo.None), cn))
-                }
-              },
-              unfilteredFrom,
-              None,
-              Nil,
-              None,
-              Nil,
-              None,
-              None,
-              None,
-              Set.empty
-            )
-          FromStatement(filteredStmt, labelProvider.tableLabel(), None, None)
         }
       }
 
