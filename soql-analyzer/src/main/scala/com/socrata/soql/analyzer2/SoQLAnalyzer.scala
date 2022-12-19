@@ -428,7 +428,14 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
               // actually lift the ORDER BY (together with any
               // LIMIT/OFFSET) entirely into the superquery.
 
-              val unfilteredFrom = FromStatement(stmt.copy(orderBy = Nil, limit = None, offset = None), labelProvider.tableLabel(), srn, None)
+              val (potentiallyUnorderedStatement, potentialLimit, potentialOffset) =
+                if(stmt.selectList.values.exists(_.expr.isWindowed)) {
+                  (stmt, None, None)
+                } else {
+                  (stmt.copy(orderBy = Nil, limit = None, offset = None), stmt.limit, stmt.offset)
+                }
+
+              val unfilteredFrom = FromStatement(potentiallyUnorderedStatement, labelProvider.tableLabel(), srn, None)
               val filteredStmt =
                 Select(
                   Distinctiveness.Indistinct,
@@ -453,8 +460,8 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
                     ob.copy(expr = Column(unfilteredFrom.label, columnLabel, columnTyp)(AtomicPositionInfo.None))
                   },
-                  limit = stmt.limit,
-                  offset = stmt.offset,
+                  limit = potentialLimit,
+                  offset = potentialOffset,
                   search = None,
                   hint = Set.empty
                 )

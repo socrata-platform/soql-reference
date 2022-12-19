@@ -727,7 +727,39 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 
-  test("Hidden columns - DISTINCT") {
+  test("Hidden columns - indistinct") {
+    val tf1 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
+      (0, "q") -> Q(0, "aaaa-aaaa", "select n1, n2 order by n2 limit 5 offset 6").withHiddenColumns("n2")
+    )
+    val analysis1 = analyzeSaved(tf1, "q")
+
+    val tf2 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
+      (0, "q") -> Q(0, "aaaa-aaaa", "select n1 order by n2 limit 5 offset 6")
+    )
+    val analysis2 = analyzeSaved(tf2, "q")
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Hidden columns - distinct on") {
+    val tf1 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
+      (0, "q") -> Q(0, "aaaa-aaaa", "select distinct on(n2) n1, n2 order by n2").withHiddenColumns("n2")
+    )
+    val analysis1 = analyzeSaved(tf1, "q")
+
+    val tf2 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
+      (0, "q") -> Q(0, "aaaa-aaaa", "select distinct on(n2) n1 order by n2")
+    )
+    val analysis2 = analyzeSaved(tf2, "q")
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Hidden columns - distinct") {
     val tf1 = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
       (0, "q") -> Q(0, "aaaa-aaaa", "select distinct n1, n2 order by n2 limit 5 offset 6").withHiddenColumns("n2")
@@ -737,6 +769,22 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val tf2 = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
       (0, "q") -> Q(0, "aaaa-aaaa", "select distinct n1, n2 |> select n1 order by n2 limit 5 offset 6")
+    )
+    val analysis2 = analyzeSaved(tf2, "q")
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Hidden columns - distinct with window functions") {
+    val tf1 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
+      (0, "q") -> Q(0, "aaaa-aaaa", "select distinct n1, n2, row_number() over () as rn order by n2 limit 5 offset 6").withHiddenColumns("n2")
+    )
+    val analysis1 = analyzeSaved(tf1, "q")
+
+    val tf2 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
+      (0, "q") -> Q(0, "aaaa-aaaa", "select distinct n1, n2, row_number() over () as rn order by n2 limit 5 offset 6 |> select n1, rn order by n2")
     )
     val analysis2 = analyzeSaved(tf2, "q")
 
