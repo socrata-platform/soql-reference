@@ -456,7 +456,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
                     val (columnLabel, columnTyp) =
                       stmt.selectList.iterator.collect { case (label, NamedExpr(expr, cn)) if expr == ob.expr =>
                         (label, expr.typ)
-                      }.nextOption.getOrElse {
+                      }.nextOption().getOrElse {
                         throw new Exception("Internal error: found an order by whose expr is not in the select list??")
                       }
 
