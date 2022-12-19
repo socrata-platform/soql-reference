@@ -15,32 +15,63 @@ import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, TableDescript
 sealed abstract class Thing[+RNS, +CT]
 case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT] {
   private var orderings_ : List[(String, Boolean)] = Nil
+  private var hiddenColumns_ : Set[ColumnName] = Set.empty
 
   def withOrdering(column: String, ascending: Boolean = true): D[CT] = {
     val result = D(schema : _*)
-    result.orderings_ = (column, ascending) :: result.orderings_
+    result.orderings_ = (column, ascending) :: orderings_
+    result.hiddenColumns_ = hiddenColumns_
     result
   }
-
   def orderings: Seq[(String, Boolean)] = orderings_.reverse
+
+  def withHiddenColumns(column: String*): D[CT] = {
+    val result = D(schema : _*)
+    result.orderings_ = orderings_
+    result.hiddenColumns_ = hiddenColumns_ ++ column.iterator.map(ColumnName(_))
+    result
+  }
+  def hiddenColumns = hiddenColumns_
 }
 case class Q[+RNS, +CT](scope: RNS, parent: String, soql: String, params: (String, CT)*) extends Thing[RNS, CT] {
   private var canonicalName_ : Option[String] = None
+  private var hiddenColumns_ : Set[ColumnName] = Set.empty
+
   def withCanonicalName(name: String): Q[RNS, CT] = {
     val result = Q(scope, parent, soql, params : _*)
     result.canonicalName_ = Some(name)
+    result.hiddenColumns_ = hiddenColumns_
     result
   }
   def canonicalName = canonicalName_
+
+  def withHiddenColumns(column: String*): Q[RNS, CT] = {
+    val result = Q(scope, parent, soql, params : _*)
+    result.canonicalName_ = canonicalName_
+    result.hiddenColumns_ = hiddenColumns_ ++ column.iterator.map(ColumnName(_))
+    result
+  }
+  def hiddenColumns = hiddenColumns_
 }
 case class U[+RNS, CT](scope: RNS, soql: String, params: (String, CT)*) extends Thing[RNS, CT] {
   private var canonicalName_ : Option[String] = None
+  private var hiddenColumns_ : Set[ColumnName] = Set.empty
+
   def withCanonicalName(name: String): U[RNS, CT] = {
     val result = U(scope, soql, params : _*)
     result.canonicalName_ = Some(name)
+    result.hiddenColumns_ = hiddenColumns_
     result
   }
   def canonicalName = canonicalName_
+
+  def withHiddenColumns(column: String*): U[RNS, CT] = {
+    val result = U(scope, soql, params : _*)
+    result.canonicalName_ = canonicalName_
+    result.hiddenColumns_ = hiddenColumns_ ++ column.iterator.map(ColumnName(_))
+    result
+  }
+  def hiddenColumns = hiddenColumns_
 }
 
 object MockTableFinder {
@@ -50,9 +81,9 @@ object MockTableFinder {
   def apply[RNS, CT](items: UnparsedFoundTables[RNS, CT]) = UnparsedTableMap.asMockTableFinder(items.tableMap)
 
   private sealed abstract class JThing[+RNS, +CT]
-  private case class JD[+CT](schema: Seq[(String, CT)], orderings: Option[Seq[(String, Boolean)]]) extends JThing[Nothing, CT]
-  private case class JQ[+RNS,+CT](scope: Option[RNS], parent: String, soql: String, params: Map[String, CT], canonicalName: Option[String]) extends JThing[RNS, CT]
-  private case class JU[+RNS,+CT](scope: Option[RNS], soql: String, params: Seq[(String, CT)], canonicalName: Option[String]) extends JThing[RNS, CT]
+  private case class JD[+CT](schema: Seq[(String, CT)], orderings: Option[Seq[(String, Boolean)]], hiddenColumns: Seq[String]) extends JThing[Nothing, CT]
+  private case class JQ[+RNS,+CT](scope: Option[RNS], parent: String, soql: String, params: Map[String, CT], canonicalName: Option[String], hiddenColumns: Seq[String]) extends JThing[RNS, CT]
+  private case class JU[+RNS,+CT](scope: Option[RNS], soql: String, params: Seq[(String, CT)], canonicalName: Option[String], hiddenColumns: Seq[String]) extends JThing[RNS, CT]
 
   implicit def jDecode[RNS: FieldDecode: JsonDecode, CT: JsonDecode]: JsonDecode[MockTableFinder[RNS, CT]] =
     new JsonDecode[MockTableFinder[RNS, CT]] {
@@ -73,16 +104,16 @@ object MockTableFinder {
             m.iterator.flatMap { case (rns, jthings) =>
               jthings.map { case (name, jthing) =>
                 val thing = jthing match {
-                  case JD(schema, orderings) =>
+                  case JD(schema, orderings, hiddenColumns) =>
                     orderings.getOrElse(Nil).foldLeft(D(schema : _*)) { (d, orderDir) =>
                       d.withOrdering(orderDir._1, orderDir._2)
-                    }
-                  case JQ(scopeOpt, parent, soql, params, cname) =>
+                    }.withHiddenColumns(hiddenColumns : _*)
+                  case JQ(scopeOpt, parent, soql, params, cname, hiddenColumns) =>
                     val result = Q(scopeOpt.getOrElse(rns), parent, soql, params.toSeq : _*)
-                    cname.fold(result)(result.withCanonicalName)
-                  case JU(scopeOpt, soql, params, cname) =>
+                    cname.fold(result)(result.withCanonicalName).withHiddenColumns(hiddenColumns : _*)
+                  case JU(scopeOpt, soql, params, cname, hiddenColumns) =>
                     val result = U(scopeOpt.getOrElse(rns), soql, params : _*)
-                    cname.fold(result)(result.withCanonicalName)
+                    cname.fold(result)(result.withCanonicalName).withHiddenColumns(hiddenColumns : _*)
                 }
 
                 (rns, name) -> thing
@@ -113,9 +144,29 @@ object MockTableFinder {
               val jThings =
                 things.map { case ((_rns, name), thing) =>
                   val jThing = thing match {
-                    case d@D(schema @ _*) => JD(schema, Some(d.orderings).filter(_.nonEmpty))
-                    case q@Q(scope, parent, soql, params@_*) => JQ(Some(scope).filter(_ != rns), parent, soql, params.toMap, q.canonicalName.filter(_ != name))
-                    case u@U(scope, soql, params@_*) => JU(Some(scope).filter(_ != rns), soql, params, u.canonicalName.filter(_ != name))
+                    case d@D(schema @ _*) =>
+                      JD(
+                        schema,
+                        Some(d.orderings).filter(_.nonEmpty),
+                        d.hiddenColumns.map(_.name).toSeq
+                      )
+                    case q@Q(scope, parent, soql, params@_*) =>
+                      JQ(
+                        Some(scope).filter(_ != rns),
+                        parent,
+                        soql,
+                        params.toMap,
+                        q.canonicalName.filter(_ != name),
+                        q.hiddenColumns.map(_.name).toSeq
+                      )
+                    case u@U(scope, soql, params@_*) =>
+                      JU(
+                        Some(scope).filter(_ != rns),
+                        soql,
+                        params,
+                        u.canonicalName.filter(_ != name),
+                        u.hiddenColumns.map(_.name).toSeq
+                      )
                   }
                   name -> jThing
                 }.toMap
@@ -134,14 +185,28 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
           DatabaseTableName(rawResourceName),
           CanonicalName(rawResourceName),
           OrderedMap() ++ rawSchema.iterator.map {case (rawColumnName, ct) =>
-            ColumnName(rawColumnName) -> ct
+            val cn = ColumnName(rawColumnName)
+            cn -> DatasetColumnInfo(ct, hidden = d.hiddenColumns(cn))
           },
           d.orderings.map { case (col, asc) => Ordering(ColumnName(col), asc) }
         )
       case q@Q(scope, parent, soql, params @ _*) =>
-        Query(scope, CanonicalName(q.canonicalName.getOrElse(rawResourceName)), ResourceName(parent), soql, params.iterator.map { case (k, v) => HoleName(k) -> v }.toMap)
+        Query(
+          scope,
+          CanonicalName(q.canonicalName.getOrElse(rawResourceName)),
+          ResourceName(parent),
+          soql,
+          params.iterator.map { case (k, v) => HoleName(k) -> v }.toMap,
+          q.hiddenColumns
+        )
       case u@U(scope, soql, params @ _*) =>
-        TableFunction(scope, CanonicalName(u.canonicalName.getOrElse(rawResourceName)), soql, OrderedMap() ++ params.iterator.map { case (k,v) => HoleName(k) -> v })
+        TableFunction(
+          scope,
+          CanonicalName(u.canonicalName.getOrElse(rawResourceName)),
+          soql,
+          OrderedMap() ++ params.iterator.map { case (k,v) => HoleName(k) -> v },
+          u.hiddenColumns
+        )
     }
     ScopedResourceName(scope, ResourceName(rawResourceName)) -> converted
   }.toMap
@@ -161,16 +226,16 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
   private def parsed(thing: FinderTableDescription) = {
     thing match {
       case ds: Dataset => ds.toParsed
-      case Query(scope, canonicalName, parent, soql, params) =>
+      case Query(scope, canonicalName, parent, soql, params, hiddenColumns) =>
         TableDescription.Query(
           scope, canonicalName, parent,
           ParserUtil(soql, parserParameters.copy(allowHoles = false)).getOrElse(throw new Exception("broken soql fixture 1")),
-          soql, params)
-      case TableFunction(scope, canonicalName, soql, params) =>
+          soql, params, hiddenColumns)
+      case TableFunction(scope, canonicalName, soql, params, hiddenColumns) =>
         TableDescription.TableFunction(
           scope, canonicalName,
           ParserUtil(soql, parserParameters.copy(allowHoles = true)).getOrElse(throw new Exception("broken soql fixture 2")),
-          soql, params
+          soql, params, hiddenColumns
         )
     }
   }

@@ -14,9 +14,14 @@ class UnparsedTableMap[ResourceNameScope, +ColumnType] private[analyzer2] (priva
   private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, TableMap[ResourceNameScope, ColumnType]] =
     Right(new TableMap(underlying.iterator.map { case (rns, m) =>
       rns -> m.iterator.map { case (rn, utd) =>
-        utd.parse(params) match {
-          case Right(ptd) => rn -> ptd
-          case Left(e) => return Left(e)
+        utd match {
+          case UnparsedTableDescription.Dataset(name, canonicalName, schema, ordering) =>
+            rn -> TableDescription.Dataset(name, canonicalName, schema, ordering)
+          case other: UnparsedTableDescription.SoQLUnparsedTableDescription[ResourceNameScope, ColumnType] =>
+            other.parse(params) match {
+              case Right(ptd) => rn -> ptd
+              case Left(e) => return Left(e)
+            }
         }
       }.toMap
     }.toMap))
@@ -69,13 +74,20 @@ object UnparsedTableMap {
           val thing =
             desc match {
               case UnparsedTableDescription.Dataset(_name, _canonicalName, schema, ordering) =>
-                mocktablefinder.D(schema.valuesIterator.map { case NameEntry(n, t) => n.name -> t }.toSeq : _*)
-              case UnparsedTableDescription.Query(scope, canonicalName, basedOn, soql, parameters) =>
+                val base =
+                  mocktablefinder.D(schema.valuesIterator.map { case TableDescription.DatasetColumnInfo(n, t, _) => n.name -> t }.toSeq : _*).
+                    withHiddenColumns(schema.valuesIterator.filter(_.hidden).map(_.name.name).toSeq : _*)
+                ordering.foldLeft(base) { (base, ordering) =>
+                  base.withOrdering(schema(ordering.column).name.name, ordering.ascending)
+                }
+              case UnparsedTableDescription.Query(scope, canonicalName, basedOn, soql, parameters, hiddenColumns) =>
                 mocktablefinder.Q(scope, basedOn.name, soql, parameters.toSeq.map { case (hn, ct) => hn.name -> ct } : _*).
-                  withCanonicalName(canonicalName.name)
-              case UnparsedTableDescription.TableFunction(scope, canonicalName, soql, parameters) =>
+                  withCanonicalName(canonicalName.name).
+                  withHiddenColumns(hiddenColumns.map(_.name).toSeq : _*)
+              case UnparsedTableDescription.TableFunction(scope, canonicalName, soql, parameters, hiddenColumns) =>
                 mocktablefinder.U(scope, soql, parameters.toSeq.map { case (hn, ct) => hn.name -> ct } : _*).
-                  withCanonicalName(canonicalName.name)
+                  withCanonicalName(canonicalName.name).
+                  withHiddenColumns(hiddenColumns.map(_.name).toSeq : _*)
             }
           (rns, rn.name) -> thing
         }

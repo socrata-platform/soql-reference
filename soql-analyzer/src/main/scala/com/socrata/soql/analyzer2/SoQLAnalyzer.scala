@@ -108,14 +108,14 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           case FoundTables.InContext(rn, q, _, parameters) =>
             val from = analyzeForFrom(ScopedResourceName(scope, rn), None, NoPosition)
             new Context(scope, None, Environment.empty, Map.empty).
-              analyzeStatement(None, q, Some(from))
+              analyzeStatement(None, q, Some(from), Set.empty)
           case FoundTables.InContextImpersonatingSaved(rn, q, _, parameters, impersonating) =>
             val from = analyzeForFrom(ScopedResourceName(scope, rn), None, NoPosition)
             new Context(scope, Some(impersonating), Environment.empty, Map.empty).
-              analyzeStatement(None, q, Some(from))
+              analyzeStatement(None, q, Some(from), Set.empty)
           case FoundTables.Standalone(q, _, parameters) =>
             new Context(scope, None, Environment.empty, Map.empty).
-              analyzeStatement(None, q, None)
+              analyzeStatement(None, q, None, Set.empty)
         }
       intoStatement(from)
     }
@@ -163,7 +163,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           srn,
           None,
           labelProvider.tableLabel(),
-          columns = desc.schema
+          columns = desc.schema.filter { case (_, NameEntry(name, _)) => !desc.hiddenColumns.contains(name) }
         )
       } else {
         for(TableDescription.Ordering(col, _ascending) <- desc.ordering) {
@@ -186,8 +186,12 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         FromStatement(
           Select(
             Distinctiveness.Indistinct,
-            selectList = OrderedMap() ++ from.columns.iterator.zip(columnLabels.iterator).map { case ((dcn, NameEntry(name, typ)), outputLabel) =>
-              outputLabel -> NamedExpr(Column(from.label, dcn, typ)(AtomicPositionInfo.None), name)
+            selectList = OrderedMap() ++ from.columns.iterator.zip(columnLabels.iterator).flatMap { case ((dcn, NameEntry(name, typ)), outputLabel) =>
+              if(desc.hiddenColumns(name)) {
+                None
+              } else {
+                Some(outputLabel -> NamedExpr(Column(from.label, dcn, typ)(AtomicPositionInfo.None), name))
+              }
             },
             from,
             None,
@@ -220,13 +224,13 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         tableMap.find(name) match {
           case ds: TableDescription.Dataset[CT] =>
             fromTable(name, ds)
-          case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters) =>
+          case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters, hiddenColumns) =>
             // so this is basedOn |> parsed
             // so we want to use "basedOn" as the implicit "from" for "parsed"
             val from = analyzeForFrom(ScopedResourceName(scope, basedOn), None, NoPosition /* Yes, actually NoPosition here */)
             new Context(scope, Some(canonicalName), Environment.empty, Map.empty).
-              analyzeStatement(Some(name), parsed, Some(from))
-          case TableDescription.TableFunction(_, _, _, _, _) =>
+              analyzeStatement(Some(name), parsed, Some(from), hiddenColumns)
+          case TableDescription.TableFunction(_, _, _, _, _, _) =>
             parameterlessTableFunction(name.scope, canonicalName, name.name, position)
         }
       }
@@ -235,16 +239,16 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
     class Context(scope: RNS, canonicalName: Option[CanonicalName], enclosingEnv: Environment[CT], udfParams: UdfParameters) {
       private def withEnv(env: Environment[CT]) = new Context(scope, canonicalName, env, udfParams)
 
-      def analyzeStatement(srn: Option[ScopedResourceName], q: BinaryTree[ast.Select], from0: Option[AtomicFrom[RNS, CT, CV]]): FromStatement[RNS, CT, CV] = {
+      def analyzeStatement(srn: Option[ScopedResourceName], q: BinaryTree[ast.Select], from0: Option[AtomicFrom[RNS, CT, CV]], hiddenColumns: Set[ColumnName]): FromStatement[RNS, CT, CV] = {
         q match {
           case Leaf(select) =>
-            analyzeSelection(srn, select, from0)
+            analyzeSelection(srn, select, from0, hiddenColumns)
           case PipeQuery(left, right) =>
-            val newInput = analyzeStatement(None, left, from0)
-            analyzeStatement(srn, right, Some(newInput))
+            val newInput = analyzeStatement(None, left, from0, Set.empty)
+            analyzeStatement(srn, right, Some(newInput), hiddenColumns)
           case other: TrueOp[ast.Select] =>
-            val lhs = intoStatement(analyzeStatement(None, other.left, from0))
-            val rhs = intoStatement(analyzeStatement(None, other.right, None))
+            val lhs = intoStatement(analyzeStatement(None, other.left, from0, hiddenColumns))
+            val rhs = intoStatement(analyzeStatement(None, other.right, None, hiddenColumns))
 
             if(lhs.schema.values.map(_.typ) != rhs.schema.values.map(_.typ)) {
               tableOpTypeMismatch(
@@ -269,7 +273,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         }
       }
 
-      def analyzeSelection(srn: Option[ScopedResourceName], select: ast.Select, from0: Option[AtomicFrom[RNS, CT, CV]]): FromStatement[RNS, CT, CV] = {
+      def analyzeSelection(srn: Option[ScopedResourceName], select: ast.Select, from0: Option[AtomicFrom[RNS, CT, CV]], hiddenColumns: Set[ColumnName]): FromStatement[RNS, CT, CV] = {
         val ast.Select(
           distinct,
           selection,
@@ -403,7 +407,69 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
         verifyAggregatesAndWindowFunctions(stmt)
 
-        FromStatement(stmt, labelProvider.tableLabel(), srn, None)
+        if(hiddenColumns.isEmpty) {
+          FromStatement(stmt, labelProvider.tableLabel(), srn, None)
+        } else {
+          // ok, this is a little unpleasant, thanks to DISTINCT.
+          stmt.distinctiveness match {
+            case Distinctiveness.Indistinct | Distinctiveness.On(_) =>
+              // easy case - just filter the select-list
+              val filteredStmt = stmt.copy(
+                selectList = stmt.selectList.filter {
+                  case (_, NamedExpr(_, cn)) => !hiddenColumns.contains(cn)
+                }
+              )
+              FromStatement(filteredStmt, labelProvider.tableLabel(), srn, None)
+            case Distinctiveness.FullyDistinct =>
+              // This works because IF a DISTINCT statement has an
+              // order by, those order by clauses MUST appear in the
+              // select list.  So we just need to find those columns
+              // and order by the relevant column-refs.  We'll
+              // actually lift the ORDER BY (together with any
+              // LIMIT/OFFSET) entirely into the superquery, if there
+              // are no window functions involved (since the meaning
+              // of a window function can depend on the ORDER BY)
+
+              val (potentiallyUnorderedStatement, potentialLimit, potentialOffset) =
+                if(stmt.selectList.values.exists(_.expr.isWindowed)) {
+                  (stmt, None, None)
+                } else {
+                  (stmt.copy(orderBy = Nil, limit = None, offset = None), stmt.limit, stmt.offset)
+                }
+
+              val unfilteredFrom = FromStatement(potentiallyUnorderedStatement, labelProvider.tableLabel(), srn, None)
+              val filteredStmt =
+                Select(
+                  Distinctiveness.Indistinct,
+                  stmt.selectList.flatMap { case (label, NamedExpr(expr, cn)) =>
+                    if(hiddenColumns(cn)) {
+                      None
+                    } else {
+                      Some(labelProvider.columnLabel() -> NamedExpr(Column(unfilteredFrom.label, label, expr.typ)(AtomicPositionInfo.None), cn))
+                    }
+                  },
+                  unfilteredFrom,
+                  None,
+                  Nil,
+                  None,
+                  stmt.orderBy.map { ob =>
+                    val (columnLabel, columnTyp) =
+                      stmt.selectList.iterator.collect { case (label, NamedExpr(expr, cn)) if expr == ob.expr =>
+                        (label, expr.typ)
+                      }.nextOption.getOrElse {
+                        throw new Exception("Internal error: found an order by whose expr is not in the select list??")
+                      }
+
+                    ob.copy(expr = Column(unfilteredFrom.label, columnLabel, columnTyp)(AtomicPositionInfo.None))
+                  },
+                  limit = potentialLimit,
+                  offset = potentialOffset,
+                  search = None,
+                  hint = Set.empty
+                )
+              FromStatement(filteredStmt, labelProvider.tableLabel(), None, None)
+          }
+        }
       }
 
       def collectNamesForAnalysis(from: From[RNS, CT, CV]): AliasAnalysis.AnalysisContext = {
@@ -536,7 +602,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           case ast.JoinQuery(select, rawAlias) =>
             val alias = rawAlias.substring(1)
             ensureLegalAlias(alias, NoPosition /* TODO: NEED POS INFO FROM AST */)
-            analyzeStatement(None, select, None).reAlias(Some(ResourceName(alias)))
+            analyzeStatement(None, select, None, Set.empty).reAlias(Some(ResourceName(alias)))
           case ast.JoinFunc(tn, params) =>
             tn.aliasWithoutPrefix.foreach(ensureLegalAlias(_, NoPosition /* TODO: NEED POS INFO FROM AST */))
             analyzeUDF(ResourceName(tn.nameWithoutPrefix), params).
@@ -554,7 +620,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       def analyzeUDF(resource: ResourceName, params: Seq[ast.Expression]): AtomicFrom[RNS, CT, CV] = {
         val srn = ScopedResourceName(scope, resource)
         tableMap.find(srn) match {
-          case TableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs) =>
+          case TableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs, hiddenColumns) =>
             if(params.length != paramSpecs.size) {
               incorrectNumberOfParameters(resource, expected = params.length, got = paramSpecs.size, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
             }
@@ -581,7 +647,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
                 val useQuery =
                   new Context(udfScope, Some(udfCanonicalName), Environment.empty, innerUdfParams)
-                    .analyzeStatement(None, parsed, None)
+                    .analyzeStatement(None, parsed, None, hiddenColumns)
 
                 FromStatement(
                   Select(
@@ -615,14 +681,13 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
                 // expand the UDF without introducing a layer of
                 // additional joining.
                 new Context(udfScope, Some(udfCanonicalName), Environment.empty, Map.empty)
-                  .analyzeStatement(Some(srn), parsed, None)
+                  .analyzeStatement(Some(srn), parsed, None, hiddenColumns)
             }
           case _ =>
             // Non-UDF
             parametersForNonUdf(resource, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
         }
       }
-
 
       def typecheck(
         expr: ast.Expression,
