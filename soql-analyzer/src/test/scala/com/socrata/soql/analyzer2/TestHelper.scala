@@ -49,58 +49,81 @@ trait TestHelper { this: Assertions =>
     type ColumnType = CT
   }
 
-  private def finishAnalysis(start: FoundTables[Int, TestType], params: UserParameters[TestType, TestValue]): SoQLAnalysis[Int, TestType, TestValue] = {
+  class OnFail {
+    def onAnalyzerError(err: SoQLAnalyzerError[Int]): Nothing =
+      fail(err.toString)
+
+    def onTableFinderError(err: TableFinder#Error): Nothing =
+      fail(err.toString)
+  }
+
+  implicit val DefaultOnFail = new OnFail
+
+  private def finishAnalysis(start: FoundTables[Int, TestType], params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): SoQLAnalysis[Int, TestType, TestValue] = {
     analyzer(start, params) match {
       case Right(result) => result
-      case Left(err) => fail(err.toString)
+      case Left(err) => onFail.onAnalyzerError(err)
     }
   }
 
-  def analyzeSaved(tf: TF[TestType], ctx: String): SoQLAnalysis[Int, TestType, TestValue] = {
-    analyzeSaved(tf, ctx, UserParameters.empty)
+  def analyzeSaved(tf: TF[TestType], ctx: String)(implicit onFail: OnFail): SoQLAnalysis[Int, TestType, TestValue] = {
+    analyzeSaved(tf, ctx, UserParameters.empty)(onFail)
   }
 
-  def analyzeSaved(tf: TF[TestType], ctx: String, params: UserParameters[TestType, TestValue]): SoQLAnalysis[Int, TestType, TestValue] = {
+  def analyzeSaved(tf: TF[TestType], ctx: String, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): SoQLAnalysis[Int, TestType, TestValue] = {
     tf.findTables(0, rn(ctx)) match {
       case tf.Success(start) =>
-        finishAnalysis(start, params)
+        finishAnalysis(start, params)(onFail)
       case e: tf.Error =>
-        fail(e.toString)
+        onFail.onTableFinderError(e)
     }
   }
 
-  def analyze(tf: TF[TestType], ctx: String, query: String): SoQLAnalysis[Int, TestType, TestValue] = {
-    analyze(tf, ctx, query, UserParameters.empty)
+  def analyze(tf: TF[TestType], ctx: String, query: String)(implicit onFail: OnFail): SoQLAnalysis[Int, TestType, TestValue] = {
+    analyze(tf, ctx, query, UserParameters.empty)(onFail)
   }
 
-  def analyze(tf: TF[TestType], ctx: String, query: String, params: UserParameters[TestType, TestValue]): SoQLAnalysis[Int, TestType, TestValue] = {
+  def analyze(tf: TF[TestType], ctx: String, query: String, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): SoQLAnalysis[Int, TestType, TestValue] = {
     tf.findTables(0, rn(ctx), query, specFor(params.unqualified)) match {
       case tf.Success(start) =>
-        finishAnalysis(start, params)
+        finishAnalysis(start, params)(onFail)
       case e: tf.Error =>
-        fail(e.toString)
+        onFail.onTableFinderError(e)
     }
   }
 
-  def analyze(tf: TF[TestType], ctx: String, query: String, canonicalName: CanonicalName, params: UserParameters[TestType, TestValue]): SoQLAnalysis[Int, TestType, TestValue] = {
+  def analyze(tf: TF[TestType], ctx: String, query: String, canonicalName: CanonicalName, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): SoQLAnalysis[Int, TestType, TestValue] = {
     tf.findTables(0, rn(ctx), query, Map.empty, canonicalName) match {
       case tf.Success(start) =>
-        finishAnalysis(start, params)
+        finishAnalysis(start, params)(onFail)
       case e: tf.Error =>
-        fail(e.toString)
+        onFail.onTableFinderError(e)
     }
   }
 
-  def analyze(tf: TF[TestType], query: String): SoQLAnalysis[Int, TestType, TestValue] = {
-    analyze(tf, query, UserParameters.empty)
+  def analyze(tf: TF[TestType], query: String)(implicit onFail: OnFail): SoQLAnalysis[Int, TestType, TestValue] = {
+    analyze(tf, query, UserParameters.empty)(onFail)
   }
 
-  def analyze(tf: TF[TestType], query: String, params: UserParameters[TestType, TestValue]): SoQLAnalysis[Int, TestType, TestValue] = {
+  def analyze(tf: TF[TestType], query: String, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): SoQLAnalysis[Int, TestType, TestValue] = {
     tf.findTables(0, query, specFor(params.unqualified)) match {
       case tf.Success(start) =>
-        finishAnalysis(start, params)
+        finishAnalysis(start, params)(onFail)
       case e: tf.Error =>
-        fail(e.toString)
+        onFail.onTableFinderError(e)
+    }
+  }
+
+  case class ExpectedFailure(ident: Any) extends Throwable
+  def expected(ident: Any) = throw ExpectedFailure(ident)
+
+  def expectFailure[T](ident: Any)(f: => T): Unit = {
+    try {
+      f
+      fail(s"Expected failure $ident but it did not happen")
+    } catch {
+      case ExpectedFailure(`ident`) =>
+        // yay
     }
   }
 }

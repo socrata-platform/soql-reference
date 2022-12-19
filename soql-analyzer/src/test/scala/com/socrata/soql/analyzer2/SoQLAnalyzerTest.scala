@@ -668,4 +668,23 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         |                         ^""".stripMargin
     )
   }
+
+  test("fully distinct requires selected order by") {
+    val tf = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
+    )
+
+    expectFailure(0) {
+      val analysis = analyze(tf, "aaaa-aaaa", "select distinct n1 order by n2")(new OnFail {
+        override def onAnalyzerError(e: SoQLAnalyzerError[Int]): Nothing = {
+          e match {
+            case SoQLAnalyzerError.OrderByMustBeSelectedWhenDistinct(_, _, _) =>
+              expected(0)
+            case _ =>
+              super.onAnalyzerError(e)
+          }
+        }
+      })
+    }
+  }
 }
