@@ -469,10 +469,6 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
                 )
               FromStatement(filteredStmt, labelProvider.tableLabel(), None, None)
           }
-          // Separate wrapper select because otherwise filtering
-          // columns can change the result-size when DISTINCT is in
-          // play.  When it isn't, merging should usually get rid of
-          // the wrapper.
         }
       }
 
