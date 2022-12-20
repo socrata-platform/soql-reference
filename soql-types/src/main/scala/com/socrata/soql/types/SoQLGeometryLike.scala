@@ -62,8 +62,17 @@ trait SoQLGeometryLike[T <: Geometry] {
 
   // Fast Base64 WKB representation (for CJSON transport)
   object Wkb64Rep {
-    def unapply(text: String): Option[T] = WkbRep.unapply(Base64.getDecoder.decode(text))
-    def apply(geom: T): String           = Base64.getEncoder.encodeToString(WkbRep.apply(geom))
+    def unapply(text: String): Option[T] = {
+      val bits = try {
+        Base64.getDecoder.decode(text)
+      } catch {
+        case _ : IllegalArgumentException =>
+          // Sadness
+          return None
+      }
+      WkbRep.unapply(bits)
+    }
+    def apply(geom: T): String = Base64.getEncoder.encodeToString(WkbRep.apply(geom))
   }
 
   object EWktRep {
