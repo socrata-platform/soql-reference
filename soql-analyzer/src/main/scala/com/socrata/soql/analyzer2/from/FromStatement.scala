@@ -20,10 +20,6 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
 
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = statement.columnReferences
 
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]): Self[RNS, CT, CV] = {
-    copy(statement = statement.doRemoveUnusedColumns(used, Some(label)))
-  }
-
   def find(predicate: Expr[CT, CV] => Boolean) = statement.find(predicate)
   def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
     statement.contains(e)

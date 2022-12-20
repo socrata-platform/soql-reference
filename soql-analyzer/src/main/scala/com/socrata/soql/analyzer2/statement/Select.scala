@@ -39,32 +39,6 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
     refs
   }
 
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]], myLabel: Option[TableLabel]): Self[RNS, CT, CV] = {
-    val newSelectList = (myLabel, distinctiveness) match {
-      case (_, Distinctiveness.FullyDistinct) | (None, _) =>
-        // need all my columns
-        selectList
-      case (Some(tl), _) =>
-        val wantedColumns = used.getOrElse(tl, Set.empty)
-        selectList.filter { case (cl, _) => wantedColumns(cl) }
-    }
-    val newFrom = from.doRemoveUnusedColumns(used)
-    val candidate = copy(selectList = newSelectList, from = newFrom)
-    if(candidate.isAggregated != isAggregated) {
-      // this is a super-extreme edge case, but consider
-      //   select x.x from (select count(*), 1 as x from whatever) as x
-      // Doing a naive "remove unused columns" would result in
-      //  select x.x from (select 1 as x from whatever) as x
-      // ..which changes the semantics of that inner query.  So, if removing
-      // columns from our select list changed whether or not we're aggregated,
-      // keep our column-list as-is.  This should hopefully basically never
-      // happen in practice.
-      copy(from = newFrom)
-    } else {
-      candidate
-    }
-  }
-
   final def directlyFind(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] = {
     // "directly" means "in _this_ query, not any non-lateral subqueries"
     selectList.valuesIterator.flatMap(_.expr.find(predicate)).nextOption().orElse {

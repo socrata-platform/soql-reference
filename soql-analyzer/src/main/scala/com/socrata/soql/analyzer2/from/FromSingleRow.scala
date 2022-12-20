@@ -24,7 +24,6 @@ trait FromSingleRowImpl[+RNS] { this: FromSingleRow[RNS] =>
     )
 
   def useSelectListReferences = this
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]) = this
 
   def find(predicate: Expr[Nothing, Nothing] => Boolean) = None
   def contains[CT, CV](e: Expr[CT, CV]): Boolean = false

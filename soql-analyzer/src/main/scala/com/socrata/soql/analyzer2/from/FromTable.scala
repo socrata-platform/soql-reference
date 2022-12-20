@@ -47,9 +47,6 @@ trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
     copy(label = state.convert(label))
   }
 
-  // A table has its columns whether or not they're selected, so this is just "this"
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]) = this
-
   private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {

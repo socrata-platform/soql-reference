@@ -25,12 +25,13 @@ class SoQLAnalysis[RNS, CT, CV] private (
 
   /** Simplify subselects on a best-effort basis. */
   def merge(and: MonomorphicFunction[CT]): SoQLAnalysis[RNS, CT, CV] =
-    copy(statement = new Merger(and).merge(statement))
+    copy(statement = new rewrite.Merger(and).merge(statement))
 
-  /** Simplify subselects on a best-effort basis. */
+  /** Remove columns not actually used by the query */
   def removeUnusedColumns: SoQLAnalysis[RNS, CT, CV] =
-    if(usesSelectListReferences) copy(statement = statement.unuseSelectListReferences.removeUnusedColumns.useSelectListReferences)
-    else copy(statement = statement.removeUnusedColumns)
+    withoutSelectListReferences { self =>
+      self.copy(statement = rewrite.RemoveUnusedColumns(self.statement))
+    }
 
   /** Rewrite expressions in group/order/distinct clauses which are
     * identical to expressions in the select list to use select-list
@@ -45,6 +46,13 @@ class SoQLAnalysis[RNS, CT, CV] private (
     usesSelectListReferences: Boolean = this.usesSelectListReferences
   ) =
     new SoQLAnalysis(labelProvider, statement, usesSelectListReferences)
+
+  private def withoutSelectListReferences(f: SoQLAnalysis[RNS, CT, CV] => SoQLAnalysis[RNS, CT, CV]) =
+    if(usesSelectListReferences) {
+      f(this.copy(statement = statement.unuseSelectListReferences)).useSelectListReferences
+    } else {
+      f(this)
+    }
 }
 
 object SoQLAnalysis {

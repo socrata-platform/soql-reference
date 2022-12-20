@@ -50,13 +50,6 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
     * not roundtrip perfectly through these two calls. */
   def unuseSelectListReferences: Self[RNS, CT, CV]
 
-  /** Remove columns that are not useful from inner selects.
-    * SelectListReferences must not be present. */
-  def removeUnusedColumns: Self[RNS, CT, CV] = doRemoveUnusedColumns(columnReferences, None)
-
-  // If "myLabel" is "None" it means "keep all output columns"
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]], myLabel: Option[TableLabel]): Self[RNS, CT, CV]
-
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
 
   def isIsomorphic[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](that: Statement[RNS2, CT2, CV2]): Boolean =

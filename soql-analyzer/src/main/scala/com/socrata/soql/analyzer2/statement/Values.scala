@@ -26,9 +26,6 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
     Map.empty
 
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]], myLabel: Option[TableLabel]): Self[Nothing, CT, CV] =
-    this
-
   private[analyzer2] def findIsomorphism[RNS2, CT2 >: CT, CV2 >: CV](
     state: IsomorphismState,
     thisCurrentTableLabel: Option[TableLabel],

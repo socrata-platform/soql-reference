@@ -32,12 +32,6 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
   def useSelectListReferences = copy(definitionQuery = definitionQuery.useSelectListReferences, useQuery = useQuery.useSelectListReferences)
   def unuseSelectListReferences = copy(definitionQuery = definitionQuery.unuseSelectListReferences, useQuery = useQuery.unuseSelectListReferences)
 
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]], myLabel: Option[TableLabel]): Self[RNS, CT, CV] =
-    copy(
-      definitionQuery = definitionQuery.doRemoveUnusedColumns(used, Some(definitionLabel)),
-      useQuery = useQuery.doRemoveUnusedColumns(used, myLabel)
-    )
-
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     copy(
       definitionQuery = definitionQuery.doRewriteDatabaseNames(state),

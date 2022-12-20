@@ -87,12 +87,6 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
       (acc, join) => acc.mergeWith(join.right.columnReferences)(_ ++ _).mergeWith(join.on.columnReferences)(_ ++ _)
     )
 
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]): Self[RNS, CT, CV] =
-    map[RNS, CT, CV](
-      _.doRemoveUnusedColumns(used),
-      { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, right.doRemoveUnusedColumns(used), on) }
-    )
-
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName] = {
     reduce[Map[AutoTableLabel, DatabaseTableName]] (
       { other => other.realTables },
