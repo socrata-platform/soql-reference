@@ -29,9 +29,6 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
     definitionQuery.columnReferences.mergeWith(useQuery.columnReferences)(_ ++ _)
 
-  def useSelectListReferences = copy(definitionQuery = definitionQuery.useSelectListReferences, useQuery = useQuery.useSelectListReferences)
-  def unuseSelectListReferences = copy(definitionQuery = definitionQuery.unuseSelectListReferences, useQuery = useQuery.unuseSelectListReferences)
-
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     copy(
       definitionQuery = definitionQuery.doRewriteDatabaseNames(state),

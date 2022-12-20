@@ -23,8 +23,6 @@ trait FromSingleRowImpl[+RNS] { this: FromSingleRow[RNS] =>
       label
     )
 
-  def useSelectListReferences = this
-
   def find(predicate: Expr[Nothing, Nothing] => Boolean) = None
   def contains[CT, CV](e: Expr[CT, CV]): Boolean = false
 

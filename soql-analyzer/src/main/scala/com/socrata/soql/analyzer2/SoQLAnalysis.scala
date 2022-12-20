@@ -38,7 +38,7 @@ class SoQLAnalysis[RNS, CT, CV] private (
     * indexes instead. */
   def useSelectListReferences =
     if(usesSelectListReferences) this
-    else copy(statement = statement.useSelectListReferences, usesSelectListReferences = true)
+    else copy(statement = rewrite.SelectListReferences.use(statement), usesSelectListReferences = true)
 
   private def copy[RNS2, CT2, CV2](
     labelProvider: LabelProvider = this.labelProvider,
@@ -49,7 +49,7 @@ class SoQLAnalysis[RNS, CT, CV] private (
 
   private def withoutSelectListReferences(f: SoQLAnalysis[RNS, CT, CV] => SoQLAnalysis[RNS, CT, CV]) =
     if(usesSelectListReferences) {
-      f(this.copy(statement = statement.unuseSelectListReferences)).useSelectListReferences
+      f(this.copy(statement = rewrite.SelectListReferences.unuse(statement))).useSelectListReferences
     } else {
       f(this)
     }

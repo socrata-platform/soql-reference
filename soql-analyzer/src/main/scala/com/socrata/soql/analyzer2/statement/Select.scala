@@ -191,55 +191,6 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
     from.doLabelMap(state)
   }
 
-  def useSelectListReferences: Self[RNS, CT, CV] = {
-    val selectListIndices = selectList.valuesIterator.map(_.expr).toVector.zipWithIndex.reverseIterator.toMap
-
-    def numericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
-      e match {
-        case c: Column[CT] =>
-          c // don't bother rewriting column references
-        case e =>
-          selectListIndices.get(e) match {
-            case Some(idx) => SelectListReference(idx + 1, e.isAggregated, e.isWindowed, e.typ)(e.position.asAtomic)
-            case None => e
-          }
-      }
-    }
-
-    copy(
-      distinctiveness = distinctiveness match {
-        case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
-        case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(numericateExpr))
-      },
-      from = from.useSelectListReferences,
-      groupBy = groupBy.map(numericateExpr),
-      orderBy = orderBy.map { ob => ob.copy(expr = numericateExpr(ob.expr)) }
-    )
-  }
-
-  def unuseSelectListReferences: Self[RNS, CT, CV] = {
-    val selectListIndices = selectList.valuesIterator.map(_.expr).toVector
-
-    def unnumericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
-      e match {
-        case r@SelectListReference(idxPlusOne, _, _, _) =>
-          selectListIndices(idxPlusOne - 1).reposition(r.position.logicalPosition)
-        case other =>
-          other
-      }
-    }
-
-    copy(
-      distinctiveness = distinctiveness match {
-        case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
-        case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(unnumericateExpr))
-      },
-      from = from.useSelectListReferences,
-      groupBy = groupBy.map(unnumericateExpr),
-      orderBy = orderBy.map { ob => ob.copy(expr = unnumericateExpr(ob.expr)) }
-    )
-  }
-
   private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](
     state: IsomorphismState,
     thisCurrentTableLabel: Option[TableLabel],

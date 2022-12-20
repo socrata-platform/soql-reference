@@ -38,8 +38,6 @@ sealed abstract class From[+RNS, +CT, +CV] {
     wantOrderingColumn: Boolean
   ): (Option[(TableLabel, AutoColumnLabel)], Self[RNS, CT2, CV])
 
-  def useSelectListReferences: Self[RNS, CT, CV]
-
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]]
   def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean
 

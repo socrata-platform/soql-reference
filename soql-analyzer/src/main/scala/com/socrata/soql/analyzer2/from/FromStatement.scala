@@ -38,8 +38,6 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     copy(statement = statement.doRewriteDatabaseNames(state))
 
-  def useSelectListReferences = copy(statement = statement.useSelectListReferences)
-
   private[analyzer2] def doRelabel(state: RelabelState) = {
     copy(statement = statement.doRelabel(state),
          label = state.convert(label))

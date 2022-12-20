@@ -47,9 +47,6 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
 
   val schema = typeVariedSchema
 
-  def useSelectListReferences = this
-  def unuseSelectListReferences = this
-
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
     values.iterator.flatMap(_.iterator.flatMap(_.find(predicate))).nextOption()
 

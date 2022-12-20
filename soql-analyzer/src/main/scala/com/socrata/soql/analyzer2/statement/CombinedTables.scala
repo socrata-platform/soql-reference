@@ -72,9 +72,6 @@ trait CombinedTablesImpl[+RNS, +CT, +CV] { this: CombinedTables[RNS, CT, CV] =>
       )
     )
 
-  def useSelectListReferences = copy(left = left.useSelectListReferences, right = right.useSelectListReferences)
-  def unuseSelectListReferences = copy(left = left.unuseSelectListReferences, right = right.unuseSelectListReferences)
-
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
     copy(left = left.mapAlias(f), right = right.mapAlias(f))
 

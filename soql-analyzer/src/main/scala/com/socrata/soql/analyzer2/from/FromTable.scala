@@ -79,8 +79,6 @@ trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
       state.columnMap += (label, columnLabel) -> (tr, columnName)
     }
   }
-
-  def useSelectListReferences: this.type = this
 }
 
 trait OFromTableImpl { this: FromTable.type =>

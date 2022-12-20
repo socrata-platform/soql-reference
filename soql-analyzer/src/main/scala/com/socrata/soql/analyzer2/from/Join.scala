@@ -123,16 +123,6 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
     )
   }
 
-  def useSelectListReferences: Join[RNS, CT, CV] = {
-    map[RNS, CT, CV](
-      _.useSelectListReferences,
-      { (joinType, lateral, left, right, on) =>
-        val newRight = right.useSelectListReferences
-        Join(joinType, lateral, left, newRight, on)
-      }
-    )
-  }
-
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
     map[RNS, CT, CV](
       _.mapAlias(f),
