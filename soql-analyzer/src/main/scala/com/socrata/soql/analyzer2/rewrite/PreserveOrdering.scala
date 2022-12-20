@@ -117,6 +117,8 @@ class PreserveOrdering[RNS, CT, CV] private (provider: LabelProvider) {
   }
 }
 
+/** Attempt to preserve ordering from inner queries to outer ones.
+  * SelectListReferences must not be present (this is unchecked!!). */
 object PreserveOrdering {
   def apply[RNS, CT, CV](labelProvider: LabelProvider, stmt: Statement[RNS, CT, CV]): Statement[RNS, CT, CV] = {
     new PreserveOrdering[RNS, CT, CV](labelProvider).rewriteStatement(stmt, true, false)._2

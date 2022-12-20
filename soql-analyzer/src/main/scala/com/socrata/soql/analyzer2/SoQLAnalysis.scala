@@ -16,11 +16,13 @@ class SoQLAnalysis[RNS, CT, CV] private (
     * preserve table-ordering (except across joins and aggregates,
     * which of course destroy ordering). */
   def preserveOrdering: SoQLAnalysis[RNS, CT, CV] = {
-    val nlp = labelProvider.clone()
-    copy(
-      labelProvider = nlp,
-      statement = rewrite.PreserveOrdering(nlp, statement)
-    )
+    withoutSelectListReferences { self =>
+      val nlp = self.labelProvider.clone()
+      self.copy(
+        labelProvider = nlp,
+        statement = rewrite.PreserveOrdering(nlp, self.statement)
+      )
+    }
   }
 
   /** Simplify subselects on a best-effort basis. */
