@@ -5,13 +5,16 @@ import com.socrata.soql.analyzer2._
 
 class SelectListReferences[RNS, CT, CV] private () {
   type Statement = analyzer2.Statement[RNS, CT, CV]
+  type Select = analyzer2.Select[RNS, CT, CV]
   type From = analyzer2.From[RNS, CT, CV]
   type Join = analyzer2.Join[RNS, CT, CV]
   type AtomicFrom = analyzer2.AtomicFrom[RNS, CT, CV]
   type FromTable = analyzer2.FromTable[RNS, CT]
   type FromSingleRow = analyzer2.FromSingleRow[RNS]
 
-  object Use {
+  abstract class Transform {
+    def rewriteSelect(select: Select): Select
+
     def rewriteStatement(stmt: Statement): Statement = {
       stmt match {
         case CombinedTables(op, left, right) =>
@@ -23,30 +26,8 @@ class SelectListReferences[RNS, CT, CV] private () {
         case v@Values(_) =>
           v
 
-        case stmt@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
-          val selectListIndices = selectList.valuesIterator.map(_.expr).toVector.zipWithIndex.reverseIterator.toMap
-
-          def numericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
-            e match {
-              case c: Column[CT] =>
-                c // don't bother rewriting column references
-              case e =>
-                selectListIndices.get(e) match {
-                  case Some(idx) => SelectListReference(idx + 1, e.isAggregated, e.isWindowed, e.typ)(e.position.asAtomic)
-                  case None => e
-                }
-            }
-          }
-
-          stmt.copy(
-            distinctiveness = distinctiveness match {
-              case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
-              case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(numericateExpr))
-            },
-            from = rewriteFrom(from),
-            groupBy = groupBy.map(numericateExpr),
-            orderBy = orderBy.map { ob => ob.copy(expr = numericateExpr(ob.expr)) }
-          )
+        case select: Select =>
+          rewriteSelect(select)
       }
     }
 
@@ -67,56 +48,60 @@ class SelectListReferences[RNS, CT, CV] private () {
     }
   }
 
-  object Unuse {
-    def rewriteStatement(stmt: Statement): Statement = {
-      stmt match {
-        case CombinedTables(op, left, right) =>
-          CombinedTables(op, rewriteStatement(left), rewriteStatement(right))
+  object Use extends Transform {
+    override def rewriteSelect(select: Select): Select = {
+      val Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) = select
 
-        case CTE(defLabel, defAlias, defQuery, materializedHint, useQuery) =>
-          CTE(defLabel, defAlias, rewriteStatement(defQuery), materializedHint, rewriteStatement(useQuery))
+      val selectListIndices = selectList.valuesIterator.map(_.expr).toVector.zipWithIndex.reverseIterator.toMap
 
-        case v@Values(_) =>
-          v
-
-        case stmt@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
-          val selectListIndices = selectList.valuesIterator.map(_.expr).toVector
-
-          def unnumericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
-            e match {
-              case r@SelectListReference(idxPlusOne, _, _, _) =>
-                selectListIndices(idxPlusOne - 1).reposition(r.position.logicalPosition)
-              case other =>
-                other
+      def numericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
+        e match {
+          case c: Column[CT] =>
+            c // don't bother rewriting column references
+          case e =>
+            selectListIndices.get(e) match {
+              case Some(idx) => SelectListReference(idx + 1, e.isAggregated, e.isWindowed, e.typ)(e.position.asAtomic)
+              case None => e
             }
-          }
-
-          stmt.copy(
-            distinctiveness = distinctiveness match {
-              case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
-              case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(unnumericateExpr))
-            },
-            from = rewriteFrom(from),
-            groupBy = groupBy.map(unnumericateExpr),
-            orderBy = orderBy.map { ob => ob.copy(expr = unnumericateExpr(ob.expr)) }
-          )
+        }
       }
-    }
 
-    def rewriteFrom(from: From): From = {
-      from.map[RNS, CT, CV](
-        rewriteAtomicFrom(_),
-        { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, rewriteAtomicFrom(right), on) }
+      select.copy(
+        distinctiveness = distinctiveness match {
+          case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
+          case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(numericateExpr))
+        },
+        from = rewriteFrom(from),
+        groupBy = groupBy.map(numericateExpr),
+        orderBy = orderBy.map { ob => ob.copy(expr = numericateExpr(ob.expr)) }
       )
     }
+  }
 
-    def rewriteAtomicFrom(from: AtomicFrom): AtomicFrom = {
-      from match {
-        case ft: FromTable => ft
-        case fsr: FromSingleRow => fsr
-        case fs@FromStatement(stmt, label, resourceName, alias) =>
-          fs.copy(statement = rewriteStatement(stmt))
+  object Unuse extends Transform {
+    override def rewriteSelect(select: Select): Select = {
+      val Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) = select
+
+      val selectListIndices = selectList.valuesIterator.map(_.expr).toVector
+
+      def unnumericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
+        e match {
+          case r@SelectListReference(idxPlusOne, _, _, _) =>
+            selectListIndices(idxPlusOne - 1).reposition(r.position.logicalPosition)
+          case other =>
+            other
+        }
       }
+
+      select.copy(
+        distinctiveness = distinctiveness match {
+          case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
+          case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(unnumericateExpr))
+        },
+        from = rewriteFrom(from),
+        groupBy = groupBy.map(unnumericateExpr),
+        orderBy = orderBy.map { ob => ob.copy(expr = unnumericateExpr(ob.expr)) }
+      )
     }
   }
 }
