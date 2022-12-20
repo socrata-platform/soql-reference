@@ -57,21 +57,6 @@ trait CombinedTablesImpl[+RNS, +CT, +CV] { this: CombinedTables[RNS, CT, CV] =>
         false
     }
 
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[AutoColumnLabel], Self[RNS, CT2, CV]) =
-    (
-      // table ops never preserve ordering
-      None,
-      copy(
-        left = left.preserveOrdering(provider, rowNumberFunction, false, false)._2,
-        right = right.preserveOrdering(provider, rowNumberFunction, false, false)._2
-      )
-    )
-
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
     copy(left = left.mapAlias(f), right = right.mapAlias(f))
 

@@ -40,22 +40,6 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
          definitionQuery = definitionQuery.doRelabel(state),
          useQuery = useQuery.doRelabel(state))
 
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[AutoColumnLabel], Self[RNS, CT2, CV]) = {
-    val (orderingColumn, newUseQuery) = useQuery.preserveOrdering(provider, rowNumberFunction, wantOutputOrdered, wantOrderingColumn)
-    (
-      orderingColumn,
-      copy(
-        definitionQuery = definitionQuery.preserveOrdering(provider, rowNumberFunction, false, false)._2,
-        useQuery = newUseQuery
-      )
-    )
-  }
-
   private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](
     state: IsomorphismState,
     thisCurrentTableLabel: Option[TableLabel],

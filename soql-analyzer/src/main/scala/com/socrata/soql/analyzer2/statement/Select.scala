@@ -134,56 +134,6 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
       hint = hint
     )
 
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[AutoColumnLabel], Self[RNS, CT2, CV]) = {
-    // If we're windowed, we want the underlying query ordered if
-    // possible even if our caller doesn't care, unless there's an
-    // aggregate in the way, in which case the aggregate will
-    // destroy any underlying ordering anyway so we stop caring.
-    val wantSubqueryOrdered = (isWindowed || wantOutputOrdered) && !isAggregated && distinctiveness == Distinctiveness.Indistinct
-    from.preserveOrdering(provider, rowNumberFunction, wantSubqueryOrdered, wantSubqueryOrdered) match {
-      case (Some((table, column)), newFrom) =>
-        val col = Column(table, column, rowNumberFunction.result)(AtomicPositionInfo.None)
-
-        val orderedSelf = copy(
-          from = newFrom,
-          orderBy = orderBy :+ OrderBy(col, true, true)
-        )
-
-        if(wantOrderingColumn) {
-          val rowNumberLabel = provider.columnLabel()
-          val newSelf = orderedSelf.copy(
-            selectList = selectList + (rowNumberLabel -> (NamedExpr(col, freshName("order"))))
-          )
-
-          (Some(rowNumberLabel), newSelf)
-        } else {
-          (None, orderedSelf)
-        }
-
-      case (None, newFrom) =>
-        if(wantOrderingColumn && orderBy.nonEmpty) {
-          // assume the given order by provides a total order and
-          // reflect that in our ordering column
-
-          val rowNumberLabel = provider.columnLabel()
-          val newSelf = copy(
-            selectList = selectList + (rowNumberLabel -> NamedExpr(WindowedFunctionCall(rowNumberFunction, Nil, None, Nil, Nil, None)(FuncallPositionInfo.None), freshName("order"))),
-            from = newFrom
-          )
-
-          (Some(rowNumberLabel), newSelf)
-        } else {
-          // No ordered FROM _and_ no ORDER BY?  You don't get a column even though you asked for one
-          (None, copy(from = newFrom))
-        }
-    }
-  }
-
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
     copy(from = from.mapAlias(f))
 

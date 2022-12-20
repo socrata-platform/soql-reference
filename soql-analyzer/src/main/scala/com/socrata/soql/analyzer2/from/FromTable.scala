@@ -26,14 +26,6 @@ trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
 
   private[analyzer2] override final val scope: Scope[CT] = Scope(columns, label)
 
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[(TableLabel, AutoColumnLabel)], Self[RNS, CT2, Nothing]) =
-    (None, asSelf)
-
   def debugDoc(implicit ev: HasDoc[Nothing]) =
     (tableName.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
 

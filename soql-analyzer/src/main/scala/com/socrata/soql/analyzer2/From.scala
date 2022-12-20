@@ -31,13 +31,6 @@ sealed abstract class From[+RNS, +CT, +CV] {
   private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
 
-  private[analyzer2] def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[(TableLabel, AutoColumnLabel)], Self[RNS, CT2, CV])
-
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]]
   def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean
 

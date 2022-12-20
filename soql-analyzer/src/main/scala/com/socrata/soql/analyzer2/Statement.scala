@@ -52,13 +52,6 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[RNS, CT, CV]
 
-  private[analyzer2] def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[AutoColumnLabel], Self[RNS, CT2, CV])
-
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]]
   def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean
 

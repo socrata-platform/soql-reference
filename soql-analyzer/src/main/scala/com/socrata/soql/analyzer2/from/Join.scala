@@ -137,20 +137,6 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
   def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
     reduce[Boolean](_.contains(e), { (acc, join) => acc || join.right.contains(e) || join.on.contains(e) })
 
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[(TableLabel, AutoColumnLabel)], Self[RNS, CT2, CV]) = {
-    // JOIN builds a new table, which is unordered (hence false, false)
-    val result = map[RNS, CT2, CV](
-      { _.preserveOrdering(provider, rowNumberFunction, false, false)._2 },
-      { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, right.preserveOrdering(provider, rowNumberFunction, false, false)._2, on) },
-    )
-    (None, result)
-  }
-
   private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {

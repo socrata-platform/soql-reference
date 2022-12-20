@@ -19,7 +19,7 @@ class SoQLAnalysis[RNS, CT, CV] private (
     val nlp = labelProvider.clone()
     copy(
       labelProvider = nlp,
-      statement = statement.preserveOrdering(nlp, rowNumberFunction, true, false)._2
+      statement = rewrite.PreserveOrdering(nlp, rowNumberFunction, statement)
     )
   }
 

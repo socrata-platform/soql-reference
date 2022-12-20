@@ -56,14 +56,6 @@ trait FromSingleRowImpl[+RNS] { this: FromSingleRow[RNS] =>
     // no columns
   }
 
-  private[analyzer2] override def preserveOrdering[CT2](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[(TableLabel, AutoColumnLabel)], Self[RNS, Nothing, Nothing]) =
-    (None, this)
-
   def debugDoc(implicit ev: HasDoc[Nothing]) =
     (d"(SELECT)" +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
 }

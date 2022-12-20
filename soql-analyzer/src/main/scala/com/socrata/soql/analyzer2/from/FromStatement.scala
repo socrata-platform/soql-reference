@@ -60,18 +60,6 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
     }
   }
 
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[(TableLabel, AutoColumnLabel)], Self[RNS, CT2, CV]) = {
-    val (orderColumn, stmt) =
-      statement.preserveOrdering(provider, rowNumberFunction, wantOutputOrdered, wantOrderingColumn)
-
-    (orderColumn.map((label, _)), copy(statement = stmt))
-  }
-
   def debugDoc(implicit ev: HasDoc[CV]) =
     (statement.debugDoc.encloseNesting(d"(", d")") +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
 }
