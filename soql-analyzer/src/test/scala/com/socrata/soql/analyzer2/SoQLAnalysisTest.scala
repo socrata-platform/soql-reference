@@ -19,7 +19,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val analysis = analyze(tf, "twocol", "select * order by text")
-    analysis.preserveOrdering(rowNumber).statement.schema.size must equal (2)
+    analysis.preserveOrdering.statement.schema.size must equal (2)
   }
 
   test("unordered-on-unordered doesn't change under order preservation") {
@@ -28,7 +28,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val analysis = analyze(tf, "twocol", "select * |> select *")
-    analysis.preserveOrdering(rowNumber).statement must equal (analysis.statement)
+    analysis.preserveOrdering.statement must equal (analysis.statement)
   }
 
   test("unordered-on-ordered pipes generates an ordering column") {
@@ -37,8 +37,8 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val analysis = analyze(tf, "twocol", "select * order by num |> select *")
-    val expectedAnalysis = analyze(tf, "twocol", "select *, row_number() over () as rn order by num |> select * (except rn) order by rn")
-    analysis.preserveOrdering(rowNumber).statement must be (isomorphicTo(expectedAnalysis.statement))
+    val expectedAnalysis = analyze(tf, "twocol", "select *, num as ordering order by num |> select * (except ordering) order by ordering")
+    analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("ordered-on-ordered pipes generates an ordering column") {
@@ -47,8 +47,8 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val analysis = analyze(tf, "twocol", "select * order by num |> select * order by text")
-    val expectedAnalysis = analyze(tf, "twocol", "select *, row_number() over () as rn order by num |> select * (except rn) order by text, rn")
-    analysis.preserveOrdering(rowNumber).statement must be (isomorphicTo(expectedAnalysis.statement))
+    val expectedAnalysis = analyze(tf, "twocol", "select *, num as ordering order by num |> select * (except ordering) order by text, ordering")
+    analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("orderings are blocked by aggregations and do not continue beyond them if not required by a window function") {
@@ -68,11 +68,11 @@ select * order by num
 select * order by num
   |> select *
   |> select *
-  |> select text, num, row_number () over () as rn group by text, num order by num, text
-  |> select * (except rn) order by rn
+  |> select text, num, num as o1, text as o2 group by text, num order by num, text
+  |> select * (except o1, o2) order by o1, o2
 """)
 
-    analysis.preserveOrdering(rowNumber).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("orderings are blocked by aggregations but continue again beyond them if required") {
@@ -89,14 +89,14 @@ select * order by num
 """)
 
     val expectedAnalysis = analyze(tf, "twocol", """
-select *, row_number() over () as rn order by num
-  |> select * order by rn
-  |> select * (except rn), window_function() over () order by rn
-  |> select text, num, row_number() over () as rn group by text, num order by num, text
-  |> select * (except rn) order by rn
+select *, num as ordering order by num
+  |> select * order by ordering
+  |> select * (except ordering), window_function() over () order by ordering
+  |> select text, num, num as o1, text as o2 group by text, num order by num, text
+  |> select * (except o1, o2) order by o1, o2
 """)
 
-    analysis.preserveOrdering(rowNumber).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("simple merge") {

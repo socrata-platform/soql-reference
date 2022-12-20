@@ -15,11 +15,11 @@ class SoQLAnalysis[RNS, CT, CV] private (
   /** Rewrite the analysis plumbing through enough information to
     * preserve table-ordering (except across joins and aggregates,
     * which of course destroy ordering). */
-  def preserveOrdering(rowNumberFunction: MonomorphicFunction[CT]): SoQLAnalysis[RNS, CT, CV] = {
+  def preserveOrdering: SoQLAnalysis[RNS, CT, CV] = {
     val nlp = labelProvider.clone()
     copy(
       labelProvider = nlp,
-      statement = rewrite.PreserveOrdering(nlp, rowNumberFunction, statement)
+      statement = rewrite.PreserveOrdering(nlp, statement)
     )
   }
 
