@@ -505,7 +505,19 @@ object SoQLFunctions {
   val Lead = f("lead", FunctionName("lead"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
     NoDocs
   )
+  val LeadOffset = f("lead_offset", FunctionName("lead"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber)), Seq.empty, VariableType("a"), needsWindow = true)(
+    NoDocs
+  )
+  val LeadOffsetDefault = f("lead_offset_default", FunctionName("lead"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber), VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
+    NoDocs
+  )
   val Lag = f("lag", FunctionName("lag"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
+    NoDocs
+  )
+  val LagOffset = f("lag_offset", FunctionName("lag"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber)), Seq.empty, VariableType("a"), needsWindow = true)(
+    NoDocs
+  )
+  val LagOffsetDefault = f("lag_offset_default", FunctionName("lag"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber), VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
     NoDocs
   )
   val Ntile = f("ntile", FunctionName("ntile"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), needsWindow=true)(
@@ -581,6 +593,10 @@ object SoQLFunctions {
 
   val TimeStampDiffD = f("timestamp diff in days", FunctionName("date_diff_d"), Map("a" -> TimestampLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLNumber))(
     NoDocs
+  )
+
+  val EpochSeconds = mf("epoch_seconds", FunctionName("epoch_seconds"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLNumber)(
+    "Returns the number of seconds since the start of 1 January 1970 GMT.  Note that this includes millisecond precision"
   )
 
   val TimeStampAdd = f("timestamp add", FunctionName("date_add"), Map("a" -> TimestampLike, "b" -> CovariantSet(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
