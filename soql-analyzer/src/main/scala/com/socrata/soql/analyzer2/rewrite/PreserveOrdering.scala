@@ -1,5 +1,6 @@
 package com.socrata.soql.analyzer2.rewrite
 
+import scala.collection.compat._
 import scala.collection.{mutable => scm}
 
 import com.socrata.soql.analyzer2

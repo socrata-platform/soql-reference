@@ -65,16 +65,6 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
   private[analyzer2] def doRelabel(state: RelabelState): Self[Nothing, CT, CV] =
     copy(values = values.map(_.map(_.doRelabel(state))))
 
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[AutoColumnLabel], Self[Nothing, CT2, CV]) = {
-    // VALUES are a table and hence unordered
-    (None, this)
-  }
-
   override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[Nothing, CT]] = {
     Seq(
       d"VALUES",
