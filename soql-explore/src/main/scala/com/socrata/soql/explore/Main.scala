@@ -225,10 +225,10 @@ object Main extends App {
         }
 
         if(merge) analysis = analysis.merge(SoQLFunctions.And.monomorphic.get)
-        if(preserveOrder) analysis = analysis.preserveOrdering(SoQLFunctions.RowNumber.monomorphic.get)
+        if(preserveOrder) analysis = analysis.preserveOrdering
         if(useSelectRefs) analysis = analysis.useSelectListReferences
 
-        val html = debugHtml(analysis.statement.useSelectListReferences, width)
+        val html = debugHtml(analysis.statement, width)
 
         OK ~> Content("text/html; charset=UTF-8", result(tableFinder, query(0), html, merge, preserveOrder, useSelectRefs))
       }

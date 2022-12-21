@@ -23,9 +23,6 @@ trait FromSingleRowImpl[+RNS] { this: FromSingleRow[RNS] =>
       label
     )
 
-  def useSelectListReferences = this
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]) = this
-
   def find(predicate: Expr[Nothing, Nothing] => Boolean) = None
   def contains[CT, CV](e: Expr[CT, CV]): Boolean = false
 
@@ -58,14 +55,6 @@ trait FromSingleRowImpl[+RNS] { this: FromSingleRow[RNS] =>
     state.tableMap += label -> LabelMap.TableReference(resourceName, alias)
     // no columns
   }
-
-  private[analyzer2] override def preserveOrdering[CT2](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[(TableLabel, AutoColumnLabel)], Self[RNS, Nothing, Nothing]) =
-    (None, this)
 
   def debugDoc(implicit ev: HasDoc[Nothing]) =
     (d"(SELECT)" +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))

@@ -26,9 +26,6 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
     Map.empty
 
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]], myLabel: Option[TableLabel]): Self[Nothing, CT, CV] =
-    this
-
   private[analyzer2] def findIsomorphism[RNS2, CT2 >: CT, CV2 >: CV](
     state: IsomorphismState,
     thisCurrentTableLabel: Option[TableLabel],
@@ -50,9 +47,6 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
 
   val schema = typeVariedSchema
 
-  def useSelectListReferences = this
-  def unuseSelectListReferences = this
-
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
     values.iterator.flatMap(_.iterator.flatMap(_.find(predicate))).nextOption()
 
@@ -70,16 +64,6 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[Nothing, CT, CV] =
     copy(values = values.map(_.map(_.doRelabel(state))))
-
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[AutoColumnLabel], Self[Nothing, CT2, CV]) = {
-    // VALUES are a table and hence unordered
-    (None, this)
-  }
 
   override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[Nothing, CT]] = {
     Seq(

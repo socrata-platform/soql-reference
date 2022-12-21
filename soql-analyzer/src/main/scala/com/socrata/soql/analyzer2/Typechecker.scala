@@ -1,7 +1,7 @@
 package com.socrata.soql.analyzer2
 
 import scala.util.control.NoStackTrace
-import scala.util.parsing.input.Position
+import scala.util.parsing.input.{Position, NoPosition}
 
 import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, CovariantSet}
@@ -119,12 +119,12 @@ class Typechecker[RNS, CT, CV](
       case col@ast.ColumnOrAliasRef(None, name) =>
         namedExprs.get(name) match {
           case Some(prechecked) =>
-            Right(Seq(prechecked))
+            Right(Seq(prechecked.reposition(col.position)))
           case None =>
             env.lookup(name) match {
               case None => Left(NoSuchColumn(scope, canonicalName, None, name, col.position))
               case Some(Environment.LookupResult(table, column, typ)) =>
-                Right(Seq(Column(table, column, typ)(col.position)))
+                Right(Seq(Column(table, column, typ)(new AtomicPositionInfo(col.position))))
             }
         }
       case col@ast.ColumnOrAliasRef(Some(qual), name) =>
@@ -132,7 +132,7 @@ class Typechecker[RNS, CT, CV](
         env.lookup(trueQual, name) match {
           case None => Left(NoSuchColumn(scope, canonicalName, Some(trueQual), name, col.position))
           case Some(Environment.LookupResult(table, column, typ)) =>
-            Right(Seq(Column(table, column, typ)(col.position)))
+            Right(Seq(Column(table, column, typ)(new AtomicPositionInfo(col.position))))
         }
       case l: ast.Literal =>
         squash(typeInfo.potentialExprs(l), l.position)
@@ -158,8 +158,8 @@ class Typechecker[RNS, CT, CV](
       }
 
     paramSet.flatMap(_.get(name)) match {
-      case Some(UserParameters.Null(t)) => Right(Seq(NullLiteral(t)(position)))
-      case Some(UserParameters.Value(v)) => Right(Seq(LiteralValue(v)(position)(typeInfo.hasType)))
+      case Some(UserParameters.Null(t)) => Right(Seq(NullLiteral(t)(new AtomicPositionInfo(position, NoPosition))))
+      case Some(UserParameters.Value(v)) => Right(Seq(LiteralValue(v)(new AtomicPositionInfo(position, NoPosition))(typeInfo.hasType)))
       case None => Left(UnknownUserParameter(scope, canonicalName, canonicalView, name, position))
     }
   }
@@ -225,7 +225,7 @@ class Typechecker[RNS, CT, CV](
             if(!f.isAggregate && !f.needsWindow) {
               return Left(NonAggregate(scope, canonicalName, fc.functionName, fc.functionNamePosition))
             }
-            AggregateFunctionCall(f, params, false, Some(boolExpr))(fc.position, fc.functionNamePosition)
+            AggregateFunctionCall(f, params, false, Some(boolExpr))(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
           case (maybeFilter, Some((partitions, orderings, frames))) =>
             if(!f.needsWindow && !f.isAggregate) {
               return Left(NonWindowFunction(scope, canonicalName, fc.functionName, fc.functionNamePosition))
@@ -309,15 +309,15 @@ class Typechecker[RNS, CT, CV](
               return Left(GroupsRequiresOrderBy(scope, canonicalName, frames.head.position))
             }
 
-            WindowedFunctionCall(f, params, maybeFilter, partitions, orderings, parsedFrames)(fc.position, fc.functionNamePosition)
+            WindowedFunctionCall(f, params, maybeFilter, partitions, orderings, parsedFrames)(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
           case (None, None) =>
             if(f.needsWindow) {
               return Left(RequiresWindow(scope, canonicalName, fc.functionName, fc.functionNamePosition))
             }
             if(f.isAggregate) {
-              AggregateFunctionCall(f, params, false, None)(fc.position, fc.functionNamePosition)
+              AggregateFunctionCall(f, params, false, None)(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
             } else {
-              FunctionCall(f, params)(fc.position, fc.functionNamePosition)
+              FunctionCall(f, params)(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
             }
         }
       }

@@ -11,7 +11,7 @@ import com.socrata.soql.typechecker.{TypeInfo, TypeInfo2, HasType}
 import com.socrata.soql.ast
 import com.socrata.soql.analyzer2
 
-import scala.util.parsing.input.Position
+import scala.util.parsing.input.{Position, NoPosition}
 
 object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLType, SoQLValue] {
   val typeParameterUniverse = OrderedSet(SoQLType.typePreferences : _*)
@@ -22,17 +22,17 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
 
   def potentialExprs(l: ast.Literal) =
     l match {
-      case ast.NullLiteral() => typeParameterUniverse.iterator.map(analyzer2.NullLiteral(_)(l.position)).toVector
-      case ast.BooleanLiteral(b) => Seq(analyzer2.LiteralValue(SoQLBoolean(b))(l.position))
+      case ast.NullLiteral() => typeParameterUniverse.iterator.map(analyzer2.NullLiteral(_)(new analyzer2.AtomicPositionInfo(l.position))).toVector
+      case ast.BooleanLiteral(b) => Seq(analyzer2.LiteralValue(SoQLBoolean(b))(new analyzer2.AtomicPositionInfo(l.position)))
       case ast.NumberLiteral(n) =>
-        val baseNumber = analyzer2.LiteralValue(SoQLNumber(n.bigDecimal))(l.position)
+        val baseNumber = analyzer2.LiteralValue(SoQLNumber(n.bigDecimal))(new analyzer2.AtomicPositionInfo(l.position))
         Seq(
           baseNumber,
-          analyzer2.FunctionCall(numberToMoneyFunc, Seq(baseNumber))(l.position, l.position),
-          analyzer2.FunctionCall(numberToDoubleFunc, Seq(baseNumber))(l.position, l.position),
+          analyzer2.FunctionCall(numberToMoneyFunc, Seq(baseNumber))(new analyzer2.FuncallPositionInfo(l.position, NoPosition, NoPosition)),
+          analyzer2.FunctionCall(numberToDoubleFunc, Seq(baseNumber))(new analyzer2.FuncallPositionInfo(l.position, NoPosition, NoPosition)),
         )
       case ast.StringLiteral(s) =>
-        val baseString = analyzer2.LiteralValue(SoQLText(s))(l.position)
+        val baseString = analyzer2.LiteralValue(SoQLText(s))(new analyzer2.AtomicPositionInfo(l.position))
         val results = Seq.newBuilder[analyzer2.Expr[SoQLType, SoQLValue]]
         results += baseString
         for {
@@ -42,8 +42,8 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
         } {
           results += expr(v, l.position)
         }
-        results += analyzer2.FunctionCall(textToBlobFunc, Seq(baseString))(l.position, l.position)
-        results += analyzer2.FunctionCall(textToPhotoFunc, Seq(baseString))(l.position, l.position)
+        results += analyzer2.FunctionCall(textToBlobFunc, Seq(baseString))(new analyzer2.FuncallPositionInfo(l.position, NoPosition, NoPosition))
+        results += analyzer2.FunctionCall(textToPhotoFunc, Seq(baseString))(new analyzer2.FuncallPositionInfo(l.position, NoPosition, NoPosition))
         results.result()
     }
 
@@ -54,35 +54,35 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
     f.monomorphic.getOrElse(sys.error(f.identity + " not monomorphic?"))
 
   private def funcExpr(f: MonomorphicFunction[SoQLType]) = { (t: SoQLValue, pos: Position) =>
-    analyzer2.FunctionCall(f, Seq(analyzer2.LiteralValue(t)(pos)))(pos, pos)
+    analyzer2.FunctionCall(f, Seq(analyzer2.LiteralValue(t)(new analyzer2.AtomicPositionInfo(pos))))(new analyzer2.FuncallPositionInfo(pos, NoPosition, NoPosition))
   }
 
   private def textToFixedTimestampExpr(dt: DateTime, pos: Position) =
-    analyzer2.LiteralValue(SoQLFixedTimestamp(dt))(pos)
+    analyzer2.LiteralValue(SoQLFixedTimestamp(dt))(new analyzer2.AtomicPositionInfo(pos))
   private def textToFloatingTimestampExpr(ldt: LocalDateTime, pos: Position) =
-    analyzer2.LiteralValue(SoQLFloatingTimestamp(ldt))(pos)
+    analyzer2.LiteralValue(SoQLFloatingTimestamp(ldt))(new analyzer2.AtomicPositionInfo(pos))
   private def textToDateExpr(d: LocalDate, pos: Position) =
-    analyzer2.LiteralValue(SoQLDate(d))(pos)
+    analyzer2.LiteralValue(SoQLDate(d))(new analyzer2.AtomicPositionInfo(pos))
   private def textToTimeExpr(t: LocalTime, pos: Position) =
-    analyzer2.LiteralValue(SoQLTime(t))(pos)
+    analyzer2.LiteralValue(SoQLTime(t))(new analyzer2.AtomicPositionInfo(pos))
   private def textToIntervalExpr(p: Period, pos: Position) =
-    analyzer2.LiteralValue(SoQLInterval(p))(pos)
+    analyzer2.LiteralValue(SoQLInterval(p))(new analyzer2.AtomicPositionInfo(pos))
   private def textToNumberExpr(s: SoQLText, pos: Position) =
-    analyzer2.LiteralValue(SoQLNumber(new java.math.BigDecimal(s.value)))(pos)
+    analyzer2.LiteralValue(SoQLNumber(new java.math.BigDecimal(s.value)))(new analyzer2.AtomicPositionInfo(pos))
   private def textToMoneyExpr(s: SoQLText, pos: Position) =
-    analyzer2.LiteralValue(SoQLMoney(new java.math.BigDecimal(s.value)))(pos)
+    analyzer2.LiteralValue(SoQLMoney(new java.math.BigDecimal(s.value)))(new analyzer2.AtomicPositionInfo(pos))
   private def textToPointExpr(p: Point, pos: Position) =
-    analyzer2.LiteralValue(SoQLPoint(p))(pos)
+    analyzer2.LiteralValue(SoQLPoint(p))(new analyzer2.AtomicPositionInfo(pos))
   private def textToMultiPointExpr(mp: MultiPoint, pos: Position) =
-    analyzer2.LiteralValue(SoQLMultiPoint(mp))(pos)
+    analyzer2.LiteralValue(SoQLMultiPoint(mp))(new analyzer2.AtomicPositionInfo(pos))
   private def textToLineExpr(l: LineString, pos: Position) =
-    analyzer2.LiteralValue(SoQLLine(l))(pos)
+    analyzer2.LiteralValue(SoQLLine(l))(new analyzer2.AtomicPositionInfo(pos))
   private def textToMultiLineExpr(ml: MultiLineString, pos: Position) =
-    analyzer2.LiteralValue(SoQLMultiLine(ml))(pos)
+    analyzer2.LiteralValue(SoQLMultiLine(ml))(new analyzer2.AtomicPositionInfo(pos))
   private def textToPolygonExpr(p: Polygon, pos: Position) =
-    analyzer2.LiteralValue(SoQLPolygon(p))(pos)
+    analyzer2.LiteralValue(SoQLPolygon(p))(new analyzer2.AtomicPositionInfo(pos))
   private def textToMultiPolygonExpr(mp: MultiPolygon, pos: Position) =
-    analyzer2.LiteralValue(SoQLMultiPolygon(mp))(pos)
+    analyzer2.LiteralValue(SoQLMultiPolygon(mp))(new analyzer2.AtomicPositionInfo(pos))
 
   private val textToFixedTimestampFunc = getMonomorphically(SoQLFunctions.TextToFixedTimestamp)
   private val textToFloatingTimestampFunc = getMonomorphically(SoQLFunctions.TextToFloatingTimestamp)
@@ -214,7 +214,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
   def typeOf(value: SoQLValue) = value.typ
 
   def literalBoolean(b: Boolean, pos: Position) =
-    analyzer2.LiteralValue(SoQLBoolean(b))(pos)
+    analyzer2.LiteralValue(SoQLBoolean(b))(new analyzer2.AtomicPositionInfo(pos))
 
   def literalExprFor(value: SoQLValue, pos: Position) =
     value match {

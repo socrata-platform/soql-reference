@@ -20,10 +20,6 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
 
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = statement.columnReferences
 
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]): Self[RNS, CT, CV] = {
-    copy(statement = statement.doRemoveUnusedColumns(used, Some(label)))
-  }
-
   def find(predicate: Expr[CT, CV] => Boolean) = statement.find(predicate)
   def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
     statement.contains(e)
@@ -41,8 +37,6 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     copy(statement = statement.doRewriteDatabaseNames(state))
-
-  def useSelectListReferences = copy(statement = statement.useSelectListReferences)
 
   private[analyzer2] def doRelabel(state: RelabelState) = {
     copy(statement = statement.doRelabel(state),
@@ -64,18 +58,6 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
     for((columnLabel, NameEntry(columnName, _typ)) <- statement.schema) {
       state.columnMap += (label, columnLabel) -> (tr, columnName)
     }
-  }
-
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[(TableLabel, AutoColumnLabel)], Self[RNS, CT2, CV]) = {
-    val (orderColumn, stmt) =
-      statement.preserveOrdering(provider, rowNumberFunction, wantOutputOrdered, wantOrderingColumn)
-
-    (orderColumn.map((label, _)), copy(statement = stmt))
   }
 
   def debugDoc(implicit ev: HasDoc[CV]) =

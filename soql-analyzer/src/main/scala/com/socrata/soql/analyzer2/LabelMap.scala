@@ -4,7 +4,6 @@ import scala.collection.compat.immutable.LazyList
 
 import com.rojoma.json.v3.codec.JsonEncode
 import com.rojoma.json.v3.interpolation._
-import com.rojoma.json.v3.util.OrJNull.implicits._
 import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, NullForNone}
 
 import com.socrata.soql.environment.{ColumnName, ResourceName}

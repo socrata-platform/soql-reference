@@ -47,11 +47,13 @@ trait TableFinder {
 
   case class Ordering(column: ColumnName, ascending: Boolean)
 
+  case class DatasetColumnInfo(typ: ColumnType, hidden: Boolean)
+
   /** A base dataset, or a saved query which is being analyzed opaquely. */
   case class Dataset(
     databaseName: DatabaseTableName,
     canonicalName: CanonicalName,
-    schema: OrderedMap[ColumnName, ColumnType],
+    schema: OrderedMap[ColumnName, DatasetColumnInfo],
     ordering: Seq[Ordering]
   ) extends FinderTableDescription {
     require(ordering.forall { ordering => schema.contains(ordering.column) })
@@ -60,13 +62,13 @@ trait TableFinder {
       TableDescription.Dataset(
         databaseName,
         canonicalName,
-        schema.map { case (cn, ct) =>
+        schema.map { case (cn, DatasetColumnInfo(ct, hidden)) =>
           // This is a little icky...?  But at this point we're in
           // the user-provided names world, so this is at least a
           // _predictable_ key to use as a "database column name"
           // before we get to the point of moving over to the
           // actual-database-names world.
-          DatabaseColumnName(cn.caseFolded) -> NameEntry(cn, ct)
+          DatabaseColumnName(cn.caseFolded) -> TableDescription.DatasetColumnInfo(cn, ct, hidden)
         },
         ordering.map { case Ordering(column, ascending) =>
           TableDescription.Ordering(DatabaseColumnName(column.caseFolded), ascending)
@@ -79,7 +81,8 @@ trait TableFinder {
     canonicalName: CanonicalName,
     basedOn: ResourceName,
     soql: String,
-    parameters: Map[HoleName, ColumnType]
+    parameters: Map[HoleName, ColumnType],
+    hiddenColumns: Set[ColumnName]
   ) extends FinderTableDescription {
   }
   /** A saved table query ("UDF"), with any parameters it defines for itself. */
@@ -87,7 +90,8 @@ trait TableFinder {
     scope: ResourceNameScope,
     canonicalName: CanonicalName,
     soql: String,
-    parameters: OrderedMap[HoleName, ColumnType]
+    parameters: OrderedMap[HoleName, ColumnType],
+    hiddenColumns: Set[ColumnName]
   ) extends FinderTableDescription
 
   type ScopedResourceName = com.socrata.soql.analyzer2.ScopedResourceName[ResourceNameScope]
@@ -161,9 +165,9 @@ trait TableFinder {
     lookup(scopedName) match {
       case Right(ds: Dataset) =>
         Success(ds.toParsed)
-      case Right(Query(scope, canonicalName, basedOn, text, params)) =>
-        parse(Some(scopedName), text, false).map(TableDescription.Query(scope, canonicalName, basedOn, _, text, params))
-      case Right(TableFunction(scope, canonicalName, text, params)) => parse(Some(scopedName), text, true).map(TableDescription.TableFunction(scope, canonicalName, _, text, params))
+      case Right(Query(scope, canonicalName, basedOn, text, params, hiddenColumns)) =>
+        parse(Some(scopedName), text, false).map(TableDescription.Query(scope, canonicalName, basedOn, _, text, params, hiddenColumns))
+      case Right(TableFunction(scope, canonicalName, text, params, hiddenColumns)) => parse(Some(scopedName), text, true).map(TableDescription.TableFunction(scope, canonicalName, _, text, params, hiddenColumns))
       case Left(LookupError.NotFound) => Error.NotFound(scopedName)
       case Left(LookupError.PermissionDenied) => Error.PermissionDenied(scopedName)
     }
@@ -208,12 +212,12 @@ trait TableFinder {
     }
     desc match {
       case TableDescription.Dataset(_, _, _, _) => Success(acc)
-      case TableDescription.Query(scope, canonicalName, basedOn, tree, _unparsed, _params) =>
+      case TableDescription.Query(scope, canonicalName, basedOn, tree, _unparsed, _params, _hiddenColumns) =>
         for {
           acc <- walkFromName(ScopedResourceName(scope, basedOn), acc, canonicalName :: stack)
           acc <- walkTree(scope, tree, acc, canonicalName :: stack)
         } yield acc
-      case TableDescription.TableFunction(scope, canonicalName, tree, _unparsed, _params) =>
+      case TableDescription.TableFunction(scope, canonicalName, tree, _unparsed, _params, _hiddenColumns) =>
         walkTree(scope, tree, acc, canonicalName :: stack)
     }
   }

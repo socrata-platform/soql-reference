@@ -72,12 +72,12 @@ trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
       args = args.map(_.doRewriteDatabaseNames(state)),
       partitionBy = partitionBy.map(_.doRewriteDatabaseNames(state)),
       orderBy = orderBy.map(_.doRewriteDatabaseNames(state))
-    )(position, functionNamePosition)
+    )(position)
 
   private[analyzer2] def doRelabel(state: RelabelState) =
     copy(args = args.map(_.doRelabel(state)),
          partitionBy = partitionBy.map(_.doRelabel(state)),
-         orderBy = orderBy.map(_.doRelabel(state)))(position, functionNamePosition)
+         orderBy = orderBy.map(_.doRelabel(state)))(position)
 
   protected def doDebugDoc(implicit ev: HasDoc[CV]) = {
     val preArgs: Doc[Nothing] = Doc(function.name.name) ++ d"("
@@ -103,7 +103,7 @@ trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
     args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs)
   }
 
-  private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = p, functionNamePosition)
+  private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = position.logicallyReposition(p))
 }
 
 trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
@@ -116,7 +116,6 @@ trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
       buffer.write(wfc.orderBy)
       buffer.write(wfc.frame)(Writable.option(Frame.serialize))
       buffer.write(wfc.position)
-      buffer.write(wfc.functionNamePosition)
     }
   }
 
@@ -128,8 +127,7 @@ trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
       val partitionBy = buffer.read[Seq[Expr[CT, CV]]]()
       val orderBy = buffer.read[Seq[OrderBy[CT, CV]]]()
       val frame = buffer.read[Option[Frame]]()(Readable.option(Frame.serialize))
-      val position = buffer.read[Position]()
-      val functionNamePosition = buffer.read[Position]()
+      val position = buffer.read[FuncallPositionInfo]()
       WindowedFunctionCall(
         function,
         args,
@@ -138,8 +136,7 @@ trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
         orderBy,
         frame
       )(
-        position,
-        functionNamePosition
+        position
       )
     }
   }

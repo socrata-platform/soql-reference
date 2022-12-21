@@ -32,7 +32,7 @@ trait OLiteralValueImpl { this: LiteralValue.type =>
       LiteralValue(
         buffer.read[CV]()
       )(
-        buffer.read[Position]()
+        buffer.read[AtomicPositionInfo]()
       )
     }
   }

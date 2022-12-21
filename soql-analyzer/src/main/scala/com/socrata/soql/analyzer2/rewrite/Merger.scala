@@ -1,4 +1,4 @@
-package com.socrata.soql.analyzer2
+package com.socrata.soql.analyzer2.rewrite
 
 import scala.annotation.tailrec
 import scala.util.parsing.input.NoPosition
@@ -7,6 +7,7 @@ import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
+import com.socrata.soql.analyzer2._
 
 class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
   private implicit val hd = new HasDoc[CV] {
@@ -263,7 +264,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
       val windowUsed =
         a.orderBy.exists(_.expr.isWindowed) ||
           a.selectList.iterator.filter(_._2.expr.isWindowed).exists { case (k, namedExpr) =>
-            b.directlyContains(Column(aLabel, k, namedExpr.expr.typ)(NoPosition))
+            b.directlyContains(Column(aLabel, k, namedExpr.expr.typ)(AtomicPositionInfo.None))
           }
 
       if(windowUsed) {
@@ -283,7 +284,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         if(b.isWindowed) {
           val windowsWithinWindows =
             a.selectList.iterator.filter(_._2.expr.isWindowed).exists { case (k, namedExpr) =>
-              val target = Column(aLabel, k, namedExpr.expr.typ)(NoPosition)
+              val target = Column(aLabel, k, namedExpr.expr.typ)(AtomicPositionInfo.None)
               b.directlyFind {
                 case e: WindowedFunctionCall[CT, CV] => e.contains(target)
                 case _ => false
@@ -362,7 +363,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
       case (None, None) => None
       case (Some(a), None) => Some(a)
       case (None, Some(b)) => Some(replaceRefs(aTable, aColumns, b))
-      case (Some(a), Some(b)) => Some(FunctionCall(and, Seq(a, replaceRefs(aTable, aColumns, b)))(NoPosition, NoPosition))
+      case (Some(a), Some(b)) => Some(FunctionCall(and, Seq(a, replaceRefs(aTable, aColumns, b)))(FuncallPositionInfo.None))
     }
 
   private def replaceRefs(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]], b: Expr[CT, CV]) =
@@ -385,14 +386,14 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         case l: Literal[CT, CV] =>
           l
         case fc@FunctionCall(f, params) =>
-          FunctionCall(f, params.map(go _))(fc.position, fc.functionNamePosition)
+          FunctionCall(f, params.map(go _))(fc.position)
         case fc@AggregateFunctionCall(f, params, distinct, filter) =>
           AggregateFunctionCall(
             f,
             params.map(go _),
             distinct,
             filter.map(go _)
-          )(fc.position, fc.functionNamePosition)
+          )(fc.position)
         case fc@WindowedFunctionCall(f, params, filter, partitionBy, orderBy, frame) =>
           WindowedFunctionCall(
             f,
@@ -401,7 +402,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
             partitionBy.map(go _),
             orderBy.map { ob => ob.copy(expr = go(ob.expr)) },
             frame
-          )(fc.position, fc.functionNamePosition)
+          )(fc.position)
         case sr: SelectListReference[CT] =>
           // This is safe because we're creating a new query with the
           // same output as b's query, so this just refers to the new

@@ -43,13 +43,6 @@ trait CombinedTablesImpl[+RNS, +CT, +CV] { this: CombinedTables[RNS, CT, CV] =>
     right.doLabelMap(state)
   }
 
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]], myLabel: Option[TableLabel]): Self[RNS, CT, CV] =
-    // We need all the columns in our subqueries to correctly do our
-    // table operation, so ignore what we're told are used and just
-    // tell our subqueries "go clean yourselves up without affecting
-    // your output schemas".
-    copy(left = left.doRemoveUnusedColumns(used, None), right = right.doRemoveUnusedColumns(used, None))
-
   private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](
     state: IsomorphismState,
     thisCurrentTableLabel: Option[TableLabel],
@@ -63,24 +56,6 @@ trait CombinedTablesImpl[+RNS, +CT, +CV] { this: CombinedTables[RNS, CT, CV] =>
       case _ =>
         false
     }
-
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[AutoColumnLabel], Self[RNS, CT2, CV]) =
-    (
-      // table ops never preserve ordering
-      None,
-      copy(
-        left = left.preserveOrdering(provider, rowNumberFunction, false, false)._2,
-        right = right.preserveOrdering(provider, rowNumberFunction, false, false)._2
-      )
-    )
-
-  def useSelectListReferences = copy(left = left.useSelectListReferences, right = right.useSelectListReferences)
-  def unuseSelectListReferences = copy(left = left.unuseSelectListReferences, right = right.unuseSelectListReferences)
 
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
     copy(left = left.mapAlias(f), right = right.mapAlias(f))

@@ -41,6 +41,12 @@ object SoQLAnalyzerError {
     position: Position
   ) extends AnalysisError[RNS]
 
+  case class OrderByMustBeSelectedWhenDistinct[+RNS](
+    scope: RNS,
+    canonicalName: Option[CanonicalName],
+    position: Position
+  ) extends AnalysisError[RNS]
+
   case class InvalidGroupBy[+RNS](
     scope: RNS,
     canonicalName: Option[CanonicalName],

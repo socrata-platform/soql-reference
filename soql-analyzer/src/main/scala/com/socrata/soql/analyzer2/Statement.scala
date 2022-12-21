@@ -38,25 +38,6 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV]
 
-  /** For SQL forms that can refer to the select-columns by number, replace relevant
-    * entries in those forms with the relevant select-column-index.
-    *
-    * e.g., this will rewrite a Statement that corresponds to "select
-    * x+1, count(*) group by x+1 order by count(*)" to one that
-    * corresponds to "select x+1, count(*) group by 1 order by 2"
-    */
-  def useSelectListReferences: Self[RNS, CT, CV]
-  /** Undoes `useSelectListReferences`.  Note position information may
-    * not roundtrip perfectly through these two calls. */
-  def unuseSelectListReferences: Self[RNS, CT, CV]
-
-  /** Remove columns that are not useful from inner selects.
-    * SelectListReferences must not be present. */
-  def removeUnusedColumns: Self[RNS, CT, CV] = doRemoveUnusedColumns(columnReferences, None)
-
-  // If "myLabel" is "None" it means "keep all output columns"
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]], myLabel: Option[TableLabel]): Self[RNS, CT, CV]
-
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
 
   def isIsomorphic[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](that: Statement[RNS2, CT2, CV2]): Boolean =
@@ -70,13 +51,6 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
   ): Boolean
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[RNS, CT, CV]
-
-  private[analyzer2] def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[AutoColumnLabel], Self[RNS, CT2, CV])
 
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]]
   def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean

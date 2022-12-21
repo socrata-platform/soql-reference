@@ -108,32 +108,39 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           case FoundTables.InContext(rn, q, _, parameters) =>
             val from = analyzeForFrom(ScopedResourceName(scope, rn), None, NoPosition)
             new Context(scope, None, Environment.empty, Map.empty).
-              analyzeStatement(None, q, Some(from))
+              analyzeStatement(None, q, Some(from), Set.empty)
           case FoundTables.InContextImpersonatingSaved(rn, q, _, parameters, impersonating) =>
             val from = analyzeForFrom(ScopedResourceName(scope, rn), None, NoPosition)
             new Context(scope, Some(impersonating), Environment.empty, Map.empty).
-              analyzeStatement(None, q, Some(from))
+              analyzeStatement(None, q, Some(from), Set.empty)
           case FoundTables.Standalone(q, _, parameters) =>
             new Context(scope, None, Environment.empty, Map.empty).
-              analyzeStatement(None, q, None)
+              analyzeStatement(None, q, None, Set.empty)
         }
       intoStatement(from)
     }
 
     def intoStatement(from: AtomicFrom[RNS, CT, CV]): Statement[RNS, CT, CV] = {
-      val selectList =
-        from match {
-          case from: FromTable[RNS, CT] =>
+      from match {
+        case from: FromTable[RNS, CT] =>
+          selectFromFrom(
             from.columns.map { case (label, NameEntry(name, typ)) =>
-              labelProvider.columnLabel() -> NamedExpr(Column(from.label, label, typ)(NoPosition), name)
-            }
-          case from: FromSingleRow[RNS] =>
-            OrderedMap.empty[AutoColumnLabel, NamedExpr[CT, CV]]
-          case from: FromStatement[RNS, CT, CV] =>
-            // Just short-circuit it and return the underlying Statement
-            return from.statement
-        }
+              labelProvider.columnLabel() -> NamedExpr(Column(from.label, label, typ)(AtomicPositionInfo.None), name)
+            },
+            from
+          )
+        case from: FromSingleRow[RNS] =>
+          selectFromFrom(OrderedMap.empty[AutoColumnLabel, NamedExpr[CT, CV]], from)
+        case from: FromStatement[RNS, CT, CV] =>
+          // Just short-circuit it and return the underlying Statement
+          from.statement
+      }
+    }
 
+    def selectFromFrom(
+      selectList: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]],
+      from: AtomicFrom[RNS, CT, CV]
+    ): Statement[RNS, CT, CV] = {
       Select(
         distinctiveness = Distinctiveness.Indistinct,
         selectList = selectList,
@@ -156,7 +163,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           srn,
           None,
           labelProvider.tableLabel(),
-          columns = desc.schema
+          columns = desc.schema.filter { case (_, NameEntry(name, _)) => !desc.hiddenColumns.contains(name) }
         )
       } else {
         for(TableDescription.Ordering(col, _ascending) <- desc.ordering) {
@@ -179,8 +186,12 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         FromStatement(
           Select(
             Distinctiveness.Indistinct,
-            selectList = OrderedMap() ++ from.columns.iterator.zip(columnLabels.iterator).map { case ((dcn, NameEntry(name, typ)), outputLabel) =>
-              outputLabel -> NamedExpr(Column(from.label, dcn, typ)(NoPosition), name)
+            selectList = OrderedMap() ++ from.columns.iterator.zip(columnLabels.iterator).flatMap { case ((dcn, NameEntry(name, typ)), outputLabel) =>
+              if(desc.hiddenColumns(name)) {
+                None
+              } else {
+                Some(outputLabel -> NamedExpr(Column(from.label, dcn, typ)(AtomicPositionInfo.None), name))
+              }
             },
             from,
             None,
@@ -188,7 +199,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             None,
             desc.ordering.map { case TableDescription.Ordering(dcn, ascending) =>
               val NameEntry(_, typ) = from.columns(dcn)
-              OrderBy(Column(from.label, dcn, typ)(NoPosition), ascending = ascending, nullLast = ascending)
+              OrderBy(Column(from.label, dcn, typ)(AtomicPositionInfo.None), ascending = ascending, nullLast = ascending)
             },
             None,
             None,
@@ -213,13 +224,13 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         tableMap.find(name) match {
           case ds: TableDescription.Dataset[CT] =>
             fromTable(name, ds)
-          case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters) =>
+          case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters, hiddenColumns) =>
             // so this is basedOn |> parsed
             // so we want to use "basedOn" as the implicit "from" for "parsed"
             val from = analyzeForFrom(ScopedResourceName(scope, basedOn), None, NoPosition /* Yes, actually NoPosition here */)
             new Context(scope, Some(canonicalName), Environment.empty, Map.empty).
-              analyzeStatement(Some(name), parsed, Some(from))
-          case TableDescription.TableFunction(_, _, _, _, _) =>
+              analyzeStatement(Some(name), parsed, Some(from), hiddenColumns)
+          case TableDescription.TableFunction(_, _, _, _, _, _) =>
             parameterlessTableFunction(name.scope, canonicalName, name.name, position)
         }
       }
@@ -228,16 +239,16 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
     class Context(scope: RNS, canonicalName: Option[CanonicalName], enclosingEnv: Environment[CT], udfParams: UdfParameters) {
       private def withEnv(env: Environment[CT]) = new Context(scope, canonicalName, env, udfParams)
 
-      def analyzeStatement(srn: Option[ScopedResourceName], q: BinaryTree[ast.Select], from0: Option[AtomicFrom[RNS, CT, CV]]): FromStatement[RNS, CT, CV] = {
+      def analyzeStatement(srn: Option[ScopedResourceName], q: BinaryTree[ast.Select], from0: Option[AtomicFrom[RNS, CT, CV]], hiddenColumns: Set[ColumnName]): FromStatement[RNS, CT, CV] = {
         q match {
           case Leaf(select) =>
-            analyzeSelection(srn, select, from0)
+            analyzeSelection(srn, select, from0, hiddenColumns)
           case PipeQuery(left, right) =>
-            val newInput = analyzeStatement(None, left, from0)
-            analyzeStatement(srn, right, Some(newInput))
+            val newInput = analyzeStatement(None, left, from0, Set.empty)
+            analyzeStatement(srn, right, Some(newInput), hiddenColumns)
           case other: TrueOp[ast.Select] =>
-            val lhs = intoStatement(analyzeStatement(None, other.left, from0))
-            val rhs = intoStatement(analyzeStatement(None, other.right, None))
+            val lhs = intoStatement(analyzeStatement(None, other.left, from0, hiddenColumns))
+            val rhs = intoStatement(analyzeStatement(None, other.right, None, hiddenColumns))
 
             if(lhs.schema.values.map(_.typ) != rhs.schema.values.map(_.typ)) {
               tableOpTypeMismatch(
@@ -262,7 +273,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         }
       }
 
-      def analyzeSelection(srn: Option[ScopedResourceName], select: ast.Select, from0: Option[AtomicFrom[RNS, CT, CV]]): FromStatement[RNS, CT, CV] = {
+      def analyzeSelection(srn: Option[ScopedResourceName], select: ast.Select, from0: Option[AtomicFrom[RNS, CT, CV]], hiddenColumns: Set[ColumnName]): FromStatement[RNS, CT, CV] = {
         val ast.Select(
           distinct,
           selection,
@@ -332,7 +343,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           }
           val checked = finalState.typecheck(expr)
           if(!typeInfo.isGroupable(checked.typ)) {
-            invalidGroupBy(checked.typ, checked.position)
+            invalidGroupBy(checked.typ, checked.position.logicalPosition)
           }
           checked
         }
@@ -343,7 +354,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           }
           val checked = finalState.typecheck(expr)
           if(!typeInfo.isOrdered(checked.typ)) {
-            unorderedOrderBy(checked.typ, checked.position)
+            unorderedOrderBy(checked.typ, checked.position.logicalPosition)
           }
           OrderBy(checked, ascending, nullLast)
         }
@@ -357,11 +368,15 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             } else { // distinct on without an order by implicitly orders by the distinct columns
               for(expr <- exprs) {
                 if(!typeInfo.isOrdered(expr.typ)) {
-                  unorderedOrderBy(expr.typ, expr.position)
+                  unorderedOrderBy(expr.typ, expr.position.logicalPosition)
                 }
               }
             }
-          case _ =>
+          case Distinctiveness.FullyDistinct =>
+            for(missingOb <- checkedOrderBys.find { ob => !finalState.namedExprs.values.exists(_ == ob.expr) }) {
+              orderByMustBeSelected(missingOb.expr.position.logicalPosition)
+            }
+          case Distinctiveness.Indistinct =>
             // all well
         }
 
@@ -392,7 +407,69 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
         verifyAggregatesAndWindowFunctions(stmt)
 
-        FromStatement(stmt, labelProvider.tableLabel(), srn, None)
+        if(hiddenColumns.isEmpty) {
+          FromStatement(stmt, labelProvider.tableLabel(), srn, None)
+        } else {
+          // ok, this is a little unpleasant, thanks to DISTINCT.
+          stmt.distinctiveness match {
+            case Distinctiveness.Indistinct | Distinctiveness.On(_) =>
+              // easy case - just filter the select-list
+              val filteredStmt = stmt.copy(
+                selectList = stmt.selectList.filter {
+                  case (_, NamedExpr(_, cn)) => !hiddenColumns.contains(cn)
+                }
+              )
+              FromStatement(filteredStmt, labelProvider.tableLabel(), srn, None)
+            case Distinctiveness.FullyDistinct =>
+              // This works because IF a DISTINCT statement has an
+              // order by, those order by clauses MUST appear in the
+              // select list.  So we just need to find those columns
+              // and order by the relevant column-refs.  We'll
+              // actually lift the ORDER BY (together with any
+              // LIMIT/OFFSET) entirely into the superquery, if there
+              // are no window functions involved (since the meaning
+              // of a window function can depend on the ORDER BY)
+
+              val (potentiallyUnorderedStatement, potentialLimit, potentialOffset) =
+                if(stmt.selectList.values.exists(_.expr.isWindowed)) {
+                  (stmt, None, None)
+                } else {
+                  (stmt.copy(orderBy = Nil, limit = None, offset = None), stmt.limit, stmt.offset)
+                }
+
+              val unfilteredFrom = FromStatement(potentiallyUnorderedStatement, labelProvider.tableLabel(), srn, None)
+              val filteredStmt =
+                Select(
+                  Distinctiveness.Indistinct,
+                  stmt.selectList.flatMap { case (label, NamedExpr(expr, cn)) =>
+                    if(hiddenColumns(cn)) {
+                      None
+                    } else {
+                      Some(labelProvider.columnLabel() -> NamedExpr(Column(unfilteredFrom.label, label, expr.typ)(AtomicPositionInfo.None), cn))
+                    }
+                  },
+                  unfilteredFrom,
+                  None,
+                  Nil,
+                  None,
+                  stmt.orderBy.map { ob =>
+                    val (columnLabel, columnTyp) =
+                      stmt.selectList.iterator.collect { case (label, NamedExpr(expr, cn)) if expr == ob.expr =>
+                        (label, expr.typ)
+                      }.nextOption().getOrElse {
+                        throw new Exception("Internal error: found an order by whose expr is not in the select list??")
+                      }
+
+                    ob.copy(expr = Column(unfilteredFrom.label, columnLabel, columnTyp)(AtomicPositionInfo.None))
+                  },
+                  limit = potentialLimit,
+                  offset = potentialOffset,
+                  search = None,
+                  hint = Set.empty
+                )
+              FromStatement(filteredStmt, labelProvider.tableLabel(), None, None)
+          }
+        }
       }
 
       def collectNamesForAnalysis(from: From[RNS, CT, CV]): AliasAnalysis.AnalysisContext = {
@@ -525,7 +602,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           case ast.JoinQuery(select, rawAlias) =>
             val alias = rawAlias.substring(1)
             ensureLegalAlias(alias, NoPosition /* TODO: NEED POS INFO FROM AST */)
-            analyzeStatement(None, select, None).reAlias(Some(ResourceName(alias)))
+            analyzeStatement(None, select, None, Set.empty).reAlias(Some(ResourceName(alias)))
           case ast.JoinFunc(tn, params) =>
             tn.aliasWithoutPrefix.foreach(ensureLegalAlias(_, NoPosition /* TODO: NEED POS INFO FROM AST */))
             analyzeUDF(ResourceName(tn.nameWithoutPrefix), params).
@@ -543,7 +620,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
       def analyzeUDF(resource: ResourceName, params: Seq[ast.Expression]): AtomicFrom[RNS, CT, CV] = {
         val srn = ScopedResourceName(scope, resource)
         tableMap.find(srn) match {
-          case TableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs) =>
+          case TableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs, hiddenColumns) =>
             if(params.length != paramSpecs.size) {
               incorrectNumberOfParameters(resource, expected = params.length, got = paramSpecs.size, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
             }
@@ -551,47 +628,32 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             //    @bleh(x, y, z)
             // to
             //    select * from (values (x,y,z)) join lateral (udfexpansion) on true
-            // though this only happens for params which expand to function calls.
-            // Literal and column refs just get inlined into the udfexpansion.
+            // Possibly we'll want a rewrite pass that inlines constants and
+            // maybe simple column references into the udf expansion, 
 
             val typecheckedParams =
               OrderedMap() ++ params.lazyZip(paramSpecs).map { case (expr, (name, typ)) =>
                 name -> typecheck(expr, Map.empty, Some(typ))
               }
 
-            val (outOfLineParams, inlineParams) = typecheckedParams.partition { case (_name, e) =>
-                e match {
-                  case _ : FuncallLike[CT, CV] => true
-                  case _ : Column[CT] | _ : Literal[CT, CV] => false
-                  case _ : SelectListReference[CT] => throw new Exception("Impossible: select list reference out of typechecking")
-                }
-              }
-
-            NonEmptySeq.fromSeq(outOfLineParams.values.toVector) match {
-              case Some(outOfLineValues) =>
-                val outOfLineParamsQuery = Values(NonEmptySeq(outOfLineValues))
+            NonEmptySeq.fromSeq(typecheckedParams.values.toVector) match {
+              case Some(typecheckedExprs) =>
+                val outOfLineParamsQuery = Values(NonEmptySeq(typecheckedExprs))
                 val outOfLineParamsLabel = labelProvider.tableLabel()
                 val innerUdfParams =
-                  outOfLineParamsQuery.schema.keys.lazyZip(outOfLineParams).map { case (colLabel, (name, expr)) =>
-                    name -> { (p: Position) => Column(outOfLineParamsLabel, colLabel, expr.typ)(p) }
-                  }.toMap ++ inlineParams.withValuesMapped { c =>
-                    // reposition the inline parameter so that if an
-                    // error is reported while typechecking (or,
-                    // eventually, running) the UDF body, it gets
-                    // reported at the parameter-use-site rather than
-                    // the parameter-call-site.
-                    c.reposition _
-                  }
+                  outOfLineParamsQuery.schema.keys.lazyZip(typecheckedParams).map { case (colLabel, (name, expr)) =>
+                    name -> { (p: Position) => Column(outOfLineParamsLabel, colLabel, expr.typ)(new AtomicPositionInfo(p)) }
+                  }.toMap
 
                 val useQuery =
                   new Context(udfScope, Some(udfCanonicalName), Environment.empty, innerUdfParams)
-                    .analyzeStatement(None, parsed, None)
+                    .analyzeStatement(None, parsed, None, hiddenColumns)
 
                 FromStatement(
                   Select(
                     Distinctiveness.Indistinct,
                     OrderedMap() ++ useQuery.statement.schema.iterator.map { case (label, NameEntry(name, typ)) =>
-                      labelProvider.columnLabel() -> NamedExpr(Column(useQuery.label, label, typ)(NoPosition), name)
+                      labelProvider.columnLabel() -> NamedExpr(Column(useQuery.label, label, typ)(AtomicPositionInfo.None), name)
                     },
                     Join(
                       JoinType.Inner,
@@ -615,19 +677,17 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
                 )
 
               case None =>
-                // There are no out-of-line values, so we can just
+                // There are no parameters, so we can just
                 // expand the UDF without introducing a layer of
                 // additional joining.
-                val innerUdfParams = inlineParams.withValuesMapped { c => c.reposition _ }.toMap
-                new Context(udfScope, Some(udfCanonicalName), Environment.empty, innerUdfParams)
-                  .analyzeStatement(Some(srn), parsed, None)
+                new Context(udfScope, Some(udfCanonicalName), Environment.empty, Map.empty)
+                  .analyzeStatement(Some(srn), parsed, None, hiddenColumns)
             }
           case _ =>
             // Non-UDF
             parametersForNonUdf(resource, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
         }
       }
-
 
       def typecheck(
         expr: ast.Expression,
@@ -657,7 +717,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           case AggregateFunctionCall(f, args, _distinct, filter) if allowAggregates =>
             args.foreach(verifyAggregatesAndWindowFunctions(_, false, false, groupBys))
           case agg: AggregateFunctionCall[CT, CV] =>
-            aggregateFunctionNotAllowed(agg.function.name, agg.functionNamePosition)
+            aggregateFunctionNotAllowed(agg.function.name, agg.position.functionNamePosition)
           case w@WindowedFunctionCall(f, args, filter, partitionBy, orderBy, _frame) if allowWindow =>
             // Fun fact: this order by does not have the same no-literals restriction as a select's order-by
             val subExprsAreAggregates = allowAggregates && w.isAggregated
@@ -665,7 +725,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             partitionBy.foreach(verifyAggregatesAndWindowFunctions(_, subExprsAreAggregates, false, groupBys))
             orderBy.foreach { ob => verifyAggregatesAndWindowFunctions(ob.expr, subExprsAreAggregates, false, groupBys) }
           case wfc: WindowedFunctionCall[CT, CV] =>
-            windowFunctionNotAllowed(wfc.function.name, wfc.functionNamePosition)
+            windowFunctionNotAllowed(wfc.function.name, wfc.position.functionNamePosition)
           case e: Expr[CT, CV] if allowAggregates && groupBys.contains(e) =>
             // ok, we want an aggregate and this is an expression from the GROUP BY clause
           case FunctionCall(_f, args) =>
@@ -674,7 +734,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
           case c@Column(_table, _col, _typ) if allowAggregates =>
             // Column reference, but it's not from the group by clause.
             // Fail!
-            ungroupedColumnReference(c.position)
+            ungroupedColumnReference(c.position.logicalPosition)
           case _ =>
             // ok
         }
@@ -686,6 +746,8 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         throw Bail(SoQLAnalyzerError.IncorrectNumberOfUdfParameters(scope, canonicalName, forUdf, expected, got, position))
       def distinctOnMustBePrefixOfOrderBy(position: Position): Nothing =
         throw Bail(SoQLAnalyzerError.DistinctNotPrefixOfOrderBy(scope, canonicalName, position))
+      def orderByMustBeSelected(position: Position): Nothing =
+        throw Bail(SoQLAnalyzerError.OrderByMustBeSelectedWhenDistinct(scope, canonicalName, position))
       def invalidGroupBy(typ: CT, position: Position): Nothing =
         throw Bail(SoQLAnalyzerError.InvalidGroupBy(scope, canonicalName, typeInfo.typeNameFor(typ), position))
       def unorderedOrderBy(typ: CT, position: Position): Nothing =
