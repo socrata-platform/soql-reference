@@ -73,7 +73,7 @@ class PreserveOrdering[RNS, CT, CV] private (provider: LabelProvider) {
         )
         if(wantOrderingColumns) {
           // ..and our caller wants to know how we're ordered, so
-          // make sure we've put the relevant expressins in our
+          // make sure we've put the relevant expressions in our
           // select list and return them.
           val (newColumns, outputInfo) = orderedSelf.orderBy.map { case OrderBy(expr, asc, nullLast) =>
             selectList.find { case (label, NamedExpr(e, _)) => expr == e } match {
