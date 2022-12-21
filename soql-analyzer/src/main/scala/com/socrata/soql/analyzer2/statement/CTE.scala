@@ -29,15 +29,6 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
     definitionQuery.columnReferences.mergeWith(useQuery.columnReferences)(_ ++ _)
 
-  def useSelectListReferences = copy(definitionQuery = definitionQuery.useSelectListReferences, useQuery = useQuery.useSelectListReferences)
-  def unuseSelectListReferences = copy(definitionQuery = definitionQuery.unuseSelectListReferences, useQuery = useQuery.unuseSelectListReferences)
-
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]], myLabel: Option[TableLabel]): Self[RNS, CT, CV] =
-    copy(
-      definitionQuery = definitionQuery.doRemoveUnusedColumns(used, Some(definitionLabel)),
-      useQuery = useQuery.doRemoveUnusedColumns(used, myLabel)
-    )
-
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     copy(
       definitionQuery = definitionQuery.doRewriteDatabaseNames(state),
@@ -48,22 +39,6 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
     copy(definitionLabel = state.convert(definitionLabel),
          definitionQuery = definitionQuery.doRelabel(state),
          useQuery = useQuery.doRelabel(state))
-
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[AutoColumnLabel], Self[RNS, CT2, CV]) = {
-    val (orderingColumn, newUseQuery) = useQuery.preserveOrdering(provider, rowNumberFunction, wantOutputOrdered, wantOrderingColumn)
-    (
-      orderingColumn,
-      copy(
-        definitionQuery = definitionQuery.preserveOrdering(provider, rowNumberFunction, false, false)._2,
-        useQuery = newUseQuery
-      )
-    )
-  }
 
   private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](
     state: IsomorphismState,

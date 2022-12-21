@@ -39,32 +39,6 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
     refs
   }
 
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]], myLabel: Option[TableLabel]): Self[RNS, CT, CV] = {
-    val newSelectList = (myLabel, distinctiveness) match {
-      case (_, Distinctiveness.FullyDistinct) | (None, _) =>
-        // need all my columns
-        selectList
-      case (Some(tl), _) =>
-        val wantedColumns = used.getOrElse(tl, Set.empty)
-        selectList.filter { case (cl, _) => wantedColumns(cl) }
-    }
-    val newFrom = from.doRemoveUnusedColumns(used)
-    val candidate = copy(selectList = newSelectList, from = newFrom)
-    if(candidate.isAggregated != isAggregated) {
-      // this is a super-extreme edge case, but consider
-      //   select x.x from (select count(*), 1 as x from whatever) as x
-      // Doing a naive "remove unused columns" would result in
-      //  select x.x from (select 1 as x from whatever) as x
-      // ..which changes the semantics of that inner query.  So, if removing
-      // columns from our select list changed whether or not we're aggregated,
-      // keep our column-list as-is.  This should hopefully basically never
-      // happen in practice.
-      copy(from = newFrom)
-    } else {
-      candidate
-    }
-  }
-
   final def directlyFind(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] = {
     // "directly" means "in _this_ query, not any non-lateral subqueries"
     selectList.valuesIterator.flatMap(_.expr.find(predicate)).nextOption().orElse {
@@ -160,110 +134,11 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
       hint = hint
     )
 
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[AutoColumnLabel], Self[RNS, CT2, CV]) = {
-    // If we're windowed, we want the underlying query ordered if
-    // possible even if our caller doesn't care, unless there's an
-    // aggregate in the way, in which case the aggregate will
-    // destroy any underlying ordering anyway so we stop caring.
-    val wantSubqueryOrdered = (isWindowed || wantOutputOrdered) && !isAggregated && distinctiveness == Distinctiveness.Indistinct
-    from.preserveOrdering(provider, rowNumberFunction, wantSubqueryOrdered, wantSubqueryOrdered) match {
-      case (Some((table, column)), newFrom) =>
-        val col = Column(table, column, rowNumberFunction.result)(AtomicPositionInfo.None)
-
-        val orderedSelf = copy(
-          from = newFrom,
-          orderBy = orderBy :+ OrderBy(col, true, true)
-        )
-
-        if(wantOrderingColumn) {
-          val rowNumberLabel = provider.columnLabel()
-          val newSelf = orderedSelf.copy(
-            selectList = selectList + (rowNumberLabel -> (NamedExpr(col, freshName("order"))))
-          )
-
-          (Some(rowNumberLabel), newSelf)
-        } else {
-          (None, orderedSelf)
-        }
-
-      case (None, newFrom) =>
-        if(wantOrderingColumn && orderBy.nonEmpty) {
-          // assume the given order by provides a total order and
-          // reflect that in our ordering column
-
-          val rowNumberLabel = provider.columnLabel()
-          val newSelf = copy(
-            selectList = selectList + (rowNumberLabel -> NamedExpr(WindowedFunctionCall(rowNumberFunction, Nil, None, Nil, Nil, None)(FuncallPositionInfo.None), freshName("order"))),
-            from = newFrom
-          )
-
-          (Some(rowNumberLabel), newSelf)
-        } else {
-          // No ordered FROM _and_ no ORDER BY?  You don't get a column even though you asked for one
-          (None, copy(from = newFrom))
-        }
-    }
-  }
-
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
     copy(from = from.mapAlias(f))
 
   private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
     from.doLabelMap(state)
-  }
-
-  def useSelectListReferences: Self[RNS, CT, CV] = {
-    val selectListIndices = selectList.valuesIterator.map(_.expr).toVector.zipWithIndex.reverseIterator.toMap
-
-    def numericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
-      e match {
-        case c: Column[CT] =>
-          c // don't bother rewriting column references
-        case e =>
-          selectListIndices.get(e) match {
-            case Some(idx) => SelectListReference(idx + 1, e.isAggregated, e.isWindowed, e.typ)(e.position.asAtomic)
-            case None => e
-          }
-      }
-    }
-
-    copy(
-      distinctiveness = distinctiveness match {
-        case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
-        case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(numericateExpr))
-      },
-      from = from.useSelectListReferences,
-      groupBy = groupBy.map(numericateExpr),
-      orderBy = orderBy.map { ob => ob.copy(expr = numericateExpr(ob.expr)) }
-    )
-  }
-
-  def unuseSelectListReferences: Self[RNS, CT, CV] = {
-    val selectListIndices = selectList.valuesIterator.map(_.expr).toVector
-
-    def unnumericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
-      e match {
-        case r@SelectListReference(idxPlusOne, _, _, _) =>
-          selectListIndices(idxPlusOne - 1).reposition(r.position.logicalPosition)
-        case other =>
-          other
-      }
-    }
-
-    copy(
-      distinctiveness = distinctiveness match {
-        case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
-        case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(unnumericateExpr))
-      },
-      from = from.useSelectListReferences,
-      groupBy = groupBy.map(unnumericateExpr),
-      orderBy = orderBy.map { ob => ob.copy(expr = unnumericateExpr(ob.expr)) }
-    )
   }
 
   private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](

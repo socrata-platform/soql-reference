@@ -87,12 +87,6 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
       (acc, join) => acc.mergeWith(join.right.columnReferences)(_ ++ _).mergeWith(join.on.columnReferences)(_ ++ _)
     )
 
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]): Self[RNS, CT, CV] =
-    map[RNS, CT, CV](
-      _.doRemoveUnusedColumns(used),
-      { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, right.doRemoveUnusedColumns(used), on) }
-    )
-
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName] = {
     reduce[Map[AutoTableLabel, DatabaseTableName]] (
       { other => other.realTables },
@@ -129,16 +123,6 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
     )
   }
 
-  def useSelectListReferences: Join[RNS, CT, CV] = {
-    map[RNS, CT, CV](
-      _.useSelectListReferences,
-      { (joinType, lateral, left, right, on) =>
-        val newRight = right.useSelectListReferences
-        Join(joinType, lateral, left, newRight, on)
-      }
-    )
-  }
-
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
     map[RNS, CT, CV](
       _.mapAlias(f),
@@ -152,20 +136,6 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
     )
   def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
     reduce[Boolean](_.contains(e), { (acc, join) => acc || join.right.contains(e) || join.on.contains(e) })
-
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[(TableLabel, AutoColumnLabel)], Self[RNS, CT2, CV]) = {
-    // JOIN builds a new table, which is unordered (hence false, false)
-    val result = map[RNS, CT2, CV](
-      { _.preserveOrdering(provider, rowNumberFunction, false, false)._2 },
-      { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, right.preserveOrdering(provider, rowNumberFunction, false, false)._2, on) },
-    )
-    (None, result)
-  }
 
   private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests

@@ -26,14 +26,6 @@ trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
 
   private[analyzer2] override final val scope: Scope[CT] = Scope(columns, label)
 
-  private[analyzer2] override def preserveOrdering[CT2 >: CT](
-    provider: LabelProvider,
-    rowNumberFunction: MonomorphicFunction[CT2],
-    wantOutputOrdered: Boolean,
-    wantOrderingColumn: Boolean
-  ): (Option[(TableLabel, AutoColumnLabel)], Self[RNS, CT2, Nothing]) =
-    (None, asSelf)
-
   def debugDoc(implicit ev: HasDoc[Nothing]) =
     (tableName.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
 
@@ -46,9 +38,6 @@ trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
   private[analyzer2] def doRelabel(state: RelabelState) = {
     copy(label = state.convert(label))
   }
-
-  // A table has its columns whether or not they're selected, so this is just "this"
-  private[analyzer2] def doRemoveUnusedColumns(used: Map[TableLabel, Set[ColumnLabel]]) = this
 
   private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
@@ -82,8 +71,6 @@ trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
       state.columnMap += (label, columnLabel) -> (tr, columnName)
     }
   }
-
-  def useSelectListReferences: this.type = this
 }
 
 trait OFromTableImpl { this: FromTable.type =>

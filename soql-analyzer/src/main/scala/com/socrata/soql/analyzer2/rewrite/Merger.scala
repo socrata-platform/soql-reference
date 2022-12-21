@@ -1,4 +1,4 @@
-package com.socrata.soql.analyzer2
+package com.socrata.soql.analyzer2.rewrite
 
 import scala.annotation.tailrec
 import scala.util.parsing.input.NoPosition
@@ -7,6 +7,7 @@ import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
+import com.socrata.soql.analyzer2._
 
 class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
   private implicit val hd = new HasDoc[CV] {

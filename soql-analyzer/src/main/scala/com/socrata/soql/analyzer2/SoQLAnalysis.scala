@@ -15,29 +15,32 @@ class SoQLAnalysis[RNS, CT, CV] private (
   /** Rewrite the analysis plumbing through enough information to
     * preserve table-ordering (except across joins and aggregates,
     * which of course destroy ordering). */
-  def preserveOrdering(rowNumberFunction: MonomorphicFunction[CT]): SoQLAnalysis[RNS, CT, CV] = {
-    val nlp = labelProvider.clone()
-    copy(
-      labelProvider = nlp,
-      statement = statement.preserveOrdering(nlp, rowNumberFunction, true, false)._2
-    )
+  def preserveOrdering: SoQLAnalysis[RNS, CT, CV] = {
+    withoutSelectListReferences { self =>
+      val nlp = self.labelProvider.clone()
+      self.copy(
+        labelProvider = nlp,
+        statement = rewrite.PreserveOrdering(nlp, self.statement)
+      )
+    }
   }
 
   /** Simplify subselects on a best-effort basis. */
   def merge(and: MonomorphicFunction[CT]): SoQLAnalysis[RNS, CT, CV] =
-    copy(statement = new Merger(and).merge(statement))
+    copy(statement = new rewrite.Merger(and).merge(statement))
 
-  /** Simplify subselects on a best-effort basis. */
+  /** Remove columns not actually used by the query */
   def removeUnusedColumns: SoQLAnalysis[RNS, CT, CV] =
-    if(usesSelectListReferences) copy(statement = statement.unuseSelectListReferences.removeUnusedColumns.useSelectListReferences)
-    else copy(statement = statement.removeUnusedColumns)
+    withoutSelectListReferences { self =>
+      self.copy(statement = rewrite.RemoveUnusedColumns(self.statement))
+    }
 
   /** Rewrite expressions in group/order/distinct clauses which are
     * identical to expressions in the select list to use select-list
     * indexes instead. */
   def useSelectListReferences =
     if(usesSelectListReferences) this
-    else copy(statement = statement.useSelectListReferences, usesSelectListReferences = true)
+    else copy(statement = rewrite.SelectListReferences.use(statement), usesSelectListReferences = true)
 
   private def copy[RNS2, CT2, CV2](
     labelProvider: LabelProvider = this.labelProvider,
@@ -45,6 +48,13 @@ class SoQLAnalysis[RNS, CT, CV] private (
     usesSelectListReferences: Boolean = this.usesSelectListReferences
   ) =
     new SoQLAnalysis(labelProvider, statement, usesSelectListReferences)
+
+  private def withoutSelectListReferences(f: SoQLAnalysis[RNS, CT, CV] => SoQLAnalysis[RNS, CT, CV]) =
+    if(usesSelectListReferences) {
+      f(this.copy(statement = rewrite.SelectListReferences.unuse(statement))).useSelectListReferences
+    } else {
+      f(this)
+    }
 }
 
 object SoQLAnalysis {
