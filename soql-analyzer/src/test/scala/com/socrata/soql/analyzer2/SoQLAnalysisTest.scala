@@ -31,13 +31,33 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
     analysis.preserveOrdering.statement must equal (analysis.statement)
   }
 
-  test("unordered-on-ordered pipes generates an ordering column") {
+  test("unordered-on-ordered pipes does not generate an ordering column if unnecessary") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
     val analysis = analyze(tf, "twocol", "select * order by num |> select *")
-    val expectedAnalysis = analyze(tf, "twocol", "select *, num as ordering order by num |> select * (except ordering) order by ordering")
+    val expectedAnalysis = analyze(tf, "twocol", "select * order by num |> select * order by num")
+    analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("unordered-on-ordered pipes generates an ordering column if necessary") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select * order by num+1 |> select *")
+    val expectedAnalysis = analyze(tf, "twocol", "select *, num+1 as ordering order by num+1 |> select * (except ordering) order by ordering")
+    analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("ordered-on-ordered pipes does not generate an ordering column if unnecessary") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select * order by num |> select * order by text")
+    val expectedAnalysis = analyze(tf, "twocol", "select * order by num |> select * order by text, num")
     analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
@@ -46,8 +66,8 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val analysis = analyze(tf, "twocol", "select * order by num |> select * order by text")
-    val expectedAnalysis = analyze(tf, "twocol", "select *, num as ordering order by num |> select * (except ordering) order by text, ordering")
+    val analysis = analyze(tf, "twocol", "select * order by num+1 |> select * order by text")
+    val expectedAnalysis = analyze(tf, "twocol", "select *, num+1 as ordering order by num+1 |> select * (except ordering) order by text, ordering")
     analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
@@ -57,18 +77,18 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val analysis = analyze(tf, "twocol", """
-select * order by num
+select * order by num+1
   |> select *
   |> select *
-  |> select text, num group by text, num order by num, text
+  |> select text, num group by text, num order by num+2, text+'x'
   |> select *
 """)
 
     val expectedAnalysis = analyze(tf, "twocol", """
-select * order by num
+select * order by num+1
   |> select *
   |> select *
-  |> select text, num, num as o1, text as o2 group by text, num order by num, text
+  |> select text, num, num+2 as o1, text+'x' as o2 group by text, num order by num+2, text+'x'
   |> select * (except o1, o2) order by o1, o2
 """)
 
@@ -81,18 +101,18 @@ select * order by num
     )
 
     val analysis = analyze(tf, "twocol", """
-select * order by num
+select * order by num+1
   |> select *
   |> select *, window_function() over ()
-  |> select text, num group by text, num order by num, text
+  |> select text, num group by text, num order by num+2, text+'x'
   |> select *
 """)
 
     val expectedAnalysis = analyze(tf, "twocol", """
-select *, num as ordering order by num
+select *, num+1 as ordering order by num+1
   |> select * order by ordering
   |> select * (except ordering), window_function() over () order by ordering
-  |> select text, num, num as o1, text as o2 group by text, num order by num, text
+  |> select text, num, num+2 as o1, text+'x' as o2 group by text, num order by num+2, text+'x'
   |> select * (except o1, o2) order by o1, o2
 """)
 

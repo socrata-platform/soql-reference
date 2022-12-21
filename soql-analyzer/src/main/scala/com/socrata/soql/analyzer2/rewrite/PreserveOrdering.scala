@@ -76,11 +76,16 @@ class PreserveOrdering[RNS, CT, CV] private (provider: LabelProvider) {
           // make sure we've put the relevant expressins in our
           // select list and return them.
           val (newColumns, outputInfo) = orderedSelf.orderBy.map { case OrderBy(expr, asc, nullLast) =>
-            val columnLabel = provider.columnLabel()
-            (columnLabel -> NamedExpr(expr, freshName("order")), (columnLabel, expr.typ, asc, nullLast))
+            selectList.find { case (label, NamedExpr(e, _)) => expr == e } match {
+              case None =>
+                val columnLabel = provider.columnLabel()
+                (Some(columnLabel -> NamedExpr(expr, freshName("order"))), (columnLabel, expr.typ, asc, nullLast))
+              case Some((columnLabel, NamedExpr(existingExpr, _))) =>
+                (None, (columnLabel, existingExpr.typ, asc, nullLast))
+            }
           }.unzip
 
-          val newSelf = orderedSelf.copy(selectList = selectList ++ newColumns)
+          val newSelf = orderedSelf.copy(selectList = selectList ++ newColumns.flatten)
 
           (outputInfo, newSelf)
         } else {
