@@ -561,6 +561,8 @@ case class OrderBy(expression: Expression, ascending: Boolean, nullLast: Boolean
     val nullPlacement = if(nullLast) d"NULL LAST" else d"NULL FIRST"
     expression.doc +#+ direction +#+ nullPlacement
   }
+
+  def removeSyntacticParens = copy(expression = expression.removeSyntacticParens)
 }
 
 object SimpleSelect {
