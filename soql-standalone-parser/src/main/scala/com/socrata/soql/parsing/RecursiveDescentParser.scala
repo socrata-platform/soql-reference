@@ -227,8 +227,6 @@ object RecursiveDescentParser {
   private val OPERATOR_SET = s(AnOperator)
 
   private val LIKE_BETWEEN_IN_SET = s(IS(), AnIsNot, LIKE(), ANotLike, BETWEEN(), ANotBetween, IN(), ANotIn)
-  private val NOT_SET = s(NOT())
-  private val OR_SET = s(OR())
 
   type ExprParser = Reader => ParseResult[Expression]
 
@@ -241,18 +239,6 @@ object RecursiveDescentParser {
   object Associativity {
     case object Left extends Associativity
     case object Right extends Associativity
-  }
-
-  sealed abstract class Operator
-  object Operator {
-    case class Binary(token: Token, associativity: Associativity) extends Operator {
-      val name = SpecialFunctions.Operator(token.printable)
-    }
-    case class Unary(token: Token) extends Operator {
-      val name = SpecialFunctions.Operator(token.printable)
-    }
-    case class Special(name: FunctionName) extends Operator
-    case object Cast extends Operator
   }
 
   sealed abstract class OperatorClass {
