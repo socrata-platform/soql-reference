@@ -261,15 +261,15 @@ object RecursiveDescentParser {
   object OperatorClass {
     sealed abstract class Simple extends OperatorClass
 
-    case class Binary(ops: Seq[Token], associativity: Associativity)(val expectation: ListSet[Expectation] = ops.map[Expectation](ActualToken(_)).to(ListSet)) extends Simple {
-      val opNames = ops.iterator.map { token => token -> SpecialFunctions.Operator(token.printable) }.to(ListMap)
+    case class Binary(ops: Seq[Token], associativity: Associativity)(val expectation: ListSet[Expectation] = ops.map(ActualToken(_) : Expectation).to(ListSet)) extends Simple {
+      val opNames = ListMap() ++ ops.iterator.map { token => token -> SpecialFunctions.Operator(token.printable) }
       val functions = opNames.values.toSet
 
       def parse(parser: RecursiveDescentParser, reader: Reader, nextParser: ExprParser): ParseResult[Expression] =
         parser.parseBinOp(this, reader, nextParser)
     }
-    case class Prefix(ops: Seq[Token])(val expectation: ListSet[Expectation] = ops.map[Expectation](ActualToken(_)).to(ListSet)) extends Simple {
-      val opNames = ops.iterator.map { t => t -> SpecialFunctions.Operator(t.printable) }.to(ListMap)
+    case class Prefix(ops: Seq[Token])(val expectation: ListSet[Expectation] = ops.map(ActualToken(_) : Expectation).to(ListSet)) extends Simple {
+      val opNames = ListMap() ++ ops.iterator.map { t => t -> SpecialFunctions.Operator(t.printable) }
       val functions = opNames.values.toSet
 
       def parse(parser: RecursiveDescentParser, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
@@ -372,7 +372,7 @@ object RecursiveDescentParser {
   private val complexPrecedences: Array[(OperatorClass.Special, Int)] =
     precedenceTable.iterator.zipWithIndex.collect { case (special: OperatorClass.Special, precLevel) =>
       special -> precLevel
-    }.to(Array)
+    }.toArray
 
   def precedenceOf(node: FunctionCall): Option[Int] = {
     simplePrecedences.get((node.functionName, node.parameters.length)).orElse {
