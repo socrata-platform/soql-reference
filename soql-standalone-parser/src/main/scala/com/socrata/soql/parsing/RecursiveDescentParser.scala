@@ -1548,15 +1548,15 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
 
   private def cast(reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
     val ParseResult(r2, arg) = nextParser(reader)
-    cast_!(r2, nextParser, arg)
+    cast_!(r2, arg)
   }
 
   @tailrec
-  private def cast_!(reader: Reader, nextParser: ExprParser, arg: Expression): ParseResult[Expression] = {
+  private def cast_!(reader: Reader, arg: Expression): ParseResult[Expression] = {
     reader.first match {
       case op@COLONCOLON() =>
         val ParseResult(r2, (ident, identPos)) = simpleIdentifier(reader.rest)
-        cast_!(r2, nextParser, FunctionCall(SpecialFunctions.Cast(TypeName(ident)), Seq(arg), None)(arg.position, identPos))
+        cast_!(r2, FunctionCall(SpecialFunctions.Cast(TypeName(ident)), Seq(arg), None)(arg.position, identPos))
       case _ =>
         reader.addAlternates(COLONCOLON_SET)
         ParseResult(reader, arg)
@@ -1604,7 +1604,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def parseIn(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+  private def parseIn(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader): ParseResult[Expression] = {
     reader.first match {
       case LPAREN() =>
         parseArgList(reader.rest, arg0 = Some(scrutinee)).map { args =>
@@ -1679,7 +1679,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             val ParseResult(r2, arg2) = parseBetween(SpecialFunctions.NotBetween, arg, not, reader.rest.rest, nextParser)
             likeBetweenIn_!(r2, nextParser, arg2)
           case in: IN =>
-            val ParseResult(r2, arg2) = parseIn(SpecialFunctions.NotIn, arg, not, reader.rest.rest, nextParser)
+            val ParseResult(r2, arg2) = parseIn(SpecialFunctions.NotIn, arg, not, reader.rest.rest)
             likeBetweenIn_!(r2, nextParser, arg2)
           case like: LIKE =>
             val ParseResult(r2, arg2) = parseLike(SpecialFunctions.NotLike, arg, not, reader.rest.rest, nextParser)
@@ -1689,7 +1689,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         }
       case in: IN =>
         // Again only one possibility!
-        val ParseResult(r2, arg2) = parseIn(SpecialFunctions.In, arg, in, reader.rest, nextParser)
+        val ParseResult(r2, arg2) = parseIn(SpecialFunctions.In, arg, in, reader.rest)
         likeBetweenIn_!(r2, nextParser, arg2)
       case _ =>
         reader.addAlternates(LIKE_BETWEEN_IN_SET)
