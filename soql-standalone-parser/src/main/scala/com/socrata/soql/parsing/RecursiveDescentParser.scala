@@ -1709,31 +1709,31 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         //    thisParser' = (OP nextParser thisParser') | ε
         // which is right-recursive.
         val ParseResult(r2, e) = nextParser(reader)
-        parseBinOpLeft_!(opCls, r2, nextParser, e)
+        parseBinOpLeft(opCls, r2, nextParser, e)
       case Associativity.Right =>
-        parseBinOpRight_!(opCls, reader, nextParser)
+        parseBinOpRight(opCls, reader, nextParser)
     }
   }
 
   @tailrec
-  private def parseBinOpLeft_!(opCls: OperatorClass.Binary, reader: Reader, nextParser: ExprParser, arg1: Expression): ParseResult[Expression] = {
+  private def parseBinOpLeft(opCls: OperatorClass.Binary, reader: Reader, nextParser: ExprParser, arg1: Expression): ParseResult[Expression] = {
     val opToken = reader.first
     opCls.opNames.get(opToken) match {
       case Some(funcName) =>
         val ParseResult(r2, arg2) = nextParser(reader.rest)
-        parseBinOpLeft_!(opCls, r2, nextParser, FunctionCall(funcName, Seq(arg1, arg2), None)(arg1.position, opToken.position))
+        parseBinOpLeft(opCls, r2, nextParser, FunctionCall(funcName, Seq(arg1, arg2), None)(arg1.position, opToken.position))
       case None =>
         reader.addAlternates(opCls.expectation)
         ParseResult(reader, arg1)
     }
   }
 
-  private def parseBinOpRight_!(opCls: OperatorClass.Binary, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+  private def parseBinOpRight(opCls: OperatorClass.Binary, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
     val ParseResult(r2, arg1) = nextParser(reader)
     val opToken = r2.first
     opCls.opNames.get(opToken) match {
       case Some(funcName) =>
-        parseBinOpRight_!(opCls, r2.rest, nextParser).map { arg2 =>
+        parseBinOpRight(opCls, r2.rest, nextParser).map { arg2 =>
           FunctionCall(funcName, Seq(arg1, arg2), None)(arg1.position, opToken.position)
         }
       case None =>
