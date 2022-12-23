@@ -1552,11 +1552,11 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   }
 
   @tailrec
-  private def cast_!(reader: Reader, higherPrecedence: ExprParser, arg: Expression): ParseResult[Expression] = {
+  private def cast_!(reader: Reader, nextParser: ExprParser, arg: Expression): ParseResult[Expression] = {
     reader.first match {
       case op@COLONCOLON() =>
         val ParseResult(r2, (ident, identPos)) = simpleIdentifier(reader.rest)
-        cast_!(r2, higherPrecedence, FunctionCall(SpecialFunctions.Cast(TypeName(ident)), Seq(arg), None)(arg.position, identPos))
+        cast_!(r2, nextParser, FunctionCall(SpecialFunctions.Cast(TypeName(ident)), Seq(arg), None)(arg.position, identPos))
       case _ =>
         reader.addAlternates(COLONCOLON_SET)
         ParseResult(reader, arg)
@@ -1604,7 +1604,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def parseIn(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader, higherPrecedence: ExprParser): ParseResult[Expression] = {
+  private def parseIn(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
     reader.first match {
       case LPAREN() =>
         parseArgList(reader.rest, arg0 = Some(scrutinee)).map { args =>
@@ -1615,17 +1615,17 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def parseLike(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader, higherPrecedence: ExprParser): ParseResult[Expression] = {
-    likeBetweenIn(reader, higherPrecedence).map { pattern =>
+  private def parseLike(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+    likeBetweenIn(reader, nextParser).map { pattern =>
       FunctionCall(name, Seq(scrutinee, pattern), None)(scrutinee.position, op.position)
     }
   }
 
-  private def parseBetween(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader, higherPrecedence: ExprParser): ParseResult[Expression] = {
-    val ParseResult(r2, lowerBound) = likeBetweenIn(reader, higherPrecedence)
+  private def parseBetween(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+    val ParseResult(r2, lowerBound) = likeBetweenIn(reader, nextParser)
     r2.first match {
       case AND() =>
-        likeBetweenIn(r2.rest, higherPrecedence).map { upperBound =>
+        likeBetweenIn(r2.rest, nextParser).map { upperBound =>
           FunctionCall(name, Seq(scrutinee, lowerBound, upperBound), None)(scrutinee.position, op.position)
         }
       case _ =>
