@@ -230,11 +230,6 @@ object RecursiveDescentParser {
 
   type ExprParser = Reader => ParseResult[Expression]
 
-  case class Precedented(
-    parser: (RecursiveDescentParser, Reader, ExprParser) => ParseResult[Expression],
-    candidateFunctions: Seq[(FunctionName => Boolean, Option[Int])]
-  )
-
   sealed abstract class Associativity
   object Associativity {
     case object Left extends Associativity
