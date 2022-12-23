@@ -230,11 +230,6 @@ object RecursiveDescentParser {
 
   type ExprParser = Reader => ParseResult[Expression]
 
-  case class Precedented(
-    parser: (RecursiveDescentParser, Reader, ExprParser) => ParseResult[Expression],
-    candidateFunctions: Seq[(FunctionName => Boolean, Option[Int])]
-  )
-
   sealed abstract class Associativity
   object Associativity {
     case object Left extends Associativity
@@ -1553,15 +1548,15 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
 
   private def cast(reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
     val ParseResult(r2, arg) = nextParser(reader)
-    cast_!(r2, nextParser, arg)
+    cast_!(r2, arg)
   }
 
   @tailrec
-  private def cast_!(reader: Reader, higherPrecedence: ExprParser, arg: Expression): ParseResult[Expression] = {
+  private def cast_!(reader: Reader, arg: Expression): ParseResult[Expression] = {
     reader.first match {
       case op@COLONCOLON() =>
         val ParseResult(r2, (ident, identPos)) = simpleIdentifier(reader.rest)
-        cast_!(r2, higherPrecedence, FunctionCall(SpecialFunctions.Cast(TypeName(ident)), Seq(arg), None)(arg.position, identPos))
+        cast_!(r2, FunctionCall(SpecialFunctions.Cast(TypeName(ident)), Seq(arg), None)(arg.position, identPos))
       case _ =>
         reader.addAlternates(COLONCOLON_SET)
         ParseResult(reader, arg)
@@ -1609,7 +1604,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def parseIn(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader, higherPrecedence: ExprParser): ParseResult[Expression] = {
+  private def parseIn(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader): ParseResult[Expression] = {
     reader.first match {
       case LPAREN() =>
         parseArgList(reader.rest, arg0 = Some(scrutinee)).map { args =>
@@ -1620,17 +1615,17 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def parseLike(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader, higherPrecedence: ExprParser): ParseResult[Expression] = {
-    likeBetweenIn(reader, higherPrecedence).map { pattern =>
+  private def parseLike(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+    likeBetweenIn(reader, nextParser).map { pattern =>
       FunctionCall(name, Seq(scrutinee, pattern), None)(scrutinee.position, op.position)
     }
   }
 
-  private def parseBetween(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader, higherPrecedence: ExprParser): ParseResult[Expression] = {
-    val ParseResult(r2, lowerBound) = likeBetweenIn(reader, higherPrecedence)
+  private def parseBetween(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+    val ParseResult(r2, lowerBound) = likeBetweenIn(reader, nextParser)
     r2.first match {
       case AND() =>
-        likeBetweenIn(r2.rest, higherPrecedence).map { upperBound =>
+        likeBetweenIn(r2.rest, nextParser).map { upperBound =>
           FunctionCall(name, Seq(scrutinee, lowerBound, upperBound), None)(scrutinee.position, op.position)
         }
       case _ =>
@@ -1684,7 +1679,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             val ParseResult(r2, arg2) = parseBetween(SpecialFunctions.NotBetween, arg, not, reader.rest.rest, nextParser)
             likeBetweenIn_!(r2, nextParser, arg2)
           case in: IN =>
-            val ParseResult(r2, arg2) = parseIn(SpecialFunctions.NotIn, arg, not, reader.rest.rest, nextParser)
+            val ParseResult(r2, arg2) = parseIn(SpecialFunctions.NotIn, arg, not, reader.rest.rest)
             likeBetweenIn_!(r2, nextParser, arg2)
           case like: LIKE =>
             val ParseResult(r2, arg2) = parseLike(SpecialFunctions.NotLike, arg, not, reader.rest.rest, nextParser)
@@ -1694,7 +1689,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         }
       case in: IN =>
         // Again only one possibility!
-        val ParseResult(r2, arg2) = parseIn(SpecialFunctions.In, arg, in, reader.rest, nextParser)
+        val ParseResult(r2, arg2) = parseIn(SpecialFunctions.In, arg, in, reader.rest)
         likeBetweenIn_!(r2, nextParser, arg2)
       case _ =>
         reader.addAlternates(LIKE_BETWEEN_IN_SET)
@@ -1714,31 +1709,31 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         //    thisParser' = (OP nextParser thisParser') | ε
         // which is right-recursive.
         val ParseResult(r2, e) = nextParser(reader)
-        parseBinOpLeft_!(opCls, r2, nextParser, e)
+        parseBinOpLeft(opCls, r2, nextParser, e)
       case Associativity.Right =>
-        parseBinOpRight_!(opCls, reader, nextParser)
+        parseBinOpRight(opCls, reader, nextParser)
     }
   }
 
   @tailrec
-  private def parseBinOpLeft_!(opCls: OperatorClass.Binary, reader: Reader, nextParser: ExprParser, arg1: Expression): ParseResult[Expression] = {
+  private def parseBinOpLeft(opCls: OperatorClass.Binary, reader: Reader, nextParser: ExprParser, arg1: Expression): ParseResult[Expression] = {
     val opToken = reader.first
     opCls.opNames.get(opToken) match {
       case Some(funcName) =>
         val ParseResult(r2, arg2) = nextParser(reader.rest)
-        parseBinOpLeft_!(opCls, r2, nextParser, FunctionCall(funcName, Seq(arg1, arg2), None)(arg1.position, opToken.position))
+        parseBinOpLeft(opCls, r2, nextParser, FunctionCall(funcName, Seq(arg1, arg2), None)(arg1.position, opToken.position))
       case None =>
         reader.addAlternates(opCls.expectation)
         ParseResult(reader, arg1)
     }
   }
 
-  private def parseBinOpRight_!(opCls: OperatorClass.Binary, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+  private def parseBinOpRight(opCls: OperatorClass.Binary, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
     val ParseResult(r2, arg1) = nextParser(reader)
     val opToken = r2.first
     opCls.opNames.get(opToken) match {
       case Some(funcName) =>
-        parseBinOpRight_!(opCls, r2.rest, nextParser).map { arg2 =>
+        parseBinOpRight(opCls, r2.rest, nextParser).map { arg2 =>
           FunctionCall(funcName, Seq(arg1, arg2), None)(arg1.position, opToken.position)
         }
       case None =>
