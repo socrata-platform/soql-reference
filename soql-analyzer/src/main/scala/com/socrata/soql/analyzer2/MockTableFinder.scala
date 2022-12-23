@@ -81,9 +81,9 @@ object MockTableFinder {
   def apply[RNS, CT](items: UnparsedFoundTables[RNS, CT]) = UnparsedTableMap.asMockTableFinder(items.tableMap)
 
   private sealed abstract class JThing[+RNS, +CT]
-  private case class JD[+CT](schema: Seq[(String, CT)], orderings: Option[Seq[(String, Boolean)]], hiddenColumns: Seq[String]) extends JThing[Nothing, CT]
-  private case class JQ[+RNS,+CT](scope: Option[RNS], parent: String, soql: String, params: Map[String, CT], canonicalName: Option[String], hiddenColumns: Seq[String]) extends JThing[RNS, CT]
-  private case class JU[+RNS,+CT](scope: Option[RNS], soql: String, params: Seq[(String, CT)], canonicalName: Option[String], hiddenColumns: Seq[String]) extends JThing[RNS, CT]
+  private case class JD[+CT](schema: Seq[(String, CT)], orderings: Option[Seq[(String, Boolean)]], hiddenColumns: Option[Seq[String]]) extends JThing[Nothing, CT]
+  private case class JQ[+RNS,+CT](scope: Option[RNS], parent: String, soql: String, params: Map[String, CT], canonicalName: Option[String], hiddenColumns: Option[Seq[String]]) extends JThing[RNS, CT]
+  private case class JU[+RNS,+CT](scope: Option[RNS], soql: String, params: Seq[(String, CT)], canonicalName: Option[String], hiddenColumns: Option[Seq[String]]) extends JThing[RNS, CT]
 
   implicit def jDecode[RNS: FieldDecode: JsonDecode, CT: JsonDecode]: JsonDecode[MockTableFinder[RNS, CT]] =
     new JsonDecode[MockTableFinder[RNS, CT]] {
@@ -107,13 +107,13 @@ object MockTableFinder {
                   case JD(schema, orderings, hiddenColumns) =>
                     orderings.getOrElse(Nil).foldLeft(D(schema : _*)) { (d, orderDir) =>
                       d.withOrdering(orderDir._1, orderDir._2)
-                    }.withHiddenColumns(hiddenColumns : _*)
+                    }.withHiddenColumns(hiddenColumns.getOrElse(Nil) : _*)
                   case JQ(scopeOpt, parent, soql, params, cname, hiddenColumns) =>
                     val result = Q(scopeOpt.getOrElse(rns), parent, soql, params.toSeq : _*)
-                    cname.fold(result)(result.withCanonicalName).withHiddenColumns(hiddenColumns : _*)
+                    cname.fold(result)(result.withCanonicalName).withHiddenColumns(hiddenColumns.getOrElse(Nil) : _*)
                   case JU(scopeOpt, soql, params, cname, hiddenColumns) =>
                     val result = U(scopeOpt.getOrElse(rns), soql, params : _*)
-                    cname.fold(result)(result.withCanonicalName).withHiddenColumns(hiddenColumns : _*)
+                    cname.fold(result)(result.withCanonicalName).withHiddenColumns(hiddenColumns.getOrElse(Nil) : _*)
                 }
 
                 (rns, name) -> thing
@@ -148,7 +148,7 @@ object MockTableFinder {
                       JD(
                         schema,
                         Some(d.orderings).filter(_.nonEmpty),
-                        d.hiddenColumns.map(_.name).toSeq
+                        Some(d.hiddenColumns.map(_.name).toSeq).filter(_.nonEmpty)
                       )
                     case q@Q(scope, parent, soql, params@_*) =>
                       JQ(
@@ -157,7 +157,7 @@ object MockTableFinder {
                         soql,
                         params.toMap,
                         q.canonicalName.filter(_ != name),
-                        q.hiddenColumns.map(_.name).toSeq
+                        Some(q.hiddenColumns.map(_.name).toSeq).filter(_.nonEmpty)
                       )
                     case u@U(scope, soql, params@_*) =>
                       JU(
@@ -165,7 +165,7 @@ object MockTableFinder {
                         soql,
                         params,
                         u.canonicalName.filter(_ != name),
-                        u.hiddenColumns.map(_.name).toSeq
+                        Some(u.hiddenColumns.map(_.name).toSeq).filter(_.nonEmpty)
                       )
                   }
                   name -> jThing
