@@ -229,12 +229,12 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
       case Query(scope, canonicalName, parent, soql, params, hiddenColumns) =>
         TableDescription.Query(
           scope, canonicalName, parent,
-          ParserUtil(soql, parserParameters.copy(allowHoles = false)).getOrElse(throw new Exception("broken soql fixture 1")),
+          ParserUtil.parseWithoutContext(soql, parserParameters.copy(allowHoles = false)).getOrElse(throw new Exception("broken soql fixture 1")),
           soql, params, hiddenColumns)
       case TableFunction(scope, canonicalName, soql, params, hiddenColumns) =>
         TableDescription.TableFunction(
           scope, canonicalName,
-          ParserUtil(soql, parserParameters.copy(allowHoles = true)).getOrElse(throw new Exception("broken soql fixture 2")),
+          ParserUtil.parseWithoutContext(soql, parserParameters.copy(allowHoles = true)).getOrElse(throw new Exception("broken soql fixture 2")),
           soql, params, hiddenColumns
         )
     }

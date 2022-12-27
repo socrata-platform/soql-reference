@@ -99,11 +99,11 @@ object RecursiveDescentParser {
 
   implicit def tokenAsTokenLike(t: Token): Expectation = ActualToken(t)
 
-  def expectationsToEnglish(expectation: Iterable[Expectation], got: Token): String = {
+  def expectationStringsToEnglish(expectation: Iterable[String], got: String): String = {
     val sb = new StringBuilder
     sb.append("Expected")
 
-    def loop(expectations: LazyList[RecursiveDescentParser.Expectation], n: Int): Unit = {
+    def loop(expectations: LazyList[String], n: Int): Unit = {
       expectations match {
         case LazyList() =>
           // Uhhh... this shouldn't happen
@@ -112,20 +112,23 @@ object RecursiveDescentParser {
           if(n == 1) sb.append(" or ")
           else if(n > 1) sb.append(", or ") // oxford comma 4eva
           else sb.append(' ')
-          sb.append(hd.printable)
+          sb.append(hd)
         case LazyList.cons(hd, tl) =>
           if(n == 0) sb.append(" one of ")
           else sb.append(", ")
-          sb.append(hd.printable)
+          sb.append(hd)
           loop(tl, n+1)
       }
     }
     loop(expectation.to(LazyList), 0)
 
     sb.append(", but got ").
-      append(got.quotedPrintable).
+      append(got).
       toString
   }
+
+  def expectationsToEnglish(expectation: Iterable[Expectation], got: Token): String =
+    expectationStringsToEnglish(expectation.to(LazyList).map(_.printable), got.quotedPrintable)
 
   val CASE = new Keyword("CASE")
   val WHEN = new Keyword("WHEN")

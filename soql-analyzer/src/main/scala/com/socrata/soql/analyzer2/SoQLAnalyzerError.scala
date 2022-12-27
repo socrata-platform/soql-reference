@@ -1,254 +1,155 @@
 package com.socrata.soql.analyzer2
 
+import scala.annotation.tailrec
 import scala.util.parsing.input.Position
+
+import com.rojoma.json.v3.util.{SimpleHierarchyCodecBuilder, AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder, InternalTag}
 
 import com.socrata.soql.collection.CovariantSet
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName, FunctionName, TypeName}
+import com.socrata.soql.parsing.RecursiveDescentParser
 
 sealed abstract class SoQLAnalyzerError[+RNS](msg: String)
 
 object SoQLAnalyzerError {
-  sealed abstract class ParameterError(msg: String) extends SoQLAnalyzerError[Nothing](msg)
-  case class InvalidParameterType(canonicalName: Option[CanonicalName], param: HoleName, expected: TypeName, got: TypeName) extends ParameterError("")
+  sealed abstract class NonTextualError(msg: String) extends SoQLAnalyzerError[Nothing](msg)
 
-  sealed abstract class AnalysisError[+RNS](msg: String) extends SoQLAnalyzerError[RNS](msg) {
-    def this() = this("")
+  sealed abstract class ParameterError(msg: String) extends NonTextualError(msg)
+  case class InvalidParameterType(
+    canonicalName: Option[CanonicalName],
+    param: HoleName,
+    expected: TypeName,
+    got: TypeName
+  ) extends ParameterError(s"Invalid parameter value for ${canonicalName.fold("")(_.name + "/")}${param}: expected ${expected} but got ${got}")
 
-    val scope: RNS
-    val canonicalName: Option[CanonicalName]
-    val position: Position
+  sealed abstract class Payload(val msg: String)
+
+  case class TextualError[+RNS, +Data <: Payload](scope: RNS, canonicalName: Option[CanonicalName], position: Position, data: Data) extends SoQLAnalyzerError[RNS](data.msg)
+
+  sealed abstract class ParserError(msg: String) extends Payload(msg)
+
+  object ParserError {
+    case class UnexpectedEscape(char: Char) extends ParserError("Unexpected escape character")
+    case class BadUnicodeEscapeCharacter(char: Char) extends ParserError("Bad character in unicode escape")
+    case class UnicodeCharacterOutOfRange(value: Int) extends ParserError("Unicode character out of range")
+    case class UnexpectedCharacter(char: Char) extends ParserError("Unicode character out of range")
+    case object UnexpectedEOF extends ParserError("Unexpected end of input")
+    case object UnterminatedString extends ParserError("Unterminated string")
+
+    case class ExpectedToken(
+      expectations: Seq[String],
+      got: String
+    ) extends ParserError(RecursiveDescentParser.expectationStringsToEnglish(expectations, got))
+    case object ExpectedLeafQuery extends ParserError("Expected a non-compound query on the right side of a pipe operator")
+    case object UnexpectedStarSelect extends ParserError("Star selections must come at the start of the select-list")
+    case object UnexpectedSystemStarSelect extends ParserError("System column star selections must come before user column star selections")
   }
 
-  case class ExpectedBoolean[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    got: TypeName,
-    position: Position
-  ) extends AnalysisError[RNS]
+  sealed abstract class AnalysisError(msg: String) extends Payload(msg)
+  object AnalysisError {
+    case class ExpectedBoolean(
+      got: TypeName
+    ) extends AnalysisError("Expected boolean, but got ${got}")
 
-  case class IncorrectNumberOfUdfParameters[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    udf: ResourceName,
-    expected: Int,
-    got: Int,
-    position: Position
-  ) extends AnalysisError[RNS]
+    case class IncorrectNumberOfUdfParameters(
+      udf: ResourceName,
+      expected: Int,
+      got: Int
+    ) extends AnalysisError(s"UDF expected ${expected} parameter(s) but got ${got}")
 
-  case class DistinctNotPrefixOfOrderBy[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    position: Position
-  ) extends AnalysisError[RNS]
+    case object DistinctNotPrefixOfOrderBy extends AnalysisError("When both DISTINCT ON and ORDER BY are present, the DISTINCT BY's expression list must be a prefix of the ORDER BY")
 
-  case class OrderByMustBeSelectedWhenDistinct[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    position: Position
-  ) extends AnalysisError[RNS]
+    case object OrderByMustBeSelectedWhenDistinct extends AnalysisError("When both DISTINCT and ORDER BY are present, all columns in ORDER BY must also be selected")
 
-  case class InvalidGroupBy[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    typ: TypeName,
-    position: Position
-  ) extends AnalysisError[RNS]
+    case class InvalidGroupBy(typ: TypeName) extends AnalysisError(s"Cannot GROUP BY an expression of type ${typ}")
 
-  case class UnorderedOrderBy[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    typ: TypeName,
-    position: Position
-  ) extends AnalysisError[RNS]
+    case class UnorderedOrderBy(typ: TypeName) extends AnalysisError(s"Cannot ORDER BY or DISTINCT ON an expression of type ${typ}")
 
-  case class ParametersForNonUDF[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    nonUdf: ResourceName,
-    position: Position
-  ) extends AnalysisError[RNS]
+    case class ParametersForNonUDF(nonUdf: ResourceName) extends AnalysisError("Cannot provide parameters to a non-UDF")
 
-  case class AliasAlreadyExists[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    alias: ResourceName,
-    position: Position
-  ) extends AnalysisError[RNS]
+    case class TableAliasAlreadyExists(alias: ResourceName) extends AnalysisError(s"Table alias ${alias} already exists")
 
-  case class FromRequired[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    position: Position
-  ) extends AnalysisError[RNS]
+    case object FromRequired extends AnalysisError("FROM required in a query without an implicit context")
 
-  case class FromForbidden[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    position: Position
-  ) extends AnalysisError[RNS]
+    case object FromForbidden extends AnalysisError("FROM (other than FROM @this) forbidden in a query with an implicit context")
 
-  case class FromThisWithoutContext[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    position: Position
-  ) extends AnalysisError[RNS]
+    case object FromThisWithoutContext extends AnalysisError("FROM @this cannot be used in a query without an implicit context")
 
-  case class TableOperationTypeMismatch[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    left: Seq[TypeName],
-    right: Seq[TypeName],
-    position: Position
-  ) extends AnalysisError[RNS]
+    case class TableOperationTypeMismatch(left: Seq[TypeName], right: Seq[TypeName]) extends AnalysisError("The left- and right-hand sides of a table operation must have the same schema")
 
-  case class LiteralNotAllowedInGroupBy[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    position: Position
-  ) extends AnalysisError[RNS]
+    case object LiteralNotAllowedInGroupBy extends AnalysisError("Literal values are not allowed in GROUP BY")
 
-  case class LiteralNotAllowedInOrderBy[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    position: Position
-  ) extends AnalysisError[RNS]
+    case object LiteralNotAllowedInOrderBy extends AnalysisError("Literal values are not allowed in ORDER BY")
 
-  case class LiteralNotAllowedInDistinctOn[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    position: Position
-  ) extends AnalysisError[RNS]
+    case object LiteralNotAllowedInDistinctOn extends AnalysisError("Literal values are not allowed in DISTINCT ON")
 
-  case class AggregateFunctionNotAllowed[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    name: FunctionName,
-    position: Position
-  ) extends AnalysisError[RNS]
+    case class AggregateFunctionNotAllowed(name: FunctionName) extends AnalysisError("Aggregate function not allowed here")
 
-  case class UngroupedColumnReference[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    position: Position
-  ) extends AnalysisError[RNS]
+    case object UngroupedColumnReference extends AnalysisError("Reference to a column not specified in GROUP BY")
 
-  case class WindowFunctionNotAllowed[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    name: FunctionName,
-    position: Position
-  ) extends AnalysisError[RNS]
+    case class WindowFunctionNotAllowed(name: FunctionName) extends AnalysisError("Window function not allowed here")
 
-  case class ParameterlessTableFunction[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    name: ResourceName,
-    position: Position
-  ) extends AnalysisError[RNS]
+    case class ParameterlessTableFunction(name: ResourceName) extends AnalysisError("UDFs require parameters")
 
-  case class IllegalThisReference[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    position: Position
-  ) extends AnalysisError[RNS]
+    case object IllegalThisReference extends AnalysisError("@this can only be used as `FROM @this`, not in joins")
 
-  case class ReservedTableName[+RNS](
-    scope: RNS,
-    canonicalName: Option[CanonicalName],
-    name: ResourceName,
-    position: Position
-  ) extends AnalysisError[RNS]
+    case class ReservedTableName(name: ResourceName) extends AnalysisError("Table name '$name' is reserved")
 
-  sealed trait TypecheckError[+RNS] extends AnalysisError[RNS]
-  object TypecheckError {
-    case class NoSuchColumn[+RNS](
-      scope: RNS,
-      canonicalName: Option[CanonicalName],
-      qualifier: Option[ResourceName],
-      name: ColumnName,
-      position: Position
-    ) extends AnalysisError[RNS](s"No such column ${name.name}") with TypecheckError[RNS] with AliasAnalysisError[RNS]
+    sealed trait TypecheckError extends AnalysisError
 
-    case class UnknownUDFParameter[+RNS](
-      scope: RNS,
-      canonicalName: Option[CanonicalName],
-      name: HoleName,
-      position: Position
-    ) extends AnalysisError[RNS](s"No such UDF parameter ${name.name}") with TypecheckError[RNS]
+    object TypecheckError {
+      case class NoSuchColumn(
+        qualifier: Option[ResourceName],
+        name: ColumnName
+      ) extends AnalysisError(s"No such column ${qualifier.fold("")("@" + _ + ".")}${name}") with TypecheckError with AliasAnalysisError
 
-    case class UnknownUserParameter[+RNS](
-      scope: RNS,
-      canonicalName: Option[CanonicalName],
-      view: Option[CanonicalName],
-      name: HoleName,
-      position: Position
-    ) extends AnalysisError[RNS](s"No such user parameter ${view.fold("")(_.name + "/")}${name.name}") with TypecheckError[RNS]
+      case class UnknownUDFParameter(
+        name: HoleName
+      ) extends AnalysisError(s"No such UDF parameter ${name}") with TypecheckError
 
-    case class NoSuchFunction[+RNS](
-      scope: RNS,
-      canonicalName: Option[CanonicalName],
-      name: FunctionName,
-      arity: Int,
-      position: Position
-    ) extends AnalysisError[RNS](s"No such function ${name}/${arity}") with TypecheckError[RNS]
+      case class UnknownUserParameter(
+        view: Option[CanonicalName],
+        name: HoleName
+      ) extends AnalysisError(s"No such user parameter ${view.fold("")(_.name + "/")}${name}") with TypecheckError
 
-    case class TypeMismatch[+RNS](
-      scope: RNS,
-      canonicalName: Option[CanonicalName],
-      expected: Set[TypeName],
-      found: TypeName,
-      position: Position
-    ) extends AnalysisError[RNS](s"Type mismatch: found ${found}") with TypecheckError[RNS]
+      case class NoSuchFunction(
+        name: FunctionName,
+        arity: Int
+      ) extends AnalysisError(s"No such function ${name}/${arity}") with TypecheckError
 
-    case class RequiresWindow[+RNS](
-      scope: RNS,
-      canonicalName: Option[CanonicalName],
-      name: FunctionName,
-      position: Position
-    ) extends AnalysisError[RNS](s"${name.name} requires a window clause") with TypecheckError[RNS]
+      case class TypeMismatch(
+        expected: Set[TypeName],
+        found: TypeName
+      ) extends AnalysisError(s"Type mismatch: found ${found}") with TypecheckError
 
-    case class NonAggregate[+RNS](
-      scope: RNS,
-      canonicalName: Option[CanonicalName],
-      name: FunctionName,
-      position: Position
-    ) extends AnalysisError[RNS](s"${name.name} is not an aggregate function") with TypecheckError[RNS]
+      case class RequiresWindow(
+        name: FunctionName
+      ) extends AnalysisError(s"${name} requires a window clause") with TypecheckError
 
-    case class NonWindowFunction[+RNS](
-      scope: RNS,
-      canonicalName: Option[CanonicalName],
-      name: FunctionName,
-      position: Position
-    ) extends AnalysisError[RNS](s"${name.name} is not a window function") with TypecheckError[RNS]
+      case class NonAggregate(
+        name: FunctionName
+      ) extends AnalysisError(s"${name} is not an aggregate function") with TypecheckError
 
-    case class GroupsRequiresOrderBy[+RNS](
-      scope: RNS,
-      canonicalName: Option[CanonicalName],
-      position: Position
-    ) extends AnalysisError[RNS](s"GROUPS mode requires and ORDER BY in the window definition") with TypecheckError[RNS]
-  }
+      case class NonWindowFunction(
+        name: FunctionName
+      ) extends AnalysisError(s"${name} is not a window function") with TypecheckError
 
-  sealed trait AliasAnalysisError[+RNS] extends AnalysisError[RNS]
-  object AliasAnalysisError {
-    case class RepeatedExclusion[+RNS](
-      scope: RNS,
-      canonicalName: Option[CanonicalName],
-      name: ColumnName,
-      position: Position
-    ) extends AnalysisError[RNS]("Column `" + name + "' has already been excluded") with AliasAnalysisError[RNS]
+      case object GroupsRequiresOrderBy extends AnalysisError(s"GROUPS mode requires and ORDER BY in the window definition") with TypecheckError
+    }
 
-    case class DuplicateAlias[+RNS](
-      scope: RNS,
-      canonicalName: Option[CanonicalName],
-      name: ColumnName,
-      position: Position
-    ) extends AnalysisError[RNS]("There is already a column named `" + name + "' selected") with AliasAnalysisError[RNS]
+    sealed trait AliasAnalysisError extends AnalysisError
+    object AliasAnalysisError {
+      case class RepeatedExclusion(
+        name: ColumnName
+      ) extends AnalysisError("Column `" + name + "' has already been excluded") with AliasAnalysisError
 
-    case class CircularAliasDefinition[+RNS](
-      scope: RNS,
-      canonicalName: Option[CanonicalName],
-      name: ColumnName,
-      position: Position
-    ) extends AnalysisError[RNS]("Circular reference while defining alias `" + name + "'") with AliasAnalysisError[RNS]
+      case class DuplicateAlias(
+        name: ColumnName
+      ) extends AnalysisError("There is already a column named `" + name + "' selected") with AliasAnalysisError
+
+      case class CircularAliasDefinition(
+        name: ColumnName
+      ) extends AnalysisError("Circular reference while defining alias `" + name + "'") with AliasAnalysisError
+    }
   }
 }

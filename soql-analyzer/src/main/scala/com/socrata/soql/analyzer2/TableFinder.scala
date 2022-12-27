@@ -17,10 +17,9 @@ trait TableFinder {
 
   type ColumnType
 
-  /** The way in which `parse` can fail.  This is probably a type from
-    * soql.{standalone_exceptions,exceptions}.
+  /** The way in which `parse` can fail.
     */
-  type ParseError = LexerParserException
+  type ParseError = SoQLAnalyzerError.TextualError[ResourceNameScope, SoQLAnalyzerError.ParserError]
 
   /** The way in which saved queries are scoped.  This is nearly opaque
     * as far as TableFinder is concerned, requiring only that a tuple
@@ -114,7 +113,7 @@ trait TableFinder {
     override final def flatMap[U](f: Nothing => Result[U]): this.type = this
   }
   object Error {
-    case class ParseError(name: Option[ScopedResourceName], error: TableFinder.this.ParseError) extends Error
+    case class ParseError(error: TableFinder.this.ParseError) extends Error
     case class NotFound(name: ScopedResourceName) extends Error
     case class PermissionDenied(name: ScopedResourceName) extends Error
     case class RecursiveQuery(canonicalName: Seq[CanonicalName]) extends Error
@@ -166,17 +165,18 @@ trait TableFinder {
       case Right(ds: Dataset) =>
         Success(ds.toParsed)
       case Right(Query(scope, canonicalName, basedOn, text, params, hiddenColumns)) =>
-        parse(Some(scopedName), text, false).map(TableDescription.Query(scope, canonicalName, basedOn, _, text, params, hiddenColumns))
-      case Right(TableFunction(scope, canonicalName, text, params, hiddenColumns)) => parse(Some(scopedName), text, true).map(TableDescription.TableFunction(scope, canonicalName, _, text, params, hiddenColumns))
+        parse(scopedName.scope, Some(canonicalName), text, false).map(TableDescription.Query(scope, canonicalName, basedOn, _, text, params, hiddenColumns))
+      case Right(TableFunction(scope, canonicalName, text, params, hiddenColumns)) =>
+        parse(scopedName.scope, Some(canonicalName), text, true).map(TableDescription.TableFunction(scope, canonicalName, _, text, params, hiddenColumns))
       case Left(LookupError.NotFound) => Error.NotFound(scopedName)
       case Left(LookupError.PermissionDenied) => Error.PermissionDenied(scopedName)
     }
   }
 
-  private def parse(name: Option[ScopedResourceName], text: String, udfParamsAllowed: Boolean): Result[BinaryTree[ast.Select]] = {
-    ParserUtil(text, parserParameters.copy(allowHoles = udfParamsAllowed)) match {
+  private def parse(scope: ResourceNameScope, name: Option[CanonicalName], text: String, udfParamsAllowed: Boolean): Result[BinaryTree[ast.Select]] = {
+    ParserUtil.parseInContext(scope, name, text, parserParameters.copy(allowHoles = udfParamsAllowed)) match {
       case Right(tree) => Success(tree)
-      case Left(err) => Error.ParseError(name, err)
+      case Left(err) => Error.ParseError(err)
     }
   }
 
@@ -222,10 +222,10 @@ trait TableFinder {
     }
   }
 
-  // This walks anonymous soql.  Named soql gets parsed in doLookup
+  // This walks anonymous in a context soql.  Named soql gets parsed in doLookup
   private def walkSoQL(scope: ResourceNameScope, context: (BinaryTree[ast.Select], String) => FoundTables.Query[ColumnType], text: String, acc: TableMap, stack: List[CanonicalName]): Result[FoundTables[ResourceNameScope, ColumnType]] = {
     for {
-      tree <- parse(None, text, udfParamsAllowed = false)
+      tree <- parse(scope, None, text, udfParamsAllowed = false)
       acc <- walkTree(scope, tree, acc, stack)
     } yield {
       FoundTables(acc, scope, context(tree, text), parserParameters)
