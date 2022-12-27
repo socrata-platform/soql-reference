@@ -527,6 +527,15 @@ class SoQLAnalyzer[Type, Value](typeInfo: TypeInfo[Type, Value],
       for(item <- items if !pred(item.typ)) throw onError(typeInfo.typeNameFor(item.typ), item.position)
     }
 
+    distinct match {
+      case typed.DistinctOn(exprs) if orderBys.nonEmpty =>
+        if(!orderBys.map(_._2).startsWith(exprs)) {
+          throw DistinctOnNotPrefixOfOrderBy(exprs.head.position)
+        }
+      case _ =>
+        // ok
+    }
+
     check(where, typeInfo.isBoolean, NonBooleanWhere)
     check(groupBys, typeInfo.isGroupable, NonGroupableGroupBy)
     check(having, typeInfo.isBoolean, NonBooleanHaving)

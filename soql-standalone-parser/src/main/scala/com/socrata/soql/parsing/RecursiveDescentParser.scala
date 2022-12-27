@@ -442,7 +442,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r8, havingClause) = having(r7)
         val ParseResult(r9, (orderByClause, searchClause)) = orderByAndSearch(r8)
         val ParseResult(r10, (limitClause, offsetClause)) = limitOffset(r9)
-        ParseResult(r10, Select(distinct, selected, fromClause, joinClause, whereClause, groupByClause, havingClause, orderByClause, limitClause, offsetClause, searchClause, h).validate())
+        ParseResult(r10, Select(distinct, selected, fromClause, joinClause, whereClause, groupByClause, havingClause, orderByClause, limitClause, offsetClause, searchClause, h))
       case _ =>
         fail(reader, SELECT())
     }
