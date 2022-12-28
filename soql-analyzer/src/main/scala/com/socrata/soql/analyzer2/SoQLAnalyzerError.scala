@@ -19,16 +19,32 @@ sealed abstract class SoQLAnalyzerError[+RNS, +Data <: SoQLAnalyzerError.Payload
 
 object SoQLAnalyzerError {
   sealed abstract class NonTextualError(msg: String) extends SoQLAnalyzerError[Nothing, Nothing](msg)
+  object NonTextualError {
+    implicit val jCodec = SimpleHierarchyCodecBuilder[NonTextualError](InternalTag("type"))
+      .and("invalid-parameter-type", AutomaticJsonCodecBuilder[InvalidParameterType])
+      .build
+  }
   case class TextualError[+RNS, +Data <: Payload](scope: RNS, canonicalName: Option[CanonicalName], position: Position, data: Data) extends SoQLAnalyzerError[RNS, Data](data.msg)
+  object TextualError {
+    implicit def textualErrorEncode[RNS: JsonEncode, Data <: Payload] = new JsonEncode[TextualError[RNS, Data]] {
+      def encode(x: TextualError[RNS, Data]) = {
+        val JObject(fields) = dataCodec.exactlyCodec.encode(x.data)
+        json"""{
+          scope: ${x.scope},
+          canonicalName: ${x.canonicalName.orJNull},
+          position: ${x.position},
+          ..$fields,
+          english: ${x.data.msg}
+        }"""
+      }
+    }
+  }
 
   private implicit class AugCodec[T <: AnyRef](shc: SimpleHierarchyCodecBuilder[T]) {
     def and[U <: T : ClassTag](tag: String, codec: JsonEncode[U] with JsonDecode[U]) =
       shc.branch[U](tag)(codec, codec, implicitly)
   }
 
-  private implicit val nonTextualErrorCodec = SimpleHierarchyCodecBuilder[NonTextualError](InternalTag("type"))
-    .and("invalid-parameter-type", AutomaticJsonCodecBuilder[InvalidParameterType])
-    .build
 
   private implicit object PositionCodec extends JsonEncode[Position] with JsonDecode[Position] {
     private val row = Variable[Int]()
@@ -60,7 +76,8 @@ object SoQLAnalyzerError {
   }
 
   trait DataCodec[T <: Payload] {
-    private[SoQLAnalyzerError] def filter(t: Payload): Option[T]
+    protected def baseDataCodec = SimpleHierarchyCodecBuilder[T](TagAndValue("type", "data"))
+    private[SoQLAnalyzerError] def exactlyCodec: JsonEncode[T] with JsonDecode[T]
   }
 
   // bit of a hack to make it so that if some "case object" is changed
@@ -90,13 +107,17 @@ object SoQLAnalyzerError {
     case class PermissionDenied(name: ResourceName) extends TableFinderError(s"Permission denied accessing $name")
     case class RecursiveQuery(stack: Seq[CanonicalName]) extends TableFinderError(s"Recursive query found in saved views ${stack.mkString(", ")}")
 
-    private[SoQLAnalyzerError] def augment(b: SimpleHierarchyCodecBuilder[Payload]) =
+    private[SoQLAnalyzerError] def augment[P >: TableFinderError <: AnyRef : ClassTag](b: SimpleHierarchyCodecBuilder[P]): SimpleHierarchyCodecBuilder[P] =
       ParserError.augment(
         b.
           and("not-found", AutomaticJsonCodecBuilder[NotFound]).
           and("permission-denied", AutomaticJsonCodecBuilder[PermissionDenied]).
           and("recursive-query", AutomaticJsonCodecBuilder[RecursiveQuery])
       )
+
+    implicit val dataCodec = new DataCodec[TableFinderError] {
+      private[SoQLAnalyzerError] val exactlyCodec = augment(baseDataCodec).build
+    }
   }
 
   sealed abstract class ParserError(msg: String) extends TableFinderError(msg)
@@ -117,7 +138,7 @@ object SoQLAnalyzerError {
     case object UnexpectedStarSelect extends ParserError("Star selections must come at the start of the select-list") with Singleton
     case object UnexpectedSystemStarSelect extends ParserError("System column star selections must come before user column star selections") with Singleton
 
-    private[SoQLAnalyzerError] def augment(b: SimpleHierarchyCodecBuilder[Payload]) =
+    private[SoQLAnalyzerError] def augment[P >: ParserError <: AnyRef : ClassTag](b: SimpleHierarchyCodecBuilder[P]): SimpleHierarchyCodecBuilder[P] =
       b.
         and("unexpected-escape", AutomaticJsonCodecBuilder[UnexpectedEscape]).
         and("bad-unicode-escape-character", AutomaticJsonCodecBuilder[BadUnicodeEscapeCharacter]).
@@ -131,25 +152,13 @@ object SoQLAnalyzerError {
         and("unexpected-system-star-select", singletonCodec(UnexpectedSystemStarSelect))
 
     implicit val dataCodec = new DataCodec[ParserError] {
-      private[SoQLAnalyzerError] def filter(t: Payload) =
-        t match {
-          case pe: ParserError => Some(pe)
-          case _ => None
-        }
+      private[SoQLAnalyzerError] val exactlyCodec = augment(baseDataCodec).build
     }
   }
 
   sealed abstract class AnalysisError(msg: String) extends Payload(msg)
   object AnalysisError {
-    implicit val dataCodec = new DataCodec[AnalysisError] {
-      private[SoQLAnalyzerError] def filter(t: Payload) =
-        t match {
-          case ae: AnalysisError => Some(ae)
-          case _ => None
-        }
-    }
-
-    private[SoQLAnalyzerError] def augment(b: SimpleHierarchyCodecBuilder[Payload]) =
+    private[SoQLAnalyzerError] def augment[P >: AnalysisError <: AnyRef : ClassTag](b: SimpleHierarchyCodecBuilder[P]): SimpleHierarchyCodecBuilder[P] =
       AliasAnalysisError.augment(
         TypecheckError.augment(
           b.
@@ -176,6 +185,10 @@ object SoQLAnalyzerError {
             and("reserved-table-name", AutomaticJsonCodecBuilder[ReservedTableName])
         )
       )
+
+    implicit val dataCodec = new DataCodec[AnalysisError] {
+      private[SoQLAnalyzerError] val exactlyCodec = augment(baseDataCodec).build
+    }
 
     case class ExpectedBoolean(
       got: TypeName
@@ -210,15 +223,7 @@ object SoQLAnalyzerError {
     sealed trait TypecheckError extends AnalysisError
 
     object TypecheckError {
-      implicit val dataCodec = new DataCodec[TypecheckError] {
-        private[SoQLAnalyzerError] def filter(t: Payload) =
-          t match {
-            case te: TypecheckError => Some(te)
-            case _ => None
-          }
-      }
-
-      private[SoQLAnalyzerError] def augment(b: SimpleHierarchyCodecBuilder[Payload]) =
+      private[SoQLAnalyzerError] def augment[P >: TypecheckError <: AnyRef : ClassTag](b: SimpleHierarchyCodecBuilder[P]): SimpleHierarchyCodecBuilder[P] =
         b.
           and("no-such-column", AutomaticJsonCodecBuilder[NoSuchColumn]).
           and("unknown-udf-parameter", AutomaticJsonCodecBuilder[UnknownUDFParameter]).
@@ -229,6 +234,11 @@ object SoQLAnalyzerError {
           and("non-aggregate", AutomaticJsonCodecBuilder[NonAggregate]).
           and("non-window-function", AutomaticJsonCodecBuilder[NonWindowFunction]).
           and("groups-requires-order-by", singletonCodec(GroupsRequiresOrderBy))
+
+
+      implicit val dataCodec = new DataCodec[TypecheckError] {
+        private[SoQLAnalyzerError] val exactlyCodec = augment(baseDataCodec).build
+      }
 
       case class NoSuchColumn(
         qualifier: Option[ResourceName],
@@ -271,19 +281,15 @@ object SoQLAnalyzerError {
 
     sealed trait AliasAnalysisError extends AnalysisError
     object AliasAnalysisError {
-      implicit val dataCodec = new DataCodec[AnalysisError] {
-        private[SoQLAnalyzerError] def filter(t: Payload) =
-          t match {
-            case ae: AnalysisError => Some(ae)
-            case _ => None
-          }
-      }
-
-      private[SoQLAnalyzerError] def augment(b: SimpleHierarchyCodecBuilder[Payload]) =
+      private[SoQLAnalyzerError] def augment[P >: AliasAnalysisError <: AnyRef : ClassTag](b: SimpleHierarchyCodecBuilder[P]): SimpleHierarchyCodecBuilder[P] =
         b.
           and("repeated-exclusion", AutomaticJsonCodecBuilder[RepeatedExclusion]).
           and("duplicate-alias", AutomaticJsonCodecBuilder[DuplicateAlias]).
           and("circular-alias-definition", AutomaticJsonCodecBuilder[CircularAliasDefinition])
+
+      implicit val dataCodec = new DataCodec[AliasAnalysisError] {
+        private[SoQLAnalyzerError] val exactlyCodec = augment(baseDataCodec).build
+      }
 
       case class RepeatedExclusion(
         name: ColumnName
@@ -299,26 +305,11 @@ object SoQLAnalyzerError {
     }
   }
 
-  implicit val dataCodec = new DataCodec[Payload] {
+  implicit object dataCodec extends DataCodec[Payload] {
     private[SoQLAnalyzerError] def filter(t: Payload) =
       Some(t)
-  }
-
-  private val payloadCodec =
-    ParserError.augment(SimpleHierarchyCodecBuilder[Payload](TagAndValue("type", "data"))).
-      build
-
-  private implicit def textualErrorEncode[RNS: JsonEncode, Data <: Payload] = new JsonEncode[TextualError[RNS, Data]] {
-    def encode(x: TextualError[RNS, Data]) = {
-      val JObject(fields) = payloadCodec.encode(x.data)
-      json"""{
-        scope: ${x.scope},
-        canonicalName: ${x.canonicalName.orJNull},
-        position: ${x.position},
-        ..$fields,
-        english: ${x.data.msg}
-      }"""
-    }
+    val exactlyCodec =
+      AnalysisError.augment(TableFinderError.augment(baseDataCodec)).build
   }
 
   private implicit def textualErrorDecode[RNS: JsonDecode, Data <: Payload : DataCodec] = new JsonDecode[TextualError[RNS, Data]] {
@@ -327,30 +318,17 @@ object SoQLAnalyzerError {
     private val scope = Variable.decodeOnly[RNS]()
     private val canonicalName = Variable.decodeOnly[CanonicalName]()
     private val position = Variable.decodeOnly[Position]()
-    private val typ = Variable.decodeOnly[JString]()
 
     private val pattern = PObject(
       "scope" -> scope,
       "canonicalName" -> FirstOf(canonicalName, JNull),
-      "position" -> position,
-      "type" -> typ
+      "position" -> position
     )
 
     def decode(x: JValue) = {
-      // This doesn't always give _ideal_ decode errors - in
-      // particular, in the case where it's decoding an invalid
-      // payload of a type we're not interested in, we'll get the
-      // decode error for that other type rather than an "invalid
-      // value" on the "type" field itself.  But either way we'll get
-      // a decode error so... eh.
       pattern.matches(x).flatMap { results =>
-        payloadCodec.decode(x).flatMap { data =>
-          dataCodec.filter(data) match {
-            case Some(data) =>
-              Right(TextualError(scope(results), canonicalName.get(results), position(results), data))
-            case None =>
-              Left(DecodeError.InvalidValue(typ(results)).prefix("type"))
-          }
+        dataCodec.exactlyCodec.decode(x).map { data =>
+          TextualError(scope(results), canonicalName.get(results), position(results), data)
         }
       }
     }
