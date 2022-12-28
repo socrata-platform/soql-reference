@@ -84,8 +84,22 @@ object SoQLAnalyzerError {
 
   sealed abstract class Payload(val msg: String)
 
+  sealed abstract class TableFinderError(msg: String) extends Payload(msg)
+  object TableFinderError {
+    case class NotFound(name: ResourceName) extends TableFinderError(s"Dataset $name not found")
+    case class PermissionDenied(name: ResourceName) extends TableFinderError(s"Permission denied accessing $name")
+    case class RecursiveQuery(stack: Seq[CanonicalName]) extends TableFinderError(s"Recursive query found in saved views ${stack.mkString(", ")}")
 
-  sealed abstract class ParserError(msg: String) extends Payload(msg)
+    private[SoQLAnalyzerError] def augment(b: SimpleHierarchyCodecBuilder[Payload]) =
+      ParserError.augment(
+        b.
+          and("not-found", AutomaticJsonCodecBuilder[NotFound]).
+          and("permission-denied", AutomaticJsonCodecBuilder[PermissionDenied]).
+          and("recursive-query", AutomaticJsonCodecBuilder[RecursiveQuery])
+      )
+  }
+
+  sealed abstract class ParserError(msg: String) extends TableFinderError(msg)
 
   object ParserError {
     case class UnexpectedEscape(char: Char) extends ParserError("Unexpected escape character")
