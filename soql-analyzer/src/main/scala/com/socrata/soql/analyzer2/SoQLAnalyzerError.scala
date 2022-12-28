@@ -1,7 +1,7 @@
 package com.socrata.soql.analyzer2
 
 import scala.annotation.tailrec
-import scala.util.parsing.input.Position
+import scala.util.parsing.input.{Position, NoPosition}
 import scala.reflect.ClassTag
 
 import com.rojoma.json.v3.ast.{JValue, JObject, JNull, JString}
@@ -18,6 +18,41 @@ import com.socrata.soql.parsing.{RecursiveDescentParser, SoQLPosition}
 sealed abstract class SoQLAnalyzerError[+RNS, +Data <: SoQLAnalyzerError.Payload](msg: String)
 
 object SoQLAnalyzerError {
+  private implicit class AugCodec[T <: AnyRef](shc: SimpleHierarchyCodecBuilder[T]) {
+    def and[U <: T : ClassTag](tag: String, codec: JsonEncode[U] with JsonDecode[U]) =
+      shc.branch[U](tag)(codec, codec, implicitly)
+  }
+
+  private implicit object PositionCodec extends JsonEncode[Position] with JsonDecode[Position] {
+    private val row = Variable[Int]()
+    private val col = Variable[Int]()
+    private val text = Variable[String]()
+    private val pattern =
+      PObject(
+        "row" -> row,
+        "column" -> col,
+        "text" -> text
+      )
+
+    def encode(p: Position) =
+      p match {
+        case NoPosition =>
+          JNull
+        case other =>
+          pattern.generate(row := p.line, col := p.column, text := p.longString.split('\n')(0))
+      }
+
+    def decode(v: JValue) =
+      v match {
+        case JNull =>
+          Right(NoPosition)
+        case other =>
+          pattern.matches(v).map { results =>
+            SoQLPosition(row(results), col(results), text(results), col(results))
+          }
+      }
+  }
+
   sealed abstract class NonTextualError(msg: String) extends SoQLAnalyzerError[Nothing, Nothing](msg)
   object NonTextualError {
     implicit val jCodec = SimpleHierarchyCodecBuilder[NonTextualError](InternalTag("type"))
@@ -38,32 +73,6 @@ object SoQLAnalyzerError {
         }"""
       }
     }
-  }
-
-  private implicit class AugCodec[T <: AnyRef](shc: SimpleHierarchyCodecBuilder[T]) {
-    def and[U <: T : ClassTag](tag: String, codec: JsonEncode[U] with JsonDecode[U]) =
-      shc.branch[U](tag)(codec, codec, implicitly)
-  }
-
-
-  private implicit object PositionCodec extends JsonEncode[Position] with JsonDecode[Position] {
-    private val row = Variable[Int]()
-    private val col = Variable[Int]()
-    private val text = Variable[String]()
-    private val pattern =
-      PObject(
-        "row" -> row,
-        "column" -> col,
-        "text" -> text
-      )
-
-    def encode(p: Position) =
-      pattern.generate(row := p.line, col := p.column, text := p.longString.split('\n')(0))
-
-    def decode(v: JValue) =
-      pattern.matches(v).map { results =>
-        SoQLPosition(row(results), col(results), text(results), col(results))
-      }
   }
 
   private implicit object CharCodec extends JsonEncode[Char] with JsonDecode[Char] {
