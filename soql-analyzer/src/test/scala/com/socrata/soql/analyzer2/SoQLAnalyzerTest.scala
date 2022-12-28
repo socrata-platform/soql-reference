@@ -798,7 +798,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
     expectFailure(0) {
       val analysis = analyze(tf, "aaaa-aaaa", "select distinct n1 order by n2")(new OnFail {
-        override def onAnalyzerError(e: SoQLAnalyzerError[Int]): Nothing = {
+        override def onAnalyzerError(e: SoQLAnalyzerError[Int, SoQLAnalyzerError.AnalysisError]): Nothing = {
           e match {
             case SoQLAnalyzerError.TextualError(_, _, _, SoQLAnalyzerError.AnalysisError.OrderByMustBeSelectedWhenDistinct) =>
               expected(0)

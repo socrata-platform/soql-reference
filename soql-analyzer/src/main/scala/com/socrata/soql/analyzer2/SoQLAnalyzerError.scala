@@ -2,29 +2,88 @@ package com.socrata.soql.analyzer2
 
 import scala.annotation.tailrec
 import scala.util.parsing.input.Position
+import scala.reflect.ClassTag
 
-import com.rojoma.json.v3.util.{SimpleHierarchyCodecBuilder, AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder, InternalTag}
+import com.rojoma.json.v3.ast.{JValue, JObject, JNull, JString}
+import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
+import com.rojoma.json.v3.interpolation._
+import com.rojoma.json.v3.matcher._
+import com.rojoma.json.v3.util.{SimpleHierarchyEncodeBuilder, SimpleHierarchyDecodeBuilder, SimpleHierarchyCodecBuilder, AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder, AutomaticJsonCodecBuilder, InternalTag, TagAndValue, NoTag}
+import com.rojoma.json.v3.util.OrJNull.implicits._
 
 import com.socrata.soql.collection.CovariantSet
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName, FunctionName, TypeName}
-import com.socrata.soql.parsing.RecursiveDescentParser
+import com.socrata.soql.parsing.{RecursiveDescentParser, SoQLPosition}
 
-sealed abstract class SoQLAnalyzerError[+RNS](msg: String)
+sealed abstract class SoQLAnalyzerError[+RNS, +Data <: SoQLAnalyzerError.Payload](msg: String)
 
 object SoQLAnalyzerError {
-  sealed abstract class NonTextualError(msg: String) extends SoQLAnalyzerError[Nothing](msg)
+  sealed abstract class NonTextualError(msg: String) extends SoQLAnalyzerError[Nothing, Nothing](msg)
+  case class TextualError[+RNS, +Data <: Payload](scope: RNS, canonicalName: Option[CanonicalName], position: Position, data: Data) extends SoQLAnalyzerError[RNS, Data](data.msg)
 
-  sealed abstract class ParameterError(msg: String) extends NonTextualError(msg)
+  private implicit class AugCodec[T <: AnyRef](shc: SimpleHierarchyCodecBuilder[T]) {
+    def and[U <: T : ClassTag](tag: String, codec: JsonEncode[U] with JsonDecode[U]) =
+      shc.branch[U](tag)(codec, codec, implicitly)
+  }
+
+  private implicit val nonTextualErrorCodec = SimpleHierarchyCodecBuilder[NonTextualError](InternalTag("type"))
+    .and("invalid-parameter-type", AutomaticJsonCodecBuilder[InvalidParameterType])
+    .build
+
+  private implicit object PositionCodec extends JsonEncode[Position] with JsonDecode[Position] {
+    private val row = Variable[Int]()
+    private val col = Variable[Int]()
+    private val text = Variable[String]()
+    private val pattern =
+      PObject(
+        "row" -> row,
+        "column" -> col,
+        "text" -> text
+      )
+
+    def encode(p: Position) =
+      pattern.generate(row := p.line, col := p.column, text := p.longString.split('\n')(0))
+
+    def decode(v: JValue) =
+      pattern.matches(v).map { results =>
+        SoQLPosition(row(results), col(results), text(results), col(results))
+      }
+  }
+
+  private implicit object CharCodec extends JsonEncode[Char] with JsonDecode[Char] {
+    def encode(c: Char) = JString(c.toString)
+    def decode(v: JValue) = v match {
+      case JString(s) if s.length == 1 => Right(s.charAt(0))
+      case other: JString => Left(DecodeError.InvalidValue(other))
+      case other => Left(DecodeError.InvalidType(expected = JString, got = other.jsonType))
+    }
+  }
+
+  trait DataCodec[T <: Payload] {
+    private[SoQLAnalyzerError] def filter(t: Payload): Option[T]
+  }
+
+  // bit of a hack to make it so that if some "case object" is changed
+  // to a "case class", it'll cause a compiler error in the relevant
+  // codec.
+  sealed trait Singleton
+  private def singletonCodec[T <: Singleton](x: T) = new JsonEncode[T] with JsonDecode[T] {
+    def encode(x: T) = JObject.canonicalEmpty
+    def decode(v: JValue) = v match {
+      case JObject(_) => Right(x)
+      case other => Left(DecodeError.InvalidType(expected = JObject, got = other.jsonType))
+    }
+  }
+
   case class InvalidParameterType(
     canonicalName: Option[CanonicalName],
     param: HoleName,
     expected: TypeName,
     got: TypeName
-  ) extends ParameterError(s"Invalid parameter value for ${canonicalName.fold("")(_.name + "/")}${param}: expected ${expected} but got ${got}")
+  ) extends NonTextualError(s"Invalid parameter value for ${canonicalName.fold("")(_.name + "/")}${param}: expected ${expected} but got ${got}")
 
   sealed abstract class Payload(val msg: String)
 
-  case class TextualError[+RNS, +Data <: Payload](scope: RNS, canonicalName: Option[CanonicalName], position: Position, data: Data) extends SoQLAnalyzerError[RNS](data.msg)
 
   sealed abstract class ParserError(msg: String) extends Payload(msg)
 
@@ -33,20 +92,77 @@ object SoQLAnalyzerError {
     case class BadUnicodeEscapeCharacter(char: Char) extends ParserError("Bad character in unicode escape")
     case class UnicodeCharacterOutOfRange(value: Int) extends ParserError("Unicode character out of range")
     case class UnexpectedCharacter(char: Char) extends ParserError("Unicode character out of range")
-    case object UnexpectedEOF extends ParserError("Unexpected end of input")
-    case object UnterminatedString extends ParserError("Unterminated string")
+    case object UnexpectedEOF extends ParserError("Unexpected end of input") with Singleton
+    case object UnterminatedString extends ParserError("Unterminated string") with Singleton
 
     case class ExpectedToken(
       expectations: Seq[String],
       got: String
     ) extends ParserError(RecursiveDescentParser.expectationStringsToEnglish(expectations, got))
-    case object ExpectedLeafQuery extends ParserError("Expected a non-compound query on the right side of a pipe operator")
-    case object UnexpectedStarSelect extends ParserError("Star selections must come at the start of the select-list")
-    case object UnexpectedSystemStarSelect extends ParserError("System column star selections must come before user column star selections")
+    case object ExpectedLeafQuery extends ParserError("Expected a non-compound query on the right side of a pipe operator") with Singleton
+    case object UnexpectedStarSelect extends ParserError("Star selections must come at the start of the select-list") with Singleton
+    case object UnexpectedSystemStarSelect extends ParserError("System column star selections must come before user column star selections") with Singleton
+
+    private[SoQLAnalyzerError] def augment(b: SimpleHierarchyCodecBuilder[Payload]) =
+      b.
+        and("unexpected-escape", AutomaticJsonCodecBuilder[UnexpectedEscape]).
+        and("bad-unicode-escape-character", AutomaticJsonCodecBuilder[BadUnicodeEscapeCharacter]).
+        and("unicode-character-out-of-range", AutomaticJsonCodecBuilder[UnicodeCharacterOutOfRange]).
+        and("unexpected-character", AutomaticJsonCodecBuilder[UnexpectedCharacter]).
+        and("unexpected-eof", singletonCodec(UnexpectedEOF)).
+        and("unterminated-string", singletonCodec(UnterminatedString)).
+        and("expected-token", AutomaticJsonCodecBuilder[ExpectedToken]).
+        and("expected-leaf-query", singletonCodec(ExpectedLeafQuery)).
+        and("unexpected-star-select", singletonCodec(UnexpectedStarSelect)).
+        and("unexpected-system-star-select", singletonCodec(UnexpectedSystemStarSelect))
+
+    implicit val dataCodec = new DataCodec[ParserError] {
+      private[SoQLAnalyzerError] def filter(t: Payload) =
+        t match {
+          case pe: ParserError => Some(pe)
+          case _ => None
+        }
+    }
   }
 
   sealed abstract class AnalysisError(msg: String) extends Payload(msg)
   object AnalysisError {
+    implicit val dataCodec = new DataCodec[AnalysisError] {
+      private[SoQLAnalyzerError] def filter(t: Payload) =
+        t match {
+          case ae: AnalysisError => Some(ae)
+          case _ => None
+        }
+    }
+
+    private[SoQLAnalyzerError] def augment(b: SimpleHierarchyCodecBuilder[Payload]) =
+      AliasAnalysisError.augment(
+        TypecheckError.augment(
+          b.
+            and("expected-boolean", AutomaticJsonCodecBuilder[ExpectedBoolean]).
+            and("incorrect-number-of-udf-parameters", AutomaticJsonCodecBuilder[IncorrectNumberOfUdfParameters]).
+            and("distinct-not-prefix-of-order-by", singletonCodec(DistinctNotPrefixOfOrderBy)).
+            and("order-by-must-be-selected-when-distinct", singletonCodec(OrderByMustBeSelectedWhenDistinct)).
+            and("invalid-group-by", AutomaticJsonCodecBuilder[InvalidGroupBy]).
+            and("unordered-order-by", AutomaticJsonCodecBuilder[UnorderedOrderBy]).
+            and("parameters-for-non-udf", AutomaticJsonCodecBuilder[ParametersForNonUDF]).
+            and("table-alias-already-exists", AutomaticJsonCodecBuilder[TableAliasAlreadyExists]).
+            and("from-required", singletonCodec(FromRequired)).
+            and("from-forbidden", singletonCodec(FromForbidden)).
+            and("from-this-without-context", singletonCodec(FromThisWithoutContext)).
+            and("table-operation-type-mismatch", AutomaticJsonCodecBuilder[TableOperationTypeMismatch]).
+            and("literal-not-allowed-in-group-by", singletonCodec(LiteralNotAllowedInGroupBy)).
+            and("literal-not-allowed-in-order-by", singletonCodec(LiteralNotAllowedInOrderBy)).
+            and("literal-not-allowed-in-distinct-on", singletonCodec(LiteralNotAllowedInDistinctOn)).
+            and("aggregate-function-not-allowed", AutomaticJsonCodecBuilder[AggregateFunctionNotAllowed]).
+            and("ungrouped-column-reference", singletonCodec(UngroupedColumnReference)).
+            and("window-function-not-allowed", AutomaticJsonCodecBuilder[WindowFunctionNotAllowed]).
+            and("parameterless-udf", AutomaticJsonCodecBuilder[ParameterlessTableFunction]).
+            and("illegal-this-reference", singletonCodec(IllegalThisReference)).
+            and("reserved-table-name", AutomaticJsonCodecBuilder[ReservedTableName])
+        )
+      )
+
     case class ExpectedBoolean(
       got: TypeName
     ) extends AnalysisError("Expected boolean, but got ${got}")
@@ -57,47 +173,49 @@ object SoQLAnalyzerError {
       got: Int
     ) extends AnalysisError(s"UDF expected ${expected} parameter(s) but got ${got}")
 
-    case object DistinctNotPrefixOfOrderBy extends AnalysisError("When both DISTINCT ON and ORDER BY are present, the DISTINCT BY's expression list must be a prefix of the ORDER BY")
-
-    case object OrderByMustBeSelectedWhenDistinct extends AnalysisError("When both DISTINCT and ORDER BY are present, all columns in ORDER BY must also be selected")
-
+    case object DistinctNotPrefixOfOrderBy extends AnalysisError("When both DISTINCT ON and ORDER BY are present, the DISTINCT BY's expression list must be a prefix of the ORDER BY") with Singleton
+    case object OrderByMustBeSelectedWhenDistinct extends AnalysisError("When both DISTINCT and ORDER BY are present, all columns in ORDER BY must also be selected") with Singleton
     case class InvalidGroupBy(typ: TypeName) extends AnalysisError(s"Cannot GROUP BY an expression of type ${typ}")
-
     case class UnorderedOrderBy(typ: TypeName) extends AnalysisError(s"Cannot ORDER BY or DISTINCT ON an expression of type ${typ}")
-
     case class ParametersForNonUDF(nonUdf: ResourceName) extends AnalysisError("Cannot provide parameters to a non-UDF")
-
     case class TableAliasAlreadyExists(alias: ResourceName) extends AnalysisError(s"Table alias ${alias} already exists")
-
-    case object FromRequired extends AnalysisError("FROM required in a query without an implicit context")
-
-    case object FromForbidden extends AnalysisError("FROM (other than FROM @this) forbidden in a query with an implicit context")
-
-    case object FromThisWithoutContext extends AnalysisError("FROM @this cannot be used in a query without an implicit context")
-
+    case object FromRequired extends AnalysisError("FROM required in a query without an implicit context") with Singleton
+    case object FromForbidden extends AnalysisError("FROM (other than FROM @this) forbidden in a query with an implicit context") with Singleton
+    case object FromThisWithoutContext extends AnalysisError("FROM @this cannot be used in a query without an implicit context") with Singleton
     case class TableOperationTypeMismatch(left: Seq[TypeName], right: Seq[TypeName]) extends AnalysisError("The left- and right-hand sides of a table operation must have the same schema")
-
-    case object LiteralNotAllowedInGroupBy extends AnalysisError("Literal values are not allowed in GROUP BY")
-
-    case object LiteralNotAllowedInOrderBy extends AnalysisError("Literal values are not allowed in ORDER BY")
-
-    case object LiteralNotAllowedInDistinctOn extends AnalysisError("Literal values are not allowed in DISTINCT ON")
-
+    case object LiteralNotAllowedInGroupBy extends AnalysisError("Literal values are not allowed in GROUP BY") with Singleton
+    case object LiteralNotAllowedInOrderBy extends AnalysisError("Literal values are not allowed in ORDER BY") with Singleton
+    case object LiteralNotAllowedInDistinctOn extends AnalysisError("Literal values are not allowed in DISTINCT ON") with Singleton
     case class AggregateFunctionNotAllowed(name: FunctionName) extends AnalysisError("Aggregate function not allowed here")
-
-    case object UngroupedColumnReference extends AnalysisError("Reference to a column not specified in GROUP BY")
-
+    case object UngroupedColumnReference extends AnalysisError("Reference to a column not specified in GROUP BY") with Singleton
     case class WindowFunctionNotAllowed(name: FunctionName) extends AnalysisError("Window function not allowed here")
-
     case class ParameterlessTableFunction(name: ResourceName) extends AnalysisError("UDFs require parameters")
-
-    case object IllegalThisReference extends AnalysisError("@this can only be used as `FROM @this`, not in joins")
-
+    case object IllegalThisReference extends AnalysisError("@this can only be used as `FROM @this`, not in joins") with Singleton
     case class ReservedTableName(name: ResourceName) extends AnalysisError("Table name '$name' is reserved")
 
     sealed trait TypecheckError extends AnalysisError
 
     object TypecheckError {
+      implicit val dataCodec = new DataCodec[TypecheckError] {
+        private[SoQLAnalyzerError] def filter(t: Payload) =
+          t match {
+            case te: TypecheckError => Some(te)
+            case _ => None
+          }
+      }
+
+      private[SoQLAnalyzerError] def augment(b: SimpleHierarchyCodecBuilder[Payload]) =
+        b.
+          and("no-such-column", AutomaticJsonCodecBuilder[NoSuchColumn]).
+          and("unknown-udf-parameter", AutomaticJsonCodecBuilder[UnknownUDFParameter]).
+          and("unknown-user-parameter", AutomaticJsonCodecBuilder[UnknownUserParameter]).
+          and("no-such-function", AutomaticJsonCodecBuilder[NoSuchFunction]).
+          and("type-mismatch", AutomaticJsonCodecBuilder[TypeMismatch]).
+          and("requires-window", AutomaticJsonCodecBuilder[RequiresWindow]).
+          and("non-aggregate", AutomaticJsonCodecBuilder[NonAggregate]).
+          and("non-window-function", AutomaticJsonCodecBuilder[NonWindowFunction]).
+          and("groups-requires-order-by", singletonCodec(GroupsRequiresOrderBy))
+
       case class NoSuchColumn(
         qualifier: Option[ResourceName],
         name: ColumnName
@@ -134,11 +252,25 @@ object SoQLAnalyzerError {
         name: FunctionName
       ) extends AnalysisError(s"${name} is not a window function") with TypecheckError
 
-      case object GroupsRequiresOrderBy extends AnalysisError(s"GROUPS mode requires and ORDER BY in the window definition") with TypecheckError
+      case object GroupsRequiresOrderBy extends AnalysisError(s"GROUPS mode requires and ORDER BY in the window definition") with TypecheckError with Singleton
     }
 
     sealed trait AliasAnalysisError extends AnalysisError
     object AliasAnalysisError {
+      implicit val dataCodec = new DataCodec[AnalysisError] {
+        private[SoQLAnalyzerError] def filter(t: Payload) =
+          t match {
+            case ae: AnalysisError => Some(ae)
+            case _ => None
+          }
+      }
+
+      private[SoQLAnalyzerError] def augment(b: SimpleHierarchyCodecBuilder[Payload]) =
+        b.
+          and("repeated-exclusion", AutomaticJsonCodecBuilder[RepeatedExclusion]).
+          and("duplicate-alias", AutomaticJsonCodecBuilder[DuplicateAlias]).
+          and("circular-alias-definition", AutomaticJsonCodecBuilder[CircularAliasDefinition])
+
       case class RepeatedExclusion(
         name: ColumnName
       ) extends AnalysisError("Column `" + name + "' has already been excluded") with AliasAnalysisError
@@ -152,4 +284,74 @@ object SoQLAnalyzerError {
       ) extends AnalysisError("Circular reference while defining alias `" + name + "'") with AliasAnalysisError
     }
   }
+
+  implicit val dataCodec = new DataCodec[Payload] {
+    private[SoQLAnalyzerError] def filter(t: Payload) =
+      Some(t)
+  }
+
+  private val payloadCodec =
+    ParserError.augment(SimpleHierarchyCodecBuilder[Payload](TagAndValue("type", "data"))).
+      build
+
+  private implicit def textualErrorEncode[RNS: JsonEncode, Data <: Payload] = new JsonEncode[TextualError[RNS, Data]] {
+    def encode(x: TextualError[RNS, Data]) = {
+      val JObject(fields) = payloadCodec.encode(x.data)
+      json"""{
+        scope: ${x.scope},
+        canonicalName: ${x.canonicalName.orJNull},
+        position: ${x.position},
+        ..$fields,
+        english: ${x.data.msg}
+      }"""
+    }
+  }
+
+  private implicit def textualErrorDecode[RNS: JsonDecode, Data <: Payload : DataCodec] = new JsonDecode[TextualError[RNS, Data]] {
+    private implicit val dataCodec = implicitly[DataCodec[Data]]
+
+    private val scope = Variable.decodeOnly[RNS]()
+    private val canonicalName = Variable.decodeOnly[CanonicalName]()
+    private val position = Variable.decodeOnly[Position]()
+    private val typ = Variable.decodeOnly[JString]()
+
+    private val pattern = PObject(
+      "scope" -> scope,
+      "canonicalName" -> FirstOf(canonicalName, JNull),
+      "position" -> position,
+      "type" -> typ
+    )
+
+    def decode(x: JValue) = {
+      // This doesn't always give _ideal_ decode errors - in
+      // particular, in the case where it's decoding an invalid
+      // payload of a type we're not interested in, we'll get the
+      // decode error for that other type rather than an "invalid
+      // value" on the "type" field itself.  But either way we'll get
+      // a decode error so... eh.
+      pattern.matches(x).flatMap { results =>
+        payloadCodec.decode(x).flatMap { data =>
+          dataCodec.filter(data) match {
+            case Some(data) =>
+              Right(TextualError(scope(results), canonicalName.get(results), position(results), data))
+            case None =>
+              Left(DecodeError.InvalidValue(typ(results)).prefix("type"))
+          }
+        }
+      }
+    }
+  }
+
+  // ick, but there are (currently) only two branches here, so...
+  implicit def jEncode[RNS: JsonEncode, Data <: Payload : DataCodec]: JsonEncode[SoQLAnalyzerError[RNS, Data]] =
+    SimpleHierarchyEncodeBuilder[SoQLAnalyzerError[RNS, Data]](NoTag).
+      branch[TextualError[RNS, Data]].
+      branch[NonTextualError].
+      build
+
+  implicit def jDecode[RNS: JsonDecode, Data <: Payload : DataCodec]: JsonDecode[SoQLAnalyzerError[RNS, Data]] =
+    SimpleHierarchyDecodeBuilder[SoQLAnalyzerError[RNS, Data]](NoTag).
+      branch[TextualError[RNS, Data]].
+      branch[NonTextualError].
+      build
 }
