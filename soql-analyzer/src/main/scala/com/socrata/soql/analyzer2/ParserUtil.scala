@@ -1,6 +1,8 @@
 package com.socrata.soql.analyzer2
 
 import scala.util.parsing.input.Position
+import scala.collection.compat._
+import scala.collection.compat.immutable.LazyList
 
 import com.socrata.soql.BinaryTree
 import com.socrata.soql.ast
