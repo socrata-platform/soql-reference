@@ -43,7 +43,7 @@ class TableFinderTest extends FunSuite with MustMatchers {
     def apply(err: tables.Result[Any]) =
       MatchResult(
         err match {
-          case tables.Error(SoQLAnalyzerError.TextualError(`scope`, _, _, SoQLAnalyzerError.TableFinderError.NotFound(nf))) =>
+          case Left(SoQLAnalyzerError.TextualError(`scope`, _, _, SoQLAnalyzerError.TableFinderError.NotFound(nf))) =>
             nf == name
           case _ =>
             false
@@ -59,7 +59,7 @@ class TableFinderTest extends FunSuite with MustMatchers {
     def apply(err: tables.Result[Any]) =
       MatchResult(
         err match {
-          case tables.Error(SoQLAnalyzerError.TextualError(_, _, _, SoQLAnalyzerError.TableFinderError.RecursiveQuery(path))) =>
+          case Left(SoQLAnalyzerError.TextualError(_, _, _, SoQLAnalyzerError.TableFinderError.RecursiveQuery(path))) =>
             path == names
           case _ =>
             false
@@ -117,7 +117,7 @@ class TableFinderTest extends FunSuite with MustMatchers {
 
   test("can rountdtrip a FoundTables through JSON") {
     def go(ft: tables.Result[FoundTables[Int, String]]): Unit = {
-      val orig = ft.asInstanceOf[tables.Success[FoundTables[Int, String]]].value
+      val orig = ft.toOption.get
       val jsonized = JsonEncode.toJValue(orig)
 
       // first, can bounce it through UnparsedFoundTables and get the same JSON back out
