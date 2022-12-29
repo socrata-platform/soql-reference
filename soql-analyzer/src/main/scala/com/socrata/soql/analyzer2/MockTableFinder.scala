@@ -240,7 +240,7 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
     }
   }
 
-  def apply(names: (RNS, String)*): Success[TableMap] = {
+  def apply(names: (RNS, String)*): Result[TableMap] = {
     val r = names.foldLeft(TableMap.empty[RNS, CT]) { (tableMap, scopeName) =>
       val (scope, n) = scopeName
       val name = ResourceName(n)
@@ -251,6 +251,6 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
       throw new Exception("Malformed table list")
     }
 
-    Success(r)
+    Right(r)
   }
 }

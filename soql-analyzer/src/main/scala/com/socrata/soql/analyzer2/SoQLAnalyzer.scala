@@ -1,8 +1,6 @@
 // TODO:
 //  * Errors
 //     - everything needs position info
-//  * More postprocessing passes in the SoQLAnalysis
-//     - provide_order(using_column: DatabaseTableName => DatabaseColumnName)
 
 package com.socrata.soql.analyzer2
 
@@ -37,11 +35,11 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
   type UdfParameters = Map[HoleName, Position => Expr[CT, CV]]
 
-  private case class Bail(result: SoQLAnalyzerError[RNS, SoQLAnalyzerError.AnalysisError]) extends Exception with NoStackTrace
+  private case class Bail(result: AnalysisError[RNS]) extends Exception with NoStackTrace
 
   private val Error = SoQLAnalyzerError.AnalysisError
 
-  def apply(start: FoundTables, userParameters: UserParameters): Either[SoQLAnalyzerError[RNS, SoQLAnalyzerError.AnalysisError], SoQLAnalysis[RNS, CT, CV]] = {
+  def apply(start: FoundTables, userParameters: UserParameters): Either[AnalysisError[RNS], SoQLAnalysis[RNS, CT, CV]] = {
     try {
       validateUserParameters(start.knownUserParameters, userParameters)
 

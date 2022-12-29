@@ -16,7 +16,7 @@ import mocktablefinder._
 class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
   test("alias analysis qualifiers are correct") {
     val tf = MockTableFinder.empty[Int, TestType]
-    val tf.Success(start) = tf.findTables(0, "select @bleh.whatever from @single_row", Map.empty)
+    val Right(start) = tf.findTables(0, "select @bleh.whatever from @single_row", Map.empty)
     analyzer(start, UserParameters.empty) match {
       case Right(_) => fail("Expected an error")
       case Left(SoQLAnalyzerError.TextualError(_, _, _, nsc: SoQLAnalyzerError.AnalysisError.TypecheckError.NoSuchColumn)) =>
