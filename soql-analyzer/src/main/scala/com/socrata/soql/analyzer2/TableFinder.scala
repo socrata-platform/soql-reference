@@ -20,7 +20,7 @@ trait TableFinder {
 
   /** The way in which `parse` can fail.
     */
-  type ParseError = SoQLAnalyzerError.TextualError[ResourceNameScope, SoQLAnalyzerError.ParserError]
+  type ParseError = ParserError[ResourceNameScope]
 
   /** The way in which saved queries are scoped.  This is nearly opaque
     * as far as TableFinder is concerned, requiring only that a tuple
@@ -102,7 +102,7 @@ trait TableFinder {
     case object PermissionDenied extends LookupError
   }
 
-  type Result[T] = Either[SoQLAnalyzerError.TextualError[ResourceNameScope, SoQLAnalyzerError.TableFinderError], T]
+  type Result[T] = Either[TableFinderError[ResourceNameScope], T]
 
   type TableMap = com.socrata.soql.analyzer2.TableMap[ResourceNameScope, ColumnType]
 

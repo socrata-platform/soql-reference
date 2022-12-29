@@ -18,7 +18,7 @@ class Typechecker[RNS, CT, CV](
   typeInfo: TypeInfo2[CT, CV],
   functionInfo: FunctionInfo[CT]
 ) {
-  type Error = SoQLAnalyzerError.TextualError[RNS, SoQLAnalyzerError.AnalysisError.TypecheckError]
+  type Error = TypecheckError[RNS]
   private val TypecheckError = SoQLAnalyzerError.AnalysisError.TypecheckError
   import TypecheckError._
 
