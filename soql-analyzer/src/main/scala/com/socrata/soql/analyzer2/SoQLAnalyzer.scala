@@ -37,9 +37,11 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
 
   type UdfParameters = Map[HoleName, Position => Expr[CT, CV]]
 
-  private case class Bail(result: SoQLAnalyzerError[RNS]) extends Exception with NoStackTrace
+  private case class Bail(result: SoQLAnalyzerError[RNS, SoQLAnalyzerError.AnalysisError]) extends Exception with NoStackTrace
 
-  def apply(start: FoundTables, userParameters: UserParameters): Either[SoQLAnalyzerError[RNS], SoQLAnalysis[RNS, CT, CV]] = {
+  private val Error = SoQLAnalyzerError.AnalysisError
+
+  def apply(start: FoundTables, userParameters: UserParameters): Either[SoQLAnalyzerError[RNS, SoQLAnalyzerError.AnalysisError], SoQLAnalysis[RNS, CT, CV]] = {
     try {
       validateUserParameters(start.knownUserParameters, userParameters)
 
@@ -169,7 +171,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         for(TableDescription.Ordering(col, _ascending) <- desc.ordering) {
           val typ = desc.schema(col).typ
           if(!typeInfo.isOrdered(typ)) {
-            throw Bail(SoQLAnalyzerError.UnorderedOrderBy(srn.scope, Some(desc.canonicalName), typeInfo.typeNameFor(typ), NoPosition))
+            throw Bail(SoQLAnalyzerError.TextualError(srn.scope, Some(desc.canonicalName), NoPosition, SoQLAnalyzerError.AnalysisError.UnorderedOrderBy(typeInfo.typeNameFor(typ))))
           }
         }
 
@@ -740,77 +742,77 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         }
       }
 
+      private def error(e: SoQLAnalyzerError.AnalysisError, pos: Position): Nothing =
+        throw Bail(SoQLAnalyzerError.TextualError(scope, canonicalName, pos, e))
+
       def expectedBoolean(expr: ast.Expression, got: CT): Nothing =
-        throw Bail(SoQLAnalyzerError.ExpectedBoolean(scope, canonicalName, typeInfo.typeNameFor(got), expr.position))
+        error(Error.ExpectedBoolean(typeInfo.typeNameFor(got)), expr.position)
       def incorrectNumberOfParameters(forUdf: ResourceName, expected: Int, got: Int, position: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.IncorrectNumberOfUdfParameters(scope, canonicalName, forUdf, expected, got, position))
+        error(Error.IncorrectNumberOfUdfParameters(forUdf, expected, got), position)
       def distinctOnMustBePrefixOfOrderBy(position: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.DistinctNotPrefixOfOrderBy(scope, canonicalName, position))
+        error(Error.DistinctNotPrefixOfOrderBy, position)
       def orderByMustBeSelected(position: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.OrderByMustBeSelectedWhenDistinct(scope, canonicalName, position))
+        error(Error.OrderByMustBeSelectedWhenDistinct, position)
       def invalidGroupBy(typ: CT, position: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.InvalidGroupBy(scope, canonicalName, typeInfo.typeNameFor(typ), position))
+        error(Error.InvalidGroupBy(typeInfo.typeNameFor(typ)), position)
       def unorderedOrderBy(typ: CT, position: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.UnorderedOrderBy(scope, canonicalName, typeInfo.typeNameFor(typ), position))
+        error(Error.UnorderedOrderBy(typeInfo.typeNameFor(typ)), position)
       def parametersForNonUdf(name: ResourceName, position: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.ParametersForNonUDF(scope, canonicalName, name, position))
+        error(Error.ParametersForNonUDF(name), position)
       def addScopeError(e: AddScopeError, position: Position): Nothing =
         e match {
           case AddScopeError.NameExists(n) =>
-            throw Bail(SoQLAnalyzerError.AliasAlreadyExists(scope, canonicalName, n, position))
+            error(Error.TableAliasAlreadyExists(n), position)
           case AddScopeError.MultipleImplicit =>
             // This shouldn't be able to occur from user input - the
             // grammar disallows it.
             throw new Exception("Multiple implicit tables??")
         }
       def noDataSource(position: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.FromRequired(scope, canonicalName, position))
+        error(Error.FromRequired, position)
       def chainWithFrom(position: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.FromForbidden(scope, canonicalName, position))
+        error(Error.FromForbidden, position)
       def fromThisWithoutContext(position: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.FromThisWithoutContext(scope, canonicalName, position))
+        error(Error.FromThisWithoutContext, position)
       def tableOpTypeMismatch(left: OrderedMap[ColumnName, CT], right: OrderedMap[ColumnName, CT], position: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.TableOperationTypeMismatch(scope, canonicalName, left.valuesIterator.map(typeInfo.typeNameFor).toVector, right.valuesIterator.map(typeInfo.typeNameFor).toVector, position))
+        error(Error.TableOperationTypeMismatch(left.valuesIterator.map(typeInfo.typeNameFor).toVector, right.valuesIterator.map(typeInfo.typeNameFor).toVector), position)
       def literalNotAllowedInGroupBy(pos: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.LiteralNotAllowedInGroupBy(scope, canonicalName, pos))
+        error(Error.LiteralNotAllowedInGroupBy, pos)
       def literalNotAllowedInOrderBy(pos: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.LiteralNotAllowedInOrderBy(scope, canonicalName, pos))
+        error(Error.LiteralNotAllowedInOrderBy, pos)
       def literalNotAllowedInDistinctOn(pos: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.LiteralNotAllowedInDistinctOn(scope, canonicalName, pos))
+        error(Error.LiteralNotAllowedInDistinctOn, pos)
       def aggregateFunctionNotAllowed(name: FunctionName, pos: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.AggregateFunctionNotAllowed(scope, canonicalName, name, pos))
+        error(Error.AggregateFunctionNotAllowed(name), pos)
       def ungroupedColumnReference(pos: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.UngroupedColumnReference(scope, canonicalName, pos))
+        error(Error.UngroupedColumnReference, pos)
       def windowFunctionNotAllowed(name: FunctionName, pos: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.WindowFunctionNotAllowed(scope, canonicalName, name, pos))
+        error(Error.WindowFunctionNotAllowed(name), pos)
       def reservedTableName(name: ResourceName, pos: Position): Nothing =
-        throw Bail(SoQLAnalyzerError.ReservedTableName(scope, canonicalName, name, pos))
+        error(Error.ReservedTableName(name), pos)
       def augmentAliasAnalysisException(aae: AliasAnalysisException): Nothing = {
         import com.socrata.soql.{exceptions => SE}
 
-        val rewritten =
-          aae match {
-            case SE.RepeatedException(name, pos) =>
-              SoQLAnalyzerError.AliasAnalysisError.RepeatedExclusion(scope, canonicalName, name, pos)
-            case SE.CircularAliasDefinition(name, pos) =>
-              SoQLAnalyzerError.AliasAnalysisError.CircularAliasDefinition(scope, canonicalName, name, pos)
-            case SE.DuplicateAlias(name, pos) =>
-              SoQLAnalyzerError.AliasAnalysisError.DuplicateAlias(scope, canonicalName, name, pos)
-            case nsc@SE.NoSuchColumn(name, pos) =>
-              val qual = nsc.asInstanceOf[SE.NoSuchColumn.RealNoSuchColumn].qualifier // ew
-              SoQLAnalyzerError.TypecheckError.NoSuchColumn(scope, canonicalName, qual.map(_.substring(1)).map(ResourceName(_)), name, pos)
-            case SE.NoSuchTable(_, _) =>
-              throw new Exception("Alias analysis doesn't actually throw NoSuchTable")
-          }
-
-        throw Bail(rewritten)
+        aae match {
+          case SE.RepeatedException(name, pos) =>
+            error(Error.AliasAnalysisError.RepeatedExclusion(name), pos)
+          case SE.CircularAliasDefinition(name, pos) =>
+            error(Error.AliasAnalysisError.CircularAliasDefinition(name), pos)
+          case SE.DuplicateAlias(name, pos) =>
+            error(Error.AliasAnalysisError.DuplicateAlias(name), pos)
+          case nsc@SE.NoSuchColumn(name, pos) =>
+            val qual = nsc.asInstanceOf[SE.NoSuchColumn.RealNoSuchColumn].qualifier // ew
+            error(Error.TypecheckError.NoSuchColumn(qual.map(_.substring(1)).map(ResourceName(_)), name), pos)
+          case SE.NoSuchTable(_, _) =>
+            throw new Exception("Alias analysis doesn't actually throw NoSuchTable")
+        }
       }
-      def augmentTypecheckException(tce: SoQLAnalyzerError.TypecheckError[RNS]): Nothing =
+      def augmentTypecheckException(tce: SoQLAnalyzerError.TextualError[RNS, Error.TypecheckError]): Nothing =
         throw Bail(tce)
     }
     def illegalThisReference(scope: RNS, canonicalName: Option[CanonicalName], position: Position): Nothing =
-      throw Bail(SoQLAnalyzerError.IllegalThisReference(scope, canonicalName, position))
+      throw Bail(SoQLAnalyzerError.TextualError(scope, canonicalName, position, Error.IllegalThisReference))
     def parameterlessTableFunction(scope: RNS, canonicalName: Option[CanonicalName], name: ResourceName, position: Position): Nothing =
-      throw Bail(SoQLAnalyzerError.ParameterlessTableFunction(scope, canonicalName, name, position))
+      throw Bail(SoQLAnalyzerError.TextualError(scope, canonicalName, position, Error.ParameterlessTableFunction(name)))
   }
 }

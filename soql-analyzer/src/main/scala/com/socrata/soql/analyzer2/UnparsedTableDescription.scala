@@ -87,7 +87,7 @@ object UnparsedTableDescription {
     private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]) =
       copy(scope = scopeMap(scope))
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
-      ParserUtil(soql, params.copy(allowHoles = false)).map { parsed =>
+      ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = false)).map { parsed =>
         TableDescription.Query(
           scope,
           canonicalName,
@@ -119,7 +119,7 @@ object UnparsedTableDescription {
       copy(scope = scopeMap(scope))
 
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
-      ParserUtil(soql, params.copy(allowHoles = true)).map { parsed =>
+      ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = true)).map { parsed =>
         TableDescription.TableFunction(
           scope,
           canonicalName,

@@ -18,13 +18,13 @@ class Typechecker[RNS, CT, CV](
   typeInfo: TypeInfo2[CT, CV],
   functionInfo: FunctionInfo[CT]
 ) {
-  type TypecheckError = SoQLAnalyzerError.TypecheckError[RNS]
-  private val TypecheckError = SoQLAnalyzerError.TypecheckError
+  type Error = SoQLAnalyzerError.TextualError[RNS, SoQLAnalyzerError.AnalysisError.TypecheckError]
+  private val TypecheckError = SoQLAnalyzerError.AnalysisError.TypecheckError
   import TypecheckError._
 
   private val funcallTypechecker = new FunctionCallTypechecker(typeInfo, functionInfo)
 
-  def apply(expr: ast.Expression, expectedType: Option[CT]): Either[TypecheckError, Expr[CT, CV]] =
+  def apply(expr: ast.Expression, expectedType: Option[CT]): Either[Error, Expr[CT, CV]] =
     try {
       Right(finalCheck(expr, expectedType))
     } catch {
@@ -32,7 +32,9 @@ class Typechecker[RNS, CT, CV](
         Left(e)
     }
 
-  private case class Bail(e: TypecheckError) extends Exception with NoStackTrace
+  private case class Bail(e: Error) extends Exception with NoStackTrace
+  private def error(e: SoQLAnalyzerError.AnalysisError.TypecheckError, p: Position): Error =
+    SoQLAnalyzerError.TextualError(scope, canonicalName, p, e)
 
   private def finalCheck(expr: ast.Expression, expectedType: Option[CT]): Expr[CT, CV] =
     check(expr).flatMap(disambiguate(_, expectedType, expr.position)) match {
@@ -44,17 +46,17 @@ class Typechecker[RNS, CT, CV](
     typeInfo.typeParameterUniverse.find(types).get
   }
 
-  private def disambiguate(exprs: Seq[Expr[CT, CV]], expectedType: Option[CT], pos: Position): Either[TypecheckError, Expr[CT, CV]] =
+  private def disambiguate(exprs: Seq[Expr[CT, CV]], expectedType: Option[CT], pos: Position): Either[Error, Expr[CT, CV]] =
     expectedType match {
       case Some(t) =>
         exprs.find(_.typ == t).toRight {
-          TypeMismatch(scope, canonicalName, Set(typeInfo.typeNameFor(t)), typeInfo.typeNameFor(mostPreferredType(exprs.iterator.map(_.typ).toSet)), pos)
+          error(TypeMismatch(Set(typeInfo.typeNameFor(t)), typeInfo.typeNameFor(mostPreferredType(exprs.iterator.map(_.typ).toSet))), pos)
         }
       case None =>
         Right(exprs.head)
     }
 
-  private def squash(exprs: Seq[Expr[CT, CV]], pos: Position): Either[TypecheckError, Seq[Expr[CT, CV]]] = {
+  private def squash(exprs: Seq[Expr[CT, CV]], pos: Position): Either[Error, Seq[Expr[CT, CV]]] = {
     var acc = OrderedMap.empty[CT, Expr[CT, CV]]
 
     for { e <- exprs } {
@@ -69,7 +71,7 @@ class Typechecker[RNS, CT, CV](
     Right(acc.valuesIterator.toSeq)
   }
 
-  private def check(expr: ast.Expression): Either[TypecheckError, Seq[Expr[CT, CV]]] = {
+  private def check(expr: ast.Expression): Either[Error, Seq[Expr[CT, CV]]] = {
     expr match {
       case ast.FunctionCall(ast.SpecialFunctions.Parens, Seq(param), None, None) =>
         check(param)
@@ -122,7 +124,7 @@ class Typechecker[RNS, CT, CV](
             Right(Seq(prechecked.reposition(col.position)))
           case None =>
             env.lookup(name) match {
-              case None => Left(NoSuchColumn(scope, canonicalName, None, name, col.position))
+              case None => Left(error(NoSuchColumn(None, name), col.position))
               case Some(Environment.LookupResult(table, column, typ)) =>
                 Right(Seq(Column(table, column, typ)(new AtomicPositionInfo(col.position))))
             }
@@ -130,7 +132,7 @@ class Typechecker[RNS, CT, CV](
       case col@ast.ColumnOrAliasRef(Some(qual), name) =>
         val trueQual = ResourceName(qual.substring(TableName.PrefixIndex))
         env.lookup(trueQual, name) match {
-          case None => Left(NoSuchColumn(scope, canonicalName, Some(trueQual), name, col.position))
+          case None => Left(error(NoSuchColumn(Some(trueQual), name), col.position))
           case Some(Environment.LookupResult(table, column, typ)) =>
             Right(Seq(Column(table, column, typ)(new AtomicPositionInfo(col.position))))
         }
@@ -139,7 +141,7 @@ class Typechecker[RNS, CT, CV](
       case hole@ast.Hole.UDF(name) =>
         udfParams.get(name) match {
           case Some(expr) => Right(Seq(expr(hole.position)))
-          case None => Left(UnknownUDFParameter(scope, canonicalName, name, hole.position))
+          case None => Left(error(UnknownUDFParameter(name), hole.position))
         }
       case hole@ast.Hole.SavedQuery(name, view) =>
         userParameter(view.map(CanonicalName), name, hole.position)
@@ -160,11 +162,11 @@ class Typechecker[RNS, CT, CV](
     paramSet.flatMap(_.get(name)) match {
       case Some(UserParameters.Null(t)) => Right(Seq(NullLiteral(t)(new AtomicPositionInfo(position, NoPosition))))
       case Some(UserParameters.Value(v)) => Right(Seq(LiteralValue(v)(new AtomicPositionInfo(position, NoPosition))(typeInfo.hasType)))
-      case None => Left(UnknownUserParameter(scope, canonicalName, canonicalView, name, position))
+      case None => Left(error(UnknownUserParameter(canonicalView, name), position))
     }
   }
 
-  private def checkFuncall(fc: ast.FunctionCall): Either[TypecheckError, Seq[Expr[CT, CV]]] = {
+  private def checkFuncall(fc: ast.FunctionCall): Either[Error, Seq[Expr[CT, CV]]] = {
     val ast.FunctionCall(name, parameters, filter, window) = fc
 
     val typedParameters = parameters.map(check).map {
@@ -183,7 +185,7 @@ class Typechecker[RNS, CT, CV](
     val options = functionInfo.functionsWithArity(name, typedParameters.length)
 
     if(options.isEmpty) {
-      return Left(NoSuchFunction(scope, canonicalName, name, typedParameters.length, fc.functionNamePosition))
+      return Left(error(NoSuchFunction(name, typedParameters.length), fc.functionNamePosition))
     }
 
     val (failed, resolved) = divide(funcallTypechecker.resolveOverload(options, typedParameters.map(_.map(_.typ).toSet))) {
@@ -193,7 +195,7 @@ class Typechecker[RNS, CT, CV](
 
     if(resolved.isEmpty) {
       val TypeMismatchFailure(expected, found, idx) = failed.maxBy(_.idx)
-      return Left(TypeMismatch(scope, canonicalName, expected.map(typeInfo.typeNameFor), typeInfo.typeNameFor(mostPreferredType(found)), parameters(idx).position))
+      return Left(error(TypeMismatch(expected.map(typeInfo.typeNameFor), typeInfo.typeNameFor(mostPreferredType(found))), parameters(idx).position))
     }
 
     val potentials = resolved.flatMap { f =>
@@ -220,15 +222,15 @@ class Typechecker[RNS, CT, CV](
         (typedFilter, typedWindow) match {
           case (Some(boolExpr), None) =>
             if(f.needsWindow) {
-              return Left(RequiresWindow(scope, canonicalName, fc.functionName, fc.functionNamePosition))
+              return Left(error(RequiresWindow(fc.functionName), fc.functionNamePosition))
             }
             if(!f.isAggregate && !f.needsWindow) {
-              return Left(NonAggregate(scope, canonicalName, fc.functionName, fc.functionNamePosition))
+              return Left(error(NonAggregate(fc.functionName), fc.functionNamePosition))
             }
             AggregateFunctionCall(f, params, false, Some(boolExpr))(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
           case (maybeFilter, Some((partitions, orderings, frames))) =>
             if(!f.needsWindow && !f.isAggregate) {
-              return Left(NonWindowFunction(scope, canonicalName, fc.functionName, fc.functionNamePosition))
+              return Left(error(NonWindowFunction(fc.functionName), fc.functionNamePosition))
             }
 
             // blearghhh ok so the parser does in fact parse this
@@ -306,13 +308,13 @@ class Typechecker[RNS, CT, CV](
               }
 
             if(parsedFrames.map(_.context) == FrameContext.Groups && orderings.isEmpty) {
-              return Left(GroupsRequiresOrderBy(scope, canonicalName, frames.head.position))
+              return Left(error(GroupsRequiresOrderBy, frames.head.position))
             }
 
             WindowedFunctionCall(f, params, maybeFilter, partitions, orderings, parsedFrames)(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
           case (None, None) =>
             if(f.needsWindow) {
-              return Left(RequiresWindow(scope, canonicalName, fc.functionName, fc.functionNamePosition))
+              return Left(error(RequiresWindow(fc.functionName), fc.functionNamePosition))
             }
             if(f.isAggregate) {
               AggregateFunctionCall(f, params, false, None)(new FuncallPositionInfo(fc.position, fc.functionNamePosition))

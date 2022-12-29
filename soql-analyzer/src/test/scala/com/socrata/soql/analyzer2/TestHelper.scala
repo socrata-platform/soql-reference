@@ -50,7 +50,7 @@ trait TestHelper { this: Assertions =>
   }
 
   class OnFail {
-    def onAnalyzerError(err: SoQLAnalyzerError[Int]): Nothing =
+    def onAnalyzerError(err: SoQLAnalyzerError[Int, SoQLAnalyzerError.AnalysisError]): Nothing =
       fail(err.toString)
 
     def onTableFinderError(err: TableFinder#Error): Nothing =

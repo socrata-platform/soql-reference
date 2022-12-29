@@ -19,7 +19,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val tf.Success(start) = tf.findTables(0, "select @bleh.whatever from @single_row", Map.empty)
     analyzer(start, UserParameters.empty) match {
       case Right(_) => fail("Expected an error")
-      case Left(nsc: SoQLAnalyzerError.TypecheckError.NoSuchColumn[_]) =>
+      case Left(SoQLAnalyzerError.TextualError(_, _, _, nsc: SoQLAnalyzerError.AnalysisError.TypecheckError.NoSuchColumn)) =>
         nsc.qualifier must be (Some(rn("bleh")))
         nsc.name must be (cn("whatever"))
       case Left(err) =>
@@ -798,9 +798,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
     expectFailure(0) {
       val analysis = analyze(tf, "aaaa-aaaa", "select distinct n1 order by n2")(new OnFail {
-        override def onAnalyzerError(e: SoQLAnalyzerError[Int]): Nothing = {
+        override def onAnalyzerError(e: SoQLAnalyzerError[Int, SoQLAnalyzerError.AnalysisError]): Nothing = {
           e match {
-            case SoQLAnalyzerError.OrderByMustBeSelectedWhenDistinct(_, _, _) =>
+            case SoQLAnalyzerError.TextualError(_, _, _, SoQLAnalyzerError.AnalysisError.OrderByMustBeSelectedWhenDistinct) =>
               expected(0)
             case _ =>
               super.onAnalyzerError(e)
