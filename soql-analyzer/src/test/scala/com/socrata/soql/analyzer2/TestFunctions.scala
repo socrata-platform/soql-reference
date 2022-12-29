@@ -36,6 +36,7 @@ object TestFunctions {
   val WindowFunction = mf("window_function", FunctionName("window_function"), Nil, Nil, TestNumber, needsWindow = true)
 
   val Sum = mf("sum", FunctionName("sum"), Seq(TestNumber), Nil, TestNumber, isAggregate = true)
+  val Max = mf("max", FunctionName("max"), Seq(TestNumber), Nil, TestNumber, isAggregate = true)
 
   val Count = f("count", FunctionName("count"), Map.empty, Seq(VariableType("a")), Nil, FixedType(TestNumber), isAggregate = true)
   val CountStar = f("count(*)", SpecialFunctions.StarFunc("count"), Map.empty, Nil, Nil, FixedType(TestNumber), isAggregate = true)
