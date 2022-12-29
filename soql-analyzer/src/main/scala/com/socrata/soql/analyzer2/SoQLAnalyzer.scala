@@ -1,8 +1,6 @@
 // TODO:
 //  * Errors
 //     - everything needs position info
-//  * More postprocessing passes in the SoQLAnalysis
-//     - provide_order(using_column: DatabaseTableName => DatabaseColumnName)
 
 package com.socrata.soql.analyzer2
 
