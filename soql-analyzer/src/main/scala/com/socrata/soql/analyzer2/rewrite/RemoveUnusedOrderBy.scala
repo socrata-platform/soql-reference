@@ -13,11 +13,6 @@ class RemoveUnusedOrderBy[RNS, CT, CV] private () {
   type FromSingleRow = analyzer2.FromSingleRow[RNS]
   type OrderBy = analyzer2.OrderBy[CT, CV]
 
-  // "wantOutputOrdered" == "if this statement can be rewritten to
-  // preserve the ordering of its underlying query, do so".
-  // "wantOrderingColumns" == "The caller needs column from this table
-  // to order itself".  Note that just because the caller wants a
-  // thing, it will not necessarily get it!
   def rewriteStatement(stmt: Statement, callerCaresAboutOrder: Boolean): Statement = {
     stmt match {
       case CombinedTables(op, left, right) =>
