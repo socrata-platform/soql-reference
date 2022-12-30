@@ -23,6 +23,21 @@ trait TestHelper { this: Assertions =>
   def tableFinder[RNS](items: ((RNS, String), Thing[RNS, TestType])*) = new MockTableFinder[RNS, TestType](items.toMap)
 
   val analyzer = new SoQLAnalyzer[Int, TestType, TestValue](TestTypeInfo, TestFunctionInfo)
+  val systemColumnPreservingAnalyzer = analyzer.preserveSystemColumns { (_, expr) =>
+    expr.typ match {
+      case TestNumber =>
+        Some(
+          AggregateFunctionCall(
+            TestFunctions.Max.monomorphic.get,
+            Seq(expr),
+            false,
+            None
+          )(FuncallPositionInfo.None)
+        )
+      case _ =>
+        None
+    }
+  }
 
   class IsomorphicToMatcher[RNS, CT, CV : HasDoc](right: Statement[RNS, CT, CV]) extends BeMatcher[Statement[RNS, CT, CV]] {
     def apply(left: Statement[RNS, CT, CV]) =

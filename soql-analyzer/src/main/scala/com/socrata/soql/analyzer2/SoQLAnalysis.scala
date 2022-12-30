@@ -25,14 +25,6 @@ class SoQLAnalysis[RNS, CT, CV] private (
     }
   }
 
-  def preserveSystemColumns(aggregate: Expr[CT, CV] => Option[Expr[CT, CV]]): SoQLAnalysis[RNS, CT, CV] = {
-    val nlp = labelProvider.clone()
-    copy(
-      labelProvider = nlp,
-      statement = rewrite.PreserveSystemColumns(nlp, statement, aggregate)
-    )
-  }
-
   /** Simplify subselects on a best-effort basis. */
   def merge(and: MonomorphicFunction[CT]): SoQLAnalysis[RNS, CT, CV] =
     copy(statement = new rewrite.Merger(and).merge(statement))

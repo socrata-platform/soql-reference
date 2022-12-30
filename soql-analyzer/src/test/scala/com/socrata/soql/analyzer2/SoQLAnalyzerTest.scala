@@ -809,4 +809,87 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       })
     }
   }
+
+  test("preserve system columns - simple") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
+    )
+
+    val foundTables = tf.findTables(0, rn("twocol"), "select text + text, num * 2", Map.empty).toOption.get
+    val analysis = systemColumnPreservingAnalyzer(foundTables, UserParameters.empty).toOption.get
+
+    val expectedAnalysis = analyze(tf, "twocol", "select text + text, num * 2, :id")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("preserve system columns - partially selected") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, ":version" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
+    )
+
+    val foundTables = tf.findTables(0, rn("twocol"), "select :id, text + text, num * 2", Map.empty).toOption.get
+    val analysis = systemColumnPreservingAnalyzer(foundTables, UserParameters.empty).toOption.get
+
+    val expectedAnalysis = analyze(tf, "twocol", "select :id, text + text, num * 2, :version")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("preserve system columns - distinct blocks") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, ":version" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
+    )
+
+    val foundTables = tf.findTables(0, rn("twocol"), "select distinct text + text, num * 2", Map.empty).toOption.get
+    val analysis = systemColumnPreservingAnalyzer(foundTables, UserParameters.empty).toOption.get
+
+    val expectedAnalysis = analyze(tf, "twocol", "select distinct text + text, num * 2")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("preserve system columns - table ops block") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, ":version" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
+    )
+
+    val foundTables = tf.findTables(0, rn("twocol"), "(select * |> select *) union (select * from @twocol |> select *)", Map.empty).toOption.get
+    val analysis = systemColumnPreservingAnalyzer(foundTables, UserParameters.empty).toOption.get
+
+    val expectedAnalysis = analyze(tf, "twocol", "(select *, :id, :version |> select *) union (select *, :id, :version from @twocol |> select *)")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("preserve system columns - aggregating") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
+    )
+
+    val foundTables = tf.findTables(0, rn("twocol"), "select text, count(*) group by text", Map.empty).toOption.get
+    val analysis = systemColumnPreservingAnalyzer(foundTables, UserParameters.empty).toOption.get
+
+    val expectedAnalysis = analyze(tf, "twocol", "select text, count(*), max(:id) group by text")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.statement.schema.find(_._2.name == cn(":id")) must not be empty
+  }
+
+  test("preserve system columns - udf") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber),
+      (0, "udf") -> U(0, "select num from @twocol where text = ?t", "t" -> TestText),
+      (0, "udf2") -> U(0, "select num, :id from @twocol where text = ?t", "t" -> TestText)
+    )
+
+    val foundTables = tf.findTables(0, "select @udf.:*, @udf.* from @single_row join @udf('hello') on true", Map.empty).toOption.get
+    val analysis = systemColumnPreservingAnalyzer(foundTables, UserParameters.empty).toOption.get
+
+    val expectedAnalysis = analyze(tf, "select @udf2.:id, @udf2.num from @single_row join @udf2('hello') on true")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.statement.schema.find(_._2.name == cn(":id")) must not be empty
+  }
+
 }
