@@ -25,7 +25,14 @@ object SoQLAnalyzer {
   private val SpecialNames = Set(This, SingleRow)
 }
 
-class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: FunctionInfo[CT]) {
+class SoQLAnalyzer[RNS, CT, CV] private (
+  typeInfo: TypeInfo2[CT, CV],
+  functionInfo: FunctionInfo[CT],
+  aggregateMerge: Option[(ColumnName, Expr[CT, CV]) => Option[Expr[CT, CV]]]
+) {
+  def this(typeInfo: TypeInfo2[CT, CV], functionInfo: FunctionInfo[CT]) =
+    this(typeInfo, functionInfo, None)
+
   type ScopedResourceName = com.socrata.soql.analyzer2.ScopedResourceName[RNS]
   type TableMap = com.socrata.soql.analyzer2.TableMap[RNS, CT]
   type FoundTables = com.socrata.soql.analyzer2.FoundTables[RNS, CT]
@@ -38,6 +45,12 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
   private case class Bail(result: AnalysisError[RNS]) extends Exception with NoStackTrace
 
   private val Error = SoQLAnalyzerError.AnalysisError
+
+  private def copy(aggregateMerge: Option[(ColumnName, Expr[CT, CV]) => Option[Expr[CT, CV]]] = aggregateMerge): SoQLAnalyzer[RNS, CT, CV] =
+    new SoQLAnalyzer(typeInfo, functionInfo, aggregateMerge)
+
+  def preserveSystemColumns(aggregateMerge: (ColumnName, Expr[CT, CV]) => Option[Expr[CT, CV]]): SoQLAnalyzer[RNS, CT, CV] =
+    copy(aggregateMerge = Some(aggregateMerge))
 
   def apply(start: FoundTables, userParameters: UserParameters): Either[AnalysisError[RNS], SoQLAnalysis[RNS, CT, CV]] = {
     try {
@@ -273,6 +286,53 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
         }
       }
 
+      def isSystemColumn(name: ColumnName) = name.name.startsWith(":")
+
+      @tailrec
+      final def findSystemColumns(from: From[RNS, CT, CV]): Iterable[(ColumnName, Column[CT])] =
+        from match {
+          case j: Join[RNS, CT, CV] => findSystemColumns(j.left)
+          case FromTable(_, _, _, tableLabel, columns) =>
+            columns.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>
+              name -> Column(tableLabel, colLabel, typ)(AtomicPositionInfo.None)
+            }
+          case FromStatement(stmt, tableLabel, _, _) =>
+            stmt.schema.iterator.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>
+              name -> Column(tableLabel, colLabel, typ)(AtomicPositionInfo.None)
+            }.toSeq
+          case FromSingleRow(_, _) =>
+            Nil
+        }
+
+
+      def attemptToPreserveSystemColumn(select: Select[RNS, CT, CV]): Select[RNS, CT, CV] =
+        aggregateMerge match {
+          case Some(aggregateMerger) =>
+            select.distinctiveness match {
+              case Distinctiveness.Indistinct | Distinctiveness.On(_) =>
+                val existingColumnNames = select.selectList.valuesIterator.map(_.name).to(Set)
+                val newSelectList = select.selectList ++ findSystemColumns(select.from).flatMap { case (name, column) =>
+                  if(existingColumnNames(name)) {
+                    None
+                  } else if(select.isAggregated) {
+                    aggregateMerger(name, column).map { newExpr =>
+                      labelProvider.columnLabel() -> NamedExpr(newExpr, name)
+                    }
+                  } else {
+                    Some(labelProvider.columnLabel() -> NamedExpr(column, name))
+                  }
+                }
+                select.copy(selectList = newSelectList)
+              case Distinctiveness.FullyDistinct =>
+                // adding unrequested system columns would change
+                // semantics on a fully distinct query, so don't
+                select
+            }
+          case None =>
+            // haven't been asked to preserve system columns
+            select
+        }
+
       def analyzeSelection(srn: Option[ScopedResourceName], select: ast.Select, from0: Option[AtomicFrom[RNS, CT, CV]], hiddenColumns: Set[ColumnName]): FromStatement[RNS, CT, CV] = {
         val ast.Select(
           distinct,
@@ -380,7 +440,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
             // all well
         }
 
-        val stmt = Select(
+        val stmt = attemptToPreserveSystemColumn(Select(
           checkedDistinct,
           OrderedMap() ++ aliasAnalysis.expressions.keysIterator.map { cn =>
             val expr = finalState.namedExprs(cn)
@@ -403,7 +463,7 @@ class SoQLAnalyzer[RNS, CT, CV](typeInfo: TypeInfo2[CT, CV], functionInfo: Funct
               case ast.RollupAtJoin(_) => SelectHint.RollupAtJoin
             }
           }.toSet
-        )
+        ))
 
         verifyAggregatesAndWindowFunctions(stmt)
 

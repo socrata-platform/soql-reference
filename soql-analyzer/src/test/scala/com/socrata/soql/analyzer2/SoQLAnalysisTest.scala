@@ -329,69 +329,6 @@ select count(*), 1 as x |> select x
     analysis.removeUnusedColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("preserve system columns - simple") {
-    val tf = tableFinder(
-      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
-    )
-
-    val analysis = analyze(tf, "twocol", "select text + text, num * 2")
-
-    val expectedAnalysis = analyze(tf, "twocol", "select text + text, num * 2, :id")
-
-    analysis.preserveSystemColumns(_ => None).statement must be (isomorphicTo(expectedAnalysis.statement))
-  }
-
-  test("preserve system columns - partially selected") {
-    val tf = tableFinder(
-      (0, "twocol") -> D(":id" -> TestNumber, ":version" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
-    )
-
-    val analysis = analyze(tf, "twocol", "select :id, text + text, num * 2")
-
-    val expectedAnalysis = analyze(tf, "twocol", "select :id, text + text, num * 2, :version")
-
-    analysis.preserveSystemColumns(_ => None).statement must be (isomorphicTo(expectedAnalysis.statement))
-  }
-
-  test("preserve system columns - distinct blocks") {
-    val tf = tableFinder(
-      (0, "twocol") -> D(":id" -> TestNumber, ":version" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
-    )
-
-    val analysis = analyze(tf, "twocol", "select distinct text + text, num * 2")
-
-    val expectedAnalysis = analyze(tf, "twocol", "select distinct text + text, num * 2")
-
-    analysis.preserveSystemColumns(_ => None).statement must be (isomorphicTo(expectedAnalysis.statement))
-  }
-
-  test("preserve system columns - aggregating") {
-    val tf = tableFinder(
-      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
-    )
-
-    val analysis = analyze(tf, "twocol", "select text, count(*) group by text")
-
-    val expectedAnalysis = analyze(tf, "twocol", "select text, count(*), max(:id) group by text")
-
-    def numberMerge(e: Expr[TestType, TestValue]) =
-      e.typ match {
-        case TestNumber =>
-          Some(
-            AggregateFunctionCall(
-              TestFunctions.Max.monomorphic.get,
-              Seq(e),
-              false,
-              None
-            )(FuncallPositionInfo.None)
-          )
-        case _ => None
-      }
-
-    analysis.preserveSystemColumns(numberMerge).statement must be (isomorphicTo(expectedAnalysis.statement))
-    analysis.preserveSystemColumns(numberMerge).statement.schema.find(_._2.name == cn(":id")) must not be empty
-  }
-
   test("simple (de)serialization") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
