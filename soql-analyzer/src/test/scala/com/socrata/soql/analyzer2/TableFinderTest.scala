@@ -1,8 +1,10 @@
 package com.socrata.soql.analyzer2
 
+import com.rojoma.json.v3.ast.JString
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode}
 import org.scalatest.FunSuite
 import org.scalatest.MustMatchers
+import org.scalatest.matchers.{BeMatcher, MatchResult}
 
 import com.socrata.soql.BinaryTree
 import com.socrata.soql.collection.OrderedMap
@@ -37,27 +39,56 @@ class TableFinderTest extends FunSuite with MustMatchers {
     )
   )
 
-  def notFound(scope: Int, name: String) =
-    tables.Error.NotFound(ScopedResourceName(scope, ResourceName(name)))
+  class NotFoundMatcher(scope: tables.ResourceNameScope, name: ResourceName) extends BeMatcher[tables.Result[Any]] {
+    def apply(err: tables.Result[Any]) =
+      MatchResult(
+        err match {
+          case Left(SoQLAnalyzerError.TextualError(`scope`, _, _, SoQLAnalyzerError.TableFinderError.NotFound(nf))) =>
+            nf == name
+          case _ =>
+            false
+        },
+        s"$err was not a not found error over ($scope, ${JString(name.name)})",
+        s"$err was a not found error over ($scope, ${JString(name.name)})"
+      )
+  }
+  def notFound(scope: tables.ResourceNameScope, name: String) =
+    new NotFoundMatcher(scope, ResourceName(name))
+
+  class RecursiveQueryMatcher[RNS](names: Seq[CanonicalName]) extends BeMatcher[tables.Result[Any]] {
+    def apply(err: tables.Result[Any]) =
+      MatchResult(
+        err match {
+          case Left(SoQLAnalyzerError.TextualError(_, _, _, SoQLAnalyzerError.TableFinderError.RecursiveQuery(path))) =>
+            path == names
+          case _ =>
+            false
+        },
+        s"$err was not a recursive query error over ${names.map{n => JString(n.name)}.mkString(",")}",
+        s"$err was a recursive query error over ${names.map{n => JString(n.name)}.mkString(",")}"
+      )
+  }
+  def recursiveQuery(names: String*) =
+    new RecursiveQueryMatcher(names.map(CanonicalName(_)))
 
   test("can find a table") {
     tables.findTables(0, "select * from @t1", Map.empty).map(_.tableMap) must equal (tables((0, "t1")))
   }
 
   test("will reject mutually recursive queries - context") {
-    tables.findTables(0, ResourceName("bad_one")) must equal (tables.Error.RecursiveQuery(List("bad_one","bad_two","bad_one").map(CanonicalName)))
+    tables.findTables(0, ResourceName("bad_one")) must be (recursiveQuery("bad_one","bad_two","bad_one"))
   }
 
   test("will reject mutually recursive queries - from") {
-    tables.findTables(0, ResourceName("bad_three")) must equal (tables.Error.RecursiveQuery(List("bad_three","bad_four","bad_three").map(CanonicalName)))
+    tables.findTables(0, ResourceName("bad_three")) must be (recursiveQuery("bad_three","bad_four","bad_three"))
   }
 
   test("will reject mutually recursive queries - mixed") {
-    tables.findTables(0, ResourceName("bad_five")) must equal (tables.Error.RecursiveQuery(List("bad_five","bad_six","bad_five").map(CanonicalName)))
+    tables.findTables(0, ResourceName("bad_five")) must be (recursiveQuery("bad_five","bad_six","bad_five"))
   }
 
   test("can fail to find a table") {
-    tables.findTables(0, "select * from @doesnt-exist", Map.empty).map(_.tableMap) must equal (notFound(0, "doesnt-exist"))
+    tables.findTables(0, "select * from @doesnt-exist", Map.empty).map(_.tableMap) must be (notFound(0, "doesnt-exist"))
   }
 
   test("can find a table implicitly") {
@@ -81,12 +112,12 @@ class TableFinderTest extends FunSuite with MustMatchers {
   }
 
   test("can fail to find a query in a different scope") {
-    tables.findTables(0, ResourceName("t1"), "select key, value join @t6 on @t6.key = key", Map.empty).map(_.tableMap) must equal (notFound(1, "t2"))
+    tables.findTables(0, ResourceName("t1"), "select key, value join @t6 on @t6.key = key", Map.empty).map(_.tableMap) must be (notFound(1, "t2"))
   }
 
   test("can rountdtrip a FoundTables through JSON") {
     def go(ft: tables.Result[FoundTables[Int, String]]): Unit = {
-      val orig = ft.asInstanceOf[tables.Success[FoundTables[Int, String]]].value
+      val orig = ft.toOption.get
       val jsonized = JsonEncode.toJValue(orig)
 
       // first, can bounce it through UnparsedFoundTables and get the same JSON back out

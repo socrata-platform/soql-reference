@@ -7,6 +7,7 @@ import scala.collection.immutable.VectorBuilder
 
 import com.socrata.soql.environment.{ColumnName, FunctionName, HoleName, TableName, TypeName}
 import com.socrata.prettyprint.prelude._
+import com.socrata.soql.parsing.RecursiveDescentParser
 
 sealed abstract class Expression extends Product {
   val position: Position
@@ -24,6 +25,8 @@ sealed abstract class Expression extends Product {
 
   def replaceHoles(f: Hole => Expression): Expression
   def collectHoles(f: PartialFunction[Hole, Expression]): Expression
+
+  def removeSyntacticParens: Expression
 
   def doc: Doc[Nothing]
 }
@@ -177,12 +180,14 @@ case class ColumnOrAliasRef(qualifier: Option[String], column: ColumnName)(val p
   def allColumnRefs = Set(this)
   def replaceHoles(f: Hole => Expression): this.type = this
   def collectHoles(f: PartialFunction[Hole, Expression]): this.type = this
+  def removeSyntacticParens: this.type = this
 }
 
 sealed abstract class Literal extends Expression {
   def allColumnRefs = Set.empty
   def replaceHoles(f: Hole => Expression): this.type = this
   def collectHoles(f: PartialFunction[Hole, Expression]): this.type = this
+  def removeSyntacticParens: this.type = this
 }
 case class NumberLiteral(value: BigDecimal)(val position: Position) extends Literal {
   def doc = Doc(value.toString)
@@ -198,6 +203,17 @@ case class NullLiteral()(val position: Position) extends Literal {
 }
 
 case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression], filter: Option[Expression] = None, window: Option[WindowFunctionInfo] = None)(val position: Position, val functionNamePosition: Position) extends Expression  {
+  def removeSyntacticParens =
+    if(functionName == SpecialFunctions.Parens) {
+      parameters(0).removeSyntacticParens
+    } else {
+      copy(
+        parameters = parameters.map(_.removeSyntacticParens),
+        filter = filter.map(_.removeSyntacticParens),
+        window = window.map(_.removeSyntacticParens)
+      )(position, functionNamePosition)
+    }
+
   private[ast] def variadizeAssociative(builder: VectorBuilder[Expression]): Unit = {
     require(parameters.length == 2)
     require(window.isEmpty)
@@ -226,6 +242,9 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
       case other => other.doc
     }
 
+  private def parenify(e: Expression) =
+    d"(" ++ e.doc ++ d")"
+
   private def functionDoc(funDoc: Doc[Nothing]): Doc[Nothing] = {
     if (filter.isEmpty && window.isEmpty) {
       funDoc
@@ -237,18 +256,47 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
     }
   }
 
-  def doc: Doc[Nothing] =
+  def doc: Doc[Nothing] = {
+    lazy val precLevel = RecursiveDescentParser.precedenceOf(this)
+
+    def opArg(op: Expression, parenLowerOnly: Boolean = false): Doc[Nothing] = {
+      op match {
+        case fc: FunctionCall =>
+          RecursiveDescentParser.precedenceOf(fc) match {
+            case Some(thatPrec) =>
+              precLevel match {
+                case Some(myPrec) =>
+                  // Both I and the argument have precedences at all,
+                  // so insert parens if appropriate.
+                  if(thatPrec < myPrec) {
+                    parenify(op)
+                  } else if(thatPrec == myPrec && !parenLowerOnly) {
+                    parenify(op)
+                  } else {
+                    maybeParens(op)
+                  }
+                case None =>
+                  maybeParens(op)
+              }
+            case None =>
+              maybeParens(op)
+          }
+        case _ =>
+          op.doc
+      }
+    }
+
     functionName match {
       case SpecialFunctions.Parens =>
         parameters(0).doc.enclose(d"(", d")")
       case SpecialFunctions.Subscript =>
-        parameters(0).doc ++ parameters(1).doc.enclose(d"[", d"]")
+        opArg(parameters(0), parenLowerOnly = true) ++ parameters(1).doc.enclose(d"[", d"]")
       case SpecialFunctions.StarFunc(f) =>
         functionDoc(d"$f(*)")
       case SpecialFunctions.Operator(op) if parameters.size == 1 =>
         op match {
           case "NOT" =>
-            d"NOT" +#+ parameters(0).doc
+            d"NOT" +#+ opArg(parameters(0))
           case _ =>
             // need to prevent "- -x" from formatting as "--x" but
             // otherwise we want the op to be right next to its
@@ -257,9 +305,9 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
             // there.
             parameters(0) match {
               case FunctionCall(SpecialFunctions.Operator(_), Seq(_), _, _) =>
-                Doc(op) +#+ parameters(0).doc
+                Doc(op) +#+ opArg(parameters(0), parenLowerOnly = true)
               case _ =>
-                Doc(op) ++ parameters(0).doc
+                Doc(op) ++ opArg(parameters(0), parenLowerOnly = true)
             }
         }
       case SpecialFunctions.Operator(op) if parameters.size == 2 =>
@@ -273,30 +321,35 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
             val builder = new VectorBuilder[Expression]
             variadizeAssociative(builder)
             val result = builder.result()
-            (maybeParens(result.head) +: result.drop(1).map { e => Doc(op) +#+ maybeParens(e) }).sep.hang(2)
+            // not higherOnly because of variadize hack
+            (opArg(result.head) +: result.drop(1).map { e => Doc(op) +#+ opArg(e) }).sep.hang(2)
           case _ =>
-            Seq(maybeParens(parameters(0)), Doc(op) +#+ maybeParens(parameters(1))).sep.hang(2)
+            val associativity = RecursiveDescentParser.associativityOf(this)
+            val isLeftAssoc = associativity == Some(RecursiveDescentParser.Associativity.Left)
+            val isRightAssoc = associativity == Some(RecursiveDescentParser.Associativity.Right)
+
+            Seq(opArg(parameters(0), parenLowerOnly = isLeftAssoc), Doc(op) +#+ opArg(parameters(1), parenLowerOnly = isRightAssoc)).sep.hang(2)
         }
       case SpecialFunctions.Operator(op) =>
         sys.error("Found a non-unary, non-binary operator: " + op + " at " + position)
       case SpecialFunctions.Cast(typ) if parameters.size == 1 =>
-        d"${parameters(0).doc} :: ${typ.toString}"
+        d"${opArg(parameters(0), parenLowerOnly = true)} :: ${typ.toString}"
       case SpecialFunctions.Between =>
-        Seq(parameters(0).doc, d"BETWEEN ${parameters(1).doc}", d"AND ${parameters(2).doc}").sep.hang(2)
+        Seq(opArg(parameters(0)), d"BETWEEN ${opArg(parameters(1))}", d"AND ${opArg(parameters(2))}").sep.hang(2)
       case SpecialFunctions.NotBetween =>
-        Seq(parameters(0).doc, d"NOT BETWEEN ${parameters(1).doc}", d"AND ${parameters(2).doc}").sep.hang(2)
+        Seq(opArg(parameters(0)), d"NOT BETWEEN ${opArg(parameters(1))}", d"AND ${opArg(parameters(2))}").sep.hang(2)
       case SpecialFunctions.IsNull =>
-        d"${parameters(0).doc} IS NULL"
+        d"${opArg(parameters(0))} IS NULL"
       case SpecialFunctions.IsNotNull =>
-        d"${parameters(0).doc} IS NOT NULL"
+        d"${opArg(parameters(0))} IS NOT NULL"
       case SpecialFunctions.In =>
-        parameters.iterator.drop(1).map(_.doc).to(LazyList).encloseNesting(d"${parameters(0).doc} IN (", Doc.Symbols.comma, d")").group
+        parameters.iterator.drop(1).map(_.doc).to(LazyList).encloseNesting(d"${opArg(parameters(0))} IN (", Doc.Symbols.comma, d")").group
       case SpecialFunctions.NotIn =>
-        parameters.iterator.drop(1).map(_.doc).to(LazyList).encloseNesting(d"${parameters(0).doc} NOT IN (", Doc.Symbols.comma, d")").group
+        parameters.iterator.drop(1).map(_.doc).to(LazyList).encloseNesting(d"${opArg(parameters(0))} NOT IN (", Doc.Symbols.comma, d")").group
       case SpecialFunctions.Like =>
-        d"${parameters(0).doc} LIKE ${parameters(1).doc}"
+        d"${opArg(parameters(0))} LIKE ${opArg(parameters(1))}"
       case SpecialFunctions.NotLike =>
-        d"${parameters(0).doc} NOT LIKE ${parameters(1).doc}"
+        d"${opArg(parameters(0))} NOT LIKE ${opArg(parameters(1))}"
       case SpecialFunctions.CountDistinct if parameters.length == 1 =>
         functionDoc(d"count(DISTINCT " ++ parameters(0).doc ++ d")")
       case SpecialFunctions.Case =>
@@ -322,6 +375,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
           functionDoc(funDoc)
         }
     }
+  }
 
   private implicit class Interspersable[T](xs: Seq[T]) {
     def intersperse(t: T): Seq[T] = {
@@ -354,6 +408,12 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
 }
 
 case class WindowFunctionInfo(partitions: Seq[Expression], orderings: Seq[OrderBy], frames: Seq[Expression]) {
+  def removeSyntacticParens =
+    WindowFunctionInfo(
+      partitions.map(_.removeSyntacticParens),
+      orderings.map(_.removeSyntacticParens),
+      frames.map(_.removeSyntacticParens)
+    )
 
   def doc: Doc[Nothing] = {
     val partitionDocs: Option[Doc[Nothing]] =
@@ -397,6 +457,7 @@ sealed abstract class Hole extends Expression {
   final def allColumnRefs = Set.empty
   final def replaceHoles(f: Hole => Expression) = f(this)
   final def collectHoles(f: PartialFunction[Hole, Expression]) = f.applyOrElse(this, Function.const(this))
+  final def removeSyntacticParens: this.type = this
 }
 
 object Hole {

@@ -248,6 +248,18 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
     a [NonGroupableGroupBy] must be thrownBy analyzer.analyzeFullQueryBinary("select array group by array")
   }
 
+  test("reject distinct on not in order by") {
+    a [DistinctOnNotPrefixOfOrderBy] must be thrownBy analyzer.analyzeFullQuery("SELECT DISTINCT ON(visits) name_first ORDER BY name_last")
+  }
+
+  test("accept order-by-less distinct") {
+    analyzer.analyzeFullQuery("SELECT DISTINCT ON(visits) name_first")
+  }
+
+  test("accept ordered distinct on") {
+    analyzer.analyzeFullQuery("SELECT DISTINCT ON(visits) name_first order by visits desc, name_first")
+  }
+
   test("Merging two simple filter queries is the same as querying one") {
     val analysis1 = analyzer.analyzeFullQueryBinary("select 2*visits as twice_visits where twice_visits > 10 |> select * where twice_visits > 20")
     val analysis2 = analyzer.analyzeFullQueryBinary("select 2*visits as twice_visits where twice_visits > 10 and twice_visits > 20")

@@ -110,6 +110,7 @@ object SoQLException {
       and("unorderable-order-by", AutomaticJsonCodecBuilder[UnorderableOrderBy]).
       and("unknown-parameter", AutomaticJsonCodecBuilder[UnknownParameter]).
       and("unrepresentable-parameter", AutomaticJsonCodecBuilder[UnrepresentableParameter]).
+      and("distinct-on-order-by", AutomaticJsonCodecBuilder[DistinctOnNotPrefixOfOrderBy]).
       // QueryOperationException
       and("right-side-of-chain-query-must-be-leaf", AutomaticJsonCodecBuilder[RightSideOfChainQueryMustBeLeaf]).
       build
@@ -223,6 +224,7 @@ case class NonBooleanHaving(typ: TypeName, position: Position) extends SoQLExcep
 case class UnorderableOrderBy(typ: TypeName, position: Position) extends SoQLException("Cannot order by an expression of type `" + typ + "'", position) with TypecheckException
 case class UnknownParameter(view: String, hole: String, position: Position) extends SoQLException("Unknown parameter " + JString(hole), position) with TypecheckException
 case class UnrepresentableParameter(typ: TypeName, position: Position) extends SoQLException("Unrepresentable parameter of type `" + typ + "'", position) with TypecheckException
+case class DistinctOnNotPrefixOfOrderBy(position: Position) extends SoQLException("DISTINCT ON expressions must match initial ORDER BY expressions", position) with TypecheckException
 
 sealed trait QueryOperationException extends SoQLException
 case class RightSideOfChainQueryMustBeLeaf(position: Position) extends SoQLException("Right side of a chain query must be a leaf query.", position) with QueryOperationException

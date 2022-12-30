@@ -7,6 +7,7 @@ import com.socrata.soql.tokens.*;
 %%
 
 %class AbstractLexer
+%public
 %abstract
 %type Token
 %unicode

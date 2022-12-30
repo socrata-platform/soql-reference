@@ -328,10 +328,6 @@ class ParserTest extends WordSpec with MustMatchers {
       x.toString must be ("SELECT DISTINCT `col1`, `col2`")
     }
 
-    "reject distinct on not in order by." in {
-      expectParseFullFailure("SELECT DISTINCT ON expressions must match initial ORDER BY expressions", "SELECT DISTINCT ON(col1) col2 ORDER BY col2")
-    }
-
     "select empty" in {
       val x = parseFull("select")
       val s = x.selection

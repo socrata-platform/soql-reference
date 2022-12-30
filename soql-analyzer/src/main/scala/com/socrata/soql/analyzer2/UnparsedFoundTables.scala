@@ -48,7 +48,7 @@ object UnparsedFoundTables {
   case class InContext[+CT](parent: ResourceName, soql: String, parameters: Map[HoleName, CT]) extends Query[CT] {
     private[analyzer2] type SoQL = String
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
-      ParserUtil(soql, params.copy(allowHoles = false)).map { tree =>
+      ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = false)).map { tree =>
         FoundTables.InContext(parent, tree, soql, parameters)
       }
   }
@@ -60,7 +60,7 @@ object UnparsedFoundTables {
   case class InContextImpersonatingSaved[+CT](parent: ResourceName, soql: String, parameters: Map[HoleName, CT], fake: CanonicalName) extends Query[CT] {
     private[analyzer2] type SoQL = String
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
-      ParserUtil(soql, params.copy(allowHoles = false)).map { tree =>
+      ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = false)).map { tree =>
         FoundTables.InContextImpersonatingSaved(parent, tree, soql, parameters, fake)
       }
   }
@@ -72,7 +72,7 @@ object UnparsedFoundTables {
   case class Standalone[+CT](soql: String, parameters: Map[HoleName, CT]) extends Query[CT] {
     private[analyzer2] type SoQL = String
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
-      ParserUtil(soql, params.copy(allowHoles = false)).map { tree =>
+      ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = false)).map { tree =>
         FoundTables.Standalone(tree, soql, parameters)
       }
   }

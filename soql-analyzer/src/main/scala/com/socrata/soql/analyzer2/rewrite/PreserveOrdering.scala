@@ -69,12 +69,21 @@ class PreserveOrdering[RNS, CT, CV] private (provider: LabelProvider) {
         // columns from the subquery onto the end of our order-by...
         val orderedSelf = select.copy(
           from = newFrom,
-          orderBy = orderBy ++ extraOrdering
+          // If we didn't request that the subquery be ordered, then
+          // we'll ignore any extra ordering info it returned to us.
+          // It _shouldn't_ ever do so in that case, but we'll guard
+          // it just in case, since it's required for correctness (in
+          // the face of aggregates and DISTINCT ON) that we not have
+          // the extra ordering.
+          orderBy = orderBy ++ (if(wantSubqueryOrdered) extraOrdering else Nil)
         )
         if(wantOrderingColumns) {
-          // ..and our caller wants to know how we're ordered, so
-          // make sure we've put the relevant expressions in our
-          // select list and return them.
+          // ..and our caller wants to know how we're ordered, so make
+          // sure we've put the relevant expressions in our select
+          // list and return them.  Note that if we're fully DISTINCT,
+          // any order-by clauses must already be in our select list,
+          // so they'll just get collected into outputInfo but we
+          // won't actually create any newColumns.
           val (newColumns, outputInfo) = orderedSelf.orderBy.map { case OrderBy(expr, asc, nullLast) =>
             selectList.find { case (label, NamedExpr(e, _)) => expr == e } match {
               case None =>

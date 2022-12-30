@@ -50,10 +50,10 @@ trait TestHelper { this: Assertions =>
   }
 
   class OnFail {
-    def onAnalyzerError(err: SoQLAnalyzerError[Int]): Nothing =
+    def onAnalyzerError(err: SoQLAnalyzerError[Int, SoQLAnalyzerError.AnalysisError]): Nothing =
       fail(err.toString)
 
-    def onTableFinderError(err: TableFinder#Error): Nothing =
+    def onTableFinderError(err: SoQLAnalyzerError[Int, SoQLAnalyzerError.TableFinderError]): Nothing =
       fail(err.toString)
   }
 
@@ -72,9 +72,9 @@ trait TestHelper { this: Assertions =>
 
   def analyzeSaved(tf: TF[TestType], ctx: String, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): SoQLAnalysis[Int, TestType, TestValue] = {
     tf.findTables(0, rn(ctx)) match {
-      case tf.Success(start) =>
+      case Right(start) =>
         finishAnalysis(start, params)(onFail)
-      case e: tf.Error =>
+      case Left(e) =>
         onFail.onTableFinderError(e)
     }
   }
@@ -85,18 +85,18 @@ trait TestHelper { this: Assertions =>
 
   def analyze(tf: TF[TestType], ctx: String, query: String, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): SoQLAnalysis[Int, TestType, TestValue] = {
     tf.findTables(0, rn(ctx), query, specFor(params.unqualified)) match {
-      case tf.Success(start) =>
+      case Right(start) =>
         finishAnalysis(start, params)(onFail)
-      case e: tf.Error =>
+      case Left(e) =>
         onFail.onTableFinderError(e)
     }
   }
 
   def analyze(tf: TF[TestType], ctx: String, query: String, canonicalName: CanonicalName, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): SoQLAnalysis[Int, TestType, TestValue] = {
     tf.findTables(0, rn(ctx), query, Map.empty, canonicalName) match {
-      case tf.Success(start) =>
+      case Right(start) =>
         finishAnalysis(start, params)(onFail)
-      case e: tf.Error =>
+      case Left(e) =>
         onFail.onTableFinderError(e)
     }
   }
@@ -107,9 +107,9 @@ trait TestHelper { this: Assertions =>
 
   def analyze(tf: TF[TestType], query: String, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): SoQLAnalysis[Int, TestType, TestValue] = {
     tf.findTables(0, query, specFor(params.unqualified)) match {
-      case tf.Success(start) =>
+      case Right(start) =>
         finishAnalysis(start, params)(onFail)
-      case e: tf.Error =>
+      case Left(e) =>
         onFail.onTableFinderError(e)
     }
   }

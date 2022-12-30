@@ -92,7 +92,7 @@ object LexerReader {
     DESC,
     FILTER,
 
-    // Presently unused keywords
+    // FROM-related keywords
     FROM,
     FULL,
     IN,
