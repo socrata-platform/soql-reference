@@ -121,14 +121,14 @@ class SoQLAnalyzer[RNS, CT, CV] private (
           case FoundTables.InContext(rn, q, _, parameters) =>
             val from = analyzeForFrom(ScopedResourceName(scope, rn), None, NoPosition)
             new Context(scope, None, Environment.empty, Map.empty).
-              analyzeStatement(None, q, Some(from), Set.empty)
+              analyzeStatement(None, q, Some(from), Set.empty, true)
           case FoundTables.InContextImpersonatingSaved(rn, q, _, parameters, impersonating) =>
             val from = analyzeForFrom(ScopedResourceName(scope, rn), None, NoPosition)
             new Context(scope, Some(impersonating), Environment.empty, Map.empty).
-              analyzeStatement(None, q, Some(from), Set.empty)
+              analyzeStatement(None, q, Some(from), Set.empty, true)
           case FoundTables.Standalone(q, _, parameters) =>
             new Context(scope, None, Environment.empty, Map.empty).
-              analyzeStatement(None, q, None, Set.empty)
+              analyzeStatement(None, q, None, Set.empty, true)
         }
       intoStatement(from)
     }
@@ -242,7 +242,7 @@ class SoQLAnalyzer[RNS, CT, CV] private (
             // so we want to use "basedOn" as the implicit "from" for "parsed"
             val from = analyzeForFrom(ScopedResourceName(scope, basedOn), None, NoPosition /* Yes, actually NoPosition here */)
             new Context(scope, Some(canonicalName), Environment.empty, Map.empty).
-              analyzeStatement(Some(name), parsed, Some(from), hiddenColumns)
+              analyzeStatement(Some(name), parsed, Some(from), hiddenColumns, true)
           case TableDescription.TableFunction(_, _, _, _, _, _) =>
             parameterlessTableFunction(name.scope, canonicalName, name.name, position)
         }
@@ -252,16 +252,16 @@ class SoQLAnalyzer[RNS, CT, CV] private (
     class Context(scope: RNS, canonicalName: Option[CanonicalName], enclosingEnv: Environment[CT], udfParams: UdfParameters) {
       private def withEnv(env: Environment[CT]) = new Context(scope, canonicalName, env, udfParams)
 
-      def analyzeStatement(srn: Option[ScopedResourceName], q: BinaryTree[ast.Select], from0: Option[AtomicFrom[RNS, CT, CV]], hiddenColumns: Set[ColumnName]): FromStatement[RNS, CT, CV] = {
+      def analyzeStatement(srn: Option[ScopedResourceName], q: BinaryTree[ast.Select], from0: Option[AtomicFrom[RNS, CT, CV]], hiddenColumns: Set[ColumnName], attemptToPreserveSystemColumns: Boolean): FromStatement[RNS, CT, CV] = {
         q match {
           case Leaf(select) =>
-            analyzeSelection(srn, select, from0, hiddenColumns)
+            analyzeSelection(srn, select, from0, hiddenColumns, attemptToPreserveSystemColumns = attemptToPreserveSystemColumns)
           case PipeQuery(left, right) =>
-            val newInput = analyzeStatement(None, left, from0, Set.empty)
-            analyzeStatement(srn, right, Some(newInput), hiddenColumns)
+            val newInput = analyzeStatement(None, left, from0, Set.empty, true)
+            analyzeStatement(srn, right, Some(newInput), hiddenColumns, attemptToPreserveSystemColumns)
           case other: TrueOp[ast.Select] =>
-            val lhs = intoStatement(analyzeStatement(None, other.left, from0, hiddenColumns))
-            val rhs = intoStatement(analyzeStatement(None, other.right, None, hiddenColumns))
+            val lhs = intoStatement(analyzeStatement(None, other.left, from0, hiddenColumns, attemptToPreserveSystemColumns = false))
+            val rhs = intoStatement(analyzeStatement(None, other.right, None, hiddenColumns, attemptToPreserveSystemColumns = false))
 
             if(lhs.schema.values.map(_.typ) != rhs.schema.values.map(_.typ)) {
               tableOpTypeMismatch(
@@ -305,9 +305,9 @@ class SoQLAnalyzer[RNS, CT, CV] private (
         }
 
 
-      def attemptToPreserveSystemColumn(select: Select[RNS, CT, CV]): Select[RNS, CT, CV] =
+      def addSystemColumnsIfDesired(select: Select[RNS, CT, CV], attemptToPreserveSystemColumns: Boolean): Select[RNS, CT, CV] =
         aggregateMerge match {
-          case Some(aggregateMerger) =>
+          case Some(aggregateMerger) if attemptToPreserveSystemColumns =>
             select.distinctiveness match {
               case Distinctiveness.Indistinct | Distinctiveness.On(_) =>
                 val existingColumnNames = select.selectList.valuesIterator.map(_.name).to(Set)
@@ -328,12 +328,12 @@ class SoQLAnalyzer[RNS, CT, CV] private (
                 // semantics on a fully distinct query, so don't
                 select
             }
-          case None =>
+          case _ =>
             // haven't been asked to preserve system columns
             select
         }
 
-      def analyzeSelection(srn: Option[ScopedResourceName], select: ast.Select, from0: Option[AtomicFrom[RNS, CT, CV]], hiddenColumns: Set[ColumnName]): FromStatement[RNS, CT, CV] = {
+      def analyzeSelection(srn: Option[ScopedResourceName], select: ast.Select, from0: Option[AtomicFrom[RNS, CT, CV]], hiddenColumns: Set[ColumnName], attemptToPreserveSystemColumns: Boolean): FromStatement[RNS, CT, CV] = {
         val ast.Select(
           distinct,
           selection,
@@ -440,7 +440,7 @@ class SoQLAnalyzer[RNS, CT, CV] private (
             // all well
         }
 
-        val stmt = attemptToPreserveSystemColumn(Select(
+        val stmt = addSystemColumnsIfDesired(Select(
           checkedDistinct,
           OrderedMap() ++ aliasAnalysis.expressions.keysIterator.map { cn =>
             val expr = finalState.namedExprs(cn)
@@ -463,7 +463,7 @@ class SoQLAnalyzer[RNS, CT, CV] private (
               case ast.RollupAtJoin(_) => SelectHint.RollupAtJoin
             }
           }.toSet
-        ))
+        ), attemptToPreserveSystemColumns = attemptToPreserveSystemColumns)
 
         verifyAggregatesAndWindowFunctions(stmt)
 
@@ -662,7 +662,7 @@ class SoQLAnalyzer[RNS, CT, CV] private (
           case ast.JoinQuery(select, rawAlias) =>
             val alias = rawAlias.substring(1)
             ensureLegalAlias(alias, NoPosition /* TODO: NEED POS INFO FROM AST */)
-            analyzeStatement(None, select, None, Set.empty).reAlias(Some(ResourceName(alias)))
+            analyzeStatement(None, select, None, Set.empty, true).reAlias(Some(ResourceName(alias)))
           case ast.JoinFunc(tn, params) =>
             tn.aliasWithoutPrefix.foreach(ensureLegalAlias(_, NoPosition /* TODO: NEED POS INFO FROM AST */))
             analyzeUDF(ResourceName(tn.nameWithoutPrefix), params).
@@ -707,7 +707,7 @@ class SoQLAnalyzer[RNS, CT, CV] private (
 
                 val useQuery =
                   new Context(udfScope, Some(udfCanonicalName), Environment.empty, innerUdfParams)
-                    .analyzeStatement(None, parsed, None, hiddenColumns)
+                    .analyzeStatement(None, parsed, None, hiddenColumns, true)
 
                 FromStatement(
                   Select(
@@ -741,7 +741,7 @@ class SoQLAnalyzer[RNS, CT, CV] private (
                 // expand the UDF without introducing a layer of
                 // additional joining.
                 new Context(udfScope, Some(udfCanonicalName), Environment.empty, Map.empty)
-                  .analyzeStatement(Some(srn), parsed, None, hiddenColumns)
+                  .analyzeStatement(Some(srn), parsed, None, hiddenColumns, true)
             }
           case _ =>
             // Non-UDF

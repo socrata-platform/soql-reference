@@ -849,6 +849,19 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("preserve system columns - table ops block") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, ":version" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
+    )
+
+    val foundTables = tf.findTables(0, rn("twocol"), "(select * |> select *) union (select * from @twocol |> select *)", Map.empty).toOption.get
+    val analysis = systemColumnPreservingAnalyzer(foundTables, UserParameters.empty).toOption.get
+
+    val expectedAnalysis = analyze(tf, "twocol", "(select *, :id, :version |> select *) union (select *, :id, :version from @twocol |> select *)")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
   test("preserve system columns - aggregating") {
     val tf = tableFinder(
       (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
