@@ -876,4 +876,20 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement.schema.find(_._2.name == cn(":id")) must not be empty
   }
 
+  test("preserve system columns - udf") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber),
+      (0, "udf") -> U(0, "select num from @twocol where text = ?t", "t" -> TestText),
+      (0, "udf2") -> U(0, "select num, :id from @twocol where text = ?t", "t" -> TestText)
+    )
+
+    val foundTables = tf.findTables(0, "select @udf.:*, @udf.* from @single_row join @udf('hello') on true", Map.empty).toOption.get
+    val analysis = systemColumnPreservingAnalyzer(foundTables, UserParameters.empty).toOption.get
+
+    val expectedAnalysis = analyze(tf, "select @udf2.:id, @udf2.num from @single_row join @udf2('hello') on true")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.statement.schema.find(_._2.name == cn(":id")) must not be empty
+  }
+
 }
