@@ -795,12 +795,12 @@ class SoQLAnalyzer[RNS, CT, CV] private (
       }
     }
 
-    def analyzeUDF(ctx: Ctx, resource: ResourceName, params: Seq[ast.Expression]): AtomicFrom[RNS, CT, CV] = {
-      val srn = ScopedResourceName(ctx.scope, resource)
+    def analyzeUDF(callerCtx: Ctx, resource: ResourceName, params: Seq[ast.Expression]): AtomicFrom[RNS, CT, CV] = {
+      val srn = ScopedResourceName(callerCtx.scope, resource)
       tableMap.find(srn) match {
         case TableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs, hiddenColumns) =>
           if(params.length != paramSpecs.size) {
-            ctx.incorrectNumberOfParameters(resource, expected = params.length, got = paramSpecs.size, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
+            callerCtx.incorrectNumberOfParameters(resource, expected = params.length, got = paramSpecs.size, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
           }
           // we're rewriting the UDF from
           //    @bleh(x, y, z)
@@ -811,7 +811,7 @@ class SoQLAnalyzer[RNS, CT, CV] private (
 
           val typecheckedParams =
             OrderedMap() ++ params.lazyZip(paramSpecs).map { case (expr, (name, typ)) =>
-              name -> typecheck(ctx, expr, Map.empty, Some(typ))
+              name -> typecheck(callerCtx, expr, Map.empty, Some(typ))
             }
 
           NonEmptySeq.fromSeq(typecheckedParams.values.toVector) match {
@@ -830,7 +830,7 @@ class SoQLAnalyzer[RNS, CT, CV] private (
                 enclosingEnv = Environment.empty,
                 udfParams = innerUdfParams,
                 hiddenColumns = hiddenColumns,
-                attemptToPreserveSystemColumns = ctx.attemptToPreserveSystemColumns
+                attemptToPreserveSystemColumns = callerCtx.attemptToPreserveSystemColumns
               )
 
               val useQuery = analyzeStatement(udfCtx, parsed, None)
@@ -873,14 +873,14 @@ class SoQLAnalyzer[RNS, CT, CV] private (
                 enclosingEnv = Environment.empty,
                 udfParams = Map.empty,
                 hiddenColumns = hiddenColumns,
-                attemptToPreserveSystemColumns = ctx.attemptToPreserveSystemColumns
+                attemptToPreserveSystemColumns = callerCtx.attemptToPreserveSystemColumns
               )
 
               analyzeStatement(udfCtx, parsed, None)
           }
         case _ =>
           // Non-UDF
-          ctx.parametersForNonUdf(resource, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
+          callerCtx.parametersForNonUdf(resource, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
       }
     }
 
