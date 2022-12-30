@@ -899,12 +899,21 @@ class SoQLAnalyzer[RNS, CT, CV] private (
 
     def verifyAggregatesAndWindowFunctions(ctx: Ctx, stmt: Select[RNS, CT, CV]): Unit = {
       val isAggregated = stmt.isAggregated
-      for(w <- stmt.where) verifyAggregatesAndWindowFunctions(VerifyCtx(ctx, allowAggregates = false, allowWindow = false, groupBys = Set.empty), w)
-      for(gb <- stmt.groupBy) verifyAggregatesAndWindowFunctions(VerifyCtx(ctx, allowAggregates = false, allowWindow = false, groupBys = Set.empty), gb)
       val groupBys = stmt.groupBy.toSet
-      for(h <- stmt.having) verifyAggregatesAndWindowFunctions(VerifyCtx(ctx, allowAggregates = true, allowWindow = false, groupBys = groupBys), h)
-      for(ob <- stmt.orderBy) verifyAggregatesAndWindowFunctions(VerifyCtx(ctx, allowAggregates = isAggregated, allowWindow = true, groupBys = groupBys), ob.expr)
-      for((_, s) <- stmt.selectList) verifyAggregatesAndWindowFunctions(VerifyCtx(ctx, allowAggregates = isAggregated, allowWindow = true, groupBys = groupBys), s.expr)
+
+      val preGroupCtx = VerifyCtx(ctx, allowAggregates = false, allowWindow = false, groupBys = Set.empty)
+      val havingCtx = VerifyCtx(ctx, allowAggregates = true, allowWindow = false, groupBys = groupBys)
+      val postHavingCtx = VerifyCtx(ctx, allowAggregates = isAggregated, allowWindow = true, groupBys = groupBys)
+
+      stmt.from.reduce[Unit](
+        { _ => () },
+        { (_, join) => verifyAggregatesAndWindowFunctions(preGroupCtx, join.on) }
+      )
+      for(w <- stmt.where) verifyAggregatesAndWindowFunctions(preGroupCtx, w)
+      for(gb <- stmt.groupBy) verifyAggregatesAndWindowFunctions(preGroupCtx, gb)
+      for(h <- stmt.having) verifyAggregatesAndWindowFunctions(havingCtx, h)
+      for(ob <- stmt.orderBy) verifyAggregatesAndWindowFunctions(postHavingCtx, ob.expr)
+      for((_, s) <- stmt.selectList) verifyAggregatesAndWindowFunctions(postHavingCtx, s.expr)
     }
     case class VerifyCtx(ctx: Ctx, allowAggregates: Boolean, allowWindow: Boolean, groupBys: Set[Expr[CT, CV]])
     def verifyAggregatesAndWindowFunctions(ctx: VerifyCtx, e: Expr[CT, CV]): Unit = {
