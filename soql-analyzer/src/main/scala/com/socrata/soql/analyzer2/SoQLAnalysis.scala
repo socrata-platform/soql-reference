@@ -35,6 +35,9 @@ class SoQLAnalysis[RNS, CT, CV] private (
       self.copy(statement = rewrite.RemoveUnusedColumns(self.statement))
     }
 
+  def removeUnusedOrderBy: SoQLAnalysis[RNS, CT, CV] =
+    copy(statement = rewrite.RemoveUnusedOrderBy(statement))
+
   /** Rewrite expressions in group/order/distinct clauses which are
     * identical to expressions in the select list to use select-list
     * indexes instead. */

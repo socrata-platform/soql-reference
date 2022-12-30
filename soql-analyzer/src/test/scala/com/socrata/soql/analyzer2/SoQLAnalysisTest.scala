@@ -329,6 +329,72 @@ select count(*), 1 as x |> select x
     analysis.removeUnusedColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("remove unused order by - preserve top-level ordering") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num order by text")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num order by text")
+
+    analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("remove unused order by - remove trivially unused intermediate ordering") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num order by text |> select text, num order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num |> select text, num order by num")
+
+    analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("remove unused order by - keep ordering when there's a window function involved") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num, window_function() over () order by text |> select text, num order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num, window_function() over () order by text |> select text, num order by num")
+
+    analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("remove unused order by - keep ordering when there's a limit involved") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num order by text limit 5 |> select text, num order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num order by text limit 5 |> select text, num order by num")
+
+    analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("remove unused order by - keep ordering when there's an offset involved") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num order by text offset 5 |> select text, num order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num order by text offset 5 |> select text, num order by num")
+
+    analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("preserve ordering + remove unused order by - keep ordering only at the top level") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num order by text |> select text, num order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num |> select text, num order by num, text")
+
+    analysis.preserveOrdering.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
   test("simple (de)serialization") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
