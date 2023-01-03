@@ -315,6 +315,41 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
   }
 
+  test("distinct on - ignores permutations") {
+    val tf = tableFinder(
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    analyze(tf, "aaaa-aaaa", "select distinct on (text, num) 5 order by num, text")
+    // didn't throw an exception, good
+  }
+
+  test("distinct on - requires prefix match") {
+    val tf = tableFinder(
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    expectFailure(0) {
+      analyze(tf, "aaaa-aaaa", "select distinct on (text, num) 5 order by num, num*2, text")(new OnFail {
+        override def onAnalyzerError(e: AnalysisError[Int]): Nothing = {
+          e match {
+            case SoQLAnalyzerError.TextualError(_, _, _, SoQLAnalyzerError.AnalysisError.DistinctNotPrefixOfOrderBy) =>
+              expected(0)
+            case _ =>
+              super.onAnalyzerError(e)
+          }
+        }
+      })
+    }
+  }
+
+  test("distinct on - allows extra order bys") {
+    val tf = tableFinder(
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    analyze(tf, "aaaa-aaaa", "select distinct on (text, num) 5 order by num, text, num*2")
+  }
+
   test("UDF - simple") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber),

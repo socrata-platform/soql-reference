@@ -529,17 +529,25 @@ class SoQLAnalyzer[RNS, CT, CV] private (
 
       checkedDistinct match {
         case Distinctiveness.On(exprs) =>
-          if(checkedOrderBys.nonEmpty){
-            if(!checkedOrderBys.map(_.expr).startsWith(exprs)) {
-              ctx.distinctOnMustBePrefixOfOrderBy(NoPosition /* TODO: NEED POS INFO FROM AST */)
+          for(expr <- exprs) {
+            if(!typeInfo.isOrdered(expr.typ)) {
+              ctx.unorderedOrderBy(expr.typ, expr.position.logicalPosition)
             }
-          } else { // distinct on without an order by implicitly orders by the distinct columns
-            for(expr <- exprs) {
-              if(!typeInfo.isOrdered(expr.typ)) {
-                ctx.unorderedOrderBy(expr.typ, expr.position.logicalPosition)
+          }
+
+          // Ok, so this is a little subtle.  ORDER BY clauses must
+          // come from the distinct list until that's exhausted...
+          @tailrec
+          def loop(distinctExprs: Set[Expr[CT, CV]], remainingDistinctExprs: Set[Expr[CT, CV]], orderBy: LazyList[Expr[CT, CV]]): Unit = {
+            if(remainingDistinctExprs.nonEmpty && orderBy.nonEmpty) {
+              if(distinctExprs(orderBy.head)) {
+                loop(distinctExprs, remainingDistinctExprs - orderBy.head, orderBy.tail)
+              } else {
+                ctx.distinctOnMustBePrefixOfOrderBy(orderBy.head.position.logicalPosition)
               }
             }
           }
+          loop(exprs.to(Set), exprs.to(Set), checkedOrderBys.to(LazyList).map(_.expr))
         case Distinctiveness.FullyDistinct =>
           for(missingOb <- checkedOrderBys.find { ob => !finalState.namedExprs.values.exists(_ == ob.expr) }) {
             ctx.orderByMustBeSelected(missingOb.expr.position.logicalPosition)
