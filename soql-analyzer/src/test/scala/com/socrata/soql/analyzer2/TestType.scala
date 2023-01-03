@@ -63,8 +63,11 @@ object TestValue {
         case TestNumber(n) =>
           buffer.write(2)
           buffer.write(n)
-        case TestNull =>
+        case TestUnorderable(s) =>
           buffer.write(3)
+          buffer.write(s)
+        case TestNull =>
+          buffer.write(4)
       }
     }
 
@@ -73,7 +76,8 @@ object TestValue {
         case 0 => TestText(buffer.read[String]())
         case 1 => TestBoolean(buffer.read[Boolean]())
         case 2 => TestNumber(buffer.read[Int]())
-        case 3 => TestNull
+        case 3 => TestUnorderable(buffer.read[String]())
+        case 4 => TestNull
         case other => fail("Unknown value tag " + other)
       }
     }
@@ -101,6 +105,12 @@ case class TestNumber(num: Int) extends TestValue {
   def doc = Doc(num)
 }
 object TestNumber extends TestType("number", isOrdered = true)
+
+case class TestUnorderable(value: String) extends TestValue {
+  def typ = TestUnorderable
+  def doc = Doc(JString(value).toString)
+}
+object TestUnorderable extends TestType("unorderable", isOrdered = false)
 
 case object TestNull extends TestType("null", isOrdered = false) with TestValue {
   override def isPassableTo(that: TestType) = true

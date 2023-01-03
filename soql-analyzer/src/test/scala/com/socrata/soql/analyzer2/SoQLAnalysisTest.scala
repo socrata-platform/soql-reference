@@ -395,6 +395,65 @@ select count(*), 1 as x |> select x
     analysis.preserveOrdering.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("impose ordering - partial distinct on") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select distinct on (text, num*2) text, num order by text desc")
+    val expectedAnalysis = analyze(tf, "twocol", "select distinct on (text, num*2) text, num order by text desc, num*2, num")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - non-distinct order by") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select distinct on (text) text, num order by text, num*3 desc")
+    val expectedAnalysis = analyze(tf, "twocol", "select distinct on (text) text, num order by text, num*3 desc, num")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - indistinct") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num*2 order by text, num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num*2 order by text, num, num*2")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - union") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "altcol") -> D("words" -> TestText, "digits" -> TestNumber),
+      // Can't put a subselect in initial-FROM position in soql
+      // directly, so we need a saved query to use for that
+      (0, "union") -> Q(0, "twocol", "select * union select * from @altcol")
+    )
+
+    val analysis = analyze(tf, "twocol", "select * union select * from @altcol")
+    val expectedAnalysis = analyze(tf, "union", "select * order by text, num")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - unorderable") {
+    val tf = tableFinder(
+      (0, "threecol") -> D("text" -> TestText, "num" -> TestNumber, "another_text" -> TestUnorderable)
+    )
+
+    val analysis = analyze(tf, "threecol", "select *")
+    val expectedAnalysis = analyze(tf, "threecol", "select * order by text, num")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
   test("simple (de)serialization") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
