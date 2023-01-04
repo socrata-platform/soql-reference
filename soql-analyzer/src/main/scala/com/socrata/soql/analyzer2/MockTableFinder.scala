@@ -16,11 +16,13 @@ sealed abstract class Thing[+RNS, +CT]
 case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT] {
   private var orderings_ : List[(String, Boolean)] = Nil
   private var hiddenColumns_ : Set[ColumnName] = Set.empty
+  private var primaryKeys_ : List[Seq[ColumnName]] = Nil
 
   def withOrdering(column: String, ascending: Boolean = true): D[CT] = {
     val result = D(schema : _*)
     result.orderings_ = (column, ascending) :: orderings_
     result.hiddenColumns_ = hiddenColumns_
+    result.primaryKeys_ = primaryKeys_
     result
   }
   def orderings: Seq[(String, Boolean)] = orderings_.reverse
@@ -29,9 +31,19 @@ case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT] {
     val result = D(schema : _*)
     result.orderings_ = orderings_
     result.hiddenColumns_ = hiddenColumns_ ++ column.iterator.map(ColumnName(_))
+    result.primaryKeys_ = primaryKeys_
     result
   }
   def hiddenColumns = hiddenColumns_
+
+  def withPrimaryKey(column: String*): D[CT] = {
+    val result = D(schema : _*)
+    result.orderings_ = orderings_
+    result.hiddenColumns_ = hiddenColumns_
+    result.primaryKeys_ = column.map(ColumnName(_)) :: primaryKeys_
+    result
+  }
+  def primaryKeys = primaryKeys_.reverse
 }
 case class Q[+RNS, +CT](scope: RNS, parent: String, soql: String, params: (String, CT)*) extends Thing[RNS, CT] {
   private var canonicalName_ : Option[String] = None
@@ -81,7 +93,7 @@ object MockTableFinder {
   def apply[RNS, CT](items: UnparsedFoundTables[RNS, CT]) = UnparsedTableMap.asMockTableFinder(items.tableMap)
 
   private sealed abstract class JThing[+RNS, +CT]
-  private case class JD[+CT](schema: Seq[(String, CT)], orderings: Option[Seq[(String, Boolean)]], hiddenColumns: Option[Seq[String]]) extends JThing[Nothing, CT]
+  private case class JD[+CT](schema: Seq[(String, CT)], orderings: Option[Seq[(String, Boolean)]], hiddenColumns: Option[Seq[String]], primaryKeys: Option[Seq[Seq[String]]]) extends JThing[Nothing, CT]
   private case class JQ[+RNS,+CT](scope: Option[RNS], parent: String, soql: String, params: Map[String, CT], canonicalName: Option[String], hiddenColumns: Option[Seq[String]]) extends JThing[RNS, CT]
   private case class JU[+RNS,+CT](scope: Option[RNS], soql: String, params: Seq[(String, CT)], canonicalName: Option[String], hiddenColumns: Option[Seq[String]]) extends JThing[RNS, CT]
 
@@ -104,10 +116,12 @@ object MockTableFinder {
             m.iterator.flatMap { case (rns, jthings) =>
               jthings.map { case (name, jthing) =>
                 val thing = jthing match {
-                  case JD(schema, orderings, hiddenColumns) =>
-                    orderings.getOrElse(Nil).foldLeft(D(schema : _*)) { (d, orderDir) =>
-                      d.withOrdering(orderDir._1, orderDir._2)
-                    }.withHiddenColumns(hiddenColumns.getOrElse(Nil) : _*)
+                  case JD(schema, orderings, hiddenColumns, pks) =>
+                    pks.getOrElse(Nil).foldLeft(
+                      orderings.getOrElse(Nil).foldLeft(D(schema : _*)) { (d, orderDir) =>
+                        d.withOrdering(orderDir._1, orderDir._2)
+                      }.withHiddenColumns(hiddenColumns.getOrElse(Nil) : _*)
+                    ) { (dataset, pk) => dataset.withPrimaryKey(pk: _*) }
                   case JQ(scopeOpt, parent, soql, params, cname, hiddenColumns) =>
                     val result = Q(scopeOpt.getOrElse(rns), parent, soql, params.toSeq : _*)
                     cname.fold(result)(result.withCanonicalName).withHiddenColumns(hiddenColumns.getOrElse(Nil) : _*)
@@ -148,7 +162,8 @@ object MockTableFinder {
                       JD(
                         schema,
                         Some(d.orderings).filter(_.nonEmpty),
-                        Some(d.hiddenColumns.map(_.name).toSeq).filter(_.nonEmpty)
+                        Some(d.hiddenColumns.map(_.name).toSeq).filter(_.nonEmpty),
+                        Some(d.primaryKeys.map(_.map(_.name))).filter(_.nonEmpty)
                       )
                     case q@Q(scope, parent, soql, params@_*) =>
                       JQ(
@@ -188,7 +203,8 @@ class MockTableFinder[RNS, CT](private val raw: Map[(RNS, String), Thing[RNS, CT
             val cn = ColumnName(rawColumnName)
             cn -> DatasetColumnInfo(ct, hidden = d.hiddenColumns(cn))
           },
-          d.orderings.map { case (col, asc) => Ordering(ColumnName(col), asc) }
+          d.orderings.map { case (col, asc) => Ordering(ColumnName(col), asc) },
+          d.primaryKeys
         )
       case q@Q(scope, parent, soql, params @ _*) =>
         Query(

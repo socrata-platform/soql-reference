@@ -1,5 +1,7 @@
 package com.socrata.soql.analyzer2.statement
 
+import scala.collection.compat.immutable.LazyList
+
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
@@ -13,9 +15,13 @@ import DocUtils._
 
 trait CombinedTablesImpl[+RNS, +CT, +CV] { this: CombinedTables[RNS, CT, CV] =>
   type Self[+RNS, +CT, +CV] = CombinedTables[RNS, CT, CV]
+
   def asSelf = this
 
   val schema = left.schema
+  def getColumn(cl: ColumnLabel) = left.getColumn(cl)
+
+  def unique = LazyList.empty
 
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
     left.find(predicate).orElse(right.find(predicate))

@@ -40,7 +40,8 @@ object UnparsedTableDescription {
     name: DatabaseTableName,
     canonicalName: CanonicalName,
     columns: OrderedMap[DatabaseColumnName, TableDescription.DatasetColumnInfo[ColumnType]],
-    ordering: Seq[TableDescription.Ordering]
+    ordering: Seq[TableDescription.Ordering],
+    primaryKey: Seq[Seq[DatabaseColumnName]]
   ) extends UnparsedTableDescription[Nothing, ColumnType] {
     val hiddenColumns = columns.values.flatMap { case TableDescription.DatasetColumnInfo(name, _, hidden) =>
       if(hidden) Some(name) else None

@@ -1,6 +1,7 @@
 package com.socrata.soql.analyzer2.from
 
 import scala.annotation.tailrec
+import scala.collection.compat.immutable.LazyList
 
 import com.socrata.prettyprint.prelude._
 
@@ -167,6 +168,16 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
         ).sep
       },
     )
+
+  def unique =
+    reduce[LazyList[List[Seq[Column[CT]]]]](
+      _.unique.to(LazyList).map(_ :: Nil),
+      { (uniqueSoFar, join) =>
+        uniqueSoFar.flatMap { uniques =>
+          join.right.unique.map(_ :: uniques)
+        }
+      }
+    ).map(_.reverse.flatten)
 }
 
 trait OJoinImpl { this: Join.type =>

@@ -44,7 +44,8 @@ class PreserveOrdering[RNS, CT, CV] private (provider: LabelProvider) {
         // TODO, should this rewrite into a SELECT ... FROM
         // (values...) ORDER BY synthetic_column ?  If so, we'll need
         // a way to generate synthetic_column (== have a way to turn
-        // an integer into a CV)
+        // an integer into a CV).  See also similar comment over in
+        // ImposeOrdering.
         (Nil, v)
 
       case select@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>

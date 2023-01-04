@@ -1,6 +1,7 @@
 package com.socrata.soql.analyzer2.from
 
 import scala.annotation.tailrec
+import scala.collection.compat.immutable.LazyList
 
 import com.socrata.prettyprint.prelude._
 
@@ -16,6 +17,9 @@ trait FromSingleRowImpl[+RNS] { this: FromSingleRow[RNS] =>
   def asSelf = this
 
   val resourceName = None
+
+  // We have a unique ordering and no columns are required to achieve it
+  def unique = LazyList(Nil)
 
   private[analyzer2] val scope: Scope[Nothing] =
     Scope(

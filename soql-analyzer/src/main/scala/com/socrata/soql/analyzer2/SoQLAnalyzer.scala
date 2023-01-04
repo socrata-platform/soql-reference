@@ -8,6 +8,7 @@ import scala.annotation.tailrec
 import scala.util.control.NoStackTrace
 import scala.util.parsing.input.{Position, NoPosition}
 import scala.collection.compat._
+import scala.collection.compat.immutable.LazyList
 
 import com.socrata.soql.{BinaryTree, Leaf, TrueOp, PipeQuery, UnionQuery, UnionAllQuery, IntersectQuery, IntersectAllQuery, MinusQuery, MinusAllQuery}
 import com.socrata.soql.parsing.SoQLPosition
@@ -172,7 +173,8 @@ class SoQLAnalyzer[RNS, CT, CV] private (
           srn,
           None,
           labelProvider.tableLabel(),
-          columns = desc.schema.filter { case (_, NameEntry(name, _)) => !desc.hiddenColumns(name) }
+          columns = desc.schema.filter { case (_, NameEntry(name, _)) => !desc.hiddenColumns(name) },
+          primaryKeys = desc.primaryKeys
         )
       } else {
         for(TableDescription.Ordering(col, _ascending) <- desc.ordering) {
@@ -187,7 +189,8 @@ class SoQLAnalyzer[RNS, CT, CV] private (
           srn,
           None,
           labelProvider.tableLabel(),
-          columns = desc.schema
+          columns = desc.schema,
+          primaryKeys = desc.primaryKeys
         )
 
         val columnLabels = from.columns.map { case _ => labelProvider.columnLabel() }
@@ -400,7 +403,7 @@ class SoQLAnalyzer[RNS, CT, CV] private (
     final def findSystemColumns(from: From[RNS, CT, CV]): Iterable[(ColumnName, Column[CT])] =
       from match {
         case j: Join[RNS, CT, CV] => findSystemColumns(j.left)
-        case FromTable(_, _, _, tableLabel, columns) =>
+        case FromTable(_, _, _, tableLabel, columns, _) =>
           columns.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>
             name -> Column(tableLabel, colLabel, typ)(AtomicPositionInfo.None)
           }
@@ -529,17 +532,25 @@ class SoQLAnalyzer[RNS, CT, CV] private (
 
       checkedDistinct match {
         case Distinctiveness.On(exprs) =>
-          if(checkedOrderBys.nonEmpty){
-            if(!checkedOrderBys.map(_.expr).startsWith(exprs)) {
-              ctx.distinctOnMustBePrefixOfOrderBy(NoPosition /* TODO: NEED POS INFO FROM AST */)
+          for(expr <- exprs) {
+            if(!typeInfo.isOrdered(expr.typ)) {
+              ctx.unorderedOrderBy(expr.typ, expr.position.logicalPosition)
             }
-          } else { // distinct on without an order by implicitly orders by the distinct columns
-            for(expr <- exprs) {
-              if(!typeInfo.isOrdered(expr.typ)) {
-                ctx.unorderedOrderBy(expr.typ, expr.position.logicalPosition)
+          }
+
+          // Ok, so this is a little subtle.  ORDER BY clauses must
+          // come from the distinct list until that's exhausted...
+          @tailrec
+          def loop(distinctExprs: Set[Expr[CT, CV]], remainingDistinctExprs: Set[Expr[CT, CV]], orderBy: LazyList[Expr[CT, CV]]): Unit = {
+            if(remainingDistinctExprs.nonEmpty && orderBy.nonEmpty) {
+              if(distinctExprs(orderBy.head)) {
+                loop(distinctExprs, remainingDistinctExprs - orderBy.head, orderBy.tail)
+              } else {
+                ctx.distinctOnMustBePrefixOfOrderBy(orderBy.head.position.logicalPosition)
               }
             }
           }
+          loop(exprs.to(Set), exprs.to(Set), checkedOrderBys.to(LazyList).map(_.expr))
         case Distinctiveness.FullyDistinct =>
           for(missingOb <- checkedOrderBys.find { ob => !finalState.namedExprs.values.exists(_ == ob.expr) }) {
             ctx.orderByMustBeSelected(missingOb.expr.position.logicalPosition)

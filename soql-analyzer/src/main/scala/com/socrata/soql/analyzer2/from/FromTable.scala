@@ -1,6 +1,7 @@
 package com.socrata.soql.analyzer2.from
 
 import scala.annotation.tailrec
+import scala.collection.compat.immutable.LazyList
 
 import com.socrata.prettyprint.prelude._
 
@@ -19,6 +20,7 @@ trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
   def contains[CT2 >: CT, CV](e: Expr[CT2, CV]): Boolean =
     false
 
+  def unique = primaryKeys.to(LazyList).map(_.map { dcn => Column(label, dcn, columns(dcn).typ)(AtomicPositionInfo.None) })
 
   lazy val resourceName = Some(definiteResourceName)
 
@@ -42,7 +44,7 @@ trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
   private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
-      case FromTable(thatTableName, thatResourceName, thatAlias, thatLabel, thatColumns) =>
+      case FromTable(thatTableName, thatResourceName, thatAlias, thatLabel, thatColumns, thatPrimaryKeys) =>
         this.tableName == thatTableName &&
           // don't care about aliases
           state.tryAssociate(this.label, thatLabel) &&
@@ -51,7 +53,8 @@ trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
             thisColName == thatColName &&
               thisEntry.typ == thatEntry.typ
             // don't care about the entry's name
-          }
+          } &&
+          this.primaryKeys == thatPrimaryKeys
       case _ =>
         false
     }
@@ -81,6 +84,7 @@ trait OFromTableImpl { this: FromTable.type =>
       buffer.write(from.alias)
       buffer.write(from.label)
       buffer.write(from.columns)
+      buffer.write(from.primaryKeys)
     }
   }
 
@@ -91,7 +95,8 @@ trait OFromTableImpl { this: FromTable.type =>
         definiteResourceName = buffer.read[ScopedResourceName[RNS]](),
         alias = buffer.read[Option[ResourceName]](),
         label = buffer.read[AutoTableLabel](),
-        columns = buffer.read[OrderedMap[DatabaseColumnName, NameEntry[CT]]]()
+        columns = buffer.read[OrderedMap[DatabaseColumnName, NameEntry[CT]]](),
+        primaryKeys = buffer.read[Seq[Seq[DatabaseColumnName]]]()
       )
     }
   }

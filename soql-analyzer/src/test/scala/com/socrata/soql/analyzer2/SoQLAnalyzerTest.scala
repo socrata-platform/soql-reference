@@ -134,7 +134,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         OrderedMap(
           dcn("text") -> NameEntry(cn("text"), TestText),
           dcn("num") -> NameEntry(cn("num"), TestNumber)
-        )
+        ),
+        Nil
       )
     )
 
@@ -252,7 +253,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
-          )
+          ),
+          Nil
         ),
         None, Nil, None,
         List(
@@ -298,7 +300,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
               OrderedMap(
                 dcn("text") -> NameEntry(cn("text"), TestText),
                 dcn("num") -> NameEntry(cn("num"), TestNumber)
-              )
+              ),
+              Nil
             ),
             None, Nil, None,
             List(
@@ -313,6 +316,41 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         None,Nil,None,Nil,None,None,None,Set.empty
       )
     )
+  }
+
+  test("distinct on - ignores permutations") {
+    val tf = tableFinder(
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    analyze(tf, "aaaa-aaaa", "select distinct on (text, num) 5 order by num, text")
+    // didn't throw an exception, good
+  }
+
+  test("distinct on - requires prefix match") {
+    val tf = tableFinder(
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    expectFailure(0) {
+      analyze(tf, "aaaa-aaaa", "select distinct on (text, num) 5 order by num, num*2, text")(new OnFail {
+        override def onAnalyzerError(e: AnalysisError[Int]): Nothing = {
+          e match {
+            case SoQLAnalyzerError.TextualError(_, _, _, SoQLAnalyzerError.AnalysisError.DistinctNotPrefixOfOrderBy) =>
+              expected(0)
+            case _ =>
+              super.onAnalyzerError(e)
+          }
+        }
+      })
+    }
+  }
+
+  test("distinct on - allows extra order bys") {
+    val tf = tableFinder(
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    analyze(tf, "aaaa-aaaa", "select distinct on (text, num) 5 order by num, text, num*2")
   }
 
   test("UDF - simple") {
@@ -351,7 +389,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
-          )
+          ),
+          Nil
         ),
         FromStatement(
           Select(
@@ -378,7 +417,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     OrderedMap(
                       dcn("user") -> NameEntry(cn("user"),TestText),
                       dcn("allowed") -> NameEntry(cn("allowed"),TestBoolean)
-                    )
+                    ),
+                    Nil
                   ),
                   Some(
                     FunctionCall(
@@ -447,7 +487,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
-          )
+          ),
+          Nil
         ),
         FromStatement(
           Select(
@@ -474,7 +515,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     OrderedMap(
                       dcn("user") -> NameEntry(cn("user"),TestText),
                       dcn("allowed") -> NameEntry(cn("allowed"),TestBoolean)
-                    )
+                    ),
+                    Nil
                   ),
                   Some(
                     FunctionCall(
@@ -542,7 +584,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
-          )
+          ),
+          Nil
         ),
         FromStatement(
           Select(

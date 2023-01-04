@@ -39,8 +39,8 @@ object TableDescription {
             c.parse(parserParameters).left.map { _ =>
               DecodeError.InvalidValue(JString(c.soql)).prefix("soql")
             }
-          case UnparsedTableDescription.Dataset(name, canonicalName, schema, ordering) =>
-            Right(Dataset(name, canonicalName, schema, ordering))
+          case UnparsedTableDescription.Dataset(name, canonicalName, schema, ordering, primaryKey) =>
+            Right(Dataset(name, canonicalName, schema, ordering, primaryKey))
         }
     }
 
@@ -59,8 +59,19 @@ object TableDescription {
     name: DatabaseTableName,
     canonicalName: CanonicalName,
     columns: OrderedMap[DatabaseColumnName, DatasetColumnInfo[ColumnType]],
-    ordering: Seq[Ordering]
+    ordering: Seq[Ordering],
+    primaryKeys: Seq[Seq[DatabaseColumnName]]
   ) extends TableDescription[Nothing, ColumnType] {
+    for(o <- ordering) {
+      require(columns.contains(o.column), "Ordering not in dataset")
+    }
+    for {
+      pk <- primaryKeys
+      col <- pk
+    } {
+      require(columns.contains(col), "Primary key not in dataset")
+    }
+
     val hiddenColumns = columns.values.flatMap { case DatasetColumnInfo(name, _, hidden) =>
       if(hidden) Some(name) else None
     }.to(Set)
@@ -74,7 +85,7 @@ object TableDescription {
     private[analyzer2] def rewriteScopes[RNS, RNS2](scopeMap: Map[RNS, RNS2]) = this
 
     def asUnparsedTableDescription =
-      UnparsedTableDescription.Dataset(name, canonicalName, columns, ordering)
+      UnparsedTableDescription.Dataset(name, canonicalName, columns, ordering, primaryKeys)
   }
 
   case class Query[+ResourceNameScope, +ColumnType](

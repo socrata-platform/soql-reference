@@ -1,5 +1,7 @@
 package com.socrata.soql.analyzer2.statement
 
+import scala.collection.compat.immutable.LazyList
+
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
@@ -14,6 +16,8 @@ import DocUtils._
 trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
   type Self[+RNS, +CT, +CV] = Values[CT, CV]
   def asSelf = this
+
+  def unique = if(values.tail.isEmpty) LazyList(Nil) else LazyList.empty
 
   // This lets us see the schema with DatabaseColumnNames as keys
   def typeVariedSchema[T >: DatabaseColumnName]: OrderedMap[T, NameEntry[CT]] =
@@ -46,6 +50,11 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
     }
 
   val schema = typeVariedSchema
+  def getColumn(cl: ColumnLabel) =
+    cl match {
+      case dcn: DatabaseColumnName => schema.get(dcn)
+      case _ => None
+    }
 
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
     values.iterator.flatMap(_.iterator.flatMap(_.find(predicate))).nextOption()

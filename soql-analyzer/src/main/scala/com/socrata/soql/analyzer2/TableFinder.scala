@@ -54,7 +54,8 @@ trait TableFinder {
     databaseName: DatabaseTableName,
     canonicalName: CanonicalName,
     schema: OrderedMap[ColumnName, DatasetColumnInfo],
-    ordering: Seq[Ordering]
+    ordering: Seq[Ordering],
+    primaryKeys: Seq[Seq[ColumnName]]
   ) extends FinderTableDescription {
     require(ordering.forall { ordering => schema.contains(ordering.column) })
 
@@ -72,7 +73,8 @@ trait TableFinder {
         },
         ordering.map { case Ordering(column, ascending) =>
           TableDescription.Ordering(DatabaseColumnName(column.caseFolded), ascending)
-        }
+        },
+        primaryKeys.map(_.map { col => DatabaseColumnName(col.caseFolded) })
       )
   }
   /** A saved query, with any parameters it (non-transitively!) defines. */
@@ -188,7 +190,7 @@ trait TableFinder {
       return Left(SoQLAnalyzerError.TextualError(scopedName.scope, stack.headOption, pos, SoQLAnalyzerError.TableFinderError.RecursiveQuery(desc.canonicalName :: stack)))
     }
     desc match {
-      case TableDescription.Dataset(_, _, _, _) => Right(acc)
+      case TableDescription.Dataset(_, _, _, _, _) => Right(acc)
       case TableDescription.Query(scope, canonicalName, basedOn, tree, _unparsed, _params, _hiddenColumns) =>
         for {
           acc <- walkFromName(ScopedResourceName(scope, basedOn), NoPosition, acc, canonicalName :: stack)

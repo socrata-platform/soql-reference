@@ -33,14 +33,15 @@ object TestTypeInfo extends TypeInfo2[TestType, TestValue] {
     def typeParameterUniverse: OrderedSet[TestType] = OrderedSet(
       TestText,
       TestNumber,
-      TestBoolean
+      TestBoolean,
+      TestUnorderable
     )
 
     // Members declared in com.socrata.soql.typechecker.TypeInfoCommon
     def boolType: TestType = TestBoolean
     def isBoolean(typ: TestType): Boolean = typ == TestBoolean
     def isGroupable(typ: TestType): Boolean = true
-    def isOrdered(typ: TestType): Boolean = true
+    def isOrdered(typ: TestType): Boolean = typ.isOrdered
     def typeFor(name: TypeName): Option[TestType] = TestType.typesByName.get(name)
     def typeNameFor(typ: TestType): TypeName = typ.name
     def typeOf(value: TestValue): TestType = value.typ

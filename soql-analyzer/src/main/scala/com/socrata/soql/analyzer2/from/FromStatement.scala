@@ -24,6 +24,8 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
   def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
     statement.contains(e)
 
+  def unique = statement.unique.map(_.map { cn => Column(label, cn, statement.column(cn).typ)(AtomicPositionInfo.None) })
+
   private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
