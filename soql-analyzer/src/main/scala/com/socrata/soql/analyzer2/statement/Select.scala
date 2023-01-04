@@ -102,18 +102,15 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
     selectList.valuesIterator.exists(_.expr.isWindowed)
 
   def unique = {
-    from.unique match {
-      case Some(columns) =>
-        val selectedColumns = selectList.iterator.collect { case (columnLabel, NamedExpr(Column(table, col, _typ), _name)) =>
-          (table, col) -> columnLabel
-        }.toMap
-        if(columns.forall(selectedColumns.contains(_))) {
-          Some(columns.map(selectedColumns))
-        } else {
-          None
-        }
-      case _ =>
+    from.unique.flatMap { columns =>
+      val selectedColumns = selectList.iterator.collect { case (columnLabel, NamedExpr(Column(table, col, _typ), _name)) =>
+        (table, col) -> columnLabel
+      }.toMap
+      if(columns.forall(selectedColumns.contains(_))) {
+        Some(columns.map(selectedColumns))
+      } else {
         None
+      }
     }
   }
 

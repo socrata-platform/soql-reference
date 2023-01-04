@@ -2,6 +2,7 @@ package com.socrata.soql.analyzer2
 
 import scala.language.higherKinds
 import scala.annotation.tailrec
+import scala.collection.compat.immutable.LazyList
 
 import com.socrata.prettyprint.prelude._
 
@@ -17,10 +18,16 @@ sealed abstract class From[+RNS, +CT, +CV] {
   type Self[+RNS, +CT, +CV] <: From[RNS, CT, CV]
   def asSelf: Self[RNS, CT, CV]
 
-  // If this is Some, then the specified columns found here are
-  // columns one can rely on to together specify a total ordering over
-  // rows in this virtual table.
-  def unique: Option[Seq[(TableLabel, ColumnLabel)]]
+  // A dataset is allowed to have zero or more sets of columns which
+  // each uniquely specify rows (e.g., a UNION operation will have an
+  // empty seq here, @single_row will have a single empty list
+  // (because no columns are necessary to specify a unique ordering of
+  // that special table), datasets will have one (:id) or two (:id and
+  // the user-defined PK) groups, joins will have arbtrarily many.
+  // This is Seq of Seq to leave the door open to multi-column PKs,
+  // which is not currently a SoQL concept but why paint ourselves
+  // into a corner?
+  def unique: LazyList[Seq[(TableLabel, ColumnLabel)]]
 
   // extend the given environment with names introduced by this FROM clause
   private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]): Either[AddScopeError, Environment[CT2]]
@@ -129,7 +136,7 @@ case class FromTable[+RNS, +CT](
   alias: Option[ResourceName],
   label: AutoTableLabel,
   columns: OrderedMap[DatabaseColumnName, NameEntry[CT]],
-  primaryKey: Option[Seq[DatabaseColumnName]]
+  primaryKeys: Seq[Seq[DatabaseColumnName]]
 ) extends AtomicFrom[RNS, CT, Nothing] with from.FromTableImpl[RNS, CT]
 
 // "alias" is optional here because of chained soql; actually having a

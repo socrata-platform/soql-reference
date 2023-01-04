@@ -135,7 +135,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           dcn("text") -> NameEntry(cn("text"), TestText),
           dcn("num") -> NameEntry(cn("num"), TestNumber)
         ),
-        None
+        Nil
       )
     )
 
@@ -254,7 +254,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
           ),
-          None
+          Nil
         ),
         None, Nil, None,
         List(
@@ -301,7 +301,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                 dcn("text") -> NameEntry(cn("text"), TestText),
                 dcn("num") -> NameEntry(cn("num"), TestNumber)
               ),
-              None
+              Nil
             ),
             None, Nil, None,
             List(
@@ -390,7 +390,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
           ),
-          None
+          Nil
         ),
         FromStatement(
           Select(
@@ -418,7 +418,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                       dcn("user") -> NameEntry(cn("user"),TestText),
                       dcn("allowed") -> NameEntry(cn("allowed"),TestBoolean)
                     ),
-                    None
+                    Nil
                   ),
                   Some(
                     FunctionCall(
@@ -488,7 +488,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
           ),
-          None
+          Nil
         ),
         FromStatement(
           Select(
@@ -516,7 +516,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                       dcn("user") -> NameEntry(cn("user"),TestText),
                       dcn("allowed") -> NameEntry(cn("allowed"),TestBoolean)
                     ),
-                    None
+                    Nil
                   ),
                   Some(
                     FunctionCall(
@@ -585,7 +585,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
           ),
-          None
+          Nil
         ),
         FromStatement(
           Select(

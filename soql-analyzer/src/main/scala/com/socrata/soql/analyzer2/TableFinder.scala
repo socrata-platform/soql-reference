@@ -55,7 +55,7 @@ trait TableFinder {
     canonicalName: CanonicalName,
     schema: OrderedMap[ColumnName, DatasetColumnInfo],
     ordering: Seq[Ordering],
-    primaryKey: Option[Seq[ColumnName]]
+    primaryKeys: Seq[Seq[ColumnName]]
   ) extends FinderTableDescription {
     require(ordering.forall { ordering => schema.contains(ordering.column) })
 
@@ -74,7 +74,7 @@ trait TableFinder {
         ordering.map { case Ordering(column, ascending) =>
           TableDescription.Ordering(DatabaseColumnName(column.caseFolded), ascending)
         },
-        primaryKey.map(_.map { col => DatabaseColumnName(col.caseFolded) })
+        primaryKeys.map(_.map { col => DatabaseColumnName(col.caseFolded) })
       )
   }
   /** A saved query, with any parameters it (non-transitively!) defines. */

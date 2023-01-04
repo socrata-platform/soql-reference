@@ -60,13 +60,13 @@ object TableDescription {
     canonicalName: CanonicalName,
     columns: OrderedMap[DatabaseColumnName, DatasetColumnInfo[ColumnType]],
     ordering: Seq[Ordering],
-    primaryKey: Option[Seq[DatabaseColumnName]]
+    primaryKeys: Seq[Seq[DatabaseColumnName]]
   ) extends TableDescription[Nothing, ColumnType] {
     for(o <- ordering) {
       require(columns.contains(o.column), "Ordering not in dataset")
     }
     for {
-      pk <- primaryKey
+      pk <- primaryKeys
       col <- pk
     } {
       require(columns.contains(col), "Primary key not in dataset")
@@ -85,7 +85,7 @@ object TableDescription {
     private[analyzer2] def rewriteScopes[RNS, RNS2](scopeMap: Map[RNS, RNS2]) = this
 
     def asUnparsedTableDescription =
-      UnparsedTableDescription.Dataset(name, canonicalName, columns, ordering, primaryKey)
+      UnparsedTableDescription.Dataset(name, canonicalName, columns, ordering, primaryKeys)
   }
 
   case class Query[+ResourceNameScope, +ColumnType](

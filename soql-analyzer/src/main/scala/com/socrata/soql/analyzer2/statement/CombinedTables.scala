@@ -17,7 +17,7 @@ trait CombinedTablesImpl[+RNS, +CT, +CV] { this: CombinedTables[RNS, CT, CV] =>
 
   val schema = left.schema
 
-  def unique = None
+  def unique = LazyList.empty
 
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
     left.find(predicate).orElse(right.find(predicate))

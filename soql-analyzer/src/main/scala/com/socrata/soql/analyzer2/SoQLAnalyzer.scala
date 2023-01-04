@@ -174,7 +174,7 @@ class SoQLAnalyzer[RNS, CT, CV] private (
           None,
           labelProvider.tableLabel(),
           columns = desc.schema.filter { case (_, NameEntry(name, _)) => !desc.hiddenColumns(name) },
-          primaryKey = desc.primaryKey
+          primaryKeys = desc.primaryKeys
         )
       } else {
         for(TableDescription.Ordering(col, _ascending) <- desc.ordering) {
@@ -190,7 +190,7 @@ class SoQLAnalyzer[RNS, CT, CV] private (
           None,
           labelProvider.tableLabel(),
           columns = desc.schema,
-          primaryKey = desc.primaryKey
+          primaryKeys = desc.primaryKeys
         )
 
         val columnLabels = from.columns.map { case _ => labelProvider.columnLabel() }

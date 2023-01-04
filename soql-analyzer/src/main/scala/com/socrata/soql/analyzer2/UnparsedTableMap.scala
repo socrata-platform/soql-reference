@@ -74,20 +74,15 @@ object UnparsedTableMap {
         resources.iterator.map { case (rn, desc) =>
           val thing =
             desc match {
-              case UnparsedTableDescription.Dataset(_name, _canonicalName, schema, ordering, pk) =>
+              case UnparsedTableDescription.Dataset(_name, _canonicalName, schema, ordering, pks) =>
                 val base =
                   mocktablefinder.D(schema.valuesIterator.map { case TableDescription.DatasetColumnInfo(n, t, _) => n.name -> t }.toSeq : _*).
                     withHiddenColumns(schema.valuesIterator.filter(_.hidden).map(_.name.name).toSeq : _*)
-                val pkless =
+                pks.foldLeft(
                   ordering.foldLeft(base) { (base, ordering) =>
                     base.withOrdering(schema(ordering.column).name.name, ordering.ascending)
                   }
-                pk match {
-                  case Some(cols) =>
-                    pkless.withPrimaryKey(cols.map(schema(_).name.name) : _*)
-                  case None =>
-                    pkless
-                }
+                ) { (dataset, pk) => dataset.withPrimaryKey(pk.map(schema(_).name.name) : _*) }
               case UnparsedTableDescription.Query(scope, canonicalName, basedOn, soql, parameters, hiddenColumns) =>
                 mocktablefinder.Q(scope, basedOn.name, soql, parameters.toSeq.map { case (hn, ct) => hn.name -> ct } : _*).
                   withCanonicalName(canonicalName.name).

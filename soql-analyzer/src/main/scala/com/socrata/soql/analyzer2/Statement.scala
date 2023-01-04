@@ -3,6 +3,7 @@ package com.socrata.soql.analyzer2
 import scala.annotation.tailrec
 import scala.language.higherKinds
 import scala.util.parsing.input.{Position, NoPosition}
+import scala.collection.compat.immutable.LazyList
 
 import com.rojoma.json.v3.ast.JString
 import com.socrata.prettyprint.prelude._
@@ -21,7 +22,7 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
 
   val schema: OrderedMap[_ <: ColumnLabel, NameEntry[CT]]
 
-  def unique: Option[Seq[ColumnLabel]]
+  def unique: LazyList[Seq[ColumnLabel]]
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
