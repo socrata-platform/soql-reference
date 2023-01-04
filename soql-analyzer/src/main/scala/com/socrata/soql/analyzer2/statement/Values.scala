@@ -15,7 +15,7 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
   type Self[+RNS, +CT, +CV] = Values[CT, CV]
   def asSelf = this
 
-  def unique = LazyList.empty
+  def unique = if(values.tail.isEmpty) LazyList(Nil) else LazyList.empty
 
   // This lets us see the schema with DatabaseColumnNames as keys
   def typeVariedSchema[T >: DatabaseColumnName]: OrderedMap[T, NameEntry[CT]] =
