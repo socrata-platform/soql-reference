@@ -8,6 +8,7 @@ import scala.annotation.tailrec
 import scala.util.control.NoStackTrace
 import scala.util.parsing.input.{Position, NoPosition}
 import scala.collection.compat._
+import scala.collection.compat.immutable.LazyList
 
 import com.socrata.soql.{BinaryTree, Leaf, TrueOp, PipeQuery, UnionQuery, UnionAllQuery, IntersectQuery, IntersectAllQuery, MinusQuery, MinusAllQuery}
 import com.socrata.soql.parsing.SoQLPosition
