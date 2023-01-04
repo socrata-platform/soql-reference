@@ -17,6 +17,9 @@ trait FromSingleRowImpl[+RNS] { this: FromSingleRow[RNS] =>
 
   val resourceName = None
 
+  // We have a unique ordering and no columns are required to achieve it
+  def unique = Some(Nil)
+
   private[analyzer2] val scope: Scope[Nothing] =
     Scope(
       OrderedMap.empty[ColumnLabel, NameEntry[Nothing]],

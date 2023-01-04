@@ -173,7 +173,8 @@ class SoQLAnalyzer[RNS, CT, CV] private (
           srn,
           None,
           labelProvider.tableLabel(),
-          columns = desc.schema.filter { case (_, NameEntry(name, _)) => !desc.hiddenColumns(name) }
+          columns = desc.schema.filter { case (_, NameEntry(name, _)) => !desc.hiddenColumns(name) },
+          primaryKey = desc.primaryKey
         )
       } else {
         for(TableDescription.Ordering(col, _ascending) <- desc.ordering) {
@@ -188,7 +189,8 @@ class SoQLAnalyzer[RNS, CT, CV] private (
           srn,
           None,
           labelProvider.tableLabel(),
-          columns = desc.schema
+          columns = desc.schema,
+          primaryKey = desc.primaryKey
         )
 
         val columnLabels = from.columns.map { case _ => labelProvider.columnLabel() }
@@ -401,7 +403,7 @@ class SoQLAnalyzer[RNS, CT, CV] private (
     final def findSystemColumns(from: From[RNS, CT, CV]): Iterable[(ColumnName, Column[CT])] =
       from match {
         case j: Join[RNS, CT, CV] => findSystemColumns(j.left)
-        case FromTable(_, _, _, tableLabel, columns) =>
+        case FromTable(_, _, _, tableLabel, columns, _) =>
           columns.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>
             name -> Column(tableLabel, colLabel, typ)(AtomicPositionInfo.None)
           }

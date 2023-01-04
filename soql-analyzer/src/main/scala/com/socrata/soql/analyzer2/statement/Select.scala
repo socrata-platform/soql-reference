@@ -101,6 +101,22 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
   def isWindowed =
     selectList.valuesIterator.exists(_.expr.isWindowed)
 
+  def unique = {
+    from.unique match {
+      case Some(columns) =>
+        val selectedColumns = selectList.iterator.collect { case (columnLabel, NamedExpr(Column(table, col, _typ), _name)) =>
+          (table, col) -> columnLabel
+        }.toMap
+        if(columns.forall(selectedColumns.contains(_))) {
+          Some(columns.map(selectedColumns))
+        } else {
+          None
+        }
+      case _ =>
+        None
+    }
+  }
+
   private[analyzer2] def realTables = from.realTables
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = {

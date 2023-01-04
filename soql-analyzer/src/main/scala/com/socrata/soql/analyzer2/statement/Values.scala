@@ -15,6 +15,8 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
   type Self[+RNS, +CT, +CV] = Values[CT, CV]
   def asSelf = this
 
+  def unique = None
+
   // This lets us see the schema with DatabaseColumnNames as keys
   def typeVariedSchema[T >: DatabaseColumnName]: OrderedMap[T, NameEntry[CT]] =
     OrderedMap() ++ values.head.iterator.zipWithIndex.map { case (expr, idx) =>

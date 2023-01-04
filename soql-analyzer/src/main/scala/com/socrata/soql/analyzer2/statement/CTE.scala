@@ -17,6 +17,8 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
 
   val schema = useQuery.schema
 
+  def unique = useQuery.unique
+
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
     definitionQuery.find(predicate).orElse(useQuery.find(predicate))
 

@@ -167,6 +167,16 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
         ).sep
       },
     )
+
+  def unique =
+    reduce[Option[List[Seq[(TableLabel, ColumnLabel)]]]](
+      _.unique.map(_ :: Nil),
+      { (uniqueSoFar, join) =>
+        uniqueSoFar.flatMap { uniques =>
+          join.right.unique.map(_ :: uniques)
+        }
+      }
+    ).map(_.reverse.flatten)
 }
 
 trait OJoinImpl { this: Join.type =>

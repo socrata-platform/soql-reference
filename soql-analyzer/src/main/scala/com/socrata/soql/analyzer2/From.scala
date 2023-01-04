@@ -17,6 +17,11 @@ sealed abstract class From[+RNS, +CT, +CV] {
   type Self[+RNS, +CT, +CV] <: From[RNS, CT, CV]
   def asSelf: Self[RNS, CT, CV]
 
+  // If this is Some, then the specified columns found here are
+  // columns one can rely on to together specify a total ordering over
+  // rows in this virtual table.
+  def unique: Option[Seq[(TableLabel, ColumnLabel)]]
+
   // extend the given environment with names introduced by this FROM clause
   private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]): Either[AddScopeError, Environment[CT2]]
 
@@ -123,7 +128,8 @@ case class FromTable[+RNS, +CT](
   definiteResourceName: ScopedResourceName[RNS],
   alias: Option[ResourceName],
   label: AutoTableLabel,
-  columns: OrderedMap[DatabaseColumnName, NameEntry[CT]]
+  columns: OrderedMap[DatabaseColumnName, NameEntry[CT]],
+  primaryKey: Option[Seq[DatabaseColumnName]]
 ) extends AtomicFrom[RNS, CT, Nothing] with from.FromTableImpl[RNS, CT]
 
 // "alias" is optional here because of chained soql; actually having a

@@ -15,8 +15,8 @@ class UnparsedTableMap[ResourceNameScope, +ColumnType] private[analyzer2] (priva
     Right(new TableMap(underlying.iterator.map { case (rns, m) =>
       rns -> m.iterator.map { case (rn, utd) =>
         utd match {
-          case UnparsedTableDescription.Dataset(name, canonicalName, schema, ordering) =>
-            rn -> TableDescription.Dataset(name, canonicalName, schema, ordering)
+          case UnparsedTableDescription.Dataset(name, canonicalName, schema, ordering, pk) =>
+            rn -> TableDescription.Dataset(name, canonicalName, schema, ordering, pk)
           case other: UnparsedTableDescription.SoQLUnparsedTableDescription[ResourceNameScope, ColumnType] =>
             other.parse(params) match {
               case Right(ptd) => rn -> ptd
@@ -33,7 +33,7 @@ class UnparsedTableMap[ResourceNameScope, +ColumnType] private[analyzer2] (priva
     new UnparsedTableMap(underlying.iterator.map { case (rns, m) =>
       rns -> m.iterator.map { case (rn, ptd) =>
         val newptd = ptd match {
-          case UnparsedTableDescription.Dataset(name, canonicalName, schema, ordering) =>
+          case UnparsedTableDescription.Dataset(name, canonicalName, schema, ordering, pk) =>
             UnparsedTableDescription.Dataset(
               tableName(name),
               canonicalName,
@@ -42,7 +42,8 @@ class UnparsedTableMap[ResourceNameScope, +ColumnType] private[analyzer2] (priva
               }.toSeq : _*),
               ordering.map { case TableDescription.Ordering(dcn, ascending) =>
                 TableDescription.Ordering(columnName(name, dcn), ascending)
-              }
+              },
+              pk.map(_.map(columnName(name, _)))
             )
           case other =>
             other
@@ -73,12 +74,19 @@ object UnparsedTableMap {
         resources.iterator.map { case (rn, desc) =>
           val thing =
             desc match {
-              case UnparsedTableDescription.Dataset(_name, _canonicalName, schema, ordering) =>
+              case UnparsedTableDescription.Dataset(_name, _canonicalName, schema, ordering, pk) =>
                 val base =
                   mocktablefinder.D(schema.valuesIterator.map { case TableDescription.DatasetColumnInfo(n, t, _) => n.name -> t }.toSeq : _*).
                     withHiddenColumns(schema.valuesIterator.filter(_.hidden).map(_.name.name).toSeq : _*)
-                ordering.foldLeft(base) { (base, ordering) =>
-                  base.withOrdering(schema(ordering.column).name.name, ordering.ascending)
+                val pkless =
+                  ordering.foldLeft(base) { (base, ordering) =>
+                    base.withOrdering(schema(ordering.column).name.name, ordering.ascending)
+                  }
+                pk match {
+                  case Some(cols) =>
+                    pkless.withPrimaryKey(cols.map(schema(_).name.name) : _*)
+                  case None =>
+                    pkless
                 }
               case UnparsedTableDescription.Query(scope, canonicalName, basedOn, soql, parameters, hiddenColumns) =>
                 mocktablefinder.Q(scope, basedOn.name, soql, parameters.toSeq.map { case (hn, ct) => hn.name -> ct } : _*).

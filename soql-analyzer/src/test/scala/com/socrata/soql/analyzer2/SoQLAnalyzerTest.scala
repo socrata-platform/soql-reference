@@ -134,7 +134,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         OrderedMap(
           dcn("text") -> NameEntry(cn("text"), TestText),
           dcn("num") -> NameEntry(cn("num"), TestNumber)
-        )
+        ),
+        None
       )
     )
 
@@ -252,7 +253,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
-          )
+          ),
+          None
         ),
         None, Nil, None,
         List(
@@ -298,7 +300,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
               OrderedMap(
                 dcn("text") -> NameEntry(cn("text"), TestText),
                 dcn("num") -> NameEntry(cn("num"), TestNumber)
-              )
+              ),
+              None
             ),
             None, Nil, None,
             List(
@@ -386,7 +389,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
-          )
+          ),
+          None
         ),
         FromStatement(
           Select(
@@ -413,7 +417,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     OrderedMap(
                       dcn("user") -> NameEntry(cn("user"),TestText),
                       dcn("allowed") -> NameEntry(cn("allowed"),TestBoolean)
-                    )
+                    ),
+                    None
                   ),
                   Some(
                     FunctionCall(
@@ -482,7 +487,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
-          )
+          ),
+          None
         ),
         FromStatement(
           Select(
@@ -509,7 +515,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     OrderedMap(
                       dcn("user") -> NameEntry(cn("user"),TestText),
                       dcn("allowed") -> NameEntry(cn("allowed"),TestBoolean)
-                    )
+                    ),
+                    None
                   ),
                   Some(
                     FunctionCall(
@@ -577,7 +584,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
-          )
+          ),
+          None
         ),
         FromStatement(
           Select(

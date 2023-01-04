@@ -21,6 +21,8 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
 
   val schema: OrderedMap[_ <: ColumnLabel, NameEntry[CT]]
 
+  def unique: Option[Seq[ColumnLabel]]
+
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
   final def rewriteDatabaseNames(
