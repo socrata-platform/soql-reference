@@ -1,5 +1,7 @@
 package com.socrata.soql.analyzer2.statement
 
+import scala.collection.compat.immutable.LazyList
+
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._

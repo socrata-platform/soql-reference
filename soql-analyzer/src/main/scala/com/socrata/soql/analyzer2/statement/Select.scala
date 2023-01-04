@@ -2,6 +2,7 @@ package com.socrata.soql.analyzer2.statement
 
 import scala.util.parsing.input.{Position, NoPosition}
 import scala.collection.compat._
+import scala.collection.compat.immutable.LazyList
 
 import com.rojoma.json.v3.ast.JString
 import com.socrata.prettyprint.prelude._

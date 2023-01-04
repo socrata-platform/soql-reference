@@ -1,6 +1,7 @@
 package com.socrata.soql.analyzer2.from
 
 import scala.annotation.tailrec
+import scala.collection.compat.immutable.LazyList
 
 import com.socrata.prettyprint.prelude._
 
