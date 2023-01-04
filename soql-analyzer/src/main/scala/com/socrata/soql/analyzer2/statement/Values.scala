@@ -48,6 +48,11 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
     }
 
   val schema = typeVariedSchema
+  def getColumn(cl: ColumnLabel) =
+    cl match {
+      case dcn: DatabaseColumnName => schema.get(dcn)
+      case _ => None
+    }
 
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
     values.iterator.flatMap(_.iterator.flatMap(_.find(predicate))).nextOption()

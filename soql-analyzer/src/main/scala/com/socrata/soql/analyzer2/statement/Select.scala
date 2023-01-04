@@ -1,6 +1,7 @@
 package com.socrata.soql.analyzer2.statement
 
 import scala.util.parsing.input.{Position, NoPosition}
+import scala.collection.compat._
 
 import com.rojoma.json.v3.ast.JString
 import com.socrata.prettyprint.prelude._
@@ -83,6 +84,10 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
     find(_ == e).isDefined
 
   val schema = selectList.withValuesMapped { case NamedExpr(expr, name) => NameEntry(name, expr.typ) }
+  def getColumn(cl: ColumnLabel) = cl match {
+    case acl: AutoColumnLabel => schema.get(acl)
+    case _ => None
+  }
   lazy val selectedExprs = selectList.withValuesMapped(_.expr)
 
   private def freshName(base: String) = {
@@ -101,15 +106,46 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
   def isWindowed =
     selectList.valuesIterator.exists(_.expr.isWindowed)
 
-  def unique = {
-    from.unique.flatMap { columns =>
-      val selectedColumns = selectList.iterator.collect { case (columnLabel, NamedExpr(Column(table, col, _typ), _name)) =>
-        (table, col) -> columnLabel
+  lazy val unique: LazyList[Seq[AutoColumnLabel]] = {
+    val selectedColumns = selectList.iterator.collect { case (columnLabel, NamedExpr(Column(table, col, typ), _name)) =>
+      Column(table, col, typ)(AtomicPositionInfo.None) -> columnLabel
+    }.toMap
+
+    if(isAggregated) {
+      // if we've selected all our grouping-exprs, then those columns
+      // effectively represent a primary key.
+      val selectedColumns = selectList.iterator.map { case (columnLabel, NamedExpr(expr, _name)) =>
+        expr -> columnLabel
       }.toMap
-      if(columns.forall(selectedColumns.contains(_))) {
-        Some(columns.map(selectedColumns))
-      } else {
-        None
+      val synthetic =
+        if(groupBy.forall(selectedColumns.contains(_))) {
+          LazyList(groupBy.map(selectedColumns))
+        } else {
+          LazyList.empty
+        }
+
+      // A bit of a last-gasp hope - if we've grouped by all our
+      // parents' primary keys and selected them, then this group by
+      // was kind of pointless but we can use that to act as our
+      // primary key too.
+      val groupByExprs = groupBy.to(Set)
+      val inherited =
+        from.unique.flatMap { cols =>
+          if(cols.forall { col => groupByExprs(col) && selectedColumns.contains(col) }) {
+            Some(cols.map(selectedColumns))
+          } else {
+            None
+          }
+        }
+
+      synthetic ++ inherited
+    } else {
+      from.unique.flatMap { columns =>
+        if(columns.forall(selectedColumns.contains(_))) {
+          Some(columns.map(selectedColumns))
+        } else {
+          None
+        }
       }
     }
   }

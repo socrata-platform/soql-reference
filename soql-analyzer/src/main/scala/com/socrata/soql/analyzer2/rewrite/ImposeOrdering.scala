@@ -55,7 +55,20 @@ class ImposeOrdering[RNS, CT, CV] private (labelProvider: LabelProvider, isOrder
         v
 
       case select@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
+        val allUnique =
+          if(select.isAggregated) {
+            select.unique.map(_.map(selectList(_).expr))
+          } else {
+            from.unique
+          }
+        val usefulUnique = allUnique.filter(_.forall { c => isOrderable(c.typ) })
+
         val existingOrderBy = orderBy.map(_.expr).to(Set)
+
+        def allOrderableSelectedCols(except: Expr[CT, CV] => Boolean): Iterator[OrderBy] =
+          selectList.valuesIterator.collect { case NamedExpr(expr, name) if isOrderable(expr.typ) && !except(expr) =>
+            OrderBy(expr, true, true)
+          }
 
         val newOrderBy: Seq[OrderBy] =
           distinctiveness match {
@@ -87,16 +100,18 @@ class ImposeOrdering[RNS, CT, CV] private (labelProvider: LabelProvider, isOrder
               val newBase = preexisting ++ afterPreexisting
               val newBaseSet = newBase.iterator.map(_.expr).to(Set)
 
-              newBase ++ selectList.valuesIterator.collect { case NamedExpr(expr, name) if isOrderable(expr.typ) && !newBaseSet(expr) =>
-                OrderBy(expr, true, true)
-              }
-            case Distinctiveness.FullyDistinct | Distinctiveness.Indistinct =>
+              newBase ++ allOrderableSelectedCols(except = newBaseSet)
+            case Distinctiveness.FullyDistinct =>
               // fully distinct order by clauses must appear in the
               // select list; fortunately, that's where we're pulling
               // them from.
-              orderBy ++ selectList.valuesIterator.collect { case NamedExpr(expr, name) if isOrderable(expr.typ) && !existingOrderBy(expr) =>
-                OrderBy(expr, true, true)
+              orderBy ++ allOrderableSelectedCols(except = existingOrderBy)
+            case Distinctiveness.Indistinct =>
+              val additional = usefulUnique.headOption match {
+                case None => allOrderableSelectedCols(except = existingOrderBy)
+                case Some(exprs) => exprs.filterNot(existingOrderBy).map(OrderBy(_, true, true))
               }
+              orderBy ++ additional
           }
         select.copy(orderBy = newOrderBy.to(Vector))
     }

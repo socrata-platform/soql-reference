@@ -22,6 +22,11 @@ sealed abstract class Statement[+RNS, +CT, +CV] {
 
   val schema: OrderedMap[_ <: ColumnLabel, NameEntry[CT]]
 
+  // These exist because the _ on the schema makes it so you can't
+  // look up a column with an arbitrary column label directly.
+  def getColumn(c: ColumnLabel): Option[NameEntry[CT]]
+  def column(c: ColumnLabel) = getColumn(c).get
+
   def unique: LazyList[Seq[ColumnLabel]]
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]

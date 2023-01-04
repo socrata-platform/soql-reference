@@ -16,6 +16,7 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
   def asSelf = this
 
   val schema = useQuery.schema
+  def getColumn(cl: ColumnLabel) = useQuery.getColumn(cl)
 
   def unique = useQuery.unique
 

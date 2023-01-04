@@ -27,7 +27,7 @@ sealed abstract class From[+RNS, +CT, +CV] {
   // This is Seq of Seq to leave the door open to multi-column PKs,
   // which is not currently a SoQL concept but why paint ourselves
   // into a corner?
-  def unique: LazyList[Seq[(TableLabel, ColumnLabel)]]
+  def unique: LazyList[Seq[Column[CT]]]
 
   // extend the given environment with names introduced by this FROM clause
   private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]): Either[AddScopeError, Environment[CT2]]

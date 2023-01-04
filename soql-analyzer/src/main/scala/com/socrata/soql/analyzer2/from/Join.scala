@@ -169,7 +169,7 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
     )
 
   def unique =
-    reduce[LazyList[List[Seq[(TableLabel, ColumnLabel)]]]](
+    reduce[LazyList[List[Seq[Column[CT]]]]](
       _.unique.to(LazyList).map(_ :: Nil),
       { (uniqueSoFar, join) =>
         uniqueSoFar.flatMap { uniques =>

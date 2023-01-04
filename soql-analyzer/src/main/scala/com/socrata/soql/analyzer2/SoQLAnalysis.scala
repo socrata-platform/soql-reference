@@ -26,16 +26,17 @@ class SoQLAnalysis[RNS, CT, CV] private (
   }
 
   /** Attempt to impose an arbitrary total order on this query.  Will
-    * preserve any ordering that exists, but also add trailing ORDER
-    * BY clauses for each orderable column in the select list which
-    * are not already present.
+    * preserve any ordering that exists, but also use the statement's
+    * `unique` columns to impose an ordering if possible, or add
+    * trailing ORDER BY clauses for each orderable column in the
+    * select list which are not already present.
     */
   def imposeOrdering(isOrderable: CT => Boolean): SoQLAnalysis[RNS, CT, CV] = {
     withoutSelectListReferences { self =>
       val nlp = self.labelProvider.clone()
       self.copy(
         labelProvider = nlp,
-        statement = rewrite.ImposeOrdering(nlp, isOrderable, self.statement)
+        statement = rewrite.ImposeOrdering(nlp, isOrderable, rewrite.PreserveUnique(nlp, self.statement))
       )
     }
   }

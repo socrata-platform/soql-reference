@@ -19,7 +19,7 @@ trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
   def contains[CT2 >: CT, CV](e: Expr[CT2, CV]): Boolean =
     false
 
-  def unique = primaryKeys.to(LazyList).map(_.map((label, _)))
+  def unique = primaryKeys.to(LazyList).map(_.map { dcn => Column(label, dcn, columns(dcn).typ)(AtomicPositionInfo.None) })
 
   lazy val resourceName = Some(definiteResourceName)
 

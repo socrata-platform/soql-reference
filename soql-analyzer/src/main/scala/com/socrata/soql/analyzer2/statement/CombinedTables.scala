@@ -13,9 +13,11 @@ import DocUtils._
 
 trait CombinedTablesImpl[+RNS, +CT, +CV] { this: CombinedTables[RNS, CT, CV] =>
   type Self[+RNS, +CT, +CV] = CombinedTables[RNS, CT, CV]
+
   def asSelf = this
 
   val schema = left.schema
+  def getColumn(cl: ColumnLabel) = left.getColumn(cl)
 
   def unique = LazyList.empty
 
