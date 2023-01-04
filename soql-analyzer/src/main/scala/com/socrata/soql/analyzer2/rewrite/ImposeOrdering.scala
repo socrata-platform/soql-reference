@@ -71,7 +71,7 @@ class ImposeOrdering[RNS, CT, CV] private (labelProvider: LabelProvider, isOrder
               val preexisting = orderBy.takeWhile { ob => distinctiveExprs(ob.expr) }
               val additional = orderBy.drop(preexisting.length)
 
-              val afterPrexisting =
+              val afterPreexisting =
                 if(additional.isEmpty) {
                   // We _might_ need to add additional exprs that
                   // aren't in the order-by list yet.
@@ -84,7 +84,7 @@ class ImposeOrdering[RNS, CT, CV] private (labelProvider: LabelProvider, isOrder
                   additional
                 }
 
-              val newBase = preexisting ++ afterPrexisting
+              val newBase = preexisting ++ afterPreexisting
               val newBaseSet = newBase.iterator.map(_.expr).to(Set)
 
               newBase ++ selectList.valuesIterator.collect { case NamedExpr(expr, name) if isOrderable(expr.typ) && !newBaseSet(expr) =>
