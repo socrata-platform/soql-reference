@@ -61,6 +61,24 @@ class SoQLAnalysis[RNS, CT, CV] private (
     if(usesSelectListReferences) this
     else copy(statement = rewrite.SelectListReferences.use(statement), usesSelectListReferences = true)
 
+  /** Update limit/offset for paging purposes.  You might want to
+    * imposeOrdering before doing this to ensure the paging is
+    * meaningful.  Pages are zero-based (i.e., they're an offset
+    * rather than a page number). */
+  def page(pageSize: BigInt, pageOffset: BigInt) = {
+    addLimitOffset(Some(pageSize), Some(pageOffset * pageSize))
+  }
+
+  /** Update limit/offset.  You might want to imposeOrdering before
+    * doing this to ensure the bounds are meaningful. */
+  def addLimitOffset(limit: Option[BigInt], offset: Option[BigInt]) = {
+    val nlp = labelProvider.clone()
+    copy(
+      labelProvider = nlp,
+      statement = rewrite.AddLimitOffset(nlp, statement, limit, offset)
+    )
+  }
+
   private def copy[RNS2, CT2, CV2](
     labelProvider: LabelProvider = this.labelProvider,
     statement: Statement[RNS2, CT2, CV2] = this.statement,
