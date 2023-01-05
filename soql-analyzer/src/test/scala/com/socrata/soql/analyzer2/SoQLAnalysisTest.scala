@@ -582,6 +582,78 @@ select count(*), 1 as x |> select x
     analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("addLimitOffset - combined tables") {
+    val tf = tableFinder(
+      (0, "a") -> D("a1" -> TestText, "a2" -> TestNumber),
+      (0, "b") -> D("b1" -> TestText, "b2" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "(select * from @a) union (select * from @b)")
+    val expectedAnalysis = analyze(tf, "((select * from @a) union (select * from @b)) |> select * limit 25 offset 50")
+    analysis.addLimitOffset(limit = Some(25), offset = Some(50)).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("addLimitOffset - no limit/offset initially") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num*num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 25 offset 50")
+    analysis.addLimitOffset(limit = Some(25), offset = Some(50)).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+
+  test("addLimitOFfset - fits within initial limit/offset") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num*num limit 100 offset 100")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 25 offset 150")
+    analysis.addLimitOffset(limit = Some(25), offset = Some(50)).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("addLimitOffset - overlaps the end of initial limit/offset") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num*num limit 100 offset 100")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 50 offset 150")
+    analysis.addLimitOffset(limit = Some(500), offset = Some(50)).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("addLimitOffset - overlaps the end of initial limit/offset with no new limit provided") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num*num limit 100 offset 100")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 50 offset 150")
+    analysis.addLimitOffset(limit = None, offset = Some(50)).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("addLimitOffset - passes the end of initial limit/offset") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num*num limit 100 offset 100")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 0 offset 200") // Note the offset will not pass the end of the original chunk
+    analysis.addLimitOffset(limit = Some(500), offset = Some(500)).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("addLimitOffset - passes the end of initial limit/offset with no new limit provided") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num*num limit 100 offset 100")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 0 offset 200") // Note the offset will not pass the end of the original chunk
+    analysis.addLimitOffset(limit = None, offset = Some(500)).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
   test("simple (de)serialization") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
