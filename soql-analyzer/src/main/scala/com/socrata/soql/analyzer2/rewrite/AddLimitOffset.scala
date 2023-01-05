@@ -5,8 +5,6 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.analyzer2
 
 class AddLimitOffset[RNS, CT, CV] private (labelProvider: LabelProvider) {
-  import AddLimitOffset.zero
-
   type Statement = analyzer2.Statement[RNS, CT, CV]
 
   def rewriteStatement(stmt: Statement, desiredLimit: Option[BigInt], desiredOffset: Option[BigInt]): Statement = {
