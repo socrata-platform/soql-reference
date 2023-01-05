@@ -10,7 +10,6 @@ class AddLimitOffset[RNS, CT, CV] private (labelProvider: LabelProvider) {
   def rewriteStatement(stmt: Statement, desiredLimit: Option[BigInt], desiredOffset: Option[BigInt]): Statement = {
     stmt match {
       case CombinedTables(_, _, _) | Values(_) =>
-        // combinedtables and values don't specify an order, so we don't need to preserve an order
         val newTableLabel = labelProvider.tableLabel()
         Select(
           Distinctiveness.Indistinct,
