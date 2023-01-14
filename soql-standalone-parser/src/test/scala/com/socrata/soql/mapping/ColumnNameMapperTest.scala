@@ -175,8 +175,8 @@ class ColumnNameMapperTest extends FunSuite with MustMatchers with Assertions {
   test("Compound query mapped with aliases changes the right side of a union") {
     val soql = "SELECT name WHERE name='c1' GROUP BY name UNION SELECT name FROM @dog WHERE name='d1' GROUP BY name"
     val s = parser.binaryTreeSelect(soql)
-    val expectedNoAliases = "SELECT `MAP_name` WHERE `MAP_name` = 'c1' GROUP BY `MAP_name` UNION SELECT `MAP_name` FROM @dog WHERE `MAP_name` = 'd1' GROUP BY `MAP_name`"
-    val expectedWithAliases = "SELECT `MAP_name` AS `name` WHERE `name` = 'c1' GROUP BY `name` UNION SELECT `MAP_name` AS `name` FROM @dog WHERE `name` = 'd1' GROUP BY `name`"
+    val expectedNoAliases = "SELECT `MAP_name` WHERE `MAP_name` = \"c1\" GROUP BY `MAP_name` UNION SELECT `MAP_name` FROM @dog WHERE `MAP_name` = \"d1\" GROUP BY `MAP_name`"
+    val expectedWithAliases = "SELECT `MAP_name` AS `name` WHERE `name` = \"c1\" GROUP BY `name` UNION SELECT `MAP_name` AS `name` FROM @dog WHERE `name` = \"d1\" GROUP BY `name`"
     val actualNoAliases = Select.toString(mapper.mapSelects(s, false))
     val actualWithAliases = Select.toString(mapper.mapSelects(s, true))
     actualNoAliases must be(expectedNoAliases)
