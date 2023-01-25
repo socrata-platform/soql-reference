@@ -14,9 +14,9 @@ import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable,
 
 import DocUtils._
 
-sealed abstract class From[+RNS, +CT, +CV] {
-  type Self[+RNS, +CT, +CV] <: From[RNS, CT, CV]
-  def asSelf: Self[RNS, CT, CV]
+sealed abstract class From[MT <: MetaTypes] extends MetaTypeHelper[MT] {
+  type Self[MT <: MetaTypes] <: From[MT]
+  def asSelf: Self[MT]
 
   // A dataset is allowed to have zero or more sets of columns which
   // each uniquely specify rows (e.g., a UNION operation will have an
@@ -32,15 +32,15 @@ sealed abstract class From[+RNS, +CT, +CV] {
   // extend the given environment with names introduced by this FROM clause
   private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]): Either[AddScopeError, Environment[CT2]]
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[RNS, CT, CV]
+  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[MT]
 
-  private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV]
+  private[analyzer2] def doRelabel(state: RelabelState): Self[MT]
 
   private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
-  private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean
+  private[analyzer2] def findIsomorphism[MT2 <: MetaTypes](state: IsomorphismState, that: From[MT2]): Boolean
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
 
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]]
@@ -50,30 +50,30 @@ sealed abstract class From[+RNS, +CT, +CV] {
   final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder = debugDoc.layoutSmart().toStringBuilder(sb)
   def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]]
 
-  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV]
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT]
 
-  type ReduceResult[+RNS, +CT, +CV] <: From[RNS, CT, CV]
+  type ReduceResult[MT <: MetaTypes] <: From[MT]
 
-  def reduceMap[S, RNS2, CT2, CV2](
-    base: AtomicFrom[RNS, CT, CV] => (S, AtomicFrom[RNS2, CT2, CV2]),
-    combine: (S, JoinType, Boolean, From[RNS2, CT2, CV2], AtomicFrom[RNS, CT, CV], Expr[CT, CV]) => (S, Join[RNS2, CT2, CV2])
-  ): (S, ReduceResult[RNS2, CT2, CV2])
+  def reduceMap[S, MT2 <: MetaTypes](
+    base: AtomicFrom[MT] => (S, AtomicFrom[MT2]),
+    combine: (S, JoinType, Boolean, From[MT2], AtomicFrom[MT], Expr[CT, CV]) => (S, Join[MT2])
+  ): (S, ReduceResult[MT2])
 
-  final def map[RNS2, CT2, CV2](
-    base: AtomicFrom[RNS, CT, CV] => AtomicFrom[RNS2, CT2, CV2],
-    combine: (JoinType, Boolean, From[RNS2, CT2, CV2], AtomicFrom[RNS, CT, CV], Expr[CT, CV]) => Join[RNS2, CT2, CV2]
-  ): ReduceResult[RNS2, CT2, CV2] = {
-    reduceMap[Unit, RNS2, CT2, CV2](
+  final def map[MT2 <: MetaTypes](
+    base: AtomicFrom[MT] => AtomicFrom[MT2],
+    combine: (JoinType, Boolean, From[MT2], AtomicFrom[MT], Expr[CT, CV]) => Join[MT2]
+  ): ReduceResult[MT2] = {
+    reduceMap[Unit, MT2](
       { nonJoin => ((), base.apply(nonJoin)) },
       { (_, joinType, lateral, left, right, on) => ((), combine(joinType, lateral, left, right, on)) }
     )._2
   }
 
   final def reduce[S](
-    base: AtomicFrom[RNS, CT, CV] => S,
-    combine: (S, Join[RNS, CT, CV]) => S
+    base: AtomicFrom[MT] => S,
+    combine: (S, Join[MT]) => S
   ): S =
-    reduceMap[S, RNS, CT, CV](
+    reduceMap[S, MT](
       { nonJoin => (base(nonJoin), nonJoin) },
       { (s, joinType, lateral, left, right, on) =>
         val j = Join(joinType, lateral, left, right, on)
@@ -83,72 +83,72 @@ sealed abstract class From[+RNS, +CT, +CV] {
 }
 
 object From {
-  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[From[RNS, CT, CV]] = new Writable[From[RNS, CT, CV]] {
-    def writeTo(buffer: WriteBuffer, from: From[RNS, CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], ev: Writable[Expr[MT#CT, MT#CV]]): Writable[From[MT]] = new Writable[From[MT]] {
+    def writeTo(buffer: WriteBuffer, from: From[MT]): Unit = {
       from match {
-        case j: Join[RNS, CT, CV] =>
+        case j: Join[MT] =>
           buffer.write(0)
           buffer.write(j)
-        case ft: FromTable[RNS, CT] =>
+        case ft: FromTable[MT] =>
           buffer.write(1)
           buffer.write(ft)
-        case fs: FromStatement[RNS, CT, CV] =>
+        case fs: FromStatement[MT] =>
           buffer.write(2)
           buffer.write(fs)
-        case fsr: FromSingleRow[RNS] =>
+        case fsr: FromSingleRow[MT] =>
           buffer.write(3)
           buffer.write(fsr)
       }
     }
   }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[From[RNS, CT, CV]] = new Readable[From[RNS, CT, CV]] {
-    def readFrom(buffer: ReadBuffer): From[RNS, CT, CV] = {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], ev: Readable[Expr[MT#CT, MT#CV]]): Readable[From[MT]] = new Readable[From[MT]] {
+    def readFrom(buffer: ReadBuffer): From[MT] = {
       buffer.read[Int]() match {
-        case 0 => buffer.read[Join[RNS, CT, CV]]()
-        case 1 => buffer.read[FromTable[RNS, CT]]()
-        case 2 => buffer.read[FromStatement[RNS, CT, CV]]()
-        case 3 => buffer.read[FromSingleRow[RNS]]()
+        case 0 => buffer.read[Join[MT]]()
+        case 1 => buffer.read[FromTable[MT]]()
+        case 2 => buffer.read[FromStatement[MT]]()
+        case 3 => buffer.read[FromSingleRow[MT]]()
         case other => fail("Unknown from tag " + other)
       }
     }
   }
 }
 
-case class Join[+RNS, +CT, +CV](
+case class Join[MT <: MetaTypes](
   joinType: JoinType,
   lateral: Boolean,
-  left: From[RNS, CT, CV],
-  right: AtomicFrom[RNS, CT, CV],
-  on: Expr[CT, CV]
+  left: From[MT],
+  right: AtomicFrom[MT],
+  on: Expr[MT#CT, MT#CV]
 ) extends
-    From[RNS, CT, CV]
-    with from.JoinImpl[RNS, CT, CV]
+    From[MT]
+    with from.JoinImpl[MT]
 object Join extends from.OJoinImpl
 
-sealed abstract class AtomicFrom[+RNS, +CT, +CV] extends From[RNS, CT, CV] with from.AtomicFromImpl[RNS, CT, CV]
+sealed abstract class AtomicFrom[MT <: MetaTypes] extends From[MT] with from.AtomicFromImpl[MT]
 object AtomicFrom extends from.OAtomicFromImpl
 
-object FromTable extends from.OFromTableImpl
-case class FromTable[+RNS, +CT](
+case class FromTable[MT <: MetaTypes](
   tableName: DatabaseTableName,
-  definiteResourceName: ScopedResourceName[RNS],
+  definiteResourceName: ScopedResourceName[MT#RNS],
   alias: Option[ResourceName],
   label: AutoTableLabel,
-  columns: OrderedMap[DatabaseColumnName, NameEntry[CT]],
+  columns: OrderedMap[DatabaseColumnName, NameEntry[MT#CT]],
   primaryKeys: Seq[Seq[DatabaseColumnName]]
-) extends AtomicFrom[RNS, CT, Nothing] with from.FromTableImpl[RNS, CT]
+) extends AtomicFrom[MT] with from.FromTableImpl[MT]
+object FromTable extends from.OFromTableImpl
 
 // "alias" is optional here because of chained soql; actually having a
 // real subselect syntactically requires an alias, but `select ... |>
 // select ...` does not.  The alias is just for name-resolution during
 // analysis anyway...
-case class FromStatement[+RNS, +CT, +CV](
-  statement: Statement[RNS, CT, CV],
+case class FromStatement[MT <: MetaTypes](
+  statement: Statement[MT],
   label: AutoTableLabel,
-  resourceName: Option[ScopedResourceName[RNS]],
+  resourceName: Option[ScopedResourceName[MT#RNS]],
   alias: Option[ResourceName]
-) extends AtomicFrom[RNS, CT, CV] with from.FromStatementImpl[RNS, CT, CV] {
+) extends AtomicFrom[MT] with from.FromStatementImpl[MT] {
   // I'm not sure why this needs to be here.  The typechecker gets
   // confused about calling Scope.apply if it lives in
   // FromStatementImpl
@@ -156,8 +156,8 @@ case class FromStatement[+RNS, +CT, +CV](
 }
 object FromStatement extends from.OFromStatementImpl
 
-case class FromSingleRow[+RNS](
+case class FromSingleRow[MT <: MetaTypes](
   label: AutoTableLabel,
   alias: Option[ResourceName]
-) extends AtomicFrom[RNS, Nothing, Nothing] with from.FromSingleRowImpl[RNS]
+) extends AtomicFrom[MT] with from.FromSingleRowImpl[MT]
 object FromSingleRow extends from.OFromSingleRowImpl

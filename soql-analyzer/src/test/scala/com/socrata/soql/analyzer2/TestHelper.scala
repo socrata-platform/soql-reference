@@ -45,8 +45,8 @@ trait TestHelper { this: Assertions =>
     }
   }
 
-  class IsomorphicToMatcher[RNS, CT, CV : HasDoc](right: Statement[RNS, CT, CV]) extends BeMatcher[Statement[RNS, CT, CV]] {
-    def apply(left: Statement[RNS, CT, CV]) =
+  class IsomorphicToMatcher[MT <: MetaTypes](right: Statement[MT])(implicit ev: HasDoc[MT#CV]) extends BeMatcher[Statement[MT]] {
+    def apply(left: Statement[MT]) =
       MatchResult(
         left.isIsomorphic(right),
         left.debugStr + "\nwas not isomorphic to\n" + right.debugStr,
@@ -54,7 +54,7 @@ trait TestHelper { this: Assertions =>
       )
   }
 
-  def isomorphicTo[RNS, CT, CV : HasDoc](right: Statement[RNS, CT, CV]) = new IsomorphicToMatcher(right)
+  def isomorphicTo[MT <: MetaTypes](right: Statement[MT])(implicit ev: HasDoc[MT#CV]) = new IsomorphicToMatcher(right)
 
   def specFor(params: Map[HoleName, UserParameters.PossibleValue[TestType, TestValue]]): Map[HoleName, TestType] =
     params.iterator.map { case (hn, cv) =>

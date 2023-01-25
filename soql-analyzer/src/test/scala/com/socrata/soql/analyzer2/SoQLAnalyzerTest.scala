@@ -42,7 +42,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
@@ -102,7 +102,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
@@ -126,7 +126,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     select.from must equal (
-      FromTable(
+      FromTable[TestMT](
         dtn("aaaa-aaaa"),
         ScopedResourceName(0, rn("aaaa-aaaa")),
         None,
@@ -159,7 +159,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
@@ -186,7 +186,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
@@ -212,7 +212,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
@@ -234,18 +234,18 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis = analyzeSaved(tf, "aaaa-aaaa")
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
     select must equal (
-      Select(
+      Select[TestMT](
         Distinctiveness.Indistinct,
         OrderedMap(
           c(1) -> NamedExpr(Column(t(1), dcn("text"), TestText)(AtomicPositionInfo.None), cn("text")),
           c(2) -> NamedExpr(Column(t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None), cn("num"))
         ),
-        FromTable(
+        FromTable[TestMT](
           dtn("aaaa-aaaa"),
           ScopedResourceName(0, rn("aaaa-aaaa")),
           None,
@@ -274,25 +274,25 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis = analyze(tf, "aaaa-aaaa", "select *")
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
     select must equal (
-      Select(
+      Select[TestMT](
         Distinctiveness.Indistinct,
         OrderedMap(
           c(3) -> NamedExpr(Column(t(2),c(1),TestText)(AtomicPositionInfo.None),cn("text")),
           c(4) -> NamedExpr(Column(t(2),c(2),TestNumber)(AtomicPositionInfo.None),cn("num"))
         ),
-        FromStatement(
-          Select(
+        FromStatement[TestMT](
+          Select[TestMT](
             Distinctiveness.Indistinct,
             OrderedMap(
               c(1) -> NamedExpr(Column(t(1), dcn("text"), TestText)(AtomicPositionInfo.None), cn("text")),
               c(2) -> NamedExpr(Column(t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None), cn("num"))
             ),
-            FromTable(
+            FromTable[TestMT](
               dtn("aaaa-aaaa"),
               ScopedResourceName(0, rn("aaaa-aaaa")),
               None,
@@ -363,7 +363,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis = analyze(tf, "aaaa-aaaa", "select * join @cccc-cccc('bob') on true")
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
@@ -381,10 +381,10 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     select.from must equal (
-      Join(
+      Join[TestMT](
         JoinType.Inner,
         true,
-        FromTable(
+        FromTable[TestMT](
           dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
@@ -392,26 +392,26 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           ),
           Nil
         ),
-        FromStatement(
-          Select(
+        FromStatement[TestMT](
+          Select[TestMT](
             Distinctiveness.Indistinct,
             OrderedMap(
               c(2) -> NamedExpr(Column(t(4),c(1),TestNumber)(AtomicPositionInfo.None), cn("_1"))
             ),
-            Join(
+            Join[TestMT](
               JoinType.Inner,
               true,
-              FromStatement(
-                Values(NonEmptySeq(NonEmptySeq(LiteralValue(TestText("bob"))(AtomicPositionInfo.None),Nil),Nil)),
+              FromStatement[TestMT](
+                Values[TestMT](NonEmptySeq(NonEmptySeq(LiteralValue(TestText("bob"))(AtomicPositionInfo.None),Nil),Nil)),
                 t(2), None, None
               ),
-              FromStatement(
-                Select(
+              FromStatement[TestMT](
+                Select[TestMT](
                   Distinctiveness.Indistinct,
                   OrderedMap(
                     c(1) -> NamedExpr(LiteralValue(TestNumber(1))(AtomicPositionInfo.None),cn("_1"))
                   ),
-                  FromTable(
+                  FromTable[TestMT](
                     dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")),Some(rn("bbbb-bbbb")),
                     t(3),
                     OrderedMap(
@@ -461,7 +461,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis = analyze(tf, "aaaa-aaaa", "select * join @cccc-cccc(text) on true")
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
@@ -479,10 +479,10 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     select.from must equal (
-      Join(
+      Join[TestMT](
         JoinType.Inner,
         true,
-        FromTable(
+        FromTable[TestMT](
           dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
@@ -490,26 +490,26 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           ),
           Nil
         ),
-        FromStatement(
-          Select(
+        FromStatement[TestMT](
+          Select[TestMT](
             Distinctiveness.Indistinct,
             OrderedMap(
               c(2) -> NamedExpr(Column(t(4),c(1),TestNumber)(AtomicPositionInfo.None), cn("_1"))
             ),
-            Join(
+            Join[TestMT](
               JoinType.Inner,
               true,
               FromStatement(
-                Values(NonEmptySeq(NonEmptySeq(Column(t(1),dcn("text"),TestText)(AtomicPositionInfo.None),Nil),Nil)),
+                Values[TestMT](NonEmptySeq(NonEmptySeq(Column(t(1),dcn("text"),TestText)(AtomicPositionInfo.None),Nil),Nil)),
                 t(2), None, None
               ),
-              FromStatement(
-                Select(
+              FromStatement[TestMT](
+                Select[TestMT](
                   Distinctiveness.Indistinct,
                   OrderedMap(
                     c(1) -> NamedExpr(LiteralValue(TestNumber(1))(AtomicPositionInfo.None),cn("_1"))
                   ),
-                  FromTable(
+                  FromTable[TestMT](
                     dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")),Some(rn("bbbb-bbbb")),
                     t(3),
                     OrderedMap(
@@ -558,7 +558,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis = analyze(tf, "aaaa-aaaa", "select * join @bbbb-bbbb('hello' :: text, 5, true :: boolean, text) on true")
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
@@ -576,10 +576,10 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     select.from must equal (
-      Join(
+      Join[TestMT](
         JoinType.Inner,
         true,
-        FromTable(
+        FromTable[TestMT](
           dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
@@ -587,8 +587,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           ),
           Nil
         ),
-        FromStatement(
-          Select(
+        FromStatement[TestMT](
+          Select[TestMT](
             Distinctiveness.Indistinct,
             OrderedMap(
               c(5) -> NamedExpr(Column(t(4), c(1), TestText)(AtomicPositionInfo.None), cn("a")),
@@ -596,11 +596,11 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
               c(7) -> NamedExpr(Column(t(4), c(3), TestNumber)(AtomicPositionInfo.None), cn("c")),
               c(8) -> NamedExpr(Column(t(4), c(4), TestText)(AtomicPositionInfo.None), cn("d"))
             ),
-            Join(
+            Join[TestMT](
               JoinType.Inner,
               true,
-              FromStatement(
-                Values(
+              FromStatement[TestMT](
+                Values[TestMT](
                   NonEmptySeq(
                     NonEmptySeq(
                       FunctionCall(
@@ -621,7 +621,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                 t(2), None, None
               ),
               FromStatement(
-                Select(
+                Select[TestMT](
                   Distinctiveness.Indistinct,
                   OrderedMap(
                     c(1) -> NamedExpr(Column(t(2),dcn("column4"),TestText)(AtomicPositionInfo.None), cn("a")),
@@ -653,7 +653,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis = analyze(tf, "aaaa-aaaa", "select n1 + n2 as sum where sum = 5")
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
@@ -687,12 +687,12 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis = analyze(tf, "aaaa-aaaa", "select * join @bbbb-bbbb(7) on true")
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
     val subquery = select.from match {
-      case Join(_, _, _, FromStatement(subquery: Select[Int, TestType, TestValue], _, _, _), _) => subquery
+      case Join(_, _, _, FromStatement(subquery: Select[TestMT], _, _, _), _) => subquery
       case _ => fail("Expected a join to a subquery")
     }
 

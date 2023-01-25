@@ -12,11 +12,11 @@ import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
 
-trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
-  type Self[+RNS, +CT, +CV] = FromTable[RNS, CT]
+trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
+  type Self[MT <: MetaTypes] = FromTable[MT]
   def asSelf = this
 
-  def find(predicate: Expr[CT, Nothing] => Boolean) = None
+  def find(predicate: Expr[CT, CV] => Boolean) = None
   def contains[CT2 >: CT, CV](e: Expr[CT2, CV]): Boolean =
     false
 
@@ -28,7 +28,7 @@ trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
 
   private[analyzer2] override final val scope: Scope[CT] = Scope(columns, label)
 
-  def debugDoc(implicit ev: HasDoc[Nothing]) =
+  def debugDoc(implicit ev: HasDoc[CV]) =
     (tableName.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
@@ -41,7 +41,7 @@ trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
     copy(label = state.convert(label))
   }
 
-  private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
+  private[analyzer2] final def findIsomorphism[MT2 <: MetaTypes](state: IsomorphismState, that: From[MT2]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
       case FromTable(thatTableName, thatResourceName, thatAlias, thatLabel, thatColumns, thatPrimaryKeys) =>
@@ -61,10 +61,10 @@ trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
 
   private[analyzer2] def realTables = Map(label -> tableName)
 
-  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromTable[RNS, CT] =
+  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): Self[MT] =
     copy(alias = newAlias)
 
-  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, Nothing] =
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =
     copy(alias = f(alias))
 
   private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
@@ -77,8 +77,8 @@ trait FromTableImpl[+RNS, +CT] { this: FromTable[RNS, CT] =>
 }
 
 trait OFromTableImpl { this: FromTable.type =>
-  implicit def serialize[RNS: Writable, CT: Writable]: Writable[FromTable[RNS, CT]] = new Writable[FromTable[RNS, CT]] {
-    def writeTo(buffer: WriteBuffer, from: FromTable[RNS, CT]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT#CT, MT#CV]]): Writable[FromTable[MT]] = new Writable[FromTable[MT]] {
+    def writeTo(buffer: WriteBuffer, from: FromTable[MT]): Unit = {
       buffer.write(from.tableName)
       buffer.write(from.definiteResourceName)
       buffer.write(from.alias)
@@ -88,8 +88,8 @@ trait OFromTableImpl { this: FromTable.type =>
     }
   }
 
-  implicit def deserialize[RNS: Readable, CT: Readable]: Readable[FromTable[RNS, CT]] = new Readable[FromTable[RNS, CT]] {
-    def readFrom(buffer: ReadBuffer): FromTable[RNS, CT] = {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT#CT, MT#CV]]): Readable[FromTable[MT]] = new Readable[FromTable[MT]] with MetaTypeHelper[MT] {
+    def readFrom(buffer: ReadBuffer): FromTable[MT] = {
       FromTable(
         tableName = buffer.read[DatabaseTableName](),
         definiteResourceName = buffer.read[ScopedResourceName[RNS]](),

@@ -14,8 +14,8 @@ import com.socrata.soql.typechecker.HasDoc
 
 import DocUtils._
 
-trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
-  type Self[+RNS, +CT, +CV] = FromStatement[RNS, CT, CV]
+trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
+  type Self[MT <: MetaTypes] = FromStatement[MT]
   def asSelf = this
 
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = statement.columnReferences
@@ -26,7 +26,7 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
 
   def unique = statement.unique.map(_.map { cn => Column(label, cn, statement.column(cn).typ)(AtomicPositionInfo.None) })
 
-  private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
+  private[analyzer2] final def findIsomorphism[MT2 <: MetaTypes](state: IsomorphismState, that: From[MT2]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
       case FromStatement(thatStatement, thatLabel, thatResourceName, thatAlias) =>
@@ -45,10 +45,10 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
          label = state.convert(label))
   }
 
-  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromStatement[RNS, CT, CV] =
+  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): Self[MT] =
     copy(alias = newAlias)
 
-  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =
     copy(statement = statement.mapAlias(f), alias = f(alias))
 
   private[analyzer2] def realTables = statement.realTables
@@ -67,8 +67,8 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
 }
 
 trait OFromStatementImpl { this: FromStatement.type =>
-  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[FromStatement[RNS, CT, CV]] = new Writable[FromStatement[RNS, CT, CV]] {
-    def writeTo(buffer: WriteBuffer, from: FromStatement[RNS, CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT#CT, MT#CV]]): Writable[FromStatement[MT]] = new Writable[FromStatement[MT]] {
+    def writeTo(buffer: WriteBuffer, from: FromStatement[MT]): Unit = {
       buffer.write(from.statement)
       buffer.write(from.label)
       buffer.write(from.resourceName)
@@ -76,11 +76,11 @@ trait OFromStatementImpl { this: FromStatement.type =>
     }
   }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[FromStatement[RNS, CT, CV]] =
-    new Readable[FromStatement[RNS, CT, CV]] {
-      def readFrom(buffer: ReadBuffer): FromStatement[RNS, CT, CV] =
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT#CT, MT#CV]]): Readable[FromStatement[MT]] =
+    new Readable[FromStatement[MT]] with MetaTypeHelper[MT] {
+      def readFrom(buffer: ReadBuffer): FromStatement[MT] =
         FromStatement(
-          statement = buffer.read[Statement[RNS, CT, CV]](),
+          statement = buffer.read[Statement[MT]](),
           label = buffer.read[AutoTableLabel](),
           resourceName = buffer.read[Option[ScopedResourceName[RNS]]](),
           alias = buffer.read[Option[ResourceName]]()

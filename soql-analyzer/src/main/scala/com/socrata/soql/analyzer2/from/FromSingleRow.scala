@@ -12,8 +12,8 @@ import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
 
-trait FromSingleRowImpl[+RNS] { this: FromSingleRow[RNS] =>
-  type Self[+RNS, +CT, +CV] = FromSingleRow[RNS]
+trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
+  type Self[MT <: MetaTypes] = FromSingleRow[MT]
   def asSelf = this
 
   val resourceName = None
@@ -27,10 +27,10 @@ trait FromSingleRowImpl[+RNS] { this: FromSingleRow[RNS] =>
       label
     )
 
-  def find(predicate: Expr[Nothing, Nothing] => Boolean) = None
+  def find(predicate: Expr[CT, CV] => Boolean) = None
   def contains[CT, CV](e: Expr[CT, CV]): Boolean = false
 
-  private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
+  private[analyzer2] final def findIsomorphism[MT2 <: MetaTypes](state: IsomorphismState, that: From[MT2]): Boolean =
     that match {
       case FromSingleRow(thatLabel, thatAlias) =>
         state.tryAssociate(this.label, thatLabel)
@@ -41,14 +41,14 @@ trait FromSingleRowImpl[+RNS] { this: FromSingleRow[RNS] =>
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
 
-  private[analyzer2] def doRelabel(state: RelabelState) = {
+  private[analyzer2] def doRelabel(state: RelabelState): Self[MT] = {
     copy(label = state.convert(label))
   }
 
-  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromSingleRow[RNS] =
+  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromSingleRow[MT] =
     copy(alias = newAlias)
 
-  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, Nothing, Nothing] =
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =
     copy(alias = f(alias))
 
   private[analyzer2] def realTables = Map.empty[AutoTableLabel, DatabaseTableName]
@@ -60,22 +60,22 @@ trait FromSingleRowImpl[+RNS] { this: FromSingleRow[RNS] =>
     // no columns
   }
 
-  def debugDoc(implicit ev: HasDoc[Nothing]) =
+  def debugDoc(implicit ev: HasDoc[CV]) =
     (d"(SELECT)" +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
 }
 
 trait OFromSingleRowImpl { this: FromSingleRow.type =>
-  implicit def serialize[RNS: Writable]: Writable[FromSingleRow[RNS]] =
-    new Writable[FromSingleRow[RNS]] {
-      def writeTo(buffer: WriteBuffer, fsr: FromSingleRow[RNS]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWRitable: Writable[MT#RNS]): Writable[FromSingleRow[MT]] =
+    new Writable[FromSingleRow[MT]] {
+      def writeTo(buffer: WriteBuffer, fsr: FromSingleRow[MT]): Unit = {
         buffer.write(fsr.label)
         buffer.write(fsr.alias)
       }
     }
 
-  implicit def deserialize[RNS: Readable]: Readable[FromSingleRow[RNS]] =
-    new Readable[FromSingleRow[RNS]] {
-      def readFrom(buffer: ReadBuffer): FromSingleRow[RNS] = {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS]): Readable[FromSingleRow[MT]] =
+    new Readable[FromSingleRow[MT]] {
+      def readFrom(buffer: ReadBuffer): FromSingleRow[MT] = {
         FromSingleRow(
           label = buffer.read[AutoTableLabel](),
           alias = buffer.read[Option[ResourceName]]()

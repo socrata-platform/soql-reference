@@ -9,19 +9,19 @@ import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
 import com.socrata.soql.analyzer2._
 
-class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
+class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnalyzerUniverse[MT] {
   private implicit val hd = new HasDoc[CV] {
     override def docOf(v: CV) = com.socrata.prettyprint.Doc(v.toString)
   }
 
-  def merge(stmt: Statement[RNS, CT, CV]): Statement[RNS, CT, CV] = {
+  def merge(stmt: Statement): Statement = {
     val r = doMerge(stmt)
     debug("finished", r)
     debugDone()
     r
   }
 
-  private def doMerge(stmt: Statement[RNS, CT, CV]): Statement[RNS, CT, CV] =
+  private def doMerge(stmt: Statement): Statement =
     stmt match {
       case c@CombinedTables(_, left, right) =>
         debug("combined tables")
@@ -30,13 +30,13 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         // TODO: maybe make this not a CTE at all, sometimes?
         debug("CTE")
         cte.copy(definitionQuery = doMerge(defQ), useQuery = doMerge(useQ))
-      case v: Values[CT, CV] =>
+      case v: Values =>
         debug("values")
         v
-      case select: Select[RNS, CT, CV] =>
+      case select: Select =>
         debug("select")
         select.copy(from = mergeFrom(select.from)) match {
-          case b@Select(_, _, Unjoin(FromStatement(a: Select[RNS, CT, CV], aLabel, aResourceName, aAlias), bRejoin), _, _, _, _, _, _, _, _) =>
+          case b@Select(_, _, Unjoin(FromStatement(a: Select, aLabel, aResourceName, aAlias), bRejoin), _, _, _, _, _, _, _, _) =>
             // This privileges the first query in b's FROM because our
             // queries are frequently constructed in a chain.
             mergeSelects(a, aLabel, aResourceName, aAlias, b, bRejoin) match {
@@ -47,7 +47,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
                 debug("merged")
                 merged
             }
-          case other: Select[_, _, _] =>
+          case other: Select =>
             debug("select on not-from-select")
             other
           case other =>
@@ -56,14 +56,14 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         }
     }
 
-  private def mergeFrom(from: From[RNS, CT, CV]): From[RNS, CT, CV] = {
-    from.map[RNS, CT, CV](
+  private def mergeFrom(from: From): From = {
+    from.map[MT](
       mergeAtomicFrom,
       (jt, lat, left, right, on) => Join(jt, lat, left, mergeAtomicFrom(right), on)
     )
   }
 
-  private def mergeAtomicFrom(from: AtomicFrom[RNS, CT, CV]): AtomicFrom[RNS, CT, CV] = {
+  private def mergeAtomicFrom(from: AtomicFrom): AtomicFrom = {
     from match {
       case s@FromStatement(stmt, _, _, _) => s.copy(statement = doMerge(stmt))
       case other => other
@@ -71,7 +71,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
   }
 
   private type ExprRewriter = Expr[CT, CV] => Expr[CT, CV]
-  private type FromRewriter = (From[RNS, CT, CV], ExprRewriter) => From[RNS, CT, CV]
+  private type FromRewriter = (From, ExprRewriter) => From
 
   private object Unjoin {
     // case ... join@Unjoin(leftmost, rebuild) ... =>
@@ -83,12 +83,12 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
     //    lateral subqueries when merging.
     //
     //    One thing to note: rebuild(leftmost, identity) == join
-    def unapply(x: From[RNS, CT, CV]): Some[(AtomicFrom[RNS, CT, CV], FromRewriter)] = {
+    def unapply(x: From): Some[(AtomicFrom, FromRewriter)] = {
       @tailrec
-      def loop(here: From[RNS, CT, CV], stack: List[FromRewriter]): (AtomicFrom[RNS, CT, CV], List[FromRewriter]) = {
+      def loop(here: From, stack: List[FromRewriter]): (AtomicFrom, List[FromRewriter]) = {
         here match {
-          case atom: AtomicFrom[RNS, CT, CV] => (atom, stack)
-          case Join(jt, lat, left, right, on) => loop(left, { (newLeft: From[RNS, CT, CV], xform: ExprRewriter) => Join(jt, lat, newLeft, if(lat) rewrite(right, xform) else right, xform(on)) } :: stack)
+          case atom: AtomicFrom => (atom, stack)
+          case Join(jt, lat, left, right, on) => loop(left, { (newLeft: From, xform: ExprRewriter) => Join(jt, lat, newLeft, if(lat) rewrite(right, xform) else right, xform(on)) } :: stack)
         }
       }
 
@@ -97,19 +97,19 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
     }
   }
 
-  private def rewrite(from: AtomicFrom[RNS, CT, CV], xform: ExprRewriter): AtomicFrom[RNS, CT, CV] =
+  private def rewrite(from: AtomicFrom, xform: ExprRewriter): AtomicFrom =
     from match {
       case fs@FromStatement(s, _, _, _) => fs.copy(statement = rewrite(s, xform))
       case other => other
     }
 
-  private def rewrite(s: Statement[RNS, CT, CV], xform: ExprRewriter): Statement[RNS, CT, CV] =
+  private def rewrite(s: Statement, xform: ExprRewriter): Statement =
     s match {
       case Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
         Select(
           rewrite(distinctiveness, xform),
           rewrite(selectList, xform),
-          from.map[RNS, CT, CV](
+          from.map(
             rewrite(_, xform),
             (jt, lat, left, right, on) => Join(jt, lat, left, rewrite(right, xform), xform(on))
           ),
@@ -129,9 +129,9 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
     d.withValuesMapped { ne => ne.copy(expr = xform(ne.expr)) }
 
   private def mergeSelects(
-    a: Select[RNS, CT, CV], aLabel: TableLabel, aResourceName: Option[ScopedResourceName[RNS]], aAlias: Option[ResourceName],
-    b: Select[RNS, CT, CV], bRejoin: FromRewriter
-  ): Option[Statement[RNS, CT, CV]] =
+    a: Select, aLabel: TableLabel, aResourceName: Option[ScopedResourceName[RNS]], aAlias: Option[ResourceName],
+    b: Select, bRejoin: FromRewriter
+  ): Option[Statement] =
     // If we decide to merge this, we're going to create some flavor of
     //   select merged_projection from bRejoin(FromStatement(a.from)) ...)
     (a, b) match {
@@ -215,7 +215,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         None
     }
 
-  private def definitelyRequiresSubselect(a: Select[RNS, CT, CV], aLabel: TableLabel, b: Select[RNS, CT, CV]): Boolean = {
+  private def definitelyRequiresSubselect(a: Select, aLabel: TableLabel, b: Select): Boolean = {
     if(b.hint(SelectHint.NoChainMerge)) {
       debug("B asks not to merge with its upstream")
       return true
@@ -250,7 +250,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         return true
       }
 
-      if(!b.from.isInstanceOf[AtomicFrom[_, _, _]]) {
+      if(!b.from.isInstanceOf[AtomicFrom]) {
         // b multiplies the rows, which affects grouping; can't merge.
         debug("join-on-aggregate")
         return true
@@ -304,9 +304,9 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
   }
 
   // true if "q" reorders, groups, or filters its input-rows
-  private def shapeChanging(q: Select[RNS, CT, CV]): Boolean =
+  private def shapeChanging(q: Select): Boolean =
     q.isAggregated ||
-      !q.from.isInstanceOf[AtomicFrom[_, _, _]] ||
+      !q.from.isInstanceOf[AtomicFrom] ||
       q.where.isDefined ||
       q.orderBy.nonEmpty ||
       q.distinctiveness != Distinctiveness.Indistinct
@@ -430,7 +430,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
       debugOne = false
     }
   }
-  private def debug(message: String, a: Statement[RNS, CT, CV], bs: Statement[RNS, CT, CV]*): Unit = {
+  private def debug(message: String, a: Statement, bs: Statement*): Unit = {
     debug(message)
     debug(a.debugStr)
     bs.foreach { b => debug(b.debugStr) }

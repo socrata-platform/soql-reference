@@ -30,7 +30,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
   typeInfo: TypeInfo2[MT#CT, MT#CV],
   functionInfo: FunctionInfo[MT#CT],
   aggregateMerge: Option[(ColumnName, Expr[MT#CT, MT#CV]) => Option[Expr[MT#CT, MT#CV]]]
-) extends MetaTypeHelper[MT] {
+) extends SoQLAnalyzerUniverse[MT] {
   def this(typeInfo: TypeInfo2[MT#CT, MT#CV], functionInfo: FunctionInfo[MT#CT]) =
     this(typeInfo, functionInfo, None)
 
@@ -112,7 +112,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
   private class State(tableMap: TableMap, userParameters: UserParameters) {
     val labelProvider = new LabelProvider
 
-    def analyze(scope: RNS, query: FoundTables.Query[CT]): Statement[RNS, CT, CV] = {
+    def analyze(scope: RNS, query: FoundTables.Query[CT]): Statement = {
       val ctx = Ctx(scope, None, None, Environment.empty, Map.empty, Set.empty, true)
       val from =
         query match {
@@ -130,18 +130,18 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       intoStatement(from)
     }
 
-    def intoStatement(from: AtomicFrom[RNS, CT, CV]): Statement[RNS, CT, CV] = {
+    def intoStatement(from: AtomicFrom): Statement = {
       from match {
-        case from: FromTable[RNS, CT] =>
+        case from: FromTable =>
           selectFromFrom(
             from.columns.map { case (label, NameEntry(name, typ)) =>
               labelProvider.columnLabel() -> NamedExpr(Column(from.label, label, typ)(AtomicPositionInfo.None), name)
             },
             from
           )
-        case from: FromSingleRow[RNS] =>
+        case from: FromSingleRow =>
           selectFromFrom(OrderedMap.empty[AutoColumnLabel, NamedExpr[CT, CV]], from)
-        case from: FromStatement[RNS, CT, CV] =>
+        case from: FromStatement =>
           // Just short-circuit it and return the underlying Statement
           from.statement
       }
@@ -149,8 +149,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
 
     def selectFromFrom(
       selectList: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]],
-      from: AtomicFrom[RNS, CT, CV]
-    ): Statement[RNS, CT, CV] = {
+      from: AtomicFrom
+    ): Statement = {
       Select(
         distinctiveness = Distinctiveness.Indistinct,
         selectList = selectList,
@@ -166,7 +166,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       )
     }
 
-    def fromTable(srn: ScopedResourceName, desc: TableDescription.Dataset[CT]): AtomicFrom[RNS, CT, Nothing] = {
+    def fromTable(srn: ScopedResourceName, desc: TableDescription.Dataset[CT]): AtomicFrom = {
       if(desc.ordering.isEmpty) {
         FromTable(
           desc.name,
@@ -225,7 +225,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
     }
 
-    def analyzeForFrom(name: ScopedResourceName, canonicalName: Option[CanonicalName], position: Position): AtomicFrom[RNS, CT, CV] = {
+    def analyzeForFrom(name: ScopedResourceName, canonicalName: Option[CanonicalName], position: Position): AtomicFrom = {
       if(name.name == SoQLAnalyzer.SingleRow) {
         FromSingleRow(labelProvider.tableLabel(), None)
       } else if(name.name == SoQLAnalyzer.This) {
@@ -341,7 +341,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
     }
 
-    def analyzeStatement(ctx: Ctx, q: BinaryTree[ast.Select], from0: Option[AtomicFrom[RNS, CT, CV]]): FromStatement[RNS, CT, CV] = {
+    def analyzeStatement(ctx: Ctx, q: BinaryTree[ast.Select], from0: Option[AtomicFrom]): FromStatement = {
       q match {
         case Leaf(select) =>
           analyzeSelection(ctx, select, from0)
@@ -400,9 +400,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     def isSystemColumn(name: ColumnName) = name.name.startsWith(":")
 
     @tailrec
-    final def findSystemColumns(from: From[RNS, CT, CV]): Iterable[(ColumnName, Column[CT])] =
+    final def findSystemColumns(from: From): Iterable[(ColumnName, Column[CT])] =
       from match {
-        case j: Join[RNS, CT, CV] => findSystemColumns(j.left)
+        case j: Join => findSystemColumns(j.left)
         case FromTable(_, _, _, tableLabel, columns, _) =>
           columns.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>
             name -> Column(tableLabel, colLabel, typ)(AtomicPositionInfo.None)
@@ -416,7 +416,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
 
 
-    def addSystemColumnsIfDesired(select: Select[RNS, CT, CV], attemptToPreserveSystemColumns: Boolean): Select[RNS, CT, CV] =
+    def addSystemColumnsIfDesired(select: Select, attemptToPreserveSystemColumns: Boolean): Select =
       aggregateMerge match {
         case Some(aggregateMerger) if attemptToPreserveSystemColumns =>
           select.distinctiveness match {
@@ -444,7 +444,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           select
       }
 
-    def analyzeSelection(ctx: Ctx, select: ast.Select, from0: Option[AtomicFrom[RNS, CT, CV]]): FromStatement[RNS, CT, CV] = {
+    def analyzeSelection(ctx: Ctx, select: ast.Select, from0: Option[AtomicFrom]): FromStatement = {
       val ast.Select(
         distinct,
         selection,
@@ -651,21 +651,21 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
     }
 
-    def collectNamesForAnalysis(from: From[RNS, CT, CV]): AliasAnalysis.AnalysisContext = {
-      def contextFrom(af: AtomicFrom[RNS, CT, CV]): UntypedDatasetContext =
+    def collectNamesForAnalysis(from: From): AliasAnalysis.AnalysisContext = {
+      def contextFrom(af: AtomicFrom): UntypedDatasetContext =
         af match {
-          case _: FromSingleRow[RNS] => new UntypedDatasetContext {
+          case _: FromSingleRow => new UntypedDatasetContext {
             val columns = OrderedSet.empty
           }
-          case t: FromTable[RNS, CT] => new UntypedDatasetContext {
+          case t: FromTable => new UntypedDatasetContext {
             val columns = OrderedSet() ++ t.columns.valuesIterator.map(_.name)
           }
-          case s: FromStatement[RNS, CT, CV] => new UntypedDatasetContext {
+          case s: FromStatement => new UntypedDatasetContext {
             val columns = OrderedSet() ++ s.statement.schema.valuesIterator.map(_.name)
           }
         }
 
-      def augmentAcc(acc: Map[AliasAnalysis.Qualifier, UntypedDatasetContext], from: AtomicFrom[RNS, CT, CV]) = {
+      def augmentAcc(acc: Map[AliasAnalysis.Qualifier, UntypedDatasetContext], from: AtomicFrom) = {
         from.alias match {
           case None =>
             acc + (TableName.PrimaryTable.qualifier -> contextFrom(from))
@@ -686,7 +686,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       )
     }
 
-    def queryInputSchema(ctx: Ctx, input: Option[AtomicFrom[RNS, CT, CV]], from: Option[TableName], joins: Seq[ast.Join]): From[RNS, CT, CV] = {
+    def queryInputSchema(ctx: Ctx, input: Option[AtomicFrom], from: Option[TableName], joins: Seq[ast.Join]): From = {
       // Ok so:
       //  * @This is special only in From
       //  * It is an error if we have neither an input nor a from
@@ -704,7 +704,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       // will afterward be used to build up the linked list that this
       // analyzer wants from right to left.
 
-      val from0: AtomicFrom[RNS, CT, CV] = (input, from) match {
+      val from0: AtomicFrom = (input, from) match {
         case (None, None) =>
           // No context and no from; this is an error
           ctx.noDataSource(NoPosition /* TODO: NEED POS INFO FROM AST */)
@@ -737,7 +737,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           input.reAlias(None)
       }
 
-      joins.foldLeft[From[RNS, CT, CV]](from0) { (left, join) =>
+      joins.foldLeft[From](from0) { (left, join) =>
         val joinType = join.typ match {
           case ast.InnerJoinType => JoinType.Inner
           case ast.LeftOuterJoinType => JoinType.LeftOuter
@@ -773,7 +773,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
 
 
-    def analyzeJoinSelect(ctx: Ctx, js: ast.JoinSelect): AtomicFrom[RNS, CT, CV] = {
+    def analyzeJoinSelect(ctx: Ctx, js: ast.JoinSelect): AtomicFrom = {
       js match {
         case ast.JoinTable(tn) =>
           tn.aliasWithoutPrefix.foreach(ensureLegalAlias(ctx, _, NoPosition /* TODO: NEED POS INFO FROM AST */))
@@ -806,7 +806,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
     }
 
-    def analyzeUDF(callerCtx: Ctx, resource: ResourceName, params: Seq[ast.Expression]): AtomicFrom[RNS, CT, CV] = {
+    def analyzeUDF(callerCtx: Ctx, resource: ResourceName, params: Seq[ast.Expression]): AtomicFrom = {
       val srn = ScopedResourceName(callerCtx.scope, resource)
       tableMap.find(srn) match {
         case TableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs, hiddenColumns) =>
@@ -908,7 +908,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
     }
 
-    def verifyAggregatesAndWindowFunctions(ctx: Ctx, stmt: Select[RNS, CT, CV]): Unit = {
+    def verifyAggregatesAndWindowFunctions(ctx: Ctx, stmt: Select): Unit = {
       val isAggregated = stmt.isAggregated
       val groupBys = stmt.groupBy.toSet
 

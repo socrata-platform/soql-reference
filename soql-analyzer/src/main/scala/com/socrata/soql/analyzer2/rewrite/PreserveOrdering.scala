@@ -8,14 +8,14 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.functions.MonomorphicFunction
 
-class PreserveOrdering[RNS, CT, CV] private (provider: LabelProvider) {
-  type Statement = analyzer2.Statement[RNS, CT, CV]
-  type Select = analyzer2.Select[RNS, CT, CV]
-  type From = analyzer2.From[RNS, CT, CV]
-  type Join = analyzer2.Join[RNS, CT, CV]
-  type AtomicFrom = analyzer2.AtomicFrom[RNS, CT, CV]
-  type FromTable = analyzer2.FromTable[RNS, CT]
-  type FromSingleRow = analyzer2.FromSingleRow[RNS]
+class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extends MetaTypeHelper[MT] {
+  type Statement = analyzer2.Statement[MT]
+  type Select = analyzer2.Select[MT]
+  type From = analyzer2.From[MT]
+  type Join = analyzer2.Join[MT]
+  type AtomicFrom = analyzer2.AtomicFrom[MT]
+  type FromTable = analyzer2.FromTable[MT]
+  type FromSingleRow = analyzer2.FromSingleRow[MT]
   type OrderBy = analyzer2.OrderBy[CT, CV]
 
   // "wantOutputOrdered" == "if this statement can be rewritten to
@@ -112,7 +112,7 @@ class PreserveOrdering[RNS, CT, CV] private (provider: LabelProvider) {
         // JOIN builds a new table, which is unordered (hence (false,
         // false) and why this entire rewriteFrom method isn't just a
         // call to from.map
-        val result = join.map[RNS, CT, CV](
+        val result = join.map[MT](
           rewriteAtomicFrom(_, false, false)._2,
           { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, rewriteAtomicFrom(right, false, false)._2, on) }
         )
@@ -136,7 +136,7 @@ class PreserveOrdering[RNS, CT, CV] private (provider: LabelProvider) {
 /** Attempt to preserve ordering from inner queries to outer ones.
   * SelectListReferences must not be present (this is unchecked!!). */
 object PreserveOrdering {
-  def apply[RNS, CT, CV](labelProvider: LabelProvider, stmt: Statement[RNS, CT, CV]): Statement[RNS, CT, CV] = {
-    new PreserveOrdering[RNS, CT, CV](labelProvider).rewriteStatement(stmt, true, false)._2
+  def apply[MT <: MetaTypes](labelProvider: LabelProvider, stmt: Statement[MT]): Statement[MT] = {
+    new PreserveOrdering[MT](labelProvider).rewriteStatement(stmt, true, false)._2
   }
 }

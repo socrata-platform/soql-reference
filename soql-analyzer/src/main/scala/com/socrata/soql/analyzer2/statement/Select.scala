@@ -16,8 +16,8 @@ import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable,
 
 import DocUtils._
 
-trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
-  type Self[+RNS, +CT, +CV] = Select[RNS, CT, CV]
+trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
+  type Self[MT <: MetaTypes] = Select[MT]
   def asSelf = this
 
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = {
@@ -184,18 +184,18 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
       hint = hint
     )
 
-  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =
     copy(from = from.mapAlias(f))
 
   private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
     from.doLabelMap(state)
   }
 
-  private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](
+  private[analyzer2] def findIsomorphism[MT2 <: MetaTypes](
     state: IsomorphismState,
     thisCurrentTableLabel: Option[TableLabel],
     thatCurrentTableLabel: Option[TableLabel],
-    that: Statement[RNS2, CT2, CV2]
+    that: Statement[MT2]
   ): Boolean =
     that match {
       case Select(
@@ -263,12 +263,12 @@ trait SelectImpl[+RNS, +CT, +CV] { this: Select[RNS, CT, CV] =>
 }
 
 trait OSelectImpl { this: Select.type =>
-  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]) = new Writable[Select[RNS, CT, CV]] {
-    def writeTo(buffer: WriteBuffer, select: Select[RNS, CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT#CT, MT#CV]]) = new Writable[Select[MT]] with MetaTypeHelper[MT] {
+    def writeTo(buffer: WriteBuffer, select: Select[MT]): Unit = {
       val Select(
         distinctiveness: Distinctiveness[CT, CV],
         selectList: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]],
-        from: From[RNS, CT, CV],
+        from: From[MT],
         where: Option[Expr[CT, CV]],
         groupBy: Seq[Expr[CT, CV]],
         having: Option[Expr[CT, CV]],
@@ -293,12 +293,12 @@ trait OSelectImpl { this: Select.type =>
     }
   }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]) = new Readable[Select[RNS, CT, CV]] {
-    def readFrom(buffer: ReadBuffer): Select[RNS, CT, CV] = {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT#CT, MT#CV]]) = new Readable[Select[MT]] with MetaTypeHelper[MT] {
+    def readFrom(buffer: ReadBuffer): Select[MT] = {
       Select(
         distinctiveness = buffer.read[Distinctiveness[CT, CV]](),
         selectList = buffer.read[OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]]](),
-        from = buffer.read[From[RNS, CT, CV]](),
+        from = buffer.read[From[MT]](),
         where = buffer.read[Option[Expr[CT, CV]]](),
         groupBy = buffer.read[Seq[Expr[CT, CV]]](),
         having = buffer.read[Option[Expr[CT, CV]]](),

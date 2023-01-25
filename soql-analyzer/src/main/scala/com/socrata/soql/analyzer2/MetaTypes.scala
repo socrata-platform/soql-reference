@@ -25,3 +25,20 @@ trait MetaTypeHelper[MT <: MetaTypes] {
   type CV = MT#ColumnValue
   type RNS = MT#ResourceNameScope
 }
+
+trait SoQLAnalyzerUniverse[MT <: MetaTypes] extends MetaTypeHelper[MT] {
+  import com.socrata.soql.analyzer2
+
+  type Statement = analyzer2.Statement[MT]
+  type Select = analyzer2.Select[MT]
+  type CTE = analyzer2.CTE[MT]
+  type CombinedTables = analyzer2.CombinedTables[MT]
+  type Values = analyzer2.Values[MT]
+
+  type From = analyzer2.From[MT]
+  type Join = analyzer2.Join[MT]
+  type AtomicFrom = analyzer2.AtomicFrom[MT]
+  type FromTable = analyzer2.FromTable[MT]
+  type FromSingleRow = analyzer2.FromSingleRow[MT]
+  type FromStatement = analyzer2.FromStatement[MT]
+}

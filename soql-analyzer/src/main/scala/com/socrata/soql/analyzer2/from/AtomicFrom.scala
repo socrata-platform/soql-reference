@@ -12,8 +12,8 @@ import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
 
-trait AtomicFromImpl[+RNS, +CT, +CV] { this: AtomicFrom[RNS, CT, CV] =>
-  type Self[+RNS, +CT, +CV] <: AtomicFrom[RNS, CT, CV]
+trait AtomicFromImpl[MT <: MetaTypes] { this: AtomicFrom[MT] =>
+  type Self[MT <: MetaTypes] <: AtomicFrom[MT]
 
   val resourceName: Option[ScopedResourceName[RNS]]
   val alias: Option[ResourceName]
@@ -28,39 +28,39 @@ trait AtomicFromImpl[+RNS, +CT, +CV] { this: AtomicFrom[RNS, CT, CV] =>
     env.addScope(alias, scope)
   }
 
-  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): Self[RNS, CT, CV]
+  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): Self[MT]
 
-  type ReduceResult[+RNS, +CT, +CV] = AtomicFrom[RNS, CT, CV]
-  override def reduceMap[S, RNS2, CT2, CV2](
-    base: AtomicFrom[RNS, CT, CV] => (S, AtomicFrom[RNS2, CT2, CV2]),
-    combine: (S, JoinType, Boolean, From[RNS2, CT2, CV2], AtomicFrom[RNS, CT, CV], Expr[CT, CV]) => (S, Join[RNS2, CT2, CV2])
-  ): (S, ReduceResult[RNS2, CT2, CV2]) =
+  type ReduceResult[MT <: MetaTypes] = AtomicFrom[MT]
+  override def reduceMap[S, MT2 <: MetaTypes](
+    base: AtomicFrom[MT] => (S, AtomicFrom[MT2]),
+    combine: (S, JoinType, Boolean, From[MT2], AtomicFrom[MT], Expr[CT, CV]) => (S, Join[MT2])
+  ): (S, ReduceResult[MT2]) =
     base(this)
 }
 
 trait OAtomicFromImpl { this: AtomicFrom.type =>
-  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[AtomicFrom[RNS, CT, CV]] = new Writable[AtomicFrom[RNS, CT, CV]] {
-    def writeTo(buffer: WriteBuffer, from: AtomicFrom[RNS, CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT#CT, MT#CV]]): Writable[AtomicFrom[MT]] = new Writable[AtomicFrom[MT]] {
+    def writeTo(buffer: WriteBuffer, from: AtomicFrom[MT]): Unit = {
       from match {
-        case ft: FromTable[RNS, CT] =>
+        case ft: FromTable[MT] =>
           buffer.write(0)
           buffer.write(ft)
-        case fs: FromStatement[RNS, CT, CV] =>
+        case fs: FromStatement[MT] =>
           buffer.write(1)
           buffer.write(fs)
-        case fsr: FromSingleRow[RNS] =>
+        case fsr: FromSingleRow[MT] =>
           buffer.write(2)
           buffer.write(fsr)
       }
     }
   }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[AtomicFrom[RNS, CT, CV]] = new Readable[AtomicFrom[RNS, CT, CV]] {
-    def readFrom(buffer: ReadBuffer): AtomicFrom[RNS, CT, CV] = {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT#CT, MT#CV]]): Readable[AtomicFrom[MT]] = new Readable[AtomicFrom[MT]] {
+    def readFrom(buffer: ReadBuffer): AtomicFrom[MT] = {
       buffer.read[Int]() match {
-        case 0 => buffer.read[FromTable[RNS, CT]]()
-        case 1 => buffer.read[FromStatement[RNS, CT, CV]]()
-        case 2 => buffer.read[FromSingleRow[RNS]]()
+        case 0 => buffer.read[FromTable[MT]]()
+        case 1 => buffer.read[FromStatement[MT]]()
+        case 2 => buffer.read[FromSingleRow[MT]]()
         case other => fail("Unknown atomic from tag " + other)
       }
     }

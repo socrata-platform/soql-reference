@@ -12,8 +12,8 @@ import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
 
-trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
-  type Self[+RNS, +CT, +CV] = Join[RNS, CT, CV]
+trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
+  type Self[MT <: MetaTypes] = Join[MT]
   def asSelf = this
 
   // The difference between a lateral and a non-lateral join is the
@@ -32,11 +32,11 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
     type Stack = List[Environment[CT2] => Either[AddScopeError, Environment[CT2]]]
 
     @tailrec
-    def loop(stack: Stack, self: From[RNS, CT, CV]): (Stack, AtomicFrom[RNS, CT, CV]) = {
+    def loop(stack: Stack, self: From[MT]): (Stack, AtomicFrom[MT]) = {
       self match {
-        case j: Join[RNS, CT, CV] =>
+        case j: Join[MT] =>
           loop(j.right.addToEnvironment[CT2] _ :: stack, j.left)
-        case other: AtomicFrom[RNS, CT, CV] =>
+        case other: AtomicFrom[MT] =>
           (stack, other)
       }
     }
@@ -58,28 +58,28 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
     }
   }
 
-  type ReduceResult[+RNS, +CT, +CV] = Join[RNS, CT, CV]
+  type ReduceResult[MT <: MetaTypes] = Join[MT]
 
-  override def reduceMap[S, RNS2, CT2, CV2](
-    base: AtomicFrom[RNS, CT, CV] => (S, AtomicFrom[RNS2, CT2, CV2]),
-    combine: (S, JoinType, Boolean, From[RNS2, CT2, CV2], AtomicFrom[RNS, CT, CV], Expr[CT, CV]) => (S, Join[RNS2, CT2, CV2])
-  ): (S, ReduceResult[RNS2, CT2, CV2]) = {
-    type Stack = List[(S, From[RNS2, CT2, CV2]) => (S, Join[RNS2, CT2, CV2])]
+  override def reduceMap[S, MT2 <: MetaTypes](
+    base: AtomicFrom[MT] => (S, AtomicFrom[MT2]),
+    combine: (S, JoinType, Boolean, From[MT2], AtomicFrom[MT], Expr[CT, CV]) => (S, Join[MT2])
+  ): (S, ReduceResult[MT2]) = {
+    type Stack = List[(S, From[MT2]) => (S, Join[MT2])]
 
     @tailrec
-    def loop(self: From[RNS, CT, CV], stack: Stack): (S, From[RNS2, CT2, CV2]) = {
+    def loop(self: From[MT], stack: Stack): (S, From[MT2]) = {
       self match {
         case Join(joinType, lateral, left, right, on) =>
           loop(left, { (s, newLeft) => combine(s, joinType, lateral, newLeft, right, on) } :: stack)
-        case leftmost: AtomicFrom[RNS, CT, CV] =>
-          stack.foldLeft[(S, From[RNS2, CT2, CV2])](base(leftmost)) { (acc, f) =>
+        case leftmost: AtomicFrom[MT] =>
+          stack.foldLeft[(S, From[MT2])](base(leftmost)) { (acc, f) =>
             val (s, left) = acc
             f(s, left)
           }
       }
     }
 
-    loop(this, Nil).asInstanceOf[(S, Join[RNS2, CT2, CV2])]
+    loop(this, Nil).asInstanceOf[(S, Join[MT2])]
   }
 
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
@@ -95,8 +95,8 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
     )
   }
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Join[RNS, CT, CV] = {
-    map[RNS, CT, CV](
+  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Join[MT] = {
+    map[MT](
        _.doRewriteDatabaseNames(state),
        { (joinType, lateral, left, right, on) =>
          val newRight = right.doRewriteDatabaseNames(state)
@@ -106,8 +106,8 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
     )
   }
 
-  private[analyzer2] def doRelabel(state: RelabelState): Join[RNS, CT, CV] = {
-    map[RNS, CT, CV](
+  private[analyzer2] def doRelabel(state: RelabelState): Join[MT] = {
+    map[MT](
       _.doRelabel(state),
       { (joinType, lateral, left, right, on) =>
         val newRight = right.doRelabel(state)
@@ -124,8 +124,8 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
     )
   }
 
-  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
-    map[RNS, CT, CV](
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =
+    map[MT](
       _.mapAlias(f),
       { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, right.mapAlias(f), on) },
     )
@@ -138,7 +138,7 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
   def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
     reduce[Boolean](_.contains(e), { (acc, join) => acc || join.right.contains(e) || join.on.contains(e) })
 
-  private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
+  private[analyzer2] final def findIsomorphism[MT2 <: MetaTypes](state: IsomorphismState, that: From[MT2]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
       case Join(thatJoinType, thatLateral, thatLeft, thatRight, thatOn) =>
@@ -181,10 +181,10 @@ trait JoinImpl[+RNS, +CT, +CV] { this: Join[RNS, CT, CV] =>
 }
 
 trait OJoinImpl { this: Join.type =>
-  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[Join[RNS, CT, CV]] = new Writable[Join[RNS, CT, CV]] {
-    val afSer = AtomicFrom.serialize[RNS, CT, CV]
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT#CT, MT#CV]]): Writable[Join[MT]] = new Writable[Join[MT]] {
+    val afSer = AtomicFrom.serialize[MT]
 
-    def writeTo(buffer: WriteBuffer, join: Join[RNS, CT, CV]): Unit = {
+    def writeTo(buffer: WriteBuffer, join: Join[MT]): Unit = {
       buffer.write(join.reduce[Int](_ => 0, (n, _) => n + 1))
       join.reduce[Unit](
         f0 => afSer.writeTo(buffer, f0),
@@ -199,16 +199,16 @@ trait OJoinImpl { this: Join.type =>
     }
   }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[Join[RNS, CT, CV]] =
-    new Readable[Join[RNS, CT, CV]] {
-      val afDer = AtomicFrom.deserialize[RNS, CT, CV]
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT#CT, MT#CV]]): Readable[Join[MT]] =
+    new Readable[Join[MT]] with MetaTypeHelper[MT] {
+      val afDer = AtomicFrom.deserialize[MT]
 
-      def readFrom(buffer: ReadBuffer): Join[RNS, CT, CV] = {
+      def readFrom(buffer: ReadBuffer): Join[MT] = {
         val joins = buffer.read[Int]()
         if(joins < 1) fail("Invalid join count " + joins)
 
         @tailrec
-        def loop(left: From[RNS, CT, CV], n: Int): Join[RNS, CT, CV] = {
+        def loop(left: From[MT], n: Int): Join[MT] = {
           val j = Join(
             joinType = buffer.read[JoinType](),
             lateral = buffer.read[Boolean](),

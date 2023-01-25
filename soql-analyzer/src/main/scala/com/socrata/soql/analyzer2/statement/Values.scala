@@ -13,8 +13,8 @@ import com.socrata.soql.typechecker.HasDoc
 
 import DocUtils._
 
-trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
-  type Self[+RNS, +CT, +CV] = Values[CT, CV]
+trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
+  type Self[MT <: MetaTypes] = Values[MT]
   def asSelf = this
 
   def unique = if(values.tail.isEmpty) LazyList(Nil) else LazyList.empty
@@ -30,11 +30,11 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
     Map.empty
 
-  private[analyzer2] def findIsomorphism[RNS2, CT2 >: CT, CV2 >: CV](
+  private[analyzer2] def findIsomorphism[MT2 <: MetaTypes](
     state: IsomorphismState,
     thisCurrentTableLabel: Option[TableLabel],
     thatCurrentTableLabel: Option[TableLabel],
-    that: Statement[RNS2, CT2, CV2]
+    that: Statement[MT2]
   ): Boolean =
     that match {
       case Values(thatValues) =>
@@ -71,7 +71,7 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
       values = values.map(_.map(_.doRewriteDatabaseNames(state)))
     )
 
-  private[analyzer2] def doRelabel(state: RelabelState): Self[Nothing, CT, CV] =
+  private[analyzer2] def doRelabel(state: RelabelState): Self[MT] =
     copy(values = values.map(_.map(_.doRelabel(state))))
 
   override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[Nothing, CT]] = {
@@ -92,17 +92,17 @@ trait ValuesImpl[+CT, +CV] { this: Values[CT, CV] =>
 }
 
 trait OValuesImpl { this: Values.type =>
-  implicit def serialize[CT, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[Values[CT, CV]] =
-    new Writable[Values[CT, CV]] {
-      def writeTo(buffer: WriteBuffer, values: Values[CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit ev: Writable[Expr[MT#CT, MT#CV]]): Writable[Values[MT]] =
+    new Writable[Values[MT]] {
+      def writeTo(buffer: WriteBuffer, values: Values[MT]): Unit = {
         buffer.write(values.values)
       }
     }
 
-  implicit def deserialize[CT, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[Values[CT, CV]] =
-    new Readable[Values[CT, CV]] {
-      def readFrom(buffer: ReadBuffer): Values[CT, CV] = {
-        Values(buffer.read[NonEmptySeq[NonEmptySeq[Expr[CT, CV]]]]())
+  implicit def deserialize[MT <: MetaTypes](implicit ev: Readable[Expr[MT#CT, MT#CV]]): Readable[Values[MT]] =
+    new Readable[Values[MT]] {
+      def readFrom(buffer: ReadBuffer): Values[MT] = {
+        Values(buffer.read[NonEmptySeq[NonEmptySeq[Expr[MT#CT, MT#CV]]]]())
       }
     }
 }

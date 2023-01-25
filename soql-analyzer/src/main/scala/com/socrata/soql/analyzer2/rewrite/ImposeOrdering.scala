@@ -6,16 +6,7 @@ import com.socrata.soql.collection._
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 
-class ImposeOrdering[RNS, CT, CV] private (labelProvider: LabelProvider, isOrderable: CT => Boolean) {
-  type Statement = analyzer2.Statement[RNS, CT, CV]
-  type Select = analyzer2.Select[RNS, CT, CV]
-  type From = analyzer2.From[RNS, CT, CV]
-  type Join = analyzer2.Join[RNS, CT, CV]
-  type AtomicFrom = analyzer2.AtomicFrom[RNS, CT, CV]
-  type FromTable = analyzer2.FromTable[RNS, CT]
-  type FromSingleRow = analyzer2.FromSingleRow[RNS]
-  type OrderBy = analyzer2.OrderBy[CT, CV]
-
+class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isOrderable: MT#CT => Boolean) extends SoQLAnalyzerUniverse[MT] {
   def rewriteStatement(stmt: Statement): Statement = {
     stmt match {
       case ct@CombinedTables(op, left, right) =>
@@ -65,12 +56,12 @@ class ImposeOrdering[RNS, CT, CV] private (labelProvider: LabelProvider, isOrder
 
         val existingOrderBy = orderBy.map(_.expr).to(Set)
 
-        def allOrderableSelectedCols(except: Expr[CT, CV] => Boolean): Iterator[OrderBy] =
+        def allOrderableSelectedCols(except: Expr[CT, CV] => Boolean): Iterator[OrderBy[CT, CV]] =
           selectList.valuesIterator.collect { case NamedExpr(expr, name) if isOrderable(expr.typ) && !except(expr) =>
             OrderBy(expr, true, true)
           }
 
-        val newOrderBy: Seq[OrderBy] =
+        val newOrderBy: Seq[OrderBy[CT, CV]] =
           distinctiveness match {
             case Distinctiveness.On(exprs) =>
               // Ok, this is the weird case.  We need to ensure that
@@ -119,6 +110,6 @@ class ImposeOrdering[RNS, CT, CV] private (labelProvider: LabelProvider, isOrder
 }
 
 object ImposeOrdering {
-  def apply[RNS, CT, CV](labelProvider: LabelProvider, isOrderable: CT => Boolean, stmt: Statement[RNS, CT, CV]): Statement[RNS, CT, CV] =
-    new ImposeOrdering[RNS, CT, CV](labelProvider, isOrderable).rewriteStatement(stmt)
+  def apply[MT <: MetaTypes](labelProvider: LabelProvider, isOrderable: MT#CT => Boolean, stmt: Statement[MT]): Statement[MT] =
+    new ImposeOrdering[MT](labelProvider, isOrderable).rewriteStatement(stmt)
 }

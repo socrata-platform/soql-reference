@@ -8,14 +8,14 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.functions.MonomorphicFunction
 
-class PreserveUnique[RNS, CT, CV] private (provider: LabelProvider) {
-  type Statement = analyzer2.Statement[RNS, CT, CV]
-  type Select = analyzer2.Select[RNS, CT, CV]
-  type From = analyzer2.From[RNS, CT, CV]
-  type Join = analyzer2.Join[RNS, CT, CV]
-  type AtomicFrom = analyzer2.AtomicFrom[RNS, CT, CV]
-  type FromTable = analyzer2.FromTable[RNS, CT]
-  type FromSingleRow = analyzer2.FromSingleRow[RNS]
+class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends MetaTypeHelper[MT] {
+  type Statement = analyzer2.Statement[MT]
+  type Select = analyzer2.Select[MT]
+  type From = analyzer2.From[MT]
+  type Join = analyzer2.Join[MT]
+  type AtomicFrom = analyzer2.AtomicFrom[MT]
+  type FromTable = analyzer2.FromTable[MT]
+  type FromSingleRow = analyzer2.FromSingleRow[MT]
   type OrderBy = analyzer2.OrderBy[CT, CV]
 
   def rewriteStatement(stmt: Statement, wantColumns: Boolean): Statement = {
@@ -79,7 +79,7 @@ class PreserveUnique[RNS, CT, CV] private (provider: LabelProvider) {
   }
 
   def rewriteFrom(from: From): From = {
-    from.map[RNS, CT, CV](
+    from.map[MT](
       rewriteAtomicFrom,
       { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, rewriteAtomicFrom(right), on) }
     )
@@ -99,7 +99,7 @@ class PreserveUnique[RNS, CT, CV] private (provider: LabelProvider) {
 /** Attempt to preserve ordering from inner queries to outer ones.
   * SelectListReferences must not be present (this is unchecked!!). */
 object PreserveUnique {
-  def apply[RNS, CT, CV](labelProvider: LabelProvider, stmt: Statement[RNS, CT, CV]): Statement[RNS, CT, CV] = {
-    new PreserveUnique[RNS, CT, CV](labelProvider).rewriteStatement(stmt, false)
+  def apply[MT <: MetaTypes](labelProvider: LabelProvider, stmt: Statement[MT]): Statement[MT] = {
+    new PreserveUnique[MT](labelProvider).rewriteStatement(stmt, false)
   }
 }

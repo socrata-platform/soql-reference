@@ -6,10 +6,10 @@ import com.socrata.soql.analyzer2.serialization.{ReadBuffer, WriteBuffer, Readab
 
 class SoQLAnalysis[MT <: MetaTypes] private (
   val labelProvider: LabelProvider,
-  val statement: Statement[MT#RNS, MT#CT, MT#CV],
+  val statement: Statement[MT],
   private val usesSelectListReferences: Boolean
 ) extends MetaTypeHelper[MT] {
-  private[analyzer2] def this(labelProvider: LabelProvider, statement: Statement[MT#RNS, MT#CT, MT#CV]) =
+  private[analyzer2] def this(labelProvider: LabelProvider, statement: Statement[MT]) =
     this(labelProvider, statement, false)
 
   /** Rewrite the analysis plumbing through enough information to
@@ -81,7 +81,7 @@ class SoQLAnalysis[MT <: MetaTypes] private (
 
   private def copy[MT2 <: MetaTypes](
     labelProvider: LabelProvider = this.labelProvider,
-    statement: Statement[MT2#RNS, MT2#CT, MT2#CV] = this.statement,
+    statement: Statement[MT2] = this.statement,
     usesSelectListReferences: Boolean = this.usesSelectListReferences
   ) =
     new SoQLAnalysis[MT2](labelProvider, statement, usesSelectListReferences)
@@ -95,7 +95,7 @@ class SoQLAnalysis[MT <: MetaTypes] private (
 }
 
 object SoQLAnalysis {
-  implicit def serialize[MT <: MetaTypes](implicit ev: Writable[Statement[MT#RNS, MT#CT, MT#CV]]): Writable[SoQLAnalysis[MT]] =
+  implicit def serialize[MT <: MetaTypes](implicit ev: Writable[Statement[MT]]): Writable[SoQLAnalysis[MT]] =
     new Writable[SoQLAnalysis[MT]] {
       def writeTo(buffer: WriteBuffer, analysis: SoQLAnalysis[MT]): Unit = {
         buffer.write(analysis.labelProvider)
@@ -104,12 +104,12 @@ object SoQLAnalysis {
       }
     }
 
-  implicit def deserialize[MT <: MetaTypes](implicit ev: Readable[Statement[MT#RNS, MT#CT, MT#CV]]): Readable[SoQLAnalysis[MT]] =
+  implicit def deserialize[MT <: MetaTypes](implicit ev: Readable[Statement[MT]]): Readable[SoQLAnalysis[MT]] =
     new Readable[SoQLAnalysis[MT]] {
       def readFrom(buffer: ReadBuffer): SoQLAnalysis[MT] =
         new SoQLAnalysis(
           buffer.read[LabelProvider](),
-          buffer.read[Statement[MT#RNS, MT#CT, MT#CV]](),
+          buffer.read[Statement[MT]](),
           buffer.read[Boolean]()
         )
     }

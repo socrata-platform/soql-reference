@@ -11,8 +11,8 @@ import com.socrata.soql.typechecker.HasDoc
 
 import DocUtils._
 
-trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
-  type Self[+RNS, +CT, +CV] = CTE[RNS, CT, CV]
+trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
+  type Self[MT <: MetaTypes] = CTE[MT]
   def asSelf = this
 
   val schema = useQuery.schema
@@ -38,16 +38,16 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
       useQuery = useQuery.doRewriteDatabaseNames(state)
     )
 
-  private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV] =
+  private[analyzer2] def doRelabel(state: RelabelState): Self[MT] =
     copy(definitionLabel = state.convert(definitionLabel),
          definitionQuery = definitionQuery.doRelabel(state),
          useQuery = useQuery.doRelabel(state))
 
-  private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](
+  private[analyzer2] def findIsomorphism[MT2 <: MetaTypes](
     state: IsomorphismState,
     thisCurrentTableLabel: Option[TableLabel],
     thatCurrentTableLabel: Option[TableLabel],
-    that: Statement[RNS2, CT2, CV2]
+    that: Statement[MT2]
   ): Boolean =
     that match {
       case CTE(thatDefLabel, _thatDefAlias, thatDefQuery, thatMatrHint, thatUseQuery) =>
@@ -59,7 +59,7 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
         false
     }
 
-  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =
     copy(definitionQuery = definitionQuery.mapAlias(f), definitionAlias = f(definitionAlias), useQuery = useQuery.mapAlias(f))
 
   override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]] =
@@ -84,9 +84,9 @@ trait CTEImpl[+RNS, +CT, +CV] { this: CTE[RNS, CT, CV] =>
 }
 
 trait OCTEImpl { this: CTE.type =>
-  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[CTE[RNS, CT, CV]] =
-    new Writable[CTE[RNS, CT, CV]] {
-      def writeTo(buffer: WriteBuffer, ct: CTE[RNS, CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT#CT, MT#CV]]): Writable[CTE[MT]] =
+    new Writable[CTE[MT]] {
+      def writeTo(buffer: WriteBuffer, ct: CTE[MT]): Unit = {
         buffer.write(ct.definitionLabel)
         buffer.write(ct.definitionAlias)
         buffer.write(ct.definitionQuery)
@@ -95,15 +95,15 @@ trait OCTEImpl { this: CTE.type =>
       }
     }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[CTE[RNS, CT, CV]] =
-    new Readable[CTE[RNS, CT, CV]] {
-      def readFrom(buffer: ReadBuffer): CTE[RNS, CT, CV] = {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT#CT, MT#CV]]): Readable[CTE[MT]] =
+    new Readable[CTE[MT]] {
+      def readFrom(buffer: ReadBuffer): CTE[MT] = {
         CTE(
           definitionLabel = buffer.read[AutoTableLabel](),
           definitionAlias = buffer.read[Option[ResourceName]](),
-          definitionQuery = buffer.read[Statement[RNS, CT, CV]](),
+          definitionQuery = buffer.read[Statement[MT]](),
           materializedHint = buffer.read[MaterializedHint](),
-          useQuery = buffer.read[Statement[RNS, CT, CV]]()
+          useQuery = buffer.read[Statement[MT]]()
         )
       }
     }
