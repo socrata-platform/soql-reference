@@ -68,8 +68,8 @@ object UnparsedTableMap {
         }
     }
 
-  private[analyzer2] def asMockTableFinder[String, CT](self: UnparsedTableMap[String, CT]): mocktablefinder.MockTableFinder[String, CT] = {
-    new mocktablefinder.MockTableFinder[String, CT](
+  private[analyzer2] def asMockTableFinder[MT <: MetaTypes](self: UnparsedTableMap[MT#RNS, MT#CT]): mocktablefinder.MockTableFinder[MT] = {
+    new mocktablefinder.MockTableFinder[MT](
       self.underlying.iterator.flatMap { case (rns, resources) =>
         resources.iterator.map { case (rn, desc) =>
           val thing =

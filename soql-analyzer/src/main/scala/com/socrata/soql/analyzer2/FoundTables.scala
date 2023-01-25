@@ -12,14 +12,14 @@ import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.BinaryTree
 
-trait FoundTablesLike[ResourceNameScope, +ColumnType] {
-  type Self[RNS, +CT]
+trait FoundTablesLike[MT <: MetaTypes] extends MetaTypeHelper[MT] {
+  type Self[MT <: MetaTypes]
 
   def rewriteDatabaseNames(
     tableName: DatabaseTableName => DatabaseTableName,
     // This is given the _original_ database table name
     columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): Self[ResourceNameScope, ColumnType]
+  ): Self[MT]
 }
 
 case class UserParameterSpecs[+ColumnType](
@@ -27,28 +27,28 @@ case class UserParameterSpecs[+ColumnType](
   unqualified: Either[CanonicalName, Map[HoleName, ColumnType]]
 )
 
-final case class FoundTables[ResourceNameScope, +ColumnType] private[analyzer2] (
-  tableMap: TableMap[ResourceNameScope, ColumnType],
-  initialScope: ResourceNameScope,
-  initialQuery: FoundTables.Query[ColumnType],
+final case class FoundTables[MT <: MetaTypes] private[analyzer2] (
+  tableMap: TableMap[MT#ResourceNameScope, MT#ColumnType],
+  initialScope: MT#ResourceNameScope,
+  initialQuery: FoundTables.Query[MT#ColumnType],
   parserParameters: AbstractParser.Parameters
-) extends FoundTablesLike[ResourceNameScope, ColumnType] {
-  type Self[RNS, +CT] = FoundTables[RNS, CT]
+) extends FoundTablesLike[MT] {
+  type Self[MT <: MetaTypes] = FoundTables[MT]
 
   def asUnparsedFoundTables =
-    new UnparsedFoundTables(
+    new UnparsedFoundTables[MT](
       tableMap.asUnparsedTableMap,
       initialScope,
       initialQuery.asUnparsedQuery,
       EncodableParameters.fromParams(parserParameters)
     )
 
-  val knownUserParameters: UserParameterSpecs[ColumnType] = {
+  val knownUserParameters: UserParameterSpecs[CT] = {
     val named =
-      tableMap.descriptions.foldLeft(Map.empty[CanonicalName, Map[HoleName, ColumnType]]) { (acc, desc) =>
+      tableMap.descriptions.foldLeft(Map.empty[CanonicalName, Map[HoleName, CT]]) { (acc, desc) =>
         desc match {
           case _ : TableDescription.Dataset[_] | _ : TableDescription.TableFunction[_, _] => acc
-          case q: TableDescription.Query[_, ColumnType] => acc + (q.canonicalName -> q.parameters)
+          case q: TableDescription.Query[_, CT] => acc + (q.canonicalName -> q.parameters)
         }
       }
     initialQuery match {
@@ -61,11 +61,13 @@ final case class FoundTables[ResourceNameScope, +ColumnType] private[analyzer2] 
     }
   }
 
+  // NOTE: When/if DTN and DCT are added to MetaTypes, this will become
+  // a transformation into a _different_ MetaTypes subclass!
   final def rewriteDatabaseNames(
     tableName: DatabaseTableName => DatabaseTableName,
     // This is given the _original_ database table name
     columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): FoundTables[ResourceNameScope, ColumnType] =
+  ): FoundTables[MT] =
     copy(tableMap = tableMap.rewriteDatabaseNames(tableName, columnName))
 
   // This lets you convert resource scope names to a simplified form
@@ -77,7 +79,7 @@ final case class FoundTables[ResourceNameScope, +ColumnType] private[analyzer2] 
   lazy val (withSimplifiedScopes, simplifiedScopeMap) = locally {
     val (newMap, newToOld, oldToNew) = tableMap.rewriteScopes(initialScope)
 
-    val newFT = FoundTables(
+    val newFT = FoundTables[Intified[MT]](
       newMap,
       oldToNew(initialScope),
       initialQuery,
@@ -86,6 +88,12 @@ final case class FoundTables[ResourceNameScope, +ColumnType] private[analyzer2] 
 
     (newFT, newToOld)
   }
+}
+
+trait Intified[MT <: MetaTypes] extends MetaTypes {
+  type ResourceNameScope = Int
+  type ColumnType = MT#ColumnType
+  type ColumnValue = MT#ColumnValue
 }
 
 object FoundTables {
@@ -120,14 +128,14 @@ object FoundTables {
         }
     }
 
-  implicit def jsonEncode[RNS: JsonEncode, CT: JsonEncode]: JsonEncode[FoundTables[RNS, CT]] =
-    new JsonEncode[FoundTables[RNS, CT]] {
-      def encode(v: FoundTables[RNS, CT]) = JsonEncode.toJValue(v.asUnparsedFoundTables)
+  implicit def jsonEncode[MT <: MetaTypes](implicit rnsEncode: JsonEncode[MT#RNS], ctEncode: JsonEncode[MT#CT]): JsonEncode[FoundTables[MT]] =
+    new JsonEncode[FoundTables[MT]] {
+      def encode(v: FoundTables[MT]) = JsonEncode.toJValue(v.asUnparsedFoundTables)
     }
 
-  implicit def jsonDecode[RNS: JsonDecode, CT: JsonDecode]: JsonDecode[FoundTables[RNS, CT]] =
-    new JsonDecode[FoundTables[RNS, CT]] {
-      def decode(x: JValue): Either[DecodeError, FoundTables[RNS, CT]] = x match {
+  implicit def jsonDecode[MT <: MetaTypes](implicit rnsDecode: JsonDecode[MT#RNS], ctDecode: JsonDecode[MT#CT]) =
+    new JsonDecode[FoundTables[MT]] with MetaTypeHelper[MT] {
+      def decode(x: JValue): Either[DecodeError, FoundTables[MT]] = x match {
         case JObject(fields) =>
           val params =
             fields.get("parserParameters") match {

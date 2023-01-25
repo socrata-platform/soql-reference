@@ -7,19 +7,19 @@ import com.socrata.soql.environment.{ResourceName, HoleName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
 
-class UnparsedFoundTables[ResourceNameScope, +ColumnType] private[analyzer2] (
-  private[analyzer2] val tableMap: UnparsedTableMap[ResourceNameScope, ColumnType],
-  private[analyzer2] val initialScope: ResourceNameScope,
-  private[analyzer2] val initialQuery: UnparsedFoundTables.Query[ColumnType],
+class UnparsedFoundTables[MT <: MetaTypes] private[analyzer2] (
+  private[analyzer2] val tableMap: UnparsedTableMap[MT#ResourceNameScope, MT#ColumnType],
+  private[analyzer2] val initialScope: MT#ResourceNameScope,
+  private[analyzer2] val initialQuery: UnparsedFoundTables.Query[MT#ColumnType],
   private[analyzer2] val parserParameters: EncodableParameters
-) extends FoundTablesLike[ResourceNameScope, ColumnType] {
-  type Self[RNS, +CT] = UnparsedFoundTables[RNS, CT]
+) extends FoundTablesLike[MT] {
+  type Self[MT <: MetaTypes] = UnparsedFoundTables[MT]
 
   final def rewriteDatabaseNames(
     tableName: DatabaseTableName => DatabaseTableName,
     // This is given the _original_ database table name
     columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): UnparsedFoundTables[ResourceNameScope, ColumnType] =
+  ): UnparsedFoundTables[MT] =
     new UnparsedFoundTables(
       tableMap.rewriteDatabaseNames(tableName, columnName),
       initialScope,
@@ -97,9 +97,9 @@ object UnparsedFoundTables {
       build
   }
 
-  implicit def jEncode[RNS: JsonEncode, CT: JsonEncode] =
-    AutomaticJsonEncodeBuilder[UnparsedFoundTables[RNS, CT]]
-  implicit def jDecode[RNS: JsonDecode, CT: JsonDecode] =
-    AutomaticJsonDecodeBuilder[UnparsedFoundTables[RNS, CT]]
+  implicit def jEncode[MT <: MetaTypes](implicit rnsEncode: JsonEncode[MT#RNS], ctEncode: JsonEncode[MT#CT]) =
+    AutomaticJsonEncodeBuilder[UnparsedFoundTables[MT]]
+  implicit def jDecode[MT <: MetaTypes](implicit rnsDecode: JsonDecode[MT#RNS], ctDecode: JsonDecode[MT#CT]) =
+    AutomaticJsonDecodeBuilder[UnparsedFoundTables[MT]]
 }
 

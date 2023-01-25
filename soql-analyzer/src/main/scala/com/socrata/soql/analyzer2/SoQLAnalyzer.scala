@@ -26,17 +26,17 @@ object SoQLAnalyzer {
   private val SpecialNames = Set(This, SingleRow)
 }
 
-class SoQLAnalyzer[RNS, CT, CV] private (
-  typeInfo: TypeInfo2[CT, CV],
-  functionInfo: FunctionInfo[CT],
-  aggregateMerge: Option[(ColumnName, Expr[CT, CV]) => Option[Expr[CT, CV]]]
-) {
-  def this(typeInfo: TypeInfo2[CT, CV], functionInfo: FunctionInfo[CT]) =
+class SoQLAnalyzer[MT <: MetaTypes] private (
+  typeInfo: TypeInfo2[MT#CT, MT#CV],
+  functionInfo: FunctionInfo[MT#CT],
+  aggregateMerge: Option[(ColumnName, Expr[MT#CT, MT#CV]) => Option[Expr[MT#CT, MT#CV]]]
+) extends MetaTypeHelper[MT] {
+  def this(typeInfo: TypeInfo2[MT#CT, MT#CV], functionInfo: FunctionInfo[MT#CT]) =
     this(typeInfo, functionInfo, None)
 
   type ScopedResourceName = com.socrata.soql.analyzer2.ScopedResourceName[RNS]
   type TableMap = com.socrata.soql.analyzer2.TableMap[RNS, CT]
-  type FoundTables = com.socrata.soql.analyzer2.FoundTables[RNS, CT]
+  type FoundTables = com.socrata.soql.analyzer2.FoundTables[MT]
   type TableDescription = com.socrata.soql.analyzer2.TableDescription[RNS, CT]
   type UserParameters = com.socrata.soql.analyzer2.UserParameters[CT, CV]
   type UserParameterSpecs = com.socrata.soql.analyzer2.UserParameterSpecs[CT]
@@ -45,19 +45,19 @@ class SoQLAnalyzer[RNS, CT, CV] private (
 
   private val Error = SoQLAnalyzerError.AnalysisError
 
-  private def copy(aggregateMerge: Option[(ColumnName, Expr[CT, CV]) => Option[Expr[CT, CV]]] = aggregateMerge): SoQLAnalyzer[RNS, CT, CV] =
+  private def copy(aggregateMerge: Option[(ColumnName, Expr[CT, CV]) => Option[Expr[CT, CV]]] = aggregateMerge): SoQLAnalyzer[MT] =
     new SoQLAnalyzer(typeInfo, functionInfo, aggregateMerge)
 
-  def preserveSystemColumns(aggregateMerge: (ColumnName, Expr[CT, CV]) => Option[Expr[CT, CV]]): SoQLAnalyzer[RNS, CT, CV] =
+  def preserveSystemColumns(aggregateMerge: (ColumnName, Expr[CT, CV]) => Option[Expr[CT, CV]]): SoQLAnalyzer[MT] =
     copy(aggregateMerge = Some(aggregateMerge))
 
-  def apply(start: FoundTables, userParameters: UserParameters): Either[AnalysisError[RNS], SoQLAnalysis[RNS, CT, CV]] = {
+  def apply(start: FoundTables, userParameters: UserParameters): Either[AnalysisError[RNS], SoQLAnalysis[MT]] = {
     try {
       validateUserParameters(start.knownUserParameters, userParameters)
 
       val state = new State(start.tableMap, userParameters)
 
-      Right(new SoQLAnalysis[RNS, CT, CV](
+      Right(new SoQLAnalysis[MT](
         state.labelProvider,
         state.analyze(start.initialScope, start.initialQuery)
       ))

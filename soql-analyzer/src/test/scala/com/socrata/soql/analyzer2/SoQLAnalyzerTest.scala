@@ -15,7 +15,7 @@ import mocktablefinder._
 
 class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
   test("alias analysis qualifiers are correct") {
-    val tf = MockTableFinder.empty[Int, TestType]
+    val tf = MockTableFinder.empty[TestMT]
     val Right(start) = tf.findTables(0, "select @bleh.whatever from @single_row", Map.empty)
     analyzer(start, UserParameters.empty) match {
       case Right(_) => fail("Expected an error")
@@ -28,7 +28,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
   }
 
   test("simple contextless") {
-    val tf = MockTableFinder.empty[Int, TestType]
+    val tf = MockTableFinder.empty[TestMT]
 
     // Getting rid of parents, literal coersions, function overloading, disambiguation....
     val analysis = analyze(tf, "select ((('5' + 7))), 'hello' + 'world', '1' + '2' from @single_row")
