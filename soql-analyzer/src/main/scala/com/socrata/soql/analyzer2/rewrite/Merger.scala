@@ -9,7 +9,7 @@ import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
 import com.socrata.soql.analyzer2._
 
-class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnalyzerUniverse[MT] {
+class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnalyzerUniverse[MT] with SoQLAnalyzerExpressions[MT] {
   private implicit val hd = new HasDoc[CV] {
     override def docOf(v: CV) = com.socrata.prettyprint.Doc(v.toString)
   }
@@ -70,7 +70,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
     }
   }
 
-  private type ExprRewriter = Expr[CT, CV] => Expr[CT, CV]
+  private type ExprRewriter = Expr => Expr
   private type FromRewriter = (From, ExprRewriter) => From
 
   private object Unjoin {
@@ -286,7 +286,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
             a.selectList.iterator.filter(_._2.expr.isWindowed).exists { case (k, namedExpr) =>
               val target = Column(aLabel, k, namedExpr.expr.typ)(AtomicPositionInfo.None)
               b.directlyFind {
-                case e: WindowedFunctionCall[CT, CV] => e.contains(target)
+                case e: WindowedFunctionCall => e.contains(target)
                 case _ => false
               }.isDefined
             }
@@ -313,7 +313,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
 
   private def mergeDistinct(
     aTable: TableLabel,
-    aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]],
+    aColumns: OrderedMap[AutoColumnLabel, Expr],
     b: Distinctiveness[CT, CV]
   ): Distinctiveness[CT, CV] =
     b match {
@@ -324,18 +324,18 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
 
   private def mergeSelection(
     aTable: TableLabel,
-    aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]],
+    aColumns: OrderedMap[AutoColumnLabel, Expr],
     b: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]]
   ): OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]] =
     b.withValuesMapped { bExpr =>
       bExpr.copy(expr = replaceRefs(aTable, aColumns, bExpr.expr))
     }
 
-  private def mergeGroupBy(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]], gb: Seq[Expr[CT, CV]]): Seq[Expr[CT, CV]] = {
+  private def mergeGroupBy(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr], gb: Seq[Expr]): Seq[Expr] = {
     gb.map(replaceRefs(aTable, aColumns, _))
   }
 
-  private def orderByVsDistinct(orderBy: Seq[OrderBy[CT, CV]], columns: OrderedMap[AutoColumnLabel, Expr[CT, CV]], bDistinct: Distinctiveness[CT, CV]) = {
+  private def orderByVsDistinct(orderBy: Seq[OrderBy[CT, CV]], columns: OrderedMap[AutoColumnLabel, Expr], bDistinct: Distinctiveness[CT, CV]) = {
     orderBy.filter { ob =>
       bDistinct match {
         case Distinctiveness.Indistinct => true
@@ -347,7 +347,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
 
   private def mergeOrderBy(
     aTable: TableLabel,
-    aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]],
+    aColumns: OrderedMap[AutoColumnLabel, Expr],
     obA: Seq[OrderBy[CT, CV]],
     obB: Seq[OrderBy[CT, CV]]
   ): Seq[OrderBy[CT, CV]] =
@@ -355,10 +355,10 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
 
   private def mergeWhereLike(
     aTable: TableLabel,
-    aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]],
-    a: Option[Expr[CT, CV]],
-    b: Option[Expr[CT, CV]]
-  ): Option[Expr[CT, CV]] =
+    aColumns: OrderedMap[AutoColumnLabel, Expr],
+    a: Option[Expr],
+    b: Option[Expr]
+  ): Option[Expr] =
     (a, b) match {
       case (None, None) => None
       case (Some(a), None) => Some(a)
@@ -366,11 +366,11 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
       case (Some(a), Some(b)) => Some(FunctionCall(and, Seq(a, replaceRefs(aTable, aColumns, b)))(FuncallPositionInfo.None))
     }
 
-  private def replaceRefs(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]], b: Expr[CT, CV]) =
+  private def replaceRefs(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr], b: Expr) =
     new ReplaceRefs(aTable, aColumns).go(b)
 
-  private class ReplaceRefs(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]]) {
-    def go(b: Expr[CT, CV]): Expr[CT, CV] =
+  private class ReplaceRefs(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr]) {
+    def go(b: Expr): Expr =
       b match {
         case Column(`aTable`, c : AutoColumnLabel, t) =>
           aColumns.get(c) match {
@@ -381,9 +381,9 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
             case None =>
               oops("Found a dangling column reference!")
           }
-        case c: Column[CT] =>
+        case c: Column =>
           c
-        case l: Literal[CT, CV] =>
+        case l: Literal =>
           l
         case fc@FunctionCall(f, params) =>
           FunctionCall(f, params.map(go _))(fc.position)
@@ -403,7 +403,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
             orderBy.map { ob => ob.copy(expr = go(ob.expr)) },
             frame
           )(fc.position)
-        case sr: SelectListReference[CT] =>
+        case sr: SelectListReference =>
           // This is safe because we're creating a new query with the
           // same output as b's query, so this just refers to the new
           // (possibly rewritten) column in the same position

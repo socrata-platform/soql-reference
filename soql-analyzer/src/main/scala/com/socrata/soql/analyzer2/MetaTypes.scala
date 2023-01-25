@@ -42,3 +42,19 @@ trait SoQLAnalyzerUniverse[MT <: MetaTypes] extends MetaTypeHelper[MT] {
   type FromSingleRow = analyzer2.FromSingleRow[MT]
   type FromStatement = analyzer2.FromStatement[MT]
 }
+
+trait SoQLAnalyzerExpressions[MT <: MetaTypes] extends MetaTypeHelper[MT] {
+  import com.socrata.soql.analyzer2
+
+  type Expr = analyzer2.Expr[CT, CV]
+  type AtomicExpr = analyzer2.AtomicExpr[CT, CV]
+  type Column = analyzer2.Column[CT]
+  type SelectListReference = analyzer2.SelectListReference[CT]
+  type Literal = analyzer2.Literal[CT, CV]
+  type LiteralValue = analyzer2.LiteralValue[CT, CV]
+  type NullLiteral = analyzer2.NullLiteral[CT]
+  type FuncallLike = analyzer2.FuncallLike[CT, CV]
+  type FunctionCall = analyzer2.FunctionCall[CT, CV]
+  type AggregateFunctionCall = analyzer2.AggregateFunctionCall[CT, CV]
+  type WindowedFunctionCall = analyzer2.WindowedFunctionCall[CT, CV]
+}
