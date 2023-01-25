@@ -191,11 +191,11 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
     from.doLabelMap(state)
   }
 
-  private[analyzer2] def findIsomorphism[MT2 <: MetaTypes](
+  private[analyzer2] def findIsomorphism(
     state: IsomorphismState,
     thisCurrentTableLabel: Option[TableLabel],
     thatCurrentTableLabel: Option[TableLabel],
-    that: Statement[MT2]
+    that: Statement[MT]
   ): Boolean =
     that match {
       case Select(

@@ -48,14 +48,14 @@ sealed abstract class Statement[MT <: MetaTypes] extends MetaTypeHelper[MT] {
 
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
 
-  def isIsomorphic[MT2 <: MetaTypes](that: Statement[MT2]): Boolean =
+  def isIsomorphic(that: Statement[MT]): Boolean =
     findIsomorphism(new IsomorphismState, None, None, that)
 
-  private[analyzer2] def findIsomorphism[MT2 <: MetaTypes](
+  private[analyzer2] def findIsomorphism(
     state: IsomorphismState,
     thisCurrentTableLabel: Option[TableLabel],
     thatCurrentTableLabel: Option[TableLabel],
-    that: Statement[MT2]
+    that: Statement[MT]
   ): Boolean
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[MT]

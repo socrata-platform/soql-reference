@@ -30,7 +30,7 @@ trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
   def find(predicate: Expr[CT, CV] => Boolean) = None
   def contains[CT, CV](e: Expr[CT, CV]): Boolean = false
 
-  private[analyzer2] final def findIsomorphism[MT2 <: MetaTypes](state: IsomorphismState, that: From[MT2]): Boolean =
+  private[analyzer2] final def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean =
     that match {
       case FromSingleRow(thatLabel, thatAlias) =>
         state.tryAssociate(this.label, thatLabel)

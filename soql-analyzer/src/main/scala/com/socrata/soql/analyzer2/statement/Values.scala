@@ -30,11 +30,11 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
     Map.empty
 
-  private[analyzer2] def findIsomorphism[MT2 <: MetaTypes](
+  private[analyzer2] def findIsomorphism(
     state: IsomorphismState,
     thisCurrentTableLabel: Option[TableLabel],
     thatCurrentTableLabel: Option[TableLabel],
-    that: Statement[MT2]
+    that: Statement[MT]
   ): Boolean =
     that match {
       case Values(thatValues) =>

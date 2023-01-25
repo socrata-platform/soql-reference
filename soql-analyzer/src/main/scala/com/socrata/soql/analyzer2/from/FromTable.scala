@@ -41,7 +41,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
     copy(label = state.convert(label))
   }
 
-  private[analyzer2] final def findIsomorphism[MT2 <: MetaTypes](state: IsomorphismState, that: From[MT2]): Boolean =
+  private[analyzer2] final def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
       case FromTable(thatTableName, thatResourceName, thatAlias, thatLabel, thatColumns, thatPrimaryKeys) =>

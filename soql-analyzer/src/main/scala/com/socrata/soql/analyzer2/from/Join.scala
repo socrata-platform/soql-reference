@@ -138,7 +138,7 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
   def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
     reduce[Boolean](_.contains(e), { (acc, join) => acc || join.right.contains(e) || join.on.contains(e) })
 
-  private[analyzer2] final def findIsomorphism[MT2 <: MetaTypes](state: IsomorphismState, that: From[MT2]): Boolean =
+  private[analyzer2] final def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
       case Join(thatJoinType, thatLateral, thatLeft, thatRight, thatOn) =>

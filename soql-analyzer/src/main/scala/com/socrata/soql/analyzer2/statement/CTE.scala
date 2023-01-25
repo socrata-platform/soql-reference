@@ -43,11 +43,11 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
          definitionQuery = definitionQuery.doRelabel(state),
          useQuery = useQuery.doRelabel(state))
 
-  private[analyzer2] def findIsomorphism[MT2 <: MetaTypes](
+  private[analyzer2] def findIsomorphism(
     state: IsomorphismState,
     thisCurrentTableLabel: Option[TableLabel],
     thatCurrentTableLabel: Option[TableLabel],
-    that: Statement[MT2]
+    that: Statement[MT]
   ): Boolean =
     that match {
       case CTE(thatDefLabel, _thatDefAlias, thatDefQuery, thatMatrHint, thatUseQuery) =>

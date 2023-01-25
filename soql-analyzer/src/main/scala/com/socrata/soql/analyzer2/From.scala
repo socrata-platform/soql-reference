@@ -40,7 +40,7 @@ sealed abstract class From[MT <: MetaTypes] extends MetaTypeHelper[MT] {
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
-  private[analyzer2] def findIsomorphism[MT2 <: MetaTypes](state: IsomorphismState, that: From[MT2]): Boolean
+  private[analyzer2] def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
 
   def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]]

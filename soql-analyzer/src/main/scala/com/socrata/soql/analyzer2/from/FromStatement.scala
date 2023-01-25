@@ -26,7 +26,7 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
 
   def unique = statement.unique.map(_.map { cn => Column(label, cn, statement.column(cn).typ)(AtomicPositionInfo.None) })
 
-  private[analyzer2] final def findIsomorphism[MT2 <: MetaTypes](state: IsomorphismState, that: From[MT2]): Boolean =
+  private[analyzer2] final def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
       case FromStatement(thatStatement, thatLabel, thatResourceName, thatAlias) =>
