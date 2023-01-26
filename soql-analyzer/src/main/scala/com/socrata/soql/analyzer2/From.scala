@@ -30,7 +30,7 @@ sealed abstract class From[MT <: MetaTypes] extends MetaTypeHelper[MT] with Labe
   def unique: LazyList[Seq[Column[MT]]]
 
   // extend the given environment with names introduced by this FROM clause
-  private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]): Either[AddScopeError, Environment[CT2]]
+  private[analyzer2] def extendEnvironment(base: Environment[MT]): Either[AddScopeError, Environment[MT]]
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[MT]
 
@@ -152,7 +152,7 @@ case class FromStatement[MT <: MetaTypes](
   // I'm not sure why this needs to be here.  The typechecker gets
   // confused about calling Scope.apply if it lives in
   // FromStatementImpl
-  private[analyzer2] val scope: Scope[CT] = Scope(statement.schema, label)
+  private[analyzer2] val scope: Scope[MT] = Scope(statement.schema, label)
 }
 object FromStatement extends from.OFromStatementImpl
 

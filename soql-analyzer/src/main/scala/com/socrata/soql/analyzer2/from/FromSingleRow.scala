@@ -21,7 +21,7 @@ trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
   // We have a unique ordering and no columns are required to achieve it
   def unique = LazyList(Nil)
 
-  private[analyzer2] val scope: Scope[Nothing] =
+  private[analyzer2] val scope: Scope[MT] =
     Scope(
       OrderedMap.empty[ColumnLabel, NameEntry[Nothing]],
       label

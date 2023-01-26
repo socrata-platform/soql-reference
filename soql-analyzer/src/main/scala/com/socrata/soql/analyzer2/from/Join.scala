@@ -28,14 +28,14 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
   //    val nextFromEnv = checkedRight.extendEnvironment(checkedLeft.extendEnvironment(previousFromEnv))
   // which is what this `extendEnvironment` function does, rewritten
   // as a loop so that a lot of joins don't use a lot of stack.
-  private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]): Either[AddScopeError, Environment[CT2]] = {
-    type Stack = List[Environment[CT2] => Either[AddScopeError, Environment[CT2]]]
+  private[analyzer2] def extendEnvironment(base: Environment[MT]): Either[AddScopeError, Environment[MT]] = {
+    type Stack = List[Environment[MT] => Either[AddScopeError, Environment[MT]]]
 
     @tailrec
     def loop(stack: Stack, self: From[MT]): (Stack, AtomicFrom[MT]) = {
       self match {
         case j: Join[MT] =>
-          loop(j.right.addToEnvironment[CT2] _ :: stack, j.left)
+          loop(j.right.addToEnvironment _ :: stack, j.left)
         case other: AtomicFrom[MT] =>
           (stack, other)
       }

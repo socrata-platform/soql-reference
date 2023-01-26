@@ -8,8 +8,21 @@ import com.socrata.soql.typechecker.HasDoc
 
 import mocktablefinder._
 
+object TestHelper {
+  final class TestMT extends MetaTypes {
+    type ResourceNameScope = Int
+    type ColumnType = TestType
+    type ColumnValue = TestValue
+    type DatabaseTableNameImpl = String
+  }
+
+  val testTypeInfoProjection = TestTypeInfo.metaProject[TestMT]
+}
+
 trait TestHelper { this: Assertions =>
-  implicit val hasType = TestTypeInfo.hasType
+  type TestMT = TestHelper.TestMT
+
+  implicit val hasType = TestHelper.testTypeInfoProjection.hasType
   def t(n: Int) = AutoTableLabel.forTest(n)
   def c(n: Int) = AutoColumnLabel.forTest(n)
   def rn(n: String) = ResourceName(n)
@@ -20,12 +33,6 @@ trait TestHelper { this: Assertions =>
 
   def xtest(s: String)(f: => Any): Unit = {}
 
-  trait TestMT extends MetaTypes {
-    type ResourceNameScope = Int
-    type ColumnType = TestType
-    type ColumnValue = TestValue
-  }
-
   def tableFinder(items: ((Int, String), Thing[Int, TestType])*) = new MockTableFinder[TestMT](items.toMap)
 
   val analyzer = new SoQLAnalyzer[TestMT](TestTypeInfo, TestFunctionInfo)
@@ -33,7 +40,7 @@ trait TestHelper { this: Assertions =>
     expr.typ match {
       case TestNumber =>
         Some(
-          AggregateFunctionCall(
+          AggregateFunctionCall[TestMT](
             TestFunctions.Max.monomorphic.get,
             Seq(expr),
             false,

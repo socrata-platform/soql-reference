@@ -19,12 +19,12 @@ trait AtomicFromImpl[MT <: MetaTypes] { this: AtomicFrom[MT] =>
   val alias: Option[ResourceName]
   val label: TableLabel
 
-  private[analyzer2] val scope: Scope[CT]
+  private[analyzer2] val scope: Scope[MT]
 
-  private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]) = {
+  private[analyzer2] def extendEnvironment(base: Environment[MT]) = {
     addToEnvironment(base.extend)
   }
-  private[analyzer2] def addToEnvironment[CT2 >: CT](env: Environment[CT2]) = {
+  private[analyzer2] def addToEnvironment(env: Environment[MT]) = {
     env.addScope(alias, scope)
   }
 

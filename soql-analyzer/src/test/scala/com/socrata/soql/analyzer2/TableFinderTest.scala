@@ -15,10 +15,11 @@ import com.socrata.soql.parsing.{StandaloneParser, AbstractParser}
 import mocktablefinder._
 
 class TableFinderTest extends FunSuite with MustMatchers {
-  trait MT extends MetaTypes {
+  final class MT extends MetaTypes {
     type ResourceNameScope = Int
     type ColumnType = String
     type ColumnValue = Nothing
+    type DatabaseTableNameImpl = String
   }
 
   val tables = new MockTableFinder[MT](

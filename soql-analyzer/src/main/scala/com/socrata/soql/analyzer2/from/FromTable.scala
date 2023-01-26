@@ -25,7 +25,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
 
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
 
-  private[analyzer2] override final val scope: Scope[CT] = Scope(columns, label)
+  private[analyzer2] override final val scope: Scope[MT] = Scope(columns, label)
 
   def debugDoc(implicit ev: HasDoc[CV]) =
     (tableName.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))

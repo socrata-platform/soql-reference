@@ -6,25 +6,25 @@ import scala.util.parsing.input.{Position, NoPosition}
 import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, CovariantSet}
 import com.socrata.soql.environment.{ColumnName, HoleName, ResourceName, TableName, FunctionName}
-import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, FunctionCallTypechecker, Passed, TypeMismatchFailure, HasType}
+import com.socrata.soql.typechecker.{TypeInfoMetaProjection, FunctionInfo, FunctionCallTypechecker, Passed, TypeMismatchFailure, HasType}
 
-class Typechecker[RNS, CT, CV](
-  scope: RNS,
+class Typechecker[MT <: MetaTypes](
+  scope: MT#RNS,
   canonicalName: Option[CanonicalName],
-  env: Environment[CT],
-  namedExprs: Map[ColumnName, Expr[CT, CV]],
-  udfParams: Map[HoleName, Position => Expr[CT, CV]],
-  userParameters: UserParameters[CT, CV],
-  typeInfo: TypeInfo2[CT, CV],
-  functionInfo: FunctionInfo[CT]
-) {
+  env: Environment[MT],
+  namedExprs: Map[ColumnName, Expr[MT]],
+  udfParams: Map[HoleName, Position => Expr[MT]],
+  userParameters: UserParameters[MT#CT, MT#CV],
+  typeInfo: TypeInfoMetaProjection[MT],
+  functionInfo: FunctionInfo[MT#CT]
+) extends SoQLAnalyzerUniverse[MT] {
   type Error = TypecheckError[RNS]
   private val TypecheckError = SoQLAnalyzerError.AnalysisError.TypecheckError
   import TypecheckError._
 
   private val funcallTypechecker = new FunctionCallTypechecker(typeInfo, functionInfo)
 
-  def apply(expr: ast.Expression, expectedType: Option[CT]): Either[Error, Expr[CT, CV]] =
+  def apply(expr: ast.Expression, expectedType: Option[CT]): Either[Error, Expr] =
     try {
       Right(finalCheck(expr, expectedType))
     } catch {
@@ -36,7 +36,7 @@ class Typechecker[RNS, CT, CV](
   private def error(e: SoQLAnalyzerError.AnalysisError.TypecheckError, p: Position): Error =
     SoQLAnalyzerError.TextualError(scope, canonicalName, p, e)
 
-  private def finalCheck(expr: ast.Expression, expectedType: Option[CT]): Expr[CT, CV] =
+  private def finalCheck(expr: ast.Expression, expectedType: Option[CT]): Expr =
     check(expr).flatMap(disambiguate(_, expectedType, expr.position)) match {
       case Right(expr) => expr
       case Left(err) => throw Bail(err)
@@ -46,7 +46,7 @@ class Typechecker[RNS, CT, CV](
     typeInfo.typeParameterUniverse.find(types).get
   }
 
-  private def disambiguate(exprs: Seq[Expr[CT, CV]], expectedType: Option[CT], pos: Position): Either[Error, Expr[CT, CV]] =
+  private def disambiguate(exprs: Seq[Expr], expectedType: Option[CT], pos: Position): Either[Error, Expr] =
     expectedType match {
       case Some(t) =>
         exprs.find(_.typ == t).toRight {
@@ -56,8 +56,8 @@ class Typechecker[RNS, CT, CV](
         Right(exprs.head)
     }
 
-  private def squash(exprs: Seq[Expr[CT, CV]], pos: Position): Either[Error, Seq[Expr[CT, CV]]] = {
-    var acc = OrderedMap.empty[CT, Expr[CT, CV]]
+  private def squash(exprs: Seq[Expr], pos: Position): Either[Error, Seq[Expr]] = {
+    var acc = OrderedMap.empty[CT, Expr]
 
     for { e <- exprs } {
       acc.get(e.typ) match {
@@ -71,7 +71,7 @@ class Typechecker[RNS, CT, CV](
     Right(acc.valuesIterator.toSeq)
   }
 
-  private def check(expr: ast.Expression): Either[Error, Seq[Expr[CT, CV]]] = {
+  private def check(expr: ast.Expression): Either[Error, Seq[Expr]] = {
     expr match {
       case ast.FunctionCall(ast.SpecialFunctions.Parens, Seq(param), None, None) =>
         check(param)
@@ -166,7 +166,7 @@ class Typechecker[RNS, CT, CV](
     }
   }
 
-  private def checkFuncall(fc: ast.FunctionCall): Either[Error, Seq[Expr[CT, CV]]] = {
+  private def checkFuncall(fc: ast.FunctionCall): Either[Error, Seq[Expr]] = {
     val ast.FunctionCall(name, parameters, filter, window) = fc
 
     val typedParameters = parameters.map(check).map {
@@ -174,13 +174,13 @@ class Typechecker[RNS, CT, CV](
       case Right(es) => es
     }
 
-    val typedWindow: Option[(Seq[Expr[CT, CV]], Seq[OrderBy[CT, CV]], Seq[ast.Expression])] = window.map { w =>
+    val typedWindow: Option[(Seq[Expr], Seq[OrderBy], Seq[ast.Expression])] = window.map { w =>
       val typedPartitions = w.partitions.map(finalCheck(_, None))
       val typedOrderings = w.orderings.map(ob => OrderBy(finalCheck(ob.expression, Some(typeInfo.boolType)), ob.ascending, ob.nullLast))
       (typedPartitions, typedOrderings, w.frames)
     }
 
-    val typedFilter: Option[Expr[CT, CV]] = filter.map(finalCheck(_, Some(typeInfo.boolType)))
+    val typedFilter: Option[Expr] = filter.map(finalCheck(_, Some(typeInfo.boolType)))
 
     val options = functionInfo.functionsWithArity(name, typedParameters.length)
 
@@ -200,7 +200,7 @@ class Typechecker[RNS, CT, CV](
 
     val potentials = resolved.flatMap { f =>
       val skipTypeCheckAfter = typedParameters.size
-      val selectedParameters: Iterator[Seq[Expr[CT,CV]]] = Iterator.from(0).zip(f.allParameters.iterator).zip(typedParameters.iterator).map { case ((idx, expected), options) =>
+      val selectedParameters: Iterator[Seq[Expr]] = Iterator.from(0).zip(f.allParameters.iterator).zip(typedParameters.iterator).map { case ((idx, expected), options) =>
         val choices =
           if(idx < skipTypeCheckAfter) options.filter(_.typ == expected)
           else options.headOption.toSeq // any type is ok for window functions
@@ -216,9 +216,9 @@ class Typechecker[RNS, CT, CV](
         choices
       }
 
-      selectedParameters.toVector.foldRight(Seq(List.empty[Expr[CT, CV]])) { (choices, remainingParams) =>
+      selectedParameters.toVector.foldRight(Seq(List.empty[Expr])) { (choices, remainingParams) =>
         choices.flatMap { choice => remainingParams.map(choice :: _) }
-      }.map { params: Seq[Expr[CT, CV]] =>
+      }.map { params: Seq[Expr] =>
         (typedFilter, typedWindow) match {
           case (Some(boolExpr), None) =>
             if(f.needsWindow) {

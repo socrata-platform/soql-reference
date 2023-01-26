@@ -8,16 +8,23 @@ import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
 
-class UnparsedTableMap[ResourceNameScope, +ColumnType] private[analyzer2] (private val underlying: Map[ResourceNameScope, Map[ResourceName, UnparsedTableDescription[ResourceNameScope, ColumnType]]]) extends AnyVal with TableMapLike[ResourceNameScope, ColumnType] {
-  type Self[RNS, +CT] = UnparsedTableMap[RNS, CT]
+class UnparsedTableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[MT#ResourceNameScope, Map[ResourceName, UnparsedTableDescription[MT]]]) extends TableMapLike[MT] {
+  override def hashCode = underlying.hashCode
+  override def equals(o: Any) =
+    o match {
+      case that: UnparsedTableMap[_] => this.underlying == that.underlying
+      case _ => false
+    }
 
-  private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, TableMap[ResourceNameScope, ColumnType]] =
+  type Self[MT <: MetaTypes] = UnparsedTableMap[MT]
+
+  private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, TableMap[MT]] =
     Right(new TableMap(underlying.iterator.map { case (rns, m) =>
       rns -> m.iterator.map { case (rn, utd) =>
         utd match {
           case UnparsedTableDescription.Dataset(name, canonicalName, schema, ordering, pk) =>
             rn -> TableDescription.Dataset(name, canonicalName, schema, ordering, pk)
-          case other: UnparsedTableDescription.SoQLUnparsedTableDescription[ResourceNameScope, ColumnType] =>
+          case other: UnparsedTableDescription.SoQLUnparsedTableDescription[MT] =>
             other.parse(params) match {
               case Right(ptd) => rn -> ptd
               case Left(e) => return Left(e)
@@ -29,7 +36,7 @@ class UnparsedTableMap[ResourceNameScope, +ColumnType] private[analyzer2] (priva
   def rewriteDatabaseNames(
     tableName: DatabaseTableName => DatabaseTableName,
     columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): UnparsedTableMap[ResourceNameScope, ColumnType] = {
+  ): UnparsedTableMap[MT] = {
     new UnparsedTableMap(underlying.iterator.map { case (rns, m) =>
       rns -> m.iterator.map { case (rn, ptd) =>
         val newptd = ptd match {
@@ -55,20 +62,20 @@ class UnparsedTableMap[ResourceNameScope, +ColumnType] private[analyzer2] (priva
 }
 
 object UnparsedTableMap {
-  implicit def jsonEncode[RNS: JsonEncode, CT: JsonEncode]: JsonEncode[UnparsedTableMap[RNS, CT]] =
-    new JsonEncode[UnparsedTableMap[RNS, CT]] {
-      def encode(t: UnparsedTableMap[RNS, CT]) = JsonEncode.toJValue(t.underlying.toSeq)
+  implicit def jsonEncode[MT <: MetaTypes](implicit encRNS: JsonEncode[MT#RNS], encCT: JsonEncode[MT#CT], encDTN: JsonEncode[MT#DatabaseTableNameImpl]): JsonEncode[UnparsedTableMap[MT]] =
+    new JsonEncode[UnparsedTableMap[MT]] {
+      def encode(t: UnparsedTableMap[MT]) = JsonEncode.toJValue(t.underlying.toSeq)
     }
 
-  implicit def jsonDecode[RNS: JsonDecode, CT: JsonDecode]: JsonDecode[UnparsedTableMap[RNS, CT]] =
-    new JsonDecode[UnparsedTableMap[RNS, CT]] {
+  implicit def jsonDecode[MT <: MetaTypes](implicit encRNS: JsonDecode[MT#RNS], encCT: JsonDecode[MT#CT], decDTN: JsonDecode[MT#DatabaseTableNameImpl]): JsonDecode[UnparsedTableMap[MT]] =
+    new JsonDecode[UnparsedTableMap[MT]] with MetaTypeHelper[MT] {
       def decode(v: JValue) =
-        JsonDecode.fromJValue[Seq[(RNS, Map[ResourceName, UnparsedTableDescription[RNS, CT]])]](v).map { fields =>
+        JsonDecode.fromJValue[Seq[(RNS, Map[ResourceName, UnparsedTableDescription[MT]])]](v).map { fields =>
           new UnparsedTableMap(fields.toMap)
         }
     }
 
-  private[analyzer2] def asMockTableFinder[MT <: MetaTypes](self: UnparsedTableMap[MT#RNS, MT#CT]): mocktablefinder.MockTableFinder[MT] = {
+  private[analyzer2] def asMockTableFinder[MT <: MetaTypes](self: UnparsedTableMap[MT])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl): mocktablefinder.MockTableFinder[MT] = {
     new mocktablefinder.MockTableFinder[MT](
       self.underlying.iterator.flatMap { case (rns, resources) =>
         resources.iterator.map { case (rn, desc) =>

@@ -66,11 +66,11 @@ object ScopeName {
   case class Explicit(name: ResourceName) extends ScopeName
 }
 
-class Scope[+CT] private (
-  val schemaByName: OrderedMap[ColumnName, Entry[CT]],
-  val schemaByLabel: OrderedMap[ColumnLabel, Entry[CT]],
-  val label: TableLabel
-) {
+class Scope[MT <: MetaTypes] private (
+  val schemaByName: OrderedMap[ColumnName, Entry[MT#CT]],
+  val schemaByLabel: OrderedMap[ColumnLabel, Entry[MT#CT]],
+  val label: TableLabel[MT#DatabaseTableNameImpl]
+) extends LabelHelper[MT] {
   require(schemaByName.size == schemaByLabel.size, "Duplicate labels in schema")
 
   def types = schemaByName.iterator.map { case (_, e) => e.typ }.toSeq
@@ -84,7 +84,7 @@ class Scope[+CT] private (
 }
 
 object Scope {
-  def apply[CT](schema: OrderedMap[ColumnName, LabelEntry[CT]], label: TableLabel) = {
+  def apply[MT <: MetaTypes](schema: OrderedMap[ColumnName, LabelEntry[MT#CT]], label: TableLabel[MT#DatabaseTableNameImpl]) = {
     new Scope(
       OrderedMap() ++ schema.iterator.map { case (name, LabelEntry(label, typ)) => (name, Entry(name, label, typ)) },
       OrderedMap() ++ schema.iterator.map { case (name, LabelEntry(label, typ)) => (label, Entry(name, label, typ)) },
@@ -92,7 +92,7 @@ object Scope {
     )
   }
 
-  def apply[L <: ColumnLabel, CT](schema: OrderedMap[L, NameEntry[CT]], label: TableLabel)(implicit erasureWorkaround: ErasureWorkaround) = {
+  def apply[MT <: MetaTypes, L <: ColumnLabel](schema: OrderedMap[L, NameEntry[MT#CT]], label: TableLabel[MT#DatabaseTableNameImpl])(implicit erasureWorkaround: ErasureWorkaround) = {
     new Scope(
       OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (name, Entry(name, label, typ)) },
       OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (label, Entry(name, label, typ)) },
@@ -113,9 +113,9 @@ object Scope {
 //     - unqualified-names are resolved relative to the first entry in the current query's FROM list, or from the inherited environment
 //     - qualified names find the nearest qualifier
 
-sealed abstract class Environment[+CT](parent: Option[Environment[CT]]) {
+sealed abstract class Environment[MT <: MetaTypes](parent: Option[Environment[MT]]) {
   @tailrec
-  final def lookup(name: ColumnName): Option[Environment.LookupResult[CT]] = {
+  final def lookup(name: ColumnName): Option[Environment.LookupResult[MT]] = {
     val candidate = lookupHere(name)
     if(candidate.isDefined) return candidate
     parent match {
@@ -125,7 +125,7 @@ sealed abstract class Environment[+CT](parent: Option[Environment[CT]]) {
   }
 
   @tailrec
-  final def lookup(resource: ResourceName, name: ColumnName): Option[Environment.LookupResult[CT]] = {
+  final def lookup(resource: ResourceName, name: ColumnName): Option[Environment.LookupResult[MT]] = {
     val candidate = lookupHere(resource, name)
     if(candidate.isDefined) return candidate
     parent match {
@@ -134,39 +134,39 @@ sealed abstract class Environment[+CT](parent: Option[Environment[CT]]) {
     }
   }
 
-  protected def lookupHere(name: ColumnName): Option[Environment.LookupResult[CT]]
-  protected def lookupHere(resource: ResourceName, name: ColumnName): Option[Environment.LookupResult[CT]]
+  protected def lookupHere(name: ColumnName): Option[Environment.LookupResult[MT]]
+  protected def lookupHere(resource: ResourceName, name: ColumnName): Option[Environment.LookupResult[MT]]
 
-  def extend: Environment[CT]
+  def extend: Environment[MT]
 
-  def addScope[CT2 >: CT](name: Option[ResourceName], scope: Scope[CT2]): Either[AddScopeError, Environment[CT2]]
+  def addScope(name: Option[ResourceName], scope: Scope[MT]): Either[AddScopeError, Environment[MT]]
 }
 
 object Environment {
-  val empty: Environment[Nothing] = new EmptyEnvironment(None)
+  def empty[MT <: MetaTypes]: Environment[MT] = new EmptyEnvironment(None)
 
-  case class LookupResult[+CT](table: TableLabel, column: ColumnLabel, typ: CT)
+  case class LookupResult[MT <: MetaTypes](table: TableLabel[MT#DatabaseTableNameImpl], column: ColumnLabel, typ: MT#CT)
 
-  private class EmptyEnvironment[CT](parent: Option[Environment[CT]]) extends Environment(parent) {
+  private class EmptyEnvironment[MT <: MetaTypes](parent: Option[Environment[MT]]) extends Environment(parent) with MetaTypeHelper[MT] {
     override def lookupHere(name: ColumnName) = None
     override def lookupHere(resource: ResourceName, name: ColumnName) = None
 
-    override def extend: Environment[CT] = this
+    override def extend: Environment[MT] = this
 
-    override def addScope[CT2 >: CT](name: Option[ResourceName], scope: Scope[CT2]): Either[AddScopeError, Environment[CT2]] =
+    override def addScope(name: Option[ResourceName], scope: Scope[MT]): Either[AddScopeError, Environment[MT]] =
       Right(new NonEmptyEnvironment(
         scope,
-        name.fold(Map.empty[ResourceName, Scope[CT2]]) { n => Map(n -> scope) },
+        name.fold(Map.empty[ResourceName, Scope[MT]]) { n => Map(n -> scope) },
         parent
       ))
 
     override def toString = "Environment()"
   }
 
-  private class NonEmptyEnvironment[+CT](
-    implicitScope: Scope[CT],
-    explicitScopes: Map[ResourceName, Scope[CT]],
-    parent: Option[Environment[CT]]
+  private class NonEmptyEnvironment[MT <: MetaTypes](
+    implicitScope: Scope[MT],
+    explicitScopes: Map[ResourceName, Scope[MT]],
+    parent: Option[Environment[MT]]
   ) extends Environment(parent) {
     override def lookupHere(name: ColumnName) =
       implicitScope.schemaByName.get(name).map { entry =>
@@ -184,7 +184,7 @@ object Environment {
         toString
     }
 
-    override def extend: Environment[CT] = new EmptyEnvironment(Some(this))
+    override def extend: Environment[MT] = new EmptyEnvironment(Some(this))
 
     override def lookupHere(resource: ResourceName, name: ColumnName) =
       for {
@@ -194,7 +194,7 @@ object Environment {
         LookupResult(scope.label, entry.label, entry.typ)
       }
 
-    override def addScope[CT2 >: CT](name: Option[ResourceName], scope: Scope[CT2]): Either[AddScopeError, Environment[CT2]] = {
+    override def addScope(name: Option[ResourceName], scope: Scope[MT]): Either[AddScopeError, Environment[MT]] = {
       name match {
         case Some(rn) =>
           if(explicitScopes.contains(rn)) {

@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2.rewrite
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 
-class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[TableLabel, Set[ColumnLabel]]) extends SoQLAnalyzerUniverse[MT] {
+class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[TableLabel[MT#DatabaseTableNameImpl], Set[ColumnLabel]]) extends SoQLAnalyzerUniverse[MT] {
   // myLabel being "None" means "keep all of my output columns,
   // whether or not they appear to be used".  This is for both the
   // top-level (where of course all the columns will be used by
@@ -27,7 +27,7 @@ class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[TableL
 
       case stmt@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
         val newSelectList = (myLabel, distinctiveness) match {
-          case (_, Distinctiveness.FullyDistinct) | (None, _) =>
+          case (_, Distinctiveness.FullyDistinct()) | (None, _) =>
             // need to keep all my columns
             selectList
           case (Some(tl), _) =>

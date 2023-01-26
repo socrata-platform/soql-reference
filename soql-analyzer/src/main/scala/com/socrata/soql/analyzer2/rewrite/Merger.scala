@@ -9,7 +9,7 @@ import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
 import com.socrata.soql.analyzer2._
 
-class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnalyzerUniverse[MT] with SoQLAnalyzerExpressions[MT] {
+class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnalyzerUniverse[MT] with SoQLAnalyzerExpressions[MT] with LabelHelper[MT] {
   private implicit val hd = new HasDoc[CV] {
     override def docOf(v: CV) = com.socrata.prettyprint.Doc(v.toString)
   }
@@ -119,13 +119,12 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
       case CombinedTables(op, left, right) => CombinedTables(op, rewrite(left, xform), rewrite(right, xform))
       case CTE(defLbl, defAlias, defQ, useLbl, useQ) => CTE(defLbl, defAlias, rewrite(defQ, xform), useLbl, rewrite(useQ, xform))
     }
-  private def rewrite(d: Distinctiveness[CT, CV], xform: ExprRewriter): Distinctiveness[CT, CV] =
+  private def rewrite(d: Distinctiveness[MT], xform: ExprRewriter): Distinctiveness[MT] =
     d match {
-      case Distinctiveness.Indistinct => Distinctiveness.Indistinct
-      case Distinctiveness.FullyDistinct => Distinctiveness.FullyDistinct
       case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(xform))
+      case x@(Distinctiveness.Indistinct() | Distinctiveness.FullyDistinct()) => x
     }
-  private def rewrite(d: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]], xform: ExprRewriter): OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]] =
+  private def rewrite(d: OrderedMap[AutoColumnLabel, NamedExpr[MT]], xform: ExprRewriter): OrderedMap[AutoColumnLabel, NamedExpr[MT]] =
     d.withValuesMapped { ne => ne.copy(expr = xform(ne.expr)) }
 
   private def mergeSelects(
@@ -226,14 +225,14 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
       return true
     }
 
-    if(a.distinctiveness != Distinctiveness.Indistinct) {
+    if(a.distinctiveness != Distinctiveness.Indistinct()) {
       // selecting from a DISTINCT query is tricky to merge; let's
       // not.
       debug("A is distinct in some way")
       return true
     }
 
-    if(b.isWindowed || b.isAggregated || b.distinctiveness != Distinctiveness.Indistinct) {
+    if(b.isWindowed || b.isAggregated || b.distinctiveness != Distinctiveness.Indistinct()) {
       if(a.limit.isDefined || a.offset.isDefined) {
         // can't smash the queries together because a trims out some
         // of its rows after-the-fact, so b's windows (or groups)
@@ -309,24 +308,23 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
       !q.from.isInstanceOf[AtomicFrom] ||
       q.where.isDefined ||
       q.orderBy.nonEmpty ||
-      q.distinctiveness != Distinctiveness.Indistinct
+      q.distinctiveness != Distinctiveness.Indistinct()
 
   private def mergeDistinct(
     aTable: TableLabel,
     aColumns: OrderedMap[AutoColumnLabel, Expr],
-    b: Distinctiveness[CT, CV]
-  ): Distinctiveness[CT, CV] =
+    b: Distinctiveness[MT]
+  ): Distinctiveness[MT] =
     b match {
-      case Distinctiveness.Indistinct => Distinctiveness.Indistinct
-      case Distinctiveness.FullyDistinct => Distinctiveness.FullyDistinct
       case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(replaceRefs(aTable, aColumns, _)))
+      case x@(Distinctiveness.Indistinct() | Distinctiveness.FullyDistinct()) => x
     }
 
   private def mergeSelection(
     aTable: TableLabel,
     aColumns: OrderedMap[AutoColumnLabel, Expr],
-    b: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]]
-  ): OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]] =
+    b: OrderedMap[AutoColumnLabel, NamedExpr[MT]]
+  ): OrderedMap[AutoColumnLabel, NamedExpr[MT]] =
     b.withValuesMapped { bExpr =>
       bExpr.copy(expr = replaceRefs(aTable, aColumns, bExpr.expr))
     }
@@ -335,11 +333,11 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
     gb.map(replaceRefs(aTable, aColumns, _))
   }
 
-  private def orderByVsDistinct(orderBy: Seq[OrderBy[CT, CV]], columns: OrderedMap[AutoColumnLabel, Expr], bDistinct: Distinctiveness[CT, CV]) = {
+  private def orderByVsDistinct(orderBy: Seq[OrderBy], columns: OrderedMap[AutoColumnLabel, Expr], bDistinct: Distinctiveness[MT]) = {
     orderBy.filter { ob =>
       bDistinct match {
-        case Distinctiveness.Indistinct => true
-        case Distinctiveness.FullyDistinct => columns.values.exists(_ == ob.expr)
+        case Distinctiveness.Indistinct() => true
+        case Distinctiveness.FullyDistinct() => columns.values.exists(_ == ob.expr)
         case Distinctiveness.On(exprs) => exprs.contains(ob.expr)
       }
     }
@@ -348,9 +346,9 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
   private def mergeOrderBy(
     aTable: TableLabel,
     aColumns: OrderedMap[AutoColumnLabel, Expr],
-    obA: Seq[OrderBy[CT, CV]],
-    obB: Seq[OrderBy[CT, CV]]
-  ): Seq[OrderBy[CT, CV]] =
+    obA: Seq[OrderBy],
+    obB: Seq[OrderBy]
+  ): Seq[OrderBy] =
     obB.map { ob => ob.copy(expr = replaceRefs(aTable, aColumns, ob.expr)) } ++ obA
 
   private def mergeWhereLike(

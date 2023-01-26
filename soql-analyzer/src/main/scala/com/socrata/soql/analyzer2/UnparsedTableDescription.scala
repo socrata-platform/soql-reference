@@ -19,30 +19,30 @@ import com.socrata.soql.BinaryTree
 // has to handle passing through JSONified table descriptions but
 // doesn't care about the actual parse tree itself.
 
-sealed trait UnparsedTableDescription[+ResourceNameScope, +ColumnType] extends TableDescriptionLike
+sealed trait UnparsedTableDescription[MT <: MetaTypes] extends TableDescriptionLike with MetaTypeHelper[MT] with LabelHelper[MT]
 
 object UnparsedTableDescription {
-  implicit def jEncode[RNS: JsonEncode, CT: JsonEncode] =
-    SimpleHierarchyEncodeBuilder[UnparsedTableDescription[RNS, CT]](InternalTag("type")).
-      branch[Dataset[CT]]("dataset")(Dataset.encode[CT], implicitly).
-      branch[Query[RNS, CT]]("query")(Query.encode[RNS, CT], implicitly).
-      branch[TableFunction[RNS, CT]]("tablefunc")(TableFunction.encode[RNS, CT], implicitly).
+  implicit def jEncode[MT <: MetaTypes](implicit encRNS: JsonEncode[MT#RNS], encCT: JsonEncode[MT#CT], encDTN: JsonEncode[MT#DatabaseTableNameImpl]) =
+    SimpleHierarchyEncodeBuilder[UnparsedTableDescription[MT]](InternalTag("type")).
+      branch[Dataset[MT]]("dataset")(Dataset.encode[MT], implicitly).
+      branch[Query[MT]]("query")(Query.encode[MT], implicitly).
+      branch[TableFunction[MT]]("tablefunc")(TableFunction.encode[MT], implicitly).
       build
 
-  implicit def jDecode[RNS: JsonDecode, CT: JsonDecode] =
-    SimpleHierarchyDecodeBuilder[UnparsedTableDescription[RNS, CT]](InternalTag("type")).
-      branch[Dataset[CT]]("dataset")(Dataset.decode[CT], implicitly).
-      branch[Query[RNS, CT]]("query")(Query.decode[RNS, CT], implicitly).
-      branch[TableFunction[RNS, CT]]("tablefunc")(TableFunction.decode[RNS, CT], implicitly).
+  implicit def jDecode[MT <: MetaTypes](implicit decRNS: JsonDecode[MT#RNS], decCT: JsonDecode[MT#CT], decDTN: JsonDecode[MT#DatabaseTableNameImpl]) =
+    SimpleHierarchyDecodeBuilder[UnparsedTableDescription[MT]](InternalTag("type")).
+      branch[Dataset[MT]]("dataset")(Dataset.decode[MT], implicitly).
+      branch[Query[MT]]("query")(Query.decode[MT], implicitly).
+      branch[TableFunction[MT]]("tablefunc")(TableFunction.decode[MT], implicitly).
       build
 
-  case class Dataset[+ColumnType](
-    name: DatabaseTableName,
+  case class Dataset[MT <: MetaTypes](
+    name: DatabaseTableName[MT#DatabaseTableNameImpl],
     canonicalName: CanonicalName,
-    columns: OrderedMap[DatabaseColumnName, TableDescription.DatasetColumnInfo[ColumnType]],
+    columns: OrderedMap[DatabaseColumnName, TableDescription.DatasetColumnInfo[MT#ColumnType]],
     ordering: Seq[TableDescription.Ordering],
     primaryKey: Seq[Seq[DatabaseColumnName]]
-  ) extends UnparsedTableDescription[Nothing, ColumnType] {
+  ) extends UnparsedTableDescription[MT] {
     val hiddenColumns = columns.values.flatMap { case TableDescription.DatasetColumnInfo(name, _, hidden) =>
       if(hidden) Some(name) else None
     }.to(Set)
@@ -51,45 +51,47 @@ object UnparsedTableDescription {
     // fires while json-decoding
     require(ordering.forall { o => columns.contains(o.column) })
 
-    private[analyzer2] def rewriteScopes[RNS, RNS2](scopeMap: Map[RNS, RNS2]) = this
+    private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#RNS])(implicit ev: ChangesOnlyRNS[MT, MT2]) = this
   }
   object Dataset {
-    private[UnparsedTableDescription] def encode[CT: JsonEncode]: JsonEncode[Dataset[CT]] =
-      new JsonEncode[Dataset[CT]] {
+    private[UnparsedTableDescription] def encode[MT <: MetaTypes](implicit encCT: JsonEncode[MT#CT], encDTN: JsonEncode[MT#DatabaseTableNameImpl]): JsonEncode[Dataset[MT]] =
+      new JsonEncode[Dataset[MT]] with MetaTypeHelper[MT] {
         implicit val schemaEncode = OrderedMapHelper.jsonEncode[DatabaseColumnName, TableDescription.DatasetColumnInfo[CT]]
-        val encoder = AutomaticJsonEncodeBuilder[Dataset[CT]]
+        val encoder = AutomaticJsonEncodeBuilder[Dataset[MT]]
 
-        def encode(ds: Dataset[CT]): JValue = encoder.encode(ds)
+        def encode(ds: Dataset[MT]): JValue = encoder.encode(ds)
       }
 
-    private[UnparsedTableDescription] def decode[CT: JsonDecode]: JsonDecode[Dataset[CT]] =
-      new JsonDecode[Dataset[CT]] {
+    private[UnparsedTableDescription] def decode[MT <: MetaTypes](implicit decCT: JsonDecode[MT#CT], decDTN: JsonDecode[MT#DatabaseTableNameImpl]): JsonDecode[Dataset[MT]] =
+      new JsonDecode[Dataset[MT]] with MetaTypeHelper[MT] {
         implicit val schemaDecode = OrderedMapHelper.jsonDecode[DatabaseColumnName, TableDescription.DatasetColumnInfo[CT]]
-        val decoder = AutomaticJsonDecodeBuilder[Dataset[CT]]
+        val decoder = AutomaticJsonDecodeBuilder[Dataset[MT]]
 
         def decode(v: JValue) = decoder.decode(v)
       }
   }
 
-  sealed trait SoQLUnparsedTableDescription[+ResourceNameScope, +ColumnType] extends UnparsedTableDescription[ResourceNameScope, ColumnType] {
+  sealed trait SoQLUnparsedTableDescription[MT <: MetaTypes] extends UnparsedTableDescription[MT] {
     def soql: String
-    private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, TableDescription[ResourceNameScope, ColumnType]]
+    private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, TableDescription[MT]]
   }
 
-  case class Query[+ResourceNameScope, +ColumnType](
-    scope: ResourceNameScope, // This scope is to resolve both basedOn and any tables referenced within the soql
+  case class Query[MT <: MetaTypes](
+    scope: MT#ResourceNameScope, // This scope is to resolve both basedOn and any tables referenced within the soql
     canonicalName: CanonicalName, // This is the canonical name of this query; it is assumed to be unique across scopes
     basedOn: ResourceName,
     soql: String,
-    parameters: Map[HoleName, ColumnType],
+    parameters: Map[HoleName, MT#ColumnType],
     hiddenColumns: Set[ColumnName]
-  ) extends SoQLUnparsedTableDescription[ResourceNameScope, ColumnType] {
-    private[analyzer2] type SoQL = String
-    private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]) =
-      copy(scope = scopeMap(scope))
+  ) extends SoQLUnparsedTableDescription[MT] {
+    private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#RNS])(implicit ev: ChangesOnlyRNS[MT, MT2]): Query[MT2] =
+      copy(
+        scope = scopeMap(scope),
+        parameters = parameters.asInstanceOf[Map[HoleName, MT2#ColumnType]] // SAFETY: ColumnType isn't changing
+      )
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
       ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = false)).map { parsed =>
-        TableDescription.Query(
+        TableDescription.Query[MT](
           scope,
           canonicalName,
           basedOn,
@@ -101,23 +103,24 @@ object UnparsedTableDescription {
       }
   }
   object Query {
-    private[UnparsedTableDescription] def encode[RNS: JsonEncode, CT: JsonEncode] =
-      AutomaticJsonEncodeBuilder[Query[RNS, CT]]
-    private[UnparsedTableDescription] def decode[RNS: JsonDecode, CT: JsonDecode] =
-      AutomaticJsonDecodeBuilder[Query[RNS, CT]]
+    private[UnparsedTableDescription] def encode[MT <: MetaTypes](implicit encRNS: JsonEncode[MT#RNS], encCT: JsonEncode[MT#CT]) =
+      AutomaticJsonEncodeBuilder[Query[MT]]
+    private[UnparsedTableDescription] def decode[MT <: MetaTypes](implicit decRNS: JsonDecode[MT#RNS], decCT: JsonDecode[MT#CT]) =
+      AutomaticJsonDecodeBuilder[Query[MT]]
   }
 
-  case class TableFunction[+ResourceNameScope, +ColumnType](
-    scope: ResourceNameScope, // This scope is to resolve any tables referenced within the soql
+  case class TableFunction[MT <: MetaTypes](
+    scope: MT#ResourceNameScope, // This scope is to resolve any tables referenced within the soql
     canonicalName: CanonicalName, // This is the canonical name of this UDF; it is assumed to be unique across scopes
     soql: String,
-    parameters: OrderedMap[HoleName, ColumnType],
+    parameters: OrderedMap[HoleName, MT#ColumnType],
     hiddenColumns: Set[ColumnName]
-  ) extends SoQLUnparsedTableDescription[ResourceNameScope, ColumnType] {
-    private[analyzer2] type SoQL = String
-
-    private[analyzer2] def rewriteScopes[RNS >: ResourceNameScope, RNS2](scopeMap: Map[RNS, RNS2]) =
-      copy(scope = scopeMap(scope))
+  ) extends SoQLUnparsedTableDescription[MT] {
+    private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#RNS])(implicit ev: ChangesOnlyRNS[MT, MT2]): TableFunction[MT2] =
+      copy(
+        scope = scopeMap(scope),
+        parameters = parameters.asInstanceOf[OrderedMap[HoleName, MT2#ColumnType]] // SAFETY: ColumnType isn't changing
+      )
 
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
       ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = true)).map { parsed =>
@@ -133,18 +136,18 @@ object UnparsedTableDescription {
   }
 
   object TableFunction {
-    private[UnparsedTableDescription] def encode[RNS: JsonEncode, CT: JsonEncode]: JsonEncode[TableFunction[RNS, CT]] =
-      new JsonEncode[TableFunction[RNS, CT]] {
+    private[UnparsedTableDescription] def encode[MT <: MetaTypes](implicit encRNS: JsonEncode[MT#RNS], encCT: JsonEncode[MT#CT]): JsonEncode[TableFunction[MT]] =
+      new JsonEncode[TableFunction[MT]] with MetaTypeHelper[MT] {
         implicit val paramsEncode = OrderedMapHelper.jsonEncode[HoleName, CT]
-        val encoder = AutomaticJsonEncodeBuilder[TableFunction[RNS, CT]]
+        val encoder = AutomaticJsonEncodeBuilder[TableFunction[MT]]
 
-        def encode(u: TableFunction[RNS, CT]): JValue = encoder.encode(u)
+        def encode(u: TableFunction[MT]): JValue = encoder.encode(u)
       }
 
-    private[UnparsedTableDescription] def decode[RNS: JsonDecode, CT: JsonDecode]: JsonDecode[TableFunction[RNS, CT]] =
-      new JsonDecode[TableFunction[RNS, CT]] {
+    private[UnparsedTableDescription] def decode[MT <: MetaTypes](implicit decRNS: JsonDecode[MT#RNS], decCT: JsonDecode[MT#CT]): JsonDecode[TableFunction[MT]] =
+      new JsonDecode[TableFunction[MT]] with MetaTypeHelper[MT] {
         implicit val paramsDecode = OrderedMapHelper.jsonDecode[HoleName, CT]
-        val decoder = AutomaticJsonDecodeBuilder[TableFunction[RNS, CT]]
+        val decoder = AutomaticJsonDecodeBuilder[TableFunction[MT]]
 
         def decode(v: JValue) = decoder.decode(v)
       }

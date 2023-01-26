@@ -8,9 +8,9 @@ import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
 
 class UnparsedFoundTables[MT <: MetaTypes] private[analyzer2] (
-  private[analyzer2] val tableMap: UnparsedTableMap[MT#ResourceNameScope, MT#ColumnType],
+  private[analyzer2] val tableMap: UnparsedTableMap[MT],
   private[analyzer2] val initialScope: MT#ResourceNameScope,
-  private[analyzer2] val initialQuery: UnparsedFoundTables.Query[MT#ColumnType],
+  private[analyzer2] val initialQuery: UnparsedFoundTables.Query[MT],
   private[analyzer2] val parserParameters: EncodableParameters
 ) extends FoundTablesLike[MT] {
   type Self[MT <: MetaTypes] = UnparsedFoundTables[MT]
@@ -29,23 +29,24 @@ class UnparsedFoundTables[MT <: MetaTypes] private[analyzer2] (
 }
 
 object UnparsedFoundTables {
-  sealed abstract class Query[+CT] {
+  sealed abstract class Query[MT <: MetaTypes] {
     private[analyzer2] type SoQL <: String
     private[analyzer2] def soql: SoQL
-    private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, FoundTables.Query[CT]]
+    private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, FoundTables.Query[MT]]
   }
 
-  case class Saved(name: ResourceName) extends Query[Nothing] {
+  case class Saved[MT <: MetaTypes](name: ResourceName) extends Query[MT] {
     private[analyzer2] type SoQL = Nothing
     private[analyzer2] def soql = ???
 
     private[analyzer2] def parse(params: AbstractParser.Parameters) = Right(FoundTables.Saved(name))
   }
   object Saved {
-    private[analyzer2] implicit val codec = AutomaticJsonCodecBuilder[Saved]
+    private[analyzer2] implicit def encode[MT <: MetaTypes] = AutomaticJsonEncodeBuilder[Saved[MT]]
+    private[analyzer2] implicit def decode[MT <: MetaTypes] = AutomaticJsonDecodeBuilder[Saved[MT]]
   }
 
-  case class InContext[+CT](parent: ResourceName, soql: String, parameters: Map[HoleName, CT]) extends Query[CT] {
+  case class InContext[MT <: MetaTypes](parent: ResourceName, soql: String, parameters: Map[HoleName, MT#CT]) extends Query[MT] {
     private[analyzer2] type SoQL = String
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
       ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = false)).map { tree =>
@@ -53,11 +54,11 @@ object UnparsedFoundTables {
       }
   }
   object InContext {
-    private[analyzer2] implicit def encode[CT : JsonEncode] = AutomaticJsonEncodeBuilder[InContext[CT]]
-    private[analyzer2] implicit def decode[CT : JsonDecode] = AutomaticJsonDecodeBuilder[InContext[CT]]
+    private[analyzer2] implicit def encode[MT <: MetaTypes](implicit encCT : JsonEncode[MT#CT]) = AutomaticJsonEncodeBuilder[InContext[MT]]
+    private[analyzer2] implicit def decode[MT <: MetaTypes](implicit decCT : JsonDecode[MT#CT]) = AutomaticJsonDecodeBuilder[InContext[MT]]
   }
 
-  case class InContextImpersonatingSaved[+CT](parent: ResourceName, soql: String, parameters: Map[HoleName, CT], fake: CanonicalName) extends Query[CT] {
+  case class InContextImpersonatingSaved[MT <: MetaTypes](parent: ResourceName, soql: String, parameters: Map[HoleName, MT#CT], fake: CanonicalName) extends Query[MT] {
     private[analyzer2] type SoQL = String
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
       ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = false)).map { tree =>
@@ -65,11 +66,11 @@ object UnparsedFoundTables {
       }
   }
   object InContextImpersonatingSaved {
-    private[UnparsedFoundTables] implicit def encode[CT: JsonEncode] = AutomaticJsonEncodeBuilder[InContextImpersonatingSaved[CT]]
-    private[UnparsedFoundTables] implicit def decode[CT: JsonDecode] = AutomaticJsonDecodeBuilder[InContextImpersonatingSaved[CT]]
+    private[UnparsedFoundTables] implicit def encode[MT <: MetaTypes](implicit encCT: JsonEncode[MT#CT]) = AutomaticJsonEncodeBuilder[InContextImpersonatingSaved[MT]]
+    private[UnparsedFoundTables] implicit def decode[MT <: MetaTypes](implicit decCT: JsonDecode[MT#CT]) = AutomaticJsonDecodeBuilder[InContextImpersonatingSaved[MT]]
   }
 
-  case class Standalone[+CT](soql: String, parameters: Map[HoleName, CT]) extends Query[CT] {
+  case class Standalone[MT <: MetaTypes](soql: String, parameters: Map[HoleName, MT#CT]) extends Query[MT] {
     private[analyzer2] type SoQL = String
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
       ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = false)).map { tree =>
@@ -77,29 +78,29 @@ object UnparsedFoundTables {
       }
   }
   object Standalone {
-    private[UnparsedFoundTables] implicit def encode[CT: JsonEncode] = AutomaticJsonEncodeBuilder[Standalone[CT]]
-    private[UnparsedFoundTables] implicit def decode[CT: JsonDecode] = AutomaticJsonDecodeBuilder[Standalone[CT]]
+    private[UnparsedFoundTables] implicit def encode[MT <: MetaTypes](implicit encCT: JsonEncode[MT#CT]) = AutomaticJsonEncodeBuilder[Standalone[MT]]
+    private[UnparsedFoundTables] implicit def decode[MT <: MetaTypes](implicit decCT: JsonDecode[MT#CT]) = AutomaticJsonDecodeBuilder[Standalone[MT]]
   }
 
   object Query {
-    private[analyzer2] implicit def queryEncode[CT : JsonEncode]: JsonEncode[Query[CT]] = SimpleHierarchyEncodeBuilder[Query[CT]](InternalTag("type")).
-      branch[Saved]("saved").
-      branch[InContext[CT]]("in-context").
-      branch[InContextImpersonatingSaved[CT]]("in-context-impersonating-saved").
-      branch[Standalone[CT]]("standalone").
+    private[analyzer2] implicit def queryEncode[MT <: MetaTypes](implicit encCT : JsonEncode[MT#CT]): JsonEncode[Query[MT]] = SimpleHierarchyEncodeBuilder[Query[MT]](InternalTag("type")).
+      branch[Saved[MT]]("saved").
+      branch[InContext[MT]]("in-context").
+      branch[InContextImpersonatingSaved[MT]]("in-context-impersonating-saved").
+      branch[Standalone[MT]]("standalone").
       build
 
-    private[analyzer2] implicit def queryDecode[CT : JsonDecode]: JsonDecode[Query[CT]] = SimpleHierarchyDecodeBuilder[Query[CT]](InternalTag("type")).
-      branch[Saved]("saved").
-      branch[InContext[CT]]("in-context").
-      branch[InContextImpersonatingSaved[CT]]("in-context-impersonating-saved").
-      branch[Standalone[CT]]("standalone").
+    private[analyzer2] implicit def queryDecode[MT <: MetaTypes](implicit decCT: JsonDecode[MT#CT]): JsonDecode[Query[MT]] = SimpleHierarchyDecodeBuilder[Query[MT]](InternalTag("type")).
+      branch[Saved[MT]]("saved").
+      branch[InContext[MT]]("in-context").
+      branch[InContextImpersonatingSaved[MT]]("in-context-impersonating-saved").
+      branch[Standalone[MT]]("standalone").
       build
   }
 
-  implicit def jEncode[MT <: MetaTypes](implicit rnsEncode: JsonEncode[MT#RNS], ctEncode: JsonEncode[MT#CT]) =
+  implicit def jEncode[MT <: MetaTypes](implicit rnsEncode: JsonEncode[MT#RNS], ctEncode: JsonEncode[MT#CT], dtnEncode: JsonEncode[MT#DatabaseTableNameImpl]) =
     AutomaticJsonEncodeBuilder[UnparsedFoundTables[MT]]
-  implicit def jDecode[MT <: MetaTypes](implicit rnsDecode: JsonDecode[MT#RNS], ctDecode: JsonDecode[MT#CT]) =
+  implicit def jDecode[MT <: MetaTypes](implicit rnsDecode: JsonDecode[MT#RNS], ctDecode: JsonDecode[MT#CT], dtnDecode: JsonDecode[MT#DatabaseTableNameImpl]) =
     AutomaticJsonDecodeBuilder[UnparsedFoundTables[MT]]
 }
 

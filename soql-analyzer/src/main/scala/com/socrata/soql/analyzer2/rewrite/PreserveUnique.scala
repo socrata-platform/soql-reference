@@ -8,16 +8,7 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.functions.MonomorphicFunction
 
-class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends MetaTypeHelper[MT] {
-  type Statement = analyzer2.Statement[MT]
-  type Select = analyzer2.Select[MT]
-  type From = analyzer2.From[MT]
-  type Join = analyzer2.Join[MT]
-  type AtomicFrom = analyzer2.AtomicFrom[MT]
-  type FromTable = analyzer2.FromTable[MT]
-  type FromSingleRow = analyzer2.FromSingleRow[MT]
-  type OrderBy = analyzer2.OrderBy[CT, CV]
-
+class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends SoQLAnalyzerUniverse[MT] {
   def rewriteStatement(stmt: Statement, wantColumns: Boolean): Statement = {
     stmt match {
       case ct@CombinedTables(op, left, right) =>
@@ -54,13 +45,13 @@ class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends 
         // aggregate in the way, in which case the aggregate will
         // destroy any underlying ordering anyway so we stop caring.
 
-        if(distinctiveness == Distinctiveness.FullyDistinct) {
+        if(distinctiveness == Distinctiveness.FullyDistinct()) {
           select
         } else {
           val newFrom = rewriteFrom(from)
           if(wantColumns) {
             var existingExprs = selectList.valuesIterator.map(_.expr).to(Set)
-            val additional = Vector.newBuilder[Column[CT]]
+            val additional = Vector.newBuilder[Column]
             for(col <- newFrom.unique.flatten) {
               if(!existingExprs(col)) {
                 existingExprs += col

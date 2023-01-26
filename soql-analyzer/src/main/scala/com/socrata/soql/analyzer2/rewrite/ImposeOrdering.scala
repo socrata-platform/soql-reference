@@ -16,7 +16,7 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
         val newTableLabel = labelProvider.tableLabel()
 
         Select(
-          Distinctiveness.Indistinct,
+          Distinctiveness.Indistinct(),
           OrderedMap() ++ ct.schema.iterator.map { case (columnLabel, NameEntry(name, typ)) =>
             labelProvider.columnLabel() -> NamedExpr(Column(newTableLabel, columnLabel, typ)(AtomicPositionInfo.None), name)
           },
@@ -56,12 +56,12 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
 
         val existingOrderBy = orderBy.map(_.expr).to(Set)
 
-        def allOrderableSelectedCols(except: Expr[CT, CV] => Boolean): Iterator[OrderBy[CT, CV]] =
+        def allOrderableSelectedCols(except: Expr => Boolean): Iterator[OrderBy] =
           selectList.valuesIterator.collect { case NamedExpr(expr, name) if isOrderable(expr.typ) && !except(expr) =>
             OrderBy(expr, true, true)
           }
 
-        val newOrderBy: Seq[OrderBy[CT, CV]] =
+        val newOrderBy: Seq[OrderBy] =
           distinctiveness match {
             case Distinctiveness.On(exprs) =>
               // Ok, this is the weird case.  We need to ensure that
@@ -92,12 +92,12 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
               val newBaseSet = newBase.iterator.map(_.expr).to(Set)
 
               newBase ++ allOrderableSelectedCols(except = newBaseSet)
-            case Distinctiveness.FullyDistinct =>
+            case Distinctiveness.FullyDistinct() =>
               // fully distinct order by clauses must appear in the
               // select list; fortunately, that's where we're pulling
               // them from.
               orderBy ++ allOrderableSelectedCols(except = existingOrderBy)
-            case Distinctiveness.Indistinct =>
+            case Distinctiveness.Indistinct() =>
               val additional = usefulUnique.headOption match {
                 case None => allOrderableSelectedCols(except = existingOrderBy)
                 case Some(exprs) => exprs.filterNot(existingOrderBy).map(OrderBy(_, true, true))

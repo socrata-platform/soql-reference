@@ -46,9 +46,9 @@ class SelectListReferences[MT <: MetaTypes] private () extends SoQLAnalyzerUnive
 
       val selectListIndices = selectList.valuesIterator.map(_.expr).toVector.zipWithIndex.reverseIterator.toMap
 
-      def numericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
+      def numericateExpr(e: Expr): Expr = {
         e match {
-          case c: Column[CT] =>
+          case c: Column =>
             c // don't bother rewriting column references
           case e =>
             selectListIndices.get(e) match {
@@ -60,8 +60,8 @@ class SelectListReferences[MT <: MetaTypes] private () extends SoQLAnalyzerUnive
 
       select.copy(
         distinctiveness = distinctiveness match {
-          case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
           case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(numericateExpr))
+          case x@(Distinctiveness.Indistinct() | Distinctiveness.FullyDistinct()) => x
         },
         from = rewriteFrom(from),
         groupBy = groupBy.map(numericateExpr),
@@ -76,7 +76,7 @@ class SelectListReferences[MT <: MetaTypes] private () extends SoQLAnalyzerUnive
 
       val selectListIndices = selectList.valuesIterator.map(_.expr).toVector
 
-      def unnumericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
+      def unnumericateExpr(e: Expr): Expr = {
         e match {
           case r@SelectListReference(idxPlusOne, _, _, _) =>
             selectListIndices(idxPlusOne - 1).reposition(r.position.logicalPosition)
@@ -87,8 +87,8 @@ class SelectListReferences[MT <: MetaTypes] private () extends SoQLAnalyzerUnive
 
       select.copy(
         distinctiveness = distinctiveness match {
-          case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
           case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(unnumericateExpr))
+          case x@(Distinctiveness.Indistinct() | Distinctiveness.FullyDistinct()) => x
         },
         from = rewriteFrom(from),
         groupBy = groupBy.map(unnumericateExpr),

@@ -8,16 +8,7 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.functions.MonomorphicFunction
 
-class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extends MetaTypeHelper[MT] {
-  type Statement = analyzer2.Statement[MT]
-  type Select = analyzer2.Select[MT]
-  type From = analyzer2.From[MT]
-  type Join = analyzer2.Join[MT]
-  type AtomicFrom = analyzer2.AtomicFrom[MT]
-  type FromTable = analyzer2.FromTable[MT]
-  type FromSingleRow = analyzer2.FromSingleRow[MT]
-  type OrderBy = analyzer2.OrderBy[CT, CV]
-
+class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extends MetaTypeHelper[MT] with SoQLAnalyzerUniverse[MT] {
   // "wantOutputOrdered" == "if this statement can be rewritten to
   // preserve the ordering of its underlying query, do so".
   // "wantOrderingColumns" == "The caller needs column from this table
@@ -63,7 +54,7 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extend
         // aggregate in the way, in which case the aggregate will
         // destroy any underlying ordering anyway so we stop caring.
 
-        val wantSubqueryOrdered = (select.isWindowed || wantOutputOrdered) && !select.isAggregated && distinctiveness == Distinctiveness.Indistinct
+        val wantSubqueryOrdered = (select.isWindowed || wantOutputOrdered) && !select.isAggregated && distinctiveness == Distinctiveness.Indistinct()
         val (extraOrdering, newFrom) = rewriteFrom(from, wantSubqueryOrdered, wantSubqueryOrdered)
 
         // We will at the very least want to add the ordering
