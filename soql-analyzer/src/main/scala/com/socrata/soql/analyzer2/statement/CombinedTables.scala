@@ -23,10 +23,10 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
 
   def unique = LazyList.empty
 
-  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] =
     left.find(predicate).orElse(right.find(predicate))
 
-  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+  def contains(e: Expr[MT]): Boolean =
     left.contains(e) || right.contains(e)
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName] =
@@ -44,7 +44,7 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
   private[analyzer2] def doRelabel(state: RelabelState): Self[MT] =
     copy(left = left.doRelabel(state), right = right.doRelabel(state))
 
-  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
+  private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
     left.doLabelMap(state)
     right.doLabelMap(state)
   }
@@ -66,13 +66,13 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =
     copy(left = left.mapAlias(f), right = right.mapAlias(f))
 
-  override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]] = {
+  override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[MT]] = {
     left.debugDoc.encloseNesting(d"(", d")") +#+ op.debugDoc +#+ right.debugDoc.encloseNesting(d"(", d")")
   }
 }
 
 trait OCombinedTablesImpl { this: CombinedTables.type =>
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT#CT, MT#CV]]): Writable[CombinedTables[MT]] =
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl]): Writable[CombinedTables[MT]] =
     new Writable[CombinedTables[MT]] {
       def writeTo(buffer: WriteBuffer, ct: CombinedTables[MT]): Unit = {
         buffer.write(ct.op)
@@ -81,7 +81,7 @@ trait OCombinedTablesImpl { this: CombinedTables.type =>
       }
     }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT#CT, MT#CV]]): Readable[CombinedTables[MT]] =
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl]): Readable[CombinedTables[MT]] =
     new Readable[CombinedTables[MT]] {
       def readFrom(buffer: ReadBuffer): CombinedTables[MT] = {
         CombinedTables(

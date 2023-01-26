@@ -33,13 +33,13 @@ trait AtomicFromImpl[MT <: MetaTypes] { this: AtomicFrom[MT] =>
   type ReduceResult[MT <: MetaTypes] = AtomicFrom[MT]
   override def reduceMap[S, MT2 <: MetaTypes](
     base: AtomicFrom[MT] => (S, AtomicFrom[MT2]),
-    combine: (S, JoinType, Boolean, From[MT2], AtomicFrom[MT], Expr[CT, CV]) => (S, Join[MT2])
+    combine: (S, JoinType, Boolean, From[MT2], AtomicFrom[MT], Expr[MT]) => (S, Join[MT2])
   ): (S, ReduceResult[MT2]) =
     base(this)
 }
 
 trait OAtomicFromImpl { this: AtomicFrom.type =>
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT#CT, MT#CV]]): Writable[AtomicFrom[MT]] = new Writable[AtomicFrom[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl]): Writable[AtomicFrom[MT]] = new Writable[AtomicFrom[MT]] {
     def writeTo(buffer: WriteBuffer, from: AtomicFrom[MT]): Unit = {
       from match {
         case ft: FromTable[MT] =>
@@ -55,7 +55,7 @@ trait OAtomicFromImpl { this: AtomicFrom.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT#CT, MT#CV]]): Readable[AtomicFrom[MT]] = new Readable[AtomicFrom[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl]): Readable[AtomicFrom[MT]] = new Readable[AtomicFrom[MT]] {
     def readFrom(buffer: ReadBuffer): AtomicFrom[MT] = {
       buffer.read[Int]() match {
         case 0 => buffer.read[FromTable[MT]]()

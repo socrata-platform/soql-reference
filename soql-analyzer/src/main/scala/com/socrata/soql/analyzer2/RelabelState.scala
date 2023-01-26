@@ -4,11 +4,11 @@ private[analyzer2] class RelabelState(provider: LabelProvider) {
   private val tableLabels = new scala.collection.mutable.HashMap[AutoTableLabel, AutoTableLabel]
   private val columnLabels = new scala.collection.mutable.HashMap[AutoColumnLabel, AutoColumnLabel]
 
-  def convert(label: TableLabel): TableLabel =
+  def convert[T](label: TableLabel[T]): TableLabel[T] =
     label match {
       case c: AutoTableLabel =>
         convert(c)
-      case db: DatabaseTableName =>
+      case db: DatabaseTableName[T] =>
         db
     }
 

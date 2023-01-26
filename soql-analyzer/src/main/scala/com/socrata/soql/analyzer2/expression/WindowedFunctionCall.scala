@@ -12,8 +12,8 @@ import com.socrata.soql.typechecker.{FunctionInfo, HasDoc, HasType}
 
 import DocUtils._
 
-trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
-  type Self[+CT, +CV] = WindowedFunctionCall[CT, CV]
+trait WindowedFunctionCallImpl[MT <: MetaTypes] { this: WindowedFunctionCall[MT] =>
+  type Self[MT <: MetaTypes] = WindowedFunctionCall[MT]
 
   val typ = function.result
 
@@ -39,7 +39,7 @@ trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
     refs
   }
 
-  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] =
     Some(this).filter(predicate).orElse {
       args.iterator.flatMap(_.find(predicate)).nextOption()
     }.orElse {
@@ -50,7 +50,7 @@ trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
       orderBy.iterator.flatMap(_.expr.find(predicate)).nextOption()
     }
 
-  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean =
+  private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean =
     that match {
       case WindowedFunctionCall(thatFunction, thatArgs, thatFilter, thatPartitionBy, thatOrderBy, thatFrame) =>
         this.function == thatFunction &&
@@ -81,8 +81,8 @@ trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
 
   protected def doDebugDoc(implicit ev: HasDoc[CV]) = {
     val preArgs: Doc[Nothing] = Doc(function.name.name) ++ d"("
-    val windowParts: Doc[Annotation[Nothing, CT]] =
-      Seq[Option[Doc[Annotation[Nothing, CT]]]](
+    val windowParts: Doc[Annotation[MT]] =
+      Seq[Option[Doc[Annotation[MT]]]](
         if(partitionBy.nonEmpty) {
           Some((d"PARTITION BY" +: partitionBy.map(_.debugDoc).punctuate(d",")).sep.nest(2))
         } else {
@@ -103,12 +103,12 @@ trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
     args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs)
   }
 
-  private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = position.logicallyReposition(p))
+  private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
 }
 
 trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
-  implicit def serialize[CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]) = new Writable[WindowedFunctionCall[CT, CV]] {
-    def writeTo(buffer: WriteBuffer, wfc: WindowedFunctionCall[CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit expr: Writable[Expr[MT]], mf: Writable[MonomorphicFunction[MT#CT]]) = new Writable[WindowedFunctionCall[MT]] {
+    def writeTo(buffer: WriteBuffer, wfc: WindowedFunctionCall[MT]): Unit = {
       buffer.write(wfc.function)
       buffer.write(wfc.args)
       buffer.write(wfc.filter)
@@ -119,13 +119,13 @@ trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
     }
   }
 
-  implicit def deserialize[CT: Readable, CV](implicit mf: Readable[MonomorphicFunction[CT]], e: Readable[Expr[CT, CV]]) = new Readable[WindowedFunctionCall[CT, CV]] {
-    def readFrom(buffer: ReadBuffer): WindowedFunctionCall[CT, CV] = {
-      val function = buffer.read[MonomorphicFunction[CT]]()
-      val args = buffer.read[Seq[Expr[CT, CV]]]()
-      val filter = buffer.read[Option[Expr[CT, CV]]]()
-      val partitionBy = buffer.read[Seq[Expr[CT, CV]]]()
-      val orderBy = buffer.read[Seq[OrderBy[CT, CV]]]()
+  implicit def deserialize[MT <: MetaTypes](implicit expr: Readable[Expr[MT]], mf: Readable[MonomorphicFunction[MT#CT]]) = new Readable[WindowedFunctionCall[MT]] {
+    def readFrom(buffer: ReadBuffer): WindowedFunctionCall[MT] = {
+      val function = buffer.read[MonomorphicFunction[MT#CT]]()
+      val args = buffer.read[Seq[Expr[MT]]]()
+      val filter = buffer.read[Option[Expr[MT]]]()
+      val partitionBy = buffer.read[Seq[Expr[MT]]]()
+      val orderBy = buffer.read[Seq[OrderBy[MT]]]()
       val frame = buffer.read[Option[Frame]]()(Readable.option(Frame.serialize))
       val position = buffer.read[FuncallPositionInfo]()
       WindowedFunctionCall(

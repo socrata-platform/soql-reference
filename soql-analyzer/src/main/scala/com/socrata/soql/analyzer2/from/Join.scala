@@ -62,7 +62,7 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
 
   override def reduceMap[S, MT2 <: MetaTypes](
     base: AtomicFrom[MT] => (S, AtomicFrom[MT2]),
-    combine: (S, JoinType, Boolean, From[MT2], AtomicFrom[MT], Expr[CT, CV]) => (S, Join[MT2])
+    combine: (S, JoinType, Boolean, From[MT2], AtomicFrom[MT], Expr[MT]) => (S, Join[MT2])
   ): (S, ReduceResult[MT2]) = {
     type Stack = List[(S, From[MT2]) => (S, Join[MT2])]
 
@@ -117,7 +117,7 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
     )
   }
 
-  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
+  private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
     reduce[Unit](
       _.doLabelMap(state),
       (_, join) => join.right.doLabelMap(state)
@@ -130,12 +130,12 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
       { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, right.mapAlias(f), on) },
     )
 
-  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
-    reduce[Option[Expr[CT, CV]]](
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] =
+    reduce[Option[Expr[MT]]](
       _.find(predicate),
       { (acc, join) => acc.orElse(join.right.find(predicate)).orElse(join.on.find(predicate)) }
     )
-  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+  def contains(e: Expr[MT]): Boolean =
     reduce[Boolean](_.contains(e), { (acc, join) => acc || join.right.contains(e) || join.on.contains(e) })
 
   private[analyzer2] final def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean =
@@ -152,7 +152,7 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
     }
 
   def debugDoc(implicit ev: HasDoc[CV]) =
-    reduce[Doc[Annotation[RNS, CT]]](
+    reduce[Doc[Annotation[MT]]](
       _.debugDoc,
       { (leftDoc, j) =>
         val Join(joinType, lateral, _left, right, on) = j
@@ -170,7 +170,7 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
     )
 
   def unique =
-    reduce[LazyList[List[Seq[Column[CT]]]]](
+    reduce[LazyList[List[Seq[Column[MT]]]]](
       _.unique.to(LazyList).map(_ :: Nil),
       { (uniqueSoFar, join) =>
         uniqueSoFar.flatMap { uniques =>
@@ -181,7 +181,7 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
 }
 
 trait OJoinImpl { this: Join.type =>
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT#CT, MT#CV]]): Writable[Join[MT]] = new Writable[Join[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl]): Writable[Join[MT]] = new Writable[Join[MT]] {
     val afSer = AtomicFrom.serialize[MT]
 
     def writeTo(buffer: WriteBuffer, join: Join[MT]): Unit = {
@@ -199,7 +199,7 @@ trait OJoinImpl { this: Join.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT#CT, MT#CV]]): Readable[Join[MT]] =
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl]): Readable[Join[MT]] =
     new Readable[Join[MT]] with MetaTypeHelper[MT] {
       val afDer = AtomicFrom.deserialize[MT]
 
@@ -214,7 +214,7 @@ trait OJoinImpl { this: Join.type =>
             lateral = buffer.read[Boolean](),
             left = left,
             right = afDer.readFrom(buffer),
-            on = buffer.read[Expr[CT, CV]]()
+            on = buffer.read[Expr[MT]]()
           )
 
           if(n > 1) {

@@ -8,8 +8,8 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.typechecker.HasDoc
 
-trait ColumnImpl[+CT] { this: Column[CT] =>
-  type Self[+CT, +CV] = Column[CT]
+trait ColumnImpl[MT <: MetaTypes] extends LabelHelper[MT] { this: Column[MT] =>
+  type Self[MT <: MetaTypes] = Column[MT]
 
   def isAggregated = false
   def isWindowed = false
@@ -17,7 +17,7 @@ trait ColumnImpl[+CT] { this: Column[CT] =>
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
     Map(table -> Set(column))
 
-  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean = {
+  private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean = {
     that match {
       case Column(thatTable, thatColumn, thatTyp) =>
         this.typ == that.typ &&
@@ -40,18 +40,18 @@ trait ColumnImpl[+CT] { this: Column[CT] =>
 
   val size = 1
 
-  def doDebugDoc(implicit ev: HasDoc[Nothing]) =
+  def doDebugDoc(implicit ev: HasDoc[CV]) =
     (table.debugDoc ++ d"." ++ column.debugDoc).
       annotate(Annotation.ColumnRef(table, column))
 
-  private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = position.logicallyReposition(p))
+  private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
 
-  def find(predicate: Expr[CT, Nothing] => Boolean): Option[Expr[CT, Nothing]] = Some(this).filter(predicate)
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] = Some(this).filter(predicate)
 }
 
 trait OColumnImpl { this: Column.type =>
-  implicit def serialize[CT : Writable] = new Writable[Column[CT]] {
-    def writeTo(buffer: WriteBuffer, c: Column[CT]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#CT], writableDCN : Writable[MT#DatabaseTableNameImpl]): Writable[Column[MT]] = new Writable[Column[MT]] {
+    def writeTo(buffer: WriteBuffer, c: Column[MT]): Unit = {
       buffer.write(c.table)
       buffer.write(c.column)
       buffer.write(c.typ)
@@ -59,8 +59,8 @@ trait OColumnImpl { this: Column.type =>
     }
   }
 
-  implicit def deserialize[CT : Readable] = new Readable[Column[CT]] {
-    def readFrom(buffer: ReadBuffer): Column[CT] = {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#CT], readableDCN : Readable[MT#DatabaseTableNameImpl]): Readable[Column[MT]] = new Readable[Column[MT]] with MetaTypeHelper[MT] with LabelHelper[MT] {
+    def readFrom(buffer: ReadBuffer): Column[MT] = {
       Column(
         table = buffer.read[TableLabel](),
         column = buffer.read[ColumnLabel](),

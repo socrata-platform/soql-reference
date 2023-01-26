@@ -8,8 +8,8 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.typechecker.HasDoc
 
-trait SelectListReferenceImpl[+CT] { this: SelectListReference[CT] =>
-  type Self[+CT, +CV] = SelectListReference[CT]
+trait SelectListReferenceImpl[MT <: MetaTypes] { this: SelectListReference[MT] =>
+  type Self[MT <: MetaTypes] = SelectListReference[MT]
 
   val size = 1
 
@@ -22,21 +22,21 @@ trait SelectListReferenceImpl[+CT] { this: SelectListReference[CT] =>
   private[analyzer2] def doRelabel(state: RelabelState) =
     this
 
-  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean = {
+  private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean = {
     this == that
   }
 
-  protected def doDebugDoc(implicit ev: HasDoc[Nothing]) =
-    Doc(index).annotate(Annotation.SelectListReference(index))
+  protected def doDebugDoc(implicit ev: HasDoc[CV]) =
+    Doc(index).annotate(Annotation.SelectListReference[MT](index))
 
-  private[analyzer2] def reposition(p: Position): Self[CT, Nothing] = copy()(position = position.logicallyReposition(p))
+  private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
 
-  def find(predicate: Expr[CT, Nothing] => Boolean): Option[Expr[CT, Nothing]] = Some(this).filter(predicate)
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] = Some(this).filter(predicate)
 }
 
 trait OSelectListReferenceImpl { this: SelectListReference.type =>
-  implicit def serialize[CT : Writable] = new Writable[SelectListReference[CT]] {
-    def writeTo(buffer: WriteBuffer, slr: SelectListReference[CT]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#CT]) = new Writable[SelectListReference[MT]] {
+    def writeTo(buffer: WriteBuffer, slr: SelectListReference[MT]): Unit = {
       buffer.write(slr.index)
       buffer.write(slr.isAggregated)
       buffer.write(slr.isWindowed)
@@ -45,13 +45,13 @@ trait OSelectListReferenceImpl { this: SelectListReference.type =>
     }
   }
 
-  implicit def deserialize[CT : Readable] = new Readable[SelectListReference[CT]] {
-    def readFrom(buffer: ReadBuffer): SelectListReference[CT] = {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#CT]) = new Readable[SelectListReference[MT]] {
+    def readFrom(buffer: ReadBuffer): SelectListReference[MT] = {
       SelectListReference(
         index = buffer.read[Int](),
         isAggregated = buffer.read[Boolean](),
         isWindowed = buffer.read[Boolean](),
-        typ = buffer.read[CT]()
+        typ = buffer.read[MT#CT]()
       )(
         buffer.read[AtomicPositionInfo]()
       )

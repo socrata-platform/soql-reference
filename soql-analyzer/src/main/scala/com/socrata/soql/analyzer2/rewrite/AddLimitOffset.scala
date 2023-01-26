@@ -10,7 +10,7 @@ class AddLimitOffset[MT <: MetaTypes] private (labelProvider: LabelProvider) ext
       case CombinedTables(_, _, _) | Values(_) =>
         val newTableLabel = labelProvider.tableLabel()
         Select(
-          Distinctiveness.Indistinct,
+          Distinctiveness.Indistinct(),
           OrderedMap() ++ stmt.schema.iterator.map { case (colLabel, NameEntry(name, typ)) =>
             labelProvider.columnLabel() -> NamedExpr(Column(newTableLabel, colLabel, typ)(AtomicPositionInfo.None), name)
           },

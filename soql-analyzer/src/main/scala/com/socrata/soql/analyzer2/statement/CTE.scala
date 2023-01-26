@@ -20,10 +20,10 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
 
   def unique = useQuery.unique
 
-  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] =
     definitionQuery.find(predicate).orElse(useQuery.find(predicate))
 
-  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+  def contains(e: Expr[MT]): Boolean =
     definitionQuery.contains(e) || useQuery.contains(e)
 
   private[analyzer2] def realTables =
@@ -62,7 +62,7 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =
     copy(definitionQuery = definitionQuery.mapAlias(f), definitionAlias = f(definitionAlias), useQuery = useQuery.mapAlias(f))
 
-  override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]] =
+  override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[MT]] =
     Seq(
       Seq(
         Some(d"WITH" +#+ definitionLabel.debugDoc +#+ d"AS"),
@@ -72,7 +72,7 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
       useQuery.debugDoc
     ).sep
 
-  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
+  private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
     definitionQuery.doLabelMap(state)
     val tr = LabelMap.TableReference(None, None)
     state.tableMap += definitionLabel -> tr
@@ -84,7 +84,7 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
 }
 
 trait OCTEImpl { this: CTE.type =>
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT#CT, MT#CV]]): Writable[CTE[MT]] =
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl]): Writable[CTE[MT]] =
     new Writable[CTE[MT]] {
       def writeTo(buffer: WriteBuffer, ct: CTE[MT]): Unit = {
         buffer.write(ct.definitionLabel)
@@ -95,7 +95,7 @@ trait OCTEImpl { this: CTE.type =>
       }
     }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT#CT, MT#CV]]): Readable[CTE[MT]] =
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl]): Readable[CTE[MT]] =
     new Readable[CTE[MT]] {
       def readFrom(buffer: ReadBuffer): CTE[MT] = {
         CTE(

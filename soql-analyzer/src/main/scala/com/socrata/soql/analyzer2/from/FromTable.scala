@@ -16,9 +16,8 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   type Self[MT <: MetaTypes] = FromTable[MT]
   def asSelf = this
 
-  def find(predicate: Expr[CT, CV] => Boolean) = None
-  def contains[CT2 >: CT, CV](e: Expr[CT2, CV]): Boolean =
-    false
+  def find(predicate: Expr[MT] => Boolean) = None
+  def contains(e: Expr[MT]): Boolean = false
 
   def unique = primaryKeys.to(LazyList).map(_.map { dcn => Column(label, dcn, columns(dcn).typ)(AtomicPositionInfo.None) })
 
@@ -29,7 +28,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   private[analyzer2] override final val scope: Scope[CT] = Scope(columns, label)
 
   def debugDoc(implicit ev: HasDoc[CV]) =
-    (tableName.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
+    (tableName.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     copy(
@@ -67,7 +66,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =
     copy(alias = f(alias))
 
-  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
+  private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
     val tr = LabelMap.TableReference(resourceName, alias)
     state.tableMap += label -> tr
     for((columnLabel, NameEntry(columnName, _typ)) <- columns) {
@@ -77,7 +76,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
 }
 
 trait OFromTableImpl { this: FromTable.type =>
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT#CT, MT#CV]]): Writable[FromTable[MT]] = new Writable[FromTable[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl]): Writable[FromTable[MT]] = new Writable[FromTable[MT]] {
     def writeTo(buffer: WriteBuffer, from: FromTable[MT]): Unit = {
       buffer.write(from.tableName)
       buffer.write(from.definiteResourceName)
@@ -88,7 +87,7 @@ trait OFromTableImpl { this: FromTable.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT#CT, MT#CV]]): Readable[FromTable[MT]] = new Readable[FromTable[MT]] with MetaTypeHelper[MT] {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl]): Readable[FromTable[MT]] = new Readable[FromTable[MT]] with MetaTypeHelper[MT] with LabelHelper[MT] {
     def readFrom(buffer: ReadBuffer): FromTable[MT] = {
       FromTable(
         tableName = buffer.read[DatabaseTableName](),

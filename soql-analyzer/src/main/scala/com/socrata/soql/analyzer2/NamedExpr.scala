@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2
 import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
-case class NamedExpr[+CT, +CV](expr: Expr[CT, CV], name: ColumnName) {
+case class NamedExpr[MT <: MetaTypes](expr: Expr[MT], name: ColumnName) extends LabelHelper[MT] {
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
     this.copy(expr = expr.doRewriteDatabaseNames(state))
 
@@ -12,17 +12,17 @@ case class NamedExpr[+CT, +CV](expr: Expr[CT, CV], name: ColumnName) {
 }
 
 object NamedExpr {
-  implicit def serialize[CT, CV](implicit ev: Writable[Expr[CT, CV]]) = new Writable[NamedExpr[CT, CV]] {
-    def writeTo(buffer: WriteBuffer, ne: NamedExpr[CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit ev: Writable[Expr[MT]]) = new Writable[NamedExpr[MT]] {
+    def writeTo(buffer: WriteBuffer, ne: NamedExpr[MT]): Unit = {
       buffer.write(ne.expr)
       buffer.write(ne.name)
     }
   }
 
-  implicit def deserialize[CT, CV](implicit ev: Readable[Expr[CT, CV]]) = new Readable[NamedExpr[CT, CV]] {
-    def readFrom(buffer: ReadBuffer): NamedExpr[CT, CV] = {
+  implicit def deserialize[MT <: MetaTypes](implicit ev: Readable[Expr[MT]]) = new Readable[NamedExpr[MT]] {
+    def readFrom(buffer: ReadBuffer): NamedExpr[MT] = {
       NamedExpr(
-        expr = buffer.read[Expr[CT, CV]](),
+        expr = buffer.read[Expr[MT]](),
         name = buffer.read[ColumnName]()
       )
     }

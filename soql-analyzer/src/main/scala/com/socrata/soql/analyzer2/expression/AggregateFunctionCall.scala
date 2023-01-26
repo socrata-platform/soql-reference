@@ -12,8 +12,8 @@ import com.socrata.soql.typechecker.{FunctionInfo, HasDoc, HasType}
 
 import DocUtils._
 
-trait AggregateFunctionCallImpl[+CT, +CV] { this: AggregateFunctionCall[CT, CV] =>
-  type Self[+CT, +CV] = AggregateFunctionCall[CT, CV]
+trait AggregateFunctionCallImpl[MT <: MetaTypes] { this: AggregateFunctionCall[MT] =>
+  type Self[MT <: MetaTypes] = AggregateFunctionCall[MT]
 
   val typ = function.result
   def isAggregated = true
@@ -32,14 +32,14 @@ trait AggregateFunctionCallImpl[+CT, +CV] { this: AggregateFunctionCall[CT, CV] 
     refs
   }
 
-  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] =
     Some(this).filter(predicate).orElse {
       args.iterator.flatMap(_.find(predicate)).nextOption()
     }.orElse {
       filter.flatMap(_.find(predicate))
     }
 
-  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean =
+  private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean =
     that match {
       case AggregateFunctionCall(thatFunction, thatArgs, thatDistinct, thatFilter) =>
         this.function == thatFunction &&
@@ -74,12 +74,12 @@ trait AggregateFunctionCallImpl[+CT, +CV] { this: AggregateFunctionCall[CT, CV] 
     args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs)
   }
 
-  private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = position.logicallyReposition(p))
+  private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
 }
 
 trait OAggregateFunctionCallImpl { this: AggregateFunctionCall.type =>
-  implicit def serialize[CT: Writable, CV](implicit expr: Writable[Expr[CT, CV]]) = new Writable[AggregateFunctionCall[CT, CV]] {
-    def writeTo(buffer: WriteBuffer, afc: AggregateFunctionCall[CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit expr: Writable[Expr[MT]], mf: Writable[MonomorphicFunction[MT#CT]]) = new Writable[AggregateFunctionCall[MT]] {
+    def writeTo(buffer: WriteBuffer, afc: AggregateFunctionCall[MT]): Unit = {
       buffer.write(afc.function)
       buffer.write(afc.args)
       buffer.write(afc.distinct)
@@ -88,12 +88,12 @@ trait OAggregateFunctionCallImpl { this: AggregateFunctionCall.type =>
     }
   }
 
-  implicit def deserialize[CT: Readable, CV](implicit mf: Readable[MonomorphicFunction[CT]], e: Readable[Expr[CT, CV]]) = new Readable[AggregateFunctionCall[CT, CV]] {
-    def readFrom(buffer: ReadBuffer): AggregateFunctionCall[CT, CV] = {
-      val function = buffer.read[MonomorphicFunction[CT]]()
-      val args = buffer.read[Seq[Expr[CT, CV]]]()
+  implicit def deserialize[MT <: MetaTypes](implicit expr: Readable[Expr[MT]], mf: Readable[MonomorphicFunction[MT#CT]]) = new Readable[AggregateFunctionCall[MT]] {
+    def readFrom(buffer: ReadBuffer): AggregateFunctionCall[MT] = {
+      val function = buffer.read[MonomorphicFunction[MT#CT]]()
+      val args = buffer.read[Seq[Expr[MT]]]()
       val distinct = buffer.read[Boolean]()
-      val filter = buffer.read[Option[Expr[CT, CV]]]()
+      val filter = buffer.read[Option[Expr[MT]]]()
       val position = buffer.read[FuncallPositionInfo]()
       val functionNamePosition = buffer.read[Position]()
       AggregateFunctionCall(

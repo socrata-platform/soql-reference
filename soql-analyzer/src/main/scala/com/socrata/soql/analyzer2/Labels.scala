@@ -2,6 +2,7 @@ package com.socrata.soql.analyzer2
 
 import com.rojoma.json.v3.ast.{JValue, JNumber, JString}
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
+import com.rojoma.json.v3.util.{SimpleHierarchyEncodeBuilder, SimpleHierarchyDecodeBuilder, TagToValue, WrapperJsonEncode, WrapperJsonDecode}
 
 import com.socrata.prettyprint.prelude._
 
@@ -64,51 +65,11 @@ object LabelProvider {
   }
 }
 
-sealed abstract class TableLabel {
+sealed abstract class TableLabel[+T] {
   def debugDoc: Doc[Nothing] = Doc(toString)
 }
-object TableLabel {
-  implicit object jCodec extends JsonEncode[TableLabel] with JsonDecode[TableLabel] {
-    def encode(v: TableLabel) = v match {
-      case a: AutoTableLabel => AutoTableLabel.jCodec.encode(a)
-      case d: DatabaseTableName => DatabaseTableName.jCodec.encode(d)
-    }
 
-    def decode(v: JValue) = v match {
-      case n: JNumber => AutoTableLabel.jCodec.decodeNum(n)
-      case s: JString => DatabaseTableName.jCodec.decodeStr(s)
-      case other => Left(DecodeError.join(Seq(
-                                            DecodeError.InvalidType(expected = JNumber, got = other.jsonType),
-                                            DecodeError.InvalidType(expected = JString, got = other.jsonType))))
-    }
-  }
-
-  implicit object serialize extends Writable[TableLabel] with Readable[TableLabel] {
-    def writeTo(buffer: WriteBuffer, label: TableLabel): Unit = {
-      label match {
-        case a: AutoTableLabel =>
-          buffer.write(0)
-          AutoTableLabel.serialize.writeTo(buffer, a)
-        case d: DatabaseTableName =>
-          buffer.write(1)
-          DatabaseTableName.serialize.writeTo(buffer, d)
-      }
-    }
-
-    def readFrom(buffer: ReadBuffer): TableLabel = {
-      buffer.read[Int]() match {
-        case 0 =>
-          AutoTableLabel.serialize.readFrom(buffer)
-        case 1 =>
-          DatabaseTableName.serialize.readFrom(buffer)
-        case other =>
-          fail("Unknown table label type " + other)
-      }
-    }
-  }
-}
-
-final class AutoTableLabel private[analyzer2] (private val name: Int) extends TableLabel {
+final class AutoTableLabel private[analyzer2] (private val name: Int) extends TableLabel[Nothing] {
   override def toString = s"t${LabelProvider.subscript(name)}"
 
   override def hashCode = name.hashCode
@@ -147,26 +108,58 @@ object AutoTableLabel {
   }
 }
 
-final case class DatabaseTableName(name: String) extends TableLabel {
-  override def toString = name
-}
+final case class DatabaseTableName[+T](name: T) extends TableLabel[T]
+
 object DatabaseTableName {
-  implicit object jCodec extends JsonEncode[DatabaseTableName] with JsonDecode[DatabaseTableName] {
-    def encode(v: DatabaseTableName) = JString(v.name)
-    def decode(x: JValue) = x match {
-      case s: JString => decodeStr(s)
-      case other => Left(DecodeError.InvalidType(expected = JString, got = other.jsonType))
-    }
-    private[analyzer2] def decodeStr(s: JString) =
-      Right(DatabaseTableName(s.string))
+  implicit def jEncode[T: JsonEncode] = WrapperJsonEncode[DatabaseTableName[T]](_.name)
+  implicit def jDecode[T: JsonDecode] = WrapperJsonDecode[DatabaseTableName[T]](DatabaseTableName[T](_))
+
+  implicit def serialize[T: Writable] = new Writable[DatabaseTableName[T]] {
+    def writeTo(buffer: WriteBuffer, d: DatabaseTableName[T]) =
+      buffer.write(d.name)
   }
 
-  implicit object serialize extends Writable[DatabaseTableName] with Readable[DatabaseTableName] {
-    def writeTo(buffer: WriteBuffer, d: DatabaseTableName) =
-      buffer.write(d.name)
-
+  implicit def deserialize[T: Readable] = new Readable[DatabaseTableName[T]] {
     def readFrom(buffer: ReadBuffer) =
-      DatabaseTableName(buffer.read[String]())
+      DatabaseTableName(buffer.read[T]())
+  }
+}
+
+object TableLabel {
+  implicit def jEncode[T : JsonEncode] = SimpleHierarchyEncodeBuilder[TableLabel[T]](TagToValue)
+    .branch[AutoTableLabel]("auto")
+    .branch[DatabaseTableName[T]]("dtn")
+    .build
+
+  implicit def jDecode[T : JsonDecode] = SimpleHierarchyDecodeBuilder[TableLabel[T]](TagToValue)
+    .branch[AutoTableLabel]("auto")
+    .branch[DatabaseTableName[T]]("dtn")
+    .build
+
+  implicit def serialize[T : Writable] = new Writable[TableLabel[T]] {
+    def writeTo(buffer: WriteBuffer, label: TableLabel[T]): Unit = {
+      label match {
+        case a: AutoTableLabel =>
+          buffer.write(0)
+          buffer.write(a)
+        case d: DatabaseTableName[T] =>
+          buffer.write(1)
+          buffer.write(d)
+      }
+    }
+  }
+
+  implicit def deserialize[T : Readable] = new Readable[TableLabel[T]] {
+    def readFrom(buffer: ReadBuffer): TableLabel[T] = {
+      buffer.read[Int]() match {
+        case 0 =>
+          buffer.read[AutoTableLabel]()
+        case 1 =>
+          buffer.read[DatabaseTableName[T]]()
+        case other =>
+          fail("Unknown table label type " + other)
+      }
+    }
   }
 }
 
@@ -275,3 +268,4 @@ object DatabaseColumnName {
       DatabaseColumnName(buffer.read[String]())
   }
 }
+

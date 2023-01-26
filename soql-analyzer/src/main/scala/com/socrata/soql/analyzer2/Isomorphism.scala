@@ -36,13 +36,13 @@ private[analyzer2] object IsomorphismState {
       underlying.get(k).asInstanceOf[Option[B]]
   }
 
-  private[analyzer2] class View private[IsomorphismState](
-    forwardTables: DMap[TableLabel],
-    backwardTables: DMap[TableLabel],
-    forwardColumns: DMap[(Option[TableLabel], ColumnLabel)],
-    backwardColumns: DMap[(Option[TableLabel], ColumnLabel)]
-  ) {
-    def reverse: View =
+  private[analyzer2] class View[MT <: MetaTypes] private[IsomorphismState](
+    forwardTables: DMap[TableLabel[MT#DatabaseTableNameImpl]],
+    backwardTables: DMap[TableLabel[MT#DatabaseTableNameImpl]],
+    forwardColumns: DMap[(Option[TableLabel[MT#DatabaseTableNameImpl]], ColumnLabel)],
+    backwardColumns: DMap[(Option[TableLabel[MT#DatabaseTableNameImpl]], ColumnLabel)]
+  ) extends LabelHelper[MT] {
+    def reverse: View[MT] =
       new View(backwardTables, forwardTables, backwardColumns, forwardColumns)
 
     def renameForward[T <: TableLabel](t: T): T = forwardTables.getOrElse(t, t)
@@ -55,12 +55,12 @@ private[analyzer2] object IsomorphismState {
   }
 }
 
-private[analyzer2] class IsomorphismState private (
-  forwardTables: IsomorphismState.DMap[TableLabel],
-  backwardTables: IsomorphismState.DMap[TableLabel],
-  forwardColumns: IsomorphismState.DMap[(Option[TableLabel], ColumnLabel)],
-  backwardColumns: IsomorphismState.DMap[(Option[TableLabel], ColumnLabel)]
-) {
+private[analyzer2] class IsomorphismState[MT <: MetaTypes] private (
+  forwardTables: IsomorphismState.DMap[TableLabel[MT#DatabaseTableNameImpl]],
+  backwardTables: IsomorphismState.DMap[TableLabel[MT#DatabaseTableNameImpl]],
+  forwardColumns: IsomorphismState.DMap[(Option[TableLabel[MT#DatabaseTableNameImpl]], ColumnLabel)],
+  backwardColumns: IsomorphismState.DMap[(Option[TableLabel[MT#DatabaseTableNameImpl]], ColumnLabel)]
+) extends LabelHelper[MT] {
   def this() = this(new IsomorphismState.DMap,new IsomorphismState.DMap,new IsomorphismState.DMap,new IsomorphismState.DMap)
 
   def finish = new IsomorphismState.View(forwardTables, backwardTables, forwardColumns, backwardColumns)

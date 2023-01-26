@@ -20,8 +20,8 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
 
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = statement.columnReferences
 
-  def find(predicate: Expr[CT, CV] => Boolean) = statement.find(predicate)
-  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+  def find(predicate: Expr[MT] => Boolean) = statement.find(predicate)
+  def contains(e: Expr[MT]): Boolean =
     statement.contains(e)
 
   def unique = statement.unique.map(_.map { cn => Column(label, cn, statement.column(cn).typ)(AtomicPositionInfo.None) })
@@ -53,7 +53,7 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
 
   private[analyzer2] def realTables = statement.realTables
 
-  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
+  private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
     statement.doLabelMap(state)
     val tr = LabelMap.TableReference(resourceName, alias)
     state.tableMap += label -> tr
@@ -63,11 +63,11 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
   }
 
   def debugDoc(implicit ev: HasDoc[CV]) =
-    (statement.debugDoc.encloseNesting(d"(", d")") +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
+    (statement.debugDoc.encloseNesting(d"(", d")") +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
 }
 
 trait OFromStatementImpl { this: FromStatement.type =>
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT#CT, MT#CV]]): Writable[FromStatement[MT]] = new Writable[FromStatement[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl]): Writable[FromStatement[MT]] = new Writable[FromStatement[MT]] {
     def writeTo(buffer: WriteBuffer, from: FromStatement[MT]): Unit = {
       buffer.write(from.statement)
       buffer.write(from.label)
@@ -76,7 +76,7 @@ trait OFromStatementImpl { this: FromStatement.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT#CT, MT#CV]]): Readable[FromStatement[MT]] =
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl]): Readable[FromStatement[MT]] =
     new Readable[FromStatement[MT]] with MetaTypeHelper[MT] {
       def readFrom(buffer: ReadBuffer): FromStatement[MT] =
         FromStatement(

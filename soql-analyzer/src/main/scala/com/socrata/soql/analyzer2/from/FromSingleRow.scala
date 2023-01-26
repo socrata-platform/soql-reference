@@ -27,8 +27,8 @@ trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
       label
     )
 
-  def find(predicate: Expr[CT, CV] => Boolean) = None
-  def contains[CT, CV](e: Expr[CT, CV]): Boolean = false
+  def find(predicate: Expr[MT] => Boolean) = None
+  def contains(e: Expr[MT]): Boolean = false
 
   private[analyzer2] final def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean =
     that match {
@@ -55,13 +55,13 @@ trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
 
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
 
-  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
+  private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
     state.tableMap += label -> LabelMap.TableReference(resourceName, alias)
     // no columns
   }
 
   def debugDoc(implicit ev: HasDoc[CV]) =
-    (d"(SELECT)" +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
+    (d"(SELECT)" +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
 }
 
 trait OFromSingleRowImpl { this: FromSingleRow.type =>

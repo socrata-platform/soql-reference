@@ -10,8 +10,8 @@ import com.socrata.soql.collection._
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.{FunctionInfo, HasDoc, HasType}
 
-trait FunctionCallImpl[+CT, +CV] { this: FunctionCall[CT, CV] =>
-  type Self[+CT, +CV] = FunctionCall[CT, CV]
+trait FunctionCallImpl[MT <: MetaTypes] { this: FunctionCall[MT] =>
+  type Self[MT <: MetaTypes] = FunctionCall[MT]
 
   require(!function.isAggregate)
   val typ = function.result
@@ -25,12 +25,12 @@ trait FunctionCallImpl[+CT, +CV] { this: FunctionCall[CT, CV] =>
       acc.mergeWith(arg.columnReferences)(_ ++ _)
     }
 
-  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] =
     Some(this).filter(predicate).orElse {
       args.iterator.flatMap(_.find(predicate)).nextOption()
     }
 
-  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean =
+  private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean =
     that match {
       case FunctionCall(thatFunction, thatArgs) =>
         this.function == thatFunction &&
@@ -49,22 +49,22 @@ trait FunctionCallImpl[+CT, +CV] { this: FunctionCall[CT, CV] =>
   protected def doDebugDoc(implicit ev: HasDoc[CV]) =
     args.map(_.debugDoc).encloseHanging(Doc(function.name.name) ++ d"(", d",", d")")
 
-  private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = position.logicallyReposition(p))
+  private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
 }
 
 trait OFunctionCallImpl { this: FunctionCall.type =>
-  implicit def serialize[CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]) = new Writable[FunctionCall[CT, CV]] {
-    def writeTo(buffer: WriteBuffer, fc: FunctionCall[CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit writableExpr: Writable[Expr[MT]], mf: Writable[MonomorphicFunction[MT#CT]]): Writable[FunctionCall[MT]] = new Writable[FunctionCall[MT]] {
+    def writeTo(buffer: WriteBuffer, fc: FunctionCall[MT]): Unit = {
       buffer.write(fc.function)
       buffer.write(fc.args)
       buffer.write(fc.position)
     }
   }
 
-  implicit def deserialize[CT: Readable, CV](implicit fi: Readable[MonomorphicFunction[CT]], e: Readable[Expr[CT, CV]]) = new Readable[FunctionCall[CT, CV]] {
-    def readFrom(buffer: ReadBuffer): FunctionCall[CT, CV] = {
-      val function = buffer.read[MonomorphicFunction[CT]]()
-      val args = buffer.read[Seq[Expr[CT, CV]]]()
+  implicit def deserialize[MT <: MetaTypes](implicit readableExpr: Readable[Expr[MT]], mf: Readable[MonomorphicFunction[MT#CT]]): Readable[FunctionCall[MT]] = new Readable[FunctionCall[MT]] {
+    def readFrom(buffer: ReadBuffer): FunctionCall[MT] = {
+      val function = buffer.read[MonomorphicFunction[MT#CT]]()
+      val args = buffer.read[Seq[Expr[MT]]]()
       val position = buffer.read[FuncallPositionInfo]()
       FunctionCall(function, args)(position)
     }

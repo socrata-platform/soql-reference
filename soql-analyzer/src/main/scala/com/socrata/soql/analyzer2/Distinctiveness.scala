@@ -6,39 +6,39 @@ import com.socrata.soql.collection._
 import com.socrata.soql.typechecker.HasDoc
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
-sealed trait Distinctiveness[+CT, +CV] {
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Distinctiveness[CT, CV]
-  private[analyzer2] def doRelabel(state: RelabelState): Distinctiveness[CT, CV]
-  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Distinctiveness[CT2, CV2]): Boolean
+sealed trait Distinctiveness[MT <: MetaTypes] extends MetaTypeHelper[MT] with LabelHelper[MT] {
+  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Distinctiveness[MT]
+  private[analyzer2] def doRelabel(state: RelabelState): Distinctiveness[MT]
+  private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Distinctiveness[MT]): Boolean
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
-  def debugDoc(implicit ev: HasDoc[CV]): Option[Doc[Annotation[Nothing, CT]]]
+  def debugDoc(implicit ev: HasDoc[CV]): Option[Doc[Annotation[MT]]]
 }
 object Distinctiveness {
-  case object Indistinct extends Distinctiveness[Nothing, Nothing] {
+  case class Indistinct[MT <: MetaTypes]() extends Distinctiveness[MT] {
     private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
     private[analyzer2] def doRelabel(state: RelabelState) = this
-    private[analyzer2] def findIsomorphism[CT2, CV2](state: IsomorphismState, that: Distinctiveness[CT2, CV2]): Boolean =
-      that == Indistinct
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
+    private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Distinctiveness[MT]): Boolean =
+      that == this
+    private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
 
-    def debugDoc(implicit ev: HasDoc[Nothing]) = None
+    def debugDoc(implicit ev: HasDoc[CV]) = None
   }
 
-  case object FullyDistinct extends Distinctiveness[Nothing, Nothing] {
+  case class FullyDistinct[MT <: MetaTypes]() extends Distinctiveness[MT] {
     private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
     private[analyzer2] def doRelabel(state: RelabelState) = this
-    private[analyzer2] def findIsomorphism[CT2, CV2](state: IsomorphismState, that: Distinctiveness[CT2, CV2]): Boolean =
-      that == FullyDistinct
+    private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Distinctiveness[MT]): Boolean =
+      that == this
 
     // Uggh.. this is a little weird (and the reason this method is
     // "private[analyzer2]") since FullyDistinct kind of references
     // all columns in the select in which it appears.
     private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
 
-    def debugDoc(implicit ev: HasDoc[Nothing]) = Some(d"DISTINCT")
+    def debugDoc(implicit ev: HasDoc[CV]) = Some(d"DISTINCT")
   }
 
-  case class On[+CT, +CV](exprs: Seq[Expr[CT, CV]]) extends Distinctiveness[CT, CV] {
+  case class On[MT <: MetaTypes](exprs: Seq[Expr[MT]]) extends Distinctiveness[MT] {
     private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
       On(exprs.map(_.doRewriteDatabaseNames(state)))
     private[analyzer2] def doRelabel(state: RelabelState) =
@@ -49,7 +49,7 @@ object Distinctiveness {
         acc.mergeWith(e.columnReferences)(_ ++ _)
       }
 
-    private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Distinctiveness[CT2, CV2]): Boolean =
+    private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Distinctiveness[MT]): Boolean =
       that match {
         case On(thatExprs) =>
           this.exprs.length == thatExprs.length &&
@@ -61,12 +61,12 @@ object Distinctiveness {
       Some(exprs.map(_.debugDoc).encloseNesting(d"DISTINCT ON (", d",", d")"))
   }
 
-  implicit def serialize[CT, CV](implicit ev: Writable[Expr[CT, CV]]) = new Writable[Distinctiveness[CT, CV]] {
-    def writeTo(buffer: WriteBuffer, d: Distinctiveness[CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit ev: Writable[Expr[MT]]) = new Writable[Distinctiveness[MT]] {
+    def writeTo(buffer: WriteBuffer, d: Distinctiveness[MT]): Unit = {
       d match {
-        case Indistinct =>
+        case Indistinct() =>
           buffer.write(0)
-        case FullyDistinct =>
+        case FullyDistinct() =>
           buffer.write(1)
         case On(exprs) =>
           buffer.write(2)
@@ -75,12 +75,12 @@ object Distinctiveness {
     }
   }
 
-  implicit def deserialize[CT, CV](implicit ev: Readable[Expr[CT, CV]]) = new Readable[Distinctiveness[CT, CV]] {
-    def readFrom(buffer: ReadBuffer): Distinctiveness[CT, CV] = {
+  implicit def deserialize[MT <: MetaTypes](implicit ev: Readable[Expr[MT]]) = new Readable[Distinctiveness[MT]] {
+    def readFrom(buffer: ReadBuffer): Distinctiveness[MT] = {
       buffer.read[Int]() match {
-        case 0 => Indistinct
-        case 1 => FullyDistinct
-        case 2 => On(buffer.read[Seq[Expr[CT, CV]]]())
+        case 0 => Indistinct()
+        case 1 => FullyDistinct()
+        case 2 => On(buffer.read[Seq[Expr[MT]]]())
         case other => fail("Unknown distinctiveness tag " + other)
       }
     }

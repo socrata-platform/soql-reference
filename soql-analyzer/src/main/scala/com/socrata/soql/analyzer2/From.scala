@@ -14,7 +14,7 @@ import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable,
 
 import DocUtils._
 
-sealed abstract class From[MT <: MetaTypes] extends MetaTypeHelper[MT] {
+sealed abstract class From[MT <: MetaTypes] extends MetaTypeHelper[MT] with LabelHelper[MT] {
   type Self[MT <: MetaTypes] <: From[MT]
   def asSelf: Self[MT]
 
@@ -27,7 +27,7 @@ sealed abstract class From[MT <: MetaTypes] extends MetaTypeHelper[MT] {
   // This is Seq of Seq to leave the door open to multi-column PKs,
   // which is not currently a SoQL concept but why paint ourselves
   // into a corner?
-  def unique: LazyList[Seq[Column[CT]]]
+  def unique: LazyList[Seq[Column[MT]]]
 
   // extend the given environment with names introduced by this FROM clause
   private[analyzer2] def extendEnvironment[CT2 >: CT](base: Environment[CT2]): Either[AddScopeError, Environment[CT2]]
@@ -36,19 +36,19 @@ sealed abstract class From[MT <: MetaTypes] extends MetaTypeHelper[MT] {
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[MT]
 
-  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit
+  private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
 
-  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]]
-  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]]
+  def contains(e: Expr[MT]): Boolean
 
   final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
   final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder = debugDoc.layoutSmart().toStringBuilder(sb)
-  def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]]
+  def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[MT]]
 
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT]
 
@@ -56,12 +56,12 @@ sealed abstract class From[MT <: MetaTypes] extends MetaTypeHelper[MT] {
 
   def reduceMap[S, MT2 <: MetaTypes](
     base: AtomicFrom[MT] => (S, AtomicFrom[MT2]),
-    combine: (S, JoinType, Boolean, From[MT2], AtomicFrom[MT], Expr[CT, CV]) => (S, Join[MT2])
+    combine: (S, JoinType, Boolean, From[MT2], AtomicFrom[MT], Expr[MT]) => (S, Join[MT2])
   ): (S, ReduceResult[MT2])
 
   final def map[MT2 <: MetaTypes](
     base: AtomicFrom[MT] => AtomicFrom[MT2],
-    combine: (JoinType, Boolean, From[MT2], AtomicFrom[MT], Expr[CT, CV]) => Join[MT2]
+    combine: (JoinType, Boolean, From[MT2], AtomicFrom[MT], Expr[MT]) => Join[MT2]
   ): ReduceResult[MT2] = {
     reduceMap[Unit, MT2](
       { nonJoin => ((), base.apply(nonJoin)) },
@@ -83,7 +83,7 @@ sealed abstract class From[MT <: MetaTypes] extends MetaTypeHelper[MT] {
 }
 
 object From {
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], ev: Writable[Expr[MT#CT, MT#CV]]): Writable[From[MT]] = new Writable[From[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], ev: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl]): Writable[From[MT]] = new Writable[From[MT]] {
     def writeTo(buffer: WriteBuffer, from: From[MT]): Unit = {
       from match {
         case j: Join[MT] =>
@@ -102,7 +102,7 @@ object From {
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], ev: Readable[Expr[MT#CT, MT#CV]]): Readable[From[MT]] = new Readable[From[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], ev: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl]): Readable[From[MT]] = new Readable[From[MT]] {
     def readFrom(buffer: ReadBuffer): From[MT] = {
       buffer.read[Int]() match {
         case 0 => buffer.read[Join[MT]]()
@@ -120,7 +120,7 @@ case class Join[MT <: MetaTypes](
   lateral: Boolean,
   left: From[MT],
   right: AtomicFrom[MT],
-  on: Expr[MT#CT, MT#CV]
+  on: Expr[MT]
 ) extends
     From[MT]
     with from.JoinImpl[MT]
@@ -130,7 +130,7 @@ sealed abstract class AtomicFrom[MT <: MetaTypes] extends From[MT] with from.Ato
 object AtomicFrom extends from.OAtomicFromImpl
 
 case class FromTable[MT <: MetaTypes](
-  tableName: DatabaseTableName,
+  tableName: DatabaseTableName[MT#DatabaseTableNameImpl],
   definiteResourceName: ScopedResourceName[MT#RNS],
   alias: Option[ResourceName],
   label: AutoTableLabel,

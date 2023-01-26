@@ -41,10 +41,10 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
     refs
   }
 
-  final def directlyFind(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] = {
+  final def directlyFind(predicate: Expr[MT] => Boolean): Option[Expr[MT]] = {
     // "directly" means "in _this_ query, not any non-lateral subqueries"
     selectList.valuesIterator.flatMap(_.expr.find(predicate)).nextOption().orElse {
-      from.reduce[Option[Expr[CT, CV]]](
+      from.reduce[Option[Expr[MT]]](
         Function.const(None),
         { (a, join) =>
           a.orElse {
@@ -63,25 +63,25 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
       orderBy.iterator.flatMap(_.expr.find(predicate)).nextOption()
     }.orElse {
       distinctiveness match {
-        case Distinctiveness.Indistinct => None
-        case Distinctiveness.FullyDistinct => None
+        case Distinctiveness.Indistinct() => None
+        case Distinctiveness.FullyDistinct() => None
         case Distinctiveness.On(exprs) => exprs.iterator.flatMap(_.find(predicate)).nextOption()
       }
     }
   }
 
-  def directlyContains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+  def directlyContains(e: Expr[MT]): Boolean =
     directlyFind(_ == e).isDefined
 
-  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] =
     directlyFind(predicate).orElse { // this checks everything except the non-lateral AtomicFroms
-      from.reduce[Option[Expr[CT, CV]]]( // ..so that's what this does
+      from.reduce[Option[Expr[MT]]]( // ..so that's what this does
         _.find(predicate),
         { (a, join) => a.orElse { if(join.lateral) None else join.right.find(predicate) } }
       )
     }
 
-  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+  def contains(e: Expr[MT]): Boolean =
     find(_ == e).isDefined
 
   val schema = selectList.withValuesMapped { case NamedExpr(expr, name) => NameEntry(name, expr.typ) }
@@ -187,7 +187,7 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =
     copy(from = from.mapAlias(f))
 
-  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
+  private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
     from.doLabelMap(state)
   }
 
@@ -236,11 +236,11 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
     }
 
   override def debugDoc(implicit ev: HasDoc[CV]) =
-    Seq[Option[Doc[Annotation[RNS, CT]]]](
+    Seq[Option[Doc[Annotation[MT]]]](
       Some(
         (Seq(Some(d"SELECT"), distinctiveness.debugDoc).flatten.hsep +:
           selectList.toSeq.zipWithIndex.map { case ((columnLabel, NamedExpr(expr, columnName)), idx) =>
-            expr.debugDoc.annotate(Annotation.SelectListDefinition(idx+1)) ++ Doc.softlineSep ++ d"AS" +#+ columnLabel.debugDoc.annotate(Annotation.ColumnAliasDefinition(columnName, columnLabel))
+            expr.debugDoc.annotate(Annotation.SelectListDefinition[MT](idx+1)) ++ Doc.softlineSep ++ d"AS" +#+ columnLabel.debugDoc.annotate(Annotation.ColumnAliasDefinition[MT](columnName, columnLabel))
           }.punctuate(d",")).sep.nest(2)
       ),
       Some((d"FROM" +#+ from.debugDoc).nest(2)),
@@ -263,16 +263,16 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
 }
 
 trait OSelectImpl { this: Select.type =>
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT#CT, MT#CV]]) = new Writable[Select[MT]] with MetaTypeHelper[MT] {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl]) = new Writable[Select[MT]] with MetaTypeHelper[MT] {
     def writeTo(buffer: WriteBuffer, select: Select[MT]): Unit = {
       val Select(
-        distinctiveness: Distinctiveness[CT, CV],
-        selectList: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]],
+        distinctiveness: Distinctiveness[MT],
+        selectList: OrderedMap[AutoColumnLabel, NamedExpr[MT]],
         from: From[MT],
-        where: Option[Expr[CT, CV]],
-        groupBy: Seq[Expr[CT, CV]],
-        having: Option[Expr[CT, CV]],
-        orderBy: Seq[OrderBy[CT, CV]],
+        where: Option[Expr[MT]],
+        groupBy: Seq[Expr[MT]],
+        having: Option[Expr[MT]],
+        orderBy: Seq[OrderBy[MT]],
         limit: Option[BigInt],
         offset: Option[BigInt],
         search: Option[String],
@@ -293,16 +293,16 @@ trait OSelectImpl { this: Select.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT#CT, MT#CV]]) = new Readable[Select[MT]] with MetaTypeHelper[MT] {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl]) = new Readable[Select[MT]] with MetaTypeHelper[MT] {
     def readFrom(buffer: ReadBuffer): Select[MT] = {
       Select(
-        distinctiveness = buffer.read[Distinctiveness[CT, CV]](),
-        selectList = buffer.read[OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]]](),
+        distinctiveness = buffer.read[Distinctiveness[MT]](),
+        selectList = buffer.read[OrderedMap[AutoColumnLabel, NamedExpr[MT]]](),
         from = buffer.read[From[MT]](),
-        where = buffer.read[Option[Expr[CT, CV]]](),
-        groupBy = buffer.read[Seq[Expr[CT, CV]]](),
-        having = buffer.read[Option[Expr[CT, CV]]](),
-        orderBy = buffer.read[Seq[OrderBy[CT, CV]]](),
+        where = buffer.read[Option[Expr[MT]]](),
+        groupBy = buffer.read[Seq[Expr[MT]]](),
+        having = buffer.read[Option[Expr[MT]]](),
+        orderBy = buffer.read[Seq[OrderBy[MT]]](),
         limit = buffer.read[Option[BigInt]](),
         offset = buffer.read[Option[BigInt]](),
         search = buffer.read[Option[String]](),

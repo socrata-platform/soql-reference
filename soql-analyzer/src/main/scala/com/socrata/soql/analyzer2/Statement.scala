@@ -16,7 +16,7 @@ import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable,
 
 import DocUtils._
 
-sealed abstract class Statement[MT <: MetaTypes] extends MetaTypeHelper[MT] {
+sealed abstract class Statement[MT <: MetaTypes] extends MetaTypeHelper[MT] with LabelHelper[MT] {
   type Self[MT <: MetaTypes] <: Statement[MT]
   def asSelf: Self[MT]
 
@@ -60,27 +60,27 @@ sealed abstract class Statement[MT <: MetaTypes] extends MetaTypeHelper[MT] {
 
   private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[MT]
 
-  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]]
-  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]]
+  def contains(e: Expr[MT]): Boolean
 
   final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
   final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder =
     debugDoc.layoutSmart().toStringBuilder(sb)
-  def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]]
+  def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[MT]]
 
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT]
 
-  final def labelMap: LabelMap[RNS] = {
-    val state = new LabelMapState[RNS]
+  final def labelMap: LabelMap[MT] = {
+    val state = new LabelMapState[MT]
     doLabelMap(state)
     state.build()
   }
 
-  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit
+  private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit
 }
 
 object Statement {
-  implicit def serialize[MT <: MetaTypes](implicit writableRNS: Writable[MT#RNS], writableCT: Writable[MT#CT], writeableExpr: Writable[Expr[MT#CT, MT#CV]]): Writable[Statement[MT]] = new Writable[Statement[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableRNS: Writable[MT#RNS], writableCT: Writable[MT#CT], writeableExpr: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl]): Writable[Statement[MT]] = new Writable[Statement[MT]] {
     def writeTo(buffer: WriteBuffer, stmt: Statement[MT]): Unit = {
       stmt match {
         case s: Select[MT] =>
@@ -99,7 +99,7 @@ object Statement {
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableRNS: Readable[MT#RNS], readableCT: Readable[MT#CT], readableExpr: Readable[Expr[MT#CT, MT#CV]]): Readable[Statement[MT]] = new Readable[Statement[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableRNS: Readable[MT#RNS], readableCT: Readable[MT#CT], readableExpr: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl]): Readable[Statement[MT]] = new Readable[Statement[MT]] {
     def readFrom(buffer: ReadBuffer): Statement[MT] = {
       buffer.read[Int]() match {
         case 0 => buffer.read[Select[MT]]()
@@ -131,7 +131,7 @@ case class CTE[MT <: MetaTypes](
 object CTE extends statement.OCTEImpl
 
 case class Values[MT <: MetaTypes](
-  values: NonEmptySeq[NonEmptySeq[Expr[MT#CT, MT#CV]]]
+  values: NonEmptySeq[NonEmptySeq[Expr[MT]]]
 ) extends Statement[MT] with statement.ValuesImpl[MT] {
   require(values.tail.forall(_.length == values.head.length))
   require(values.tail.forall(_.iterator.zip(values.head.iterator).forall { case (a, b) => a.typ == b.typ }))
@@ -139,13 +139,13 @@ case class Values[MT <: MetaTypes](
 object Values extends statement.OValuesImpl
 
 case class Select[MT <: MetaTypes](
-  distinctiveness: Distinctiveness[MT#CT, MT#CV],
-  selectList: OrderedMap[AutoColumnLabel, NamedExpr[MT#CT, MT#CV]],
+  distinctiveness: Distinctiveness[MT],
+  selectList: OrderedMap[AutoColumnLabel, NamedExpr[MT]],
   from: From[MT],
-  where: Option[Expr[MT#CT, MT#CV]],
-  groupBy: Seq[Expr[MT#CT, MT#CV]],
-  having: Option[Expr[MT#CT, MT#CV]],
-  orderBy: Seq[OrderBy[MT#CT, MT#CV]],
+  where: Option[Expr[MT]],
+  groupBy: Seq[Expr[MT]],
+  having: Option[Expr[MT]],
+  orderBy: Seq[OrderBy[MT]],
   limit: Option[BigInt],
   offset: Option[BigInt],
   search: Option[String],

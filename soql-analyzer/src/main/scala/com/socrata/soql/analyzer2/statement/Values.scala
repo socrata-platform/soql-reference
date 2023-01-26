@@ -56,10 +56,10 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
       case _ => None
     }
 
-  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] =
     values.iterator.flatMap(_.iterator.flatMap(_.find(predicate))).nextOption()
 
-  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+  def contains(e: Expr[MT]): Boolean =
     values.exists(_.exists(_.contains(e)))
 
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]) = this
@@ -74,7 +74,7 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
   private[analyzer2] def doRelabel(state: RelabelState): Self[MT] =
     copy(values = values.map(_.map(_.doRelabel(state))))
 
-  override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[Nothing, CT]] = {
+  override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[MT]] = {
     Seq(
       d"VALUES",
       values.toSeq.map { row =>
@@ -86,23 +86,23 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
     ).sep.nest(2)
   }
 
-  private[analyzer2] def doLabelMap[RNS](state: LabelMapState[RNS]): Unit = {
+  private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
     // no interior queries, nothing to do
   }
 }
 
 trait OValuesImpl { this: Values.type =>
-  implicit def serialize[MT <: MetaTypes](implicit ev: Writable[Expr[MT#CT, MT#CV]]): Writable[Values[MT]] =
+  implicit def serialize[MT <: MetaTypes](implicit ev: Writable[Expr[MT]]): Writable[Values[MT]] =
     new Writable[Values[MT]] {
       def writeTo(buffer: WriteBuffer, values: Values[MT]): Unit = {
         buffer.write(values.values)
       }
     }
 
-  implicit def deserialize[MT <: MetaTypes](implicit ev: Readable[Expr[MT#CT, MT#CV]]): Readable[Values[MT]] =
+  implicit def deserialize[MT <: MetaTypes](implicit ev: Readable[Expr[MT]]): Readable[Values[MT]] =
     new Readable[Values[MT]] {
       def readFrom(buffer: ReadBuffer): Values[MT] = {
-        Values(buffer.read[NonEmptySeq[NonEmptySeq[Expr[MT#CT, MT#CV]]]]())
+        Values(buffer.read[NonEmptySeq[NonEmptySeq[Expr[MT]]]]())
       }
     }
 }

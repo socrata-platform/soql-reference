@@ -8,8 +8,8 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.typechecker.{HasDoc, HasType}
 
-trait LiteralValueImpl[+CT, +CV] { this: LiteralValue[CT, CV] =>
-  type Self[+CT, +CV] = LiteralValue[CT, CV]
+trait LiteralValueImpl[MT <: MetaTypes] { this: LiteralValue[MT] =>
+  type Self[MT <: MetaTypes] = LiteralValue[MT]
 
   val size = 1
 
@@ -20,17 +20,17 @@ trait LiteralValueImpl[+CT, +CV] { this: LiteralValue[CT, CV] =>
 }
 
 trait OLiteralValueImpl { this: LiteralValue.type =>
-  implicit def serialize[CT, CV: Writable] = new Writable[LiteralValue[CT, CV]] {
-    def writeTo(buffer: WriteBuffer, lv: LiteralValue[CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit writableCV: Writable[MT#CV]) = new Writable[LiteralValue[MT]] {
+    def writeTo(buffer: WriteBuffer, lv: LiteralValue[MT]): Unit = {
       buffer.write(lv.value)
       buffer.write(lv.position)
     }
   }
 
-  implicit def deserialize[CT, CV: Readable](implicit ev: HasType[CV, CT]) = new Readable[LiteralValue[CT, CV]] {
-    def readFrom(buffer: ReadBuffer): LiteralValue[CT, CV] = {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCV: Readable[MT#CV], ht: HasType[MT#CV, MT#CT]) = new Readable[LiteralValue[MT]] {
+    def readFrom(buffer: ReadBuffer): LiteralValue[MT] = {
       LiteralValue(
-        buffer.read[CV]()
+        buffer.read[MT#CV]()
       )(
         buffer.read[AtomicPositionInfo]()
       )
