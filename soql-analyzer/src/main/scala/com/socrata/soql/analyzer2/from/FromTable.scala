@@ -33,9 +33,9 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     copy[MT2](
       tableName = state.convert(this.tableName),
-      definiteResourceName = state.changesOnlyLabels.convertScopedRNS(definiteResourceName),
+      definiteResourceName = state.changesOnlyLabels.convertRNSOnly(definiteResourceName),
       columns = OrderedMap() ++ columns.iterator.map { case (n, ne) =>
-        state.convert(this.tableName, n) -> state.changesOnlyLabels.convertNameEntry(ne)
+        state.convert(this.tableName, n) -> state.changesOnlyLabels.convertCTOnly(ne)
       },
       primaryKeys = primaryKeys.map(_.map(state.convert(this.tableName, _)))
     )

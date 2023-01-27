@@ -69,7 +69,7 @@ trait WindowedFunctionCallImpl[MT <: MetaTypes] { this: WindowedFunctionCall[MT]
 
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     copy[MT2](
-      function = state.changesOnlyLabels.convertMF(function),
+      function = state.changesOnlyLabels.convertCTOnly(function),
       args = args.map(_.doRewriteDatabaseNames(state)),
       filter = filter.map(_.doRewriteDatabaseNames(state)),
       partitionBy = partitionBy.map(_.doRewriteDatabaseNames(state)),

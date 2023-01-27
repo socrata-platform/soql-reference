@@ -42,7 +42,7 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     copy(
       statement = statement.doRewriteDatabaseNames(state),
-      resourceName = resourceName.map(state.changesOnlyLabels.convertScopedRNS(_))
+      resourceName = resourceName.map(state.changesOnlyLabels.convertRNSOnly(_))
     )
 
   private[analyzer2] def doRelabel(state: RelabelState) = {

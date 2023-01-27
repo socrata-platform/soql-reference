@@ -53,7 +53,7 @@ trait AggregateFunctionCallImpl[MT <: MetaTypes] { this: AggregateFunctionCall[M
 
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]): Self[MT2] =
     AggregateFunctionCall(
-      function = state.changesOnlyLabels.convertMF(function),
+      function = state.changesOnlyLabels.convertCTOnly(function),
       args = args.map(_.doRewriteDatabaseNames(state)),
       filter = filter.map(_.doRewriteDatabaseNames(state)),
       distinct = distinct

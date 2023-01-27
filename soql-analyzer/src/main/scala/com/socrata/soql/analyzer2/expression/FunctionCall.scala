@@ -42,7 +42,7 @@ trait FunctionCallImpl[MT <: MetaTypes] { this: FunctionCall[MT] =>
 
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     this.copy(
-      function = state.changesOnlyLabels.convertMF(function),
+      function = state.changesOnlyLabels.convertCTOnly(function),
       args = args.map(_.doRewriteDatabaseNames(state))
     )(position)
 

@@ -31,8 +31,8 @@ trait ChangesOnlyRNS[MT1 <: MetaTypes, MT2 <: MetaTypes] {
   def convertDTN(dtn: DatabaseTableName[MT1#DatabaseTableNameImpl]): DatabaseTableName[MT2#DatabaseTableNameImpl]
   def convertDCN(dcn: DatabaseColumnName[MT1#DatabaseColumnNameImpl]): DatabaseColumnName[MT2#DatabaseColumnNameImpl]
 
-  def convertMF(mf: MonomorphicFunction[MT1#CT]) =
-    mf.asInstanceOf[MonomorphicFunction[MT2#CT]]
+  def convertCTOnly[F[_]](f: F[MT1#CT]): F[MT2#CT] =
+    f.asInstanceOf[F[MT2#CT]]
 }
 
 object ChangesOnlyRNS {
@@ -55,14 +55,11 @@ trait ChangesOnlyLabels[MT1 <: MetaTypes, MT2 <: MetaTypes] {
   def convertCV(v: MT1#CV): MT2#CV
   def convertRNS(rns: MT1#RNS): MT2#RNS
 
-  def convertMF(mf: MonomorphicFunction[MT1#CT]) =
-    mf.asInstanceOf[MonomorphicFunction[MT2#CT]]
+  def convertCTOnly[F[_]](f: F[MT1#CT]): F[MT2#CT] =
+    f.asInstanceOf[F[MT2#CT]]
 
-  def convertNameEntry(ne: NameEntry[MT1#CT]) =
-    ne.asInstanceOf[NameEntry[MT2#CT]]
-
-  def convertScopedRNS(srns: ScopedResourceName[MT1#RNS]) =
-    srns.asInstanceOf[ScopedResourceName[MT2#RNS]]
+  def convertRNSOnly[F[_]](f: F[MT1#RNS]): F[MT2#RNS] =
+    f.asInstanceOf[F[MT2#RNS]]
 }
 
 object ChangesOnlyLabels {
