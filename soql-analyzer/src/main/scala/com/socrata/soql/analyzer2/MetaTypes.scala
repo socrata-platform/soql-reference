@@ -1,5 +1,7 @@
 package com.socrata.soql.analyzer2
 
+import scala.language.higherKinds
+
 import com.socrata.soql.functions.MonomorphicFunction
 
 trait MetaTypes {
