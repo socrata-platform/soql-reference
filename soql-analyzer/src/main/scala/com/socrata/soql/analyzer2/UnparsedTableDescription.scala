@@ -13,13 +13,19 @@ import com.socrata.soql.environment.{ResourceName, ColumnName, HoleName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.BinaryTree
+import com.socrata.soql.analyzer2
 
 // This class exists purely to be the JSON-serialized form of
 // TableDescriptions, but it can also be used by something that
 // has to handle passing through JSONified table descriptions but
 // doesn't care about the actual parse tree itself.
 
-sealed trait UnparsedTableDescription[MT <: MetaTypes] extends TableDescriptionLike with MetaTypeHelper[MT] with LabelHelper[MT]
+sealed trait UnparsedTableDescription[MT <: MetaTypes] extends TableDescriptionLike with MetaTypeHelper[MT] with LabelHelper[MT] {
+  private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
+    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
+    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+  )(implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): UnparsedTableDescription[MT2]
+}
 
 object UnparsedTableDescription {
   implicit def jEncode[MT <: MetaTypes](implicit encRNS: JsonEncode[MT#RNS], encCT: JsonEncode[MT#CT], encDTN: JsonEncode[MT#DatabaseTableNameImpl], encDCN: JsonEncode[MT#DatabaseColumnNameImpl]) =
@@ -52,6 +58,25 @@ object UnparsedTableDescription {
     require(ordering.forall { o => columns.contains(o.column) })
 
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#RNS])(implicit ev: ChangesOnlyRNS[MT, MT2]) = this
+
+    private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
+      tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
+      columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+    )(implicit ev: ChangesOnlyLabels[MT, MT2]): Dataset[MT2] = {
+      Dataset(
+        tableName(name),
+        canonicalName,
+        OrderedMap(
+          columns.iterator.map { case (dcn, ne) =>
+            columnName(name, dcn) -> TableDescription.DatasetColumnInfo(ne.name, ev.convertCT(ne.typ), ne.hidden)
+          }.toSeq : _*
+        ),
+        ordering.map { case TableDescription.Ordering(dcn, ascending) =>
+          TableDescription.Ordering(columnName(name, dcn), ascending)
+        },
+        primaryKey.map(_.map(columnName(name, _)))
+      )
+    }
   }
   object Dataset {
     private[UnparsedTableDescription] def encode[MT <: MetaTypes](implicit encCT: JsonEncode[MT#CT], encDTN: JsonEncode[MT#DatabaseTableNameImpl], encDCN: JsonEncode[MT#DatabaseColumnNameImpl]): JsonEncode[Dataset[MT]] =
@@ -101,6 +126,13 @@ object UnparsedTableDescription {
           hiddenColumns
         )
       }
+
+    private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
+      tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
+      columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+    )(implicit ev: ChangesOnlyLabels[MT, MT2]): Query[MT2] = {
+      this.asInstanceOf[Query[MT2]] // SAFETY: We have no labels
+    }
   }
   object Query {
     private[UnparsedTableDescription] def encode[MT <: MetaTypes](implicit encRNS: JsonEncode[MT#RNS], encCT: JsonEncode[MT#CT]) =
@@ -133,6 +165,13 @@ object UnparsedTableDescription {
           hiddenColumns
         )
       }
+
+    private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
+      tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
+      columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+    )(implicit ev: ChangesOnlyLabels[MT, MT2]): TableFunction[MT2] = {
+      this.asInstanceOf[TableFunction[MT2]] // SAFETY: We have no labels
+    }
   }
 
   object TableFunction {

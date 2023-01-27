@@ -11,15 +11,15 @@ import com.socrata.soql.environment.{ResourceName, HoleName, ColumnName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.BinaryTree
+import com.socrata.soql.analyzer2
 
 trait FoundTablesLike[MT <: MetaTypes] extends MetaTypeHelper[MT] with LabelHelper[MT] {
-  type Self[MT <: MetaTypes]
+  type Self[MT <: MetaTypes] <: FoundTablesLike[MT]
 
-  def rewriteDatabaseNames(
-    tableName: DatabaseTableName => DatabaseTableName,
-    // This is given the _original_ database table name
-    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): Self[MT]
+  def rewriteDatabaseNames[MT2 <: MetaTypes](
+    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
+    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+  )(implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): Self[MT2]
 }
 
 case class UserParameterSpecs[+ColumnType](
@@ -61,14 +61,15 @@ final case class FoundTables[MT <: MetaTypes] private[analyzer2] (
     }
   }
 
-  // NOTE: When/if DTN and DCT are added to MetaTypes, this will become
-  // a transformation into a _different_ MetaTypes subclass!
-  final def rewriteDatabaseNames(
-    tableName: DatabaseTableName => DatabaseTableName,
-    // This is given the _original_ database table name
-    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): FoundTables[MT] =
-    copy(tableMap = tableMap.rewriteDatabaseNames(tableName, columnName))
+  final def rewriteDatabaseNames[MT2 <: MetaTypes](
+    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
+    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+  )(implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): FoundTables[MT2] =
+    copy(
+      tableMap = tableMap.rewriteDatabaseNames[MT2](tableName, columnName),
+      initialScope = changesOnlyLabels.convertRNS(initialScope),
+      initialQuery = initialQuery.changeLabels[MT2]
+    )
 
   // This lets you convert resource scope names to a simplified form
   // if your resource scope names in one location have semantic
@@ -102,11 +103,14 @@ object FoundTables {
   sealed abstract class Query[MT <: MetaTypes] {
     def asUnparsedQuery: UnparsedFoundTables.Query[MT]
     def changeRNS[MT2 <: MetaTypes](implicit changesOnlyRNS: ChangesOnlyRNS[MT, MT2]): Query[MT2]
+    def changeLabels[MT2 <: MetaTypes](implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): Query[MT2]
   }
 
   case class Saved[MT <: MetaTypes](name: ResourceName) extends Query[MT] {
     def asUnparsedQuery = UnparsedFoundTables.Saved(name)
     def changeRNS[MT2 <: MetaTypes](implicit changesOnlyRNS: ChangesOnlyRNS[MT, MT2]): Saved[MT2] =
+      this.asInstanceOf[Saved[MT2]] // SAFETY: we don't care about _anything_ in MT
+    def changeLabels[MT2 <: MetaTypes](implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): Saved[MT2] =
       this.asInstanceOf[Saved[MT2]] // SAFETY: we don't care about _anything_ in MT
   }
 
@@ -114,15 +118,21 @@ object FoundTables {
     def asUnparsedQuery = UnparsedFoundTables.InContext(parent, text, parameters)
     def changeRNS[MT2 <: MetaTypes](implicit changesOnlyRNS: ChangesOnlyRNS[MT, MT2]): InContext[MT2] =
       this.asInstanceOf[InContext[MT2]] // SAFETY: we only care about CT, which isn't changing
+    def changeLabels[MT2 <: MetaTypes](implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): InContext[MT2] =
+      this.asInstanceOf[InContext[MT2]] // SAFETY: we only care about CT, which isn't changing
   }
   case class InContextImpersonatingSaved[MT <: MetaTypes](parent: ResourceName, soql: BinaryTree[ast.Select], text: String, parameters: Map[HoleName, MT#CT], fake: CanonicalName) extends Query[MT] {
     def asUnparsedQuery = UnparsedFoundTables.InContextImpersonatingSaved(parent, text, parameters, fake)
     def changeRNS[MT2 <: MetaTypes](implicit changesOnlyRNS: ChangesOnlyRNS[MT, MT2]): InContextImpersonatingSaved[MT2] =
       this.asInstanceOf[InContextImpersonatingSaved[MT2]] // SAFETY: we only care about CT, which isn't changing
+    def changeLabels[MT2 <: MetaTypes](implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): InContextImpersonatingSaved[MT2] =
+      this.asInstanceOf[InContextImpersonatingSaved[MT2]] // SAFETY: we only care about CT, which isn't changing
   }
   case class Standalone[MT <: MetaTypes](soql: BinaryTree[ast.Select], text: String, parameters: Map[HoleName, MT#CT]) extends Query[MT] {
     def asUnparsedQuery = UnparsedFoundTables.Standalone(text, parameters)
     def changeRNS[MT2 <: MetaTypes](implicit changesOnlyRNS: ChangesOnlyRNS[MT, MT2]): Standalone[MT2] =
+      this.asInstanceOf[Standalone[MT2]] // SAFETY: we only care about CT, which isn't changing
+    def changeLabels[MT2 <: MetaTypes](implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): Standalone[MT2] =
       this.asInstanceOf[Standalone[MT2]] // SAFETY: we only care about CT, which isn't changing
   }
 

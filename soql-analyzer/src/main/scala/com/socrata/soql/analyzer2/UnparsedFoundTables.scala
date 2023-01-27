@@ -6,6 +6,7 @@ import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, AutomaticJsonDecodeB
 import com.socrata.soql.environment.{ResourceName, HoleName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
+import com.socrata.soql.analyzer2
 
 class UnparsedFoundTables[MT <: MetaTypes] private[analyzer2] (
   private[analyzer2] val tableMap: UnparsedTableMap[MT],
@@ -15,15 +16,14 @@ class UnparsedFoundTables[MT <: MetaTypes] private[analyzer2] (
 ) extends FoundTablesLike[MT] {
   type Self[MT <: MetaTypes] = UnparsedFoundTables[MT]
 
-  final def rewriteDatabaseNames(
-    tableName: DatabaseTableName => DatabaseTableName,
-    // This is given the _original_ database table name
-    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): UnparsedFoundTables[MT] =
+  final def rewriteDatabaseNames[MT2 <: MetaTypes](
+    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
+    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+  )(implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): UnparsedFoundTables[MT2] =
     new UnparsedFoundTables(
       tableMap.rewriteDatabaseNames(tableName, columnName),
-      initialScope,
-      initialQuery,
+      changesOnlyLabels.convertRNS(initialScope),
+      initialQuery.changeLabels[MT2],
       parserParameters
     )
 }
@@ -33,6 +33,7 @@ object UnparsedFoundTables {
     private[analyzer2] type SoQL <: String
     private[analyzer2] def soql: SoQL
     private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, FoundTables.Query[MT]]
+    private[analyzer2] def changeLabels[MT2 <: MetaTypes](implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): Query[MT2]
   }
 
   case class Saved[MT <: MetaTypes](name: ResourceName) extends Query[MT] {
@@ -40,6 +41,8 @@ object UnparsedFoundTables {
     private[analyzer2] def soql = ???
 
     private[analyzer2] def parse(params: AbstractParser.Parameters) = Right(FoundTables.Saved(name))
+    private[analyzer2] def changeLabels[MT2 <: MetaTypes](implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): Saved[MT2] =
+      this.asInstanceOf[Saved[MT2]] // SAFETY: we don't care about _anything_ in MT
   }
   object Saved {
     private[analyzer2] implicit def encode[MT <: MetaTypes] = AutomaticJsonEncodeBuilder[Saved[MT]]
@@ -52,6 +55,8 @@ object UnparsedFoundTables {
       ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = false)).map { tree =>
         FoundTables.InContext(parent, tree, soql, parameters)
       }
+    private[analyzer2] def changeLabels[MT2 <: MetaTypes](implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): InContext[MT2] =
+      this.asInstanceOf[InContext[MT2]] // SAFETY: we only care about CT, which isn't changing
   }
   object InContext {
     private[analyzer2] implicit def encode[MT <: MetaTypes](implicit encCT : JsonEncode[MT#CT]) = AutomaticJsonEncodeBuilder[InContext[MT]]
@@ -64,6 +69,8 @@ object UnparsedFoundTables {
       ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = false)).map { tree =>
         FoundTables.InContextImpersonatingSaved(parent, tree, soql, parameters, fake)
       }
+    private[analyzer2] def changeLabels[MT2 <: MetaTypes](implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): InContextImpersonatingSaved[MT2] =
+      this.asInstanceOf[InContextImpersonatingSaved[MT2]] // SAFETY: we only care about CT, which isn't changing
   }
   object InContextImpersonatingSaved {
     private[UnparsedFoundTables] implicit def encode[MT <: MetaTypes](implicit encCT: JsonEncode[MT#CT]) = AutomaticJsonEncodeBuilder[InContextImpersonatingSaved[MT]]
@@ -76,6 +83,8 @@ object UnparsedFoundTables {
       ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = false)).map { tree =>
         FoundTables.Standalone(tree, soql, parameters)
       }
+    private[analyzer2] def changeLabels[MT2 <: MetaTypes](implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): Standalone[MT2] =
+      this.asInstanceOf[Standalone[MT2]] // SAFETY: we only care about CT, which isn't changing
   }
   object Standalone {
     private[UnparsedFoundTables] implicit def encode[MT <: MetaTypes](implicit encCT: JsonEncode[MT#CT]) = AutomaticJsonEncodeBuilder[Standalone[MT]]

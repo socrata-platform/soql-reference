@@ -7,6 +7,7 @@ import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
+import com.socrata.soql.analyzer2
 
 class UnparsedTableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[MT#ResourceNameScope, Map[ResourceName, UnparsedTableDescription[MT]]]) extends TableMapLike[MT] {
   override def hashCode = underlying.hashCode
@@ -33,29 +34,13 @@ class UnparsedTableMap[MT <: MetaTypes] private[analyzer2] (private val underlyi
       }.toMap
     }.toMap))
 
-  def rewriteDatabaseNames(
-    tableName: DatabaseTableName => DatabaseTableName,
-    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): UnparsedTableMap[MT] = {
+  def rewriteDatabaseNames[MT2 <: MetaTypes](
+    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
+    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+  )(implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): UnparsedTableMap[MT2] = {
     new UnparsedTableMap(underlying.iterator.map { case (rns, m) =>
-      rns -> m.iterator.map { case (rn, ptd) =>
-        val newptd = ptd match {
-          case UnparsedTableDescription.Dataset(name, canonicalName, schema, ordering, pk) =>
-            UnparsedTableDescription.Dataset(
-              tableName(name),
-              canonicalName,
-              OrderedMap(schema.iterator.map { case (dcn, ne) =>
-                columnName(name, dcn) -> ne
-              }.toSeq : _*),
-              ordering.map { case TableDescription.Ordering(dcn, ascending) =>
-                TableDescription.Ordering(columnName(name, dcn), ascending)
-              },
-              pk.map(_.map(columnName(name, _)))
-            )
-          case other =>
-            other
-        }
-        rn -> newptd
+      changesOnlyLabels.convertRNS(rns) -> m.iterator.map { case (rn, ptd) =>
+        rn -> ptd.rewriteDatabaseNames(tableName, columnName)
       }.toMap
     }.toMap)
   }

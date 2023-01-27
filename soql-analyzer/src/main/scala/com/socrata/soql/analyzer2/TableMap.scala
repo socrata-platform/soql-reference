@@ -9,15 +9,15 @@ import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, AutomaticJsonDecodeB
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ResourceName, ColumnName}
 import com.socrata.soql.parsing.AbstractParser
+import com.socrata.soql.analyzer2
 
 trait TableMapLike[MT <: MetaTypes] extends MetaTypeHelper[MT] with LabelHelper[MT] {
   type Self[MT <: MetaTypes] <: TableMapLike[MT]
 
-  def rewriteDatabaseNames(
-    tableName: DatabaseTableName => DatabaseTableName,
-    // This is given the _original_ database table name
-    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): Self[MT]
+  def rewriteDatabaseNames[MT2 <: MetaTypes](
+    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
+    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+  )(implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): Self[MT2]
 }
 
 class TableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[MT#ResourceNameScope, Map[ResourceName, TableDescription[MT]]]) extends TableMapLike[MT] {
@@ -77,29 +77,13 @@ class TableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[
     (new TableMap[Intified[MT]](newMap), newToOld, oldToNew)
   }
 
-  def rewriteDatabaseNames(
-    tableName: DatabaseTableName => DatabaseTableName,
-    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): TableMap[MT] = {
+  def rewriteDatabaseNames[MT2 <: MetaTypes](
+    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
+    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+  )(implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): TableMap[MT2] = {
     new TableMap(underlying.iterator.map { case (rns, m) =>
-      rns -> m.iterator.map { case (rn, ptd) =>
-        val newptd = ptd match {
-          case TableDescription.Dataset(name, canonicalName, schema, ordering, pk) =>
-            TableDescription.Dataset(
-              tableName(name),
-              canonicalName,
-              OrderedMap(schema.iterator.map { case (dcn, ne) =>
-                columnName(name, dcn) -> ne
-              }.toSeq : _*),
-              ordering.map { case TableDescription.Ordering(dcn, ascending) =>
-                TableDescription.Ordering(columnName(name, dcn), ascending)
-              },
-              pk.map(_.map(columnName(name, _)))
-            )
-          case other =>
-            other
-        }
-        rn -> newptd
+      changesOnlyLabels.convertRNS(rns) -> m.iterator.map { case (rn, ptd) =>
+        rn -> ptd.rewriteDatabaseNames(tableName, columnName)
       }.toMap
     }.toMap)
   }

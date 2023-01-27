@@ -12,6 +12,7 @@ import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ResourceName, ColumnName, HoleName}
 import com.socrata.soql.BinaryTree
+import com.socrata.soql.analyzer2
 
 trait TableDescriptionLike {
   val canonicalName: CanonicalName // This is the canonical name of this query or table; it is assumed to be unique across scopes
@@ -20,6 +21,10 @@ trait TableDescriptionLike {
 
 sealed trait TableDescription[MT <: MetaTypes] extends TableDescriptionLike with MetaTypeHelper[MT] with LabelHelper[MT] {
   private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#RNS])(implicit ev: ChangesOnlyRNS[MT, MT2]): TableDescription[MT2]
+  private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
+    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
+    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+  )(implicit ev: ChangesOnlyLabels[MT, MT2]): TableDescription[MT2]
 
   def asUnparsedTableDescription: UnparsedTableDescription[MT]
 }
@@ -86,6 +91,25 @@ object TableDescription {
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#RNS])(implicit ev: ChangesOnlyRNS[MT, MT2]): TableDescription[MT2] =
       this.asInstanceOf[TableDescription[MT2]] // SAFETY: We only care about the NameImpls and ColumnType, neither of which are changing
 
+    private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
+      tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
+      columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+    )(implicit ev: ChangesOnlyLabels[MT, MT2]): Dataset[MT2] = {
+      Dataset[MT2](
+        tableName(name),
+        canonicalName,
+        OrderedMap(
+          columns.iterator.map { case (dcn, ne) =>
+            columnName(name, dcn) -> DatasetColumnInfo(ne.name, ev.convertCT(ne.typ), ne.hidden)
+          }.toSeq : _*
+        ),
+        ordering.map { case TableDescription.Ordering(dcn, ascending) =>
+          TableDescription.Ordering(columnName(name, dcn), ascending)
+        },
+        primaryKeys.map(_.map(columnName(name, _)))
+      )
+    }
+
     def asUnparsedTableDescription =
       UnparsedTableDescription.Dataset(name, canonicalName, columns, ordering, primaryKeys)
   }
@@ -105,6 +129,12 @@ object TableDescription {
         parameters = parameters.asInstanceOf // SAFETY: ColumnType isn't changing
       )
 
+    private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
+      tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
+      columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+    )(implicit ev: ChangesOnlyLabels[MT, MT2]): Query[MT2] =
+      this.asInstanceOf[Query[MT2]] // SAFETY: ColumnType isn't changing
+
     def asUnparsedTableDescription =
       UnparsedTableDescription.Query(scope, canonicalName, basedOn, unparsed, parameters, hiddenColumns)
   }
@@ -122,6 +152,12 @@ object TableDescription {
         scope = scopeMap(scope),
         parameters = parameters.asInstanceOf // SAFET: ColumnType isn't changing
       )
+
+    private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
+      tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
+      columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+    )(implicit ev: ChangesOnlyLabels[MT, MT2]): TableFunction[MT2] =
+      this.asInstanceOf[TableFunction[MT2]] // SAFETY: ColumnType isn't changing
 
     def asUnparsedTableDescription =
       UnparsedTableDescription.TableFunction(scope, canonicalName, unparsed, parameters, hiddenColumns)
