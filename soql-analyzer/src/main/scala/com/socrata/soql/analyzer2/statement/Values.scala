@@ -19,8 +19,7 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
 
   def unique = if(values.tail.isEmpty) LazyList(Nil) else LazyList.empty
 
-  // This lets us see the schema with DatabaseColumnNames as keys
-  def typeVariedSchema: OrderedMap[AutoColumnLabel, NameEntry[CT]] =
+  val schema: OrderedMap[AutoColumnLabel, NameEntry[CT]] =
     OrderedMap() ++ values.head.iterator.zip(labels.iterator).zipWithIndex.map { case ((expr, label), idx) =>
       label -> NameEntry(ColumnName(s"column_${idx+1}"), expr.typ)
     }
@@ -50,14 +49,6 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
         false
     }
 
-  type EffectiveColumnLabel = AutoColumnLabel
-  val schema = typeVariedSchema
-  def getColumn(cl: ColumnLabel) =
-    cl match {
-      case acn: AutoColumnLabel => schema.get(acn)
-      case _ => None
-    }
-
   def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] =
     values.iterator.flatMap(_.iterator.flatMap(_.find(predicate))).nextOption()
 
@@ -68,7 +59,7 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
 
   private[analyzer2] def realTables = Map.empty[AutoTableLabel, DatabaseTableName]
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     copy(
       values = values.map(_.map(_.doRewriteDatabaseNames(state)))
     )

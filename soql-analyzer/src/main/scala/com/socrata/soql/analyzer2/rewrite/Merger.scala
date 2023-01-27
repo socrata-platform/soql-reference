@@ -128,7 +128,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
     d.withValuesMapped { ne => ne.copy(expr = xform(ne.expr)) }
 
   private def mergeSelects(
-    a: Select, aLabel: TableLabel, aResourceName: Option[ScopedResourceName[RNS]], aAlias: Option[ResourceName],
+    a: Select, aLabel: AutoTableLabel, aResourceName: Option[ScopedResourceName[RNS]], aAlias: Option[ResourceName],
     b: Select, bRejoin: FromRewriter
   ): Option[Statement] =
     // If we decide to merge this, we're going to create some flavor of
@@ -214,7 +214,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
         None
     }
 
-  private def definitelyRequiresSubselect(a: Select, aLabel: TableLabel, b: Select): Boolean = {
+  private def definitelyRequiresSubselect(a: Select, aLabel: AutoTableLabel, b: Select): Boolean = {
     if(b.hint(SelectHint.NoChainMerge)) {
       debug("B asks not to merge with its upstream")
       return true
@@ -263,7 +263,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
       val windowUsed =
         a.orderBy.exists(_.expr.isWindowed) ||
           a.selectList.iterator.filter(_._2.expr.isWindowed).exists { case (k, namedExpr) =>
-            b.directlyContains(Column(aLabel, k, namedExpr.expr.typ)(AtomicPositionInfo.None))
+            b.directlyContains(VirtualColumn(aLabel, k, namedExpr.expr.typ)(AtomicPositionInfo.None))
           }
 
       if(windowUsed) {
@@ -283,7 +283,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
         if(b.isWindowed) {
           val windowsWithinWindows =
             a.selectList.iterator.filter(_._2.expr.isWindowed).exists { case (k, namedExpr) =>
-              val target = Column(aLabel, k, namedExpr.expr.typ)(AtomicPositionInfo.None)
+              val target = VirtualColumn(aLabel, k, namedExpr.expr.typ)(AtomicPositionInfo.None)
               b.directlyFind {
                 case e: WindowedFunctionCall => e.contains(target)
                 case _ => false
@@ -311,7 +311,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
       q.distinctiveness != Distinctiveness.Indistinct()
 
   private def mergeDistinct(
-    aTable: TableLabel,
+    aTable: AutoTableLabel,
     aColumns: OrderedMap[AutoColumnLabel, Expr],
     b: Distinctiveness[MT]
   ): Distinctiveness[MT] =
@@ -321,7 +321,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
     }
 
   private def mergeSelection(
-    aTable: TableLabel,
+    aTable: AutoTableLabel,
     aColumns: OrderedMap[AutoColumnLabel, Expr],
     b: OrderedMap[AutoColumnLabel, NamedExpr[MT]]
   ): OrderedMap[AutoColumnLabel, NamedExpr[MT]] =
@@ -329,7 +329,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
       bExpr.copy(expr = replaceRefs(aTable, aColumns, bExpr.expr))
     }
 
-  private def mergeGroupBy(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr], gb: Seq[Expr]): Seq[Expr] = {
+  private def mergeGroupBy(aTable: AutoTableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr], gb: Seq[Expr]): Seq[Expr] = {
     gb.map(replaceRefs(aTable, aColumns, _))
   }
 
@@ -344,7 +344,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
   }
 
   private def mergeOrderBy(
-    aTable: TableLabel,
+    aTable: AutoTableLabel,
     aColumns: OrderedMap[AutoColumnLabel, Expr],
     obA: Seq[OrderBy],
     obB: Seq[OrderBy]
@@ -352,7 +352,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
     obB.map { ob => ob.copy(expr = replaceRefs(aTable, aColumns, ob.expr)) } ++ obA
 
   private def mergeWhereLike(
-    aTable: TableLabel,
+    aTable: AutoTableLabel,
     aColumns: OrderedMap[AutoColumnLabel, Expr],
     a: Option[Expr],
     b: Option[Expr]
@@ -364,13 +364,13 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
       case (Some(a), Some(b)) => Some(FunctionCall(and, Seq(a, replaceRefs(aTable, aColumns, b)))(FuncallPositionInfo.None))
     }
 
-  private def replaceRefs(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr], b: Expr) =
+  private def replaceRefs(aTable: AutoTableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr], b: Expr) =
     new ReplaceRefs(aTable, aColumns).go(b)
 
-  private class ReplaceRefs(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr]) {
+  private class ReplaceRefs(aTable: AutoTableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr]) {
     def go(b: Expr): Expr =
       b match {
-        case Column(`aTable`, c : AutoColumnLabel, t) =>
+        case VirtualColumn(`aTable`, c : AutoColumnLabel, t) =>
           aColumns.get(c) match {
             case Some(aExpr) if aExpr.typ == t =>
               aExpr

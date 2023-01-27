@@ -16,8 +16,8 @@ trait SelectListReferenceImpl[MT <: MetaTypes] { this: SelectListReference[MT] =
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
     throw new Exception("Cannot ask for ColumnReferences on a query with SelectListReferences")
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
-    this
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
+    this.asInstanceOf[SelectListReference[MT2]] // SAFETY: this contains no column labels
 
   private[analyzer2] def doRelabel(state: RelabelState) =
     this

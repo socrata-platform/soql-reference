@@ -12,7 +12,7 @@ class AddLimitOffset[MT <: MetaTypes] private (labelProvider: LabelProvider) ext
         Select(
           Distinctiveness.Indistinct(),
           OrderedMap() ++ stmt.schema.iterator.map { case (colLabel, NameEntry(name, typ)) =>
-            labelProvider.columnLabel() -> NamedExpr(Column(newTableLabel, colLabel, typ)(AtomicPositionInfo.None), name)
+            labelProvider.columnLabel() -> NamedExpr(VirtualColumn(newTableLabel, colLabel, typ)(AtomicPositionInfo.None), name)
           },
           FromStatement(stmt, newTableLabel, None, None),
           None,

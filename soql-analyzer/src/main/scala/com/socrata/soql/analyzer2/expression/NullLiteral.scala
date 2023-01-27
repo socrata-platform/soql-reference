@@ -16,7 +16,8 @@ trait NullLiteralImpl[MT <: MetaTypes] { this: NullLiteral[MT] =>
   protected def doDebugDoc(implicit ev: HasDoc[CV]) = d"NULL"
 
   def doRelabel(state: RelabelState) = this
-  def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
+  def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
+    this.asInstanceOf[NullLiteral[MT2]] // SAFETY: This does not contain any labels
 
   private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
 }

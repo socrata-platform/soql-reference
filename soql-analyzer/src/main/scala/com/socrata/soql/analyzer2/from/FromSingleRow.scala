@@ -22,10 +22,7 @@ trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
   def unique = LazyList(Nil)
 
   private[analyzer2] val scope: Scope[MT] =
-    Scope.fromLabels(
-      OrderedMap.empty[ColumnLabel, NameEntry[Nothing]],
-      label
-    )
+    new Scope.Virtual(label, OrderedMap.empty)
 
   def find(predicate: Expr[MT] => Boolean) = None
   def contains(e: Expr[MT]): Boolean = false
@@ -39,7 +36,8 @@ trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
         false
     }
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
+    this.asInstanceOf[FromSingleRow[MT2]] // safety: this has no labels
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[MT] = {
     copy(label = state.convert(label))

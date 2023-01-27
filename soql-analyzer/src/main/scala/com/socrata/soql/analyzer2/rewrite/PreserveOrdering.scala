@@ -14,7 +14,7 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extend
   // "wantOrderingColumns" == "The caller needs column from this table
   // to order itself".  Note that just because the caller wants a
   // thing, it will not necessarily get it!
-  def rewriteStatement(stmt: Statement, wantOutputOrdered: Boolean, wantOrderingColumns: Boolean): (Seq[(ColumnLabel, CT, Boolean, Boolean)], Statement) = {
+  def rewriteStatement(stmt: Statement, wantOutputOrdered: Boolean, wantOrderingColumns: Boolean): (Seq[(AutoColumnLabel, CT, Boolean, Boolean)], Statement) = {
     stmt match {
       case CombinedTables(op, left, right) =>
         // table ops never preserve ordering
@@ -119,7 +119,7 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extend
       case fs: FromSingleRow => (Nil, fs)
       case fs@FromStatement(stmt, label, resourceName, alias) =>
         val (orderColumn, newStmt) = rewriteStatement(stmt, wantOutputOrdered, wantOrderingColumns)
-        (orderColumn.map { case (col, typ, asc, nullLast) => OrderBy(Column(label, col, typ)(AtomicPositionInfo.None), asc, nullLast) }, fs.copy(statement = newStmt))
+        (orderColumn.map { case (col, typ, asc, nullLast) => OrderBy(VirtualColumn(label, col, typ)(AtomicPositionInfo.None), asc, nullLast) }, fs.copy(statement = newStmt))
     }
   }
 }

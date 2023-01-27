@@ -125,16 +125,20 @@ class Typechecker[MT <: MetaTypes](
           case None =>
             env.lookup(name) match {
               case None => Left(error(NoSuchColumn(None, name), col.position))
-              case Some(Environment.LookupResult(table, column, typ)) =>
-                Right(Seq(Column(table, column, typ)(new AtomicPositionInfo(col.position))))
+              case Some(Environment.LookupResult.Virtual(table, column, typ)) =>
+                Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(col.position))))
+              case Some(Environment.LookupResult.Physical(tableName, tableLabel, column, typ)) =>
+                Right(Seq(PhysicalColumn(tableName, tableLabel, column, typ)(new AtomicPositionInfo(col.position))))
             }
         }
       case col@ast.ColumnOrAliasRef(Some(qual), name) =>
         val trueQual = ResourceName(qual.substring(TableName.PrefixIndex))
         env.lookup(trueQual, name) match {
           case None => Left(error(NoSuchColumn(Some(trueQual), name), col.position))
-          case Some(Environment.LookupResult(table, column, typ)) =>
-            Right(Seq(Column(table, column, typ)(new AtomicPositionInfo(col.position))))
+          case Some(Environment.LookupResult.Virtual(table, column, typ)) =>
+            Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(col.position))))
+          case Some(Environment.LookupResult.Physical(tableName, tableLabel, column, typ)) =>
+            Right(Seq(PhysicalColumn(tableName, tableLabel, column, typ)(new AtomicPositionInfo(col.position))))
         }
       case l: ast.Literal =>
         squash(typeInfo.potentialExprs(l), l.position)

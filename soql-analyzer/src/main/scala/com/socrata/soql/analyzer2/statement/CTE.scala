@@ -15,10 +15,7 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
   type Self[MT <: MetaTypes] = CTE[MT]
   def asSelf = this
 
-  type EffectiveColumnLabel = useQuery.EffectiveColumnLabel
-
   val schema = useQuery.schema
-  def getColumn(cl: ColumnLabel) = useQuery.getColumn(cl)
 
   def unique = useQuery.unique
 
@@ -34,7 +31,7 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
     definitionQuery.columnReferences.mergeWith(useQuery.columnReferences)(_ ++ _)
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     copy(
       definitionQuery = definitionQuery.doRewriteDatabaseNames(state),
       useQuery = useQuery.doRewriteDatabaseNames(state)

@@ -33,7 +33,7 @@ sealed abstract class From[MT <: MetaTypes] extends MetaTypeHelper[MT] with Labe
   // extend the given environment with names introduced by this FROM clause
   private[analyzer2] def extendEnvironment(base: Environment[MT]): Either[AddScopeError, Environment[MT]]
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[MT]
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]): Self[MT2]
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[MT]
 
@@ -149,12 +149,7 @@ case class FromStatement[MT <: MetaTypes](
   label: AutoTableLabel,
   resourceName: Option[ScopedResourceName[MT#RNS]],
   alias: Option[ResourceName]
-) extends AtomicFrom[MT] with from.FromStatementImpl[MT] {
-  // I'm not sure why this needs to be here.  The typechecker gets
-  // confused about calling Scope.apply if it lives in
-  // FromStatementImpl
-  private[analyzer2] val scope: Scope[MT] = Scope.fromLabels(statement.schema, label)
-}
+) extends AtomicFrom[MT] with from.FromStatementImpl[MT]
 object FromStatement extends from.OFromStatementImpl
 
 case class FromSingleRow[MT <: MetaTypes](

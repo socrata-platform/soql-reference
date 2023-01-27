@@ -7,7 +7,7 @@ import com.socrata.soql.typechecker.HasDoc
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 sealed trait Distinctiveness[MT <: MetaTypes] extends MetaTypeHelper[MT] with LabelHelper[MT] {
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Distinctiveness[MT]
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]): Distinctiveness[MT2]
   private[analyzer2] def doRelabel(state: RelabelState): Distinctiveness[MT]
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Distinctiveness[MT]): Boolean
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
@@ -15,7 +15,8 @@ sealed trait Distinctiveness[MT <: MetaTypes] extends MetaTypeHelper[MT] with La
 }
 object Distinctiveness {
   case class Indistinct[MT <: MetaTypes]() extends Distinctiveness[MT] {
-    private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
+    private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
+      this.asInstanceOf[Indistinct[MT2]] // SAFETY: this contains no column labesls
     private[analyzer2] def doRelabel(state: RelabelState) = this
     private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Distinctiveness[MT]): Boolean =
       that == this
@@ -25,7 +26,8 @@ object Distinctiveness {
   }
 
   case class FullyDistinct[MT <: MetaTypes]() extends Distinctiveness[MT] {
-    private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
+    private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
+      this.asInstanceOf[FullyDistinct[MT2]] // SAFETY: this contains no column labesls
     private[analyzer2] def doRelabel(state: RelabelState) = this
     private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Distinctiveness[MT]): Boolean =
       that == this
@@ -39,7 +41,7 @@ object Distinctiveness {
   }
 
   case class On[MT <: MetaTypes](exprs: Seq[Expr[MT]]) extends Distinctiveness[MT] {
-    private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
+    private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
       On(exprs.map(_.doRewriteDatabaseNames(state)))
     private[analyzer2] def doRelabel(state: RelabelState) =
       On(exprs.map(_.doRelabel(state)))

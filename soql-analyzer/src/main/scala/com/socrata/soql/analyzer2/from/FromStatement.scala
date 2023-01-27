@@ -18,13 +18,15 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
   type Self[MT <: MetaTypes] = FromStatement[MT]
   def asSelf = this
 
+  private[analyzer2] val scope: Scope[MT] = new Scope.Virtual[MT](label, statement.schema)
+
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = statement.columnReferences
 
   def find(predicate: Expr[MT] => Boolean) = statement.find(predicate)
   def contains(e: Expr[MT]): Boolean =
     statement.contains(e)
 
-  def unique = statement.unique.map(_.map { cn => Column(label, cn, statement.column(cn).typ)(AtomicPositionInfo.None) })
+  def unique = statement.unique.map(_.map { cn => VirtualColumn(label, cn, statement.schema(cn).typ)(AtomicPositionInfo.None) })
 
   private[analyzer2] final def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
@@ -37,8 +39,11 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
         false
     }
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
-    copy(statement = statement.doRewriteDatabaseNames(state))
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
+    copy(
+      statement = statement.doRewriteDatabaseNames(state),
+      resourceName = resourceName.map(state.changesOnlyLabels.convertScopedRNS(_))
+    )
 
   private[analyzer2] def doRelabel(state: RelabelState) = {
     copy(statement = statement.doRelabel(state),

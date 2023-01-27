@@ -16,7 +16,8 @@ trait LiteralValueImpl[MT <: MetaTypes] { this: LiteralValue[MT] =>
   protected def doDebugDoc(implicit ev: HasDoc[CV]) = ev.docOf(value)
 
   def doRelabel(state: RelabelState) = this
-  def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = this
+  def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
+    this.asInstanceOf[LiteralValue[MT2]] // SAFETY: this contains no column references
 }
 
 trait OLiteralValueImpl { this: LiteralValue.type =>

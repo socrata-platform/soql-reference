@@ -1,5 +1,7 @@
 package com.socrata.soql.analyzer2
 
+import com.socrata.soql.functions.MonomorphicFunction
+
 trait MetaTypes {
   type ColumnType
   type ColumnValue
@@ -28,6 +30,9 @@ trait ChangesOnlyRNS[MT1 <: MetaTypes, MT2 <: MetaTypes] {
   def convertCV(v: MT1#CV): MT2#CV
   def convertDTN(dtn: DatabaseTableName[MT1#DatabaseTableNameImpl]): DatabaseTableName[MT2#DatabaseTableNameImpl]
   def convertDCN(dcn: DatabaseColumnName[MT1#DatabaseColumnNameImpl]): DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+
+  def convertMF(mf: MonomorphicFunction[MT1#CT]) =
+    mf.asInstanceOf[MonomorphicFunction[MT2#CT]]
 }
 
 object ChangesOnlyRNS {
@@ -42,6 +47,34 @@ object ChangesOnlyRNS {
       def convertCV(v: MT1#CV): MT2#CV = v
       def convertDTN(dtn: DatabaseTableName[MT1#DatabaseTableNameImpl]): DatabaseTableName[MT2#DatabaseTableNameImpl] = dtn
       def convertDCN(dcn: DatabaseColumnName[MT1#DatabaseColumnNameImpl]): DatabaseColumnName[MT2#DatabaseColumnNameImpl] = dcn
+    }
+}
+
+trait ChangesOnlyLabels[MT1 <: MetaTypes, MT2 <: MetaTypes] {
+  def convertCT(t: MT1#CT): MT2#CT
+  def convertCV(v: MT1#CV): MT2#CV
+  def convertRNS(rns: MT1#RNS): MT2#RNS
+
+  def convertMF(mf: MonomorphicFunction[MT1#CT]) =
+    mf.asInstanceOf[MonomorphicFunction[MT2#CT]]
+
+  def convertNameEntry(ne: NameEntry[MT1#CT]) =
+    ne.asInstanceOf[NameEntry[MT2#CT]]
+
+  def convertScopedRNS(srns: ScopedResourceName[MT1#RNS]) =
+    srns.asInstanceOf[ScopedResourceName[MT2#RNS]]
+}
+
+object ChangesOnlyLabels {
+  implicit def evidence[MT1 <: MetaTypes, MT2 <: MetaTypes](
+    implicit ev1: MT1#CT =:= MT2#CT,
+    ev2: MT1#CV =:= MT2#CV,
+    ev3: MT1#RNS =:= MT2#RNS
+  ): ChangesOnlyLabels[MT1, MT2] =
+    new ChangesOnlyLabels[MT1, MT2] {
+      def convertCT(t: MT1#CT): MT2#CT = t
+      def convertCV(v: MT1#CV): MT2#CV = v
+      def convertRNS(rns: MT1#RNS): MT2#RNS = rns
     }
 }
 
@@ -65,7 +98,7 @@ trait LabelHelper[MT <: MetaTypes] {
   type DatabaseColumnName = analyzer2.DatabaseColumnName[MT#DatabaseColumnNameImpl]
 
   private[analyzer2] type IsomorphismState = analyzer2.IsomorphismState[MT]
-  private[analyzer2] type RewriteDatabaseNamesState = analyzer2.RewriteDatabaseNamesState[MT]
+  private[analyzer2] type RewriteDatabaseNamesState[MT2 <: MetaTypes] = analyzer2.RewriteDatabaseNamesState[MT, MT2]
 }
 
 trait SoQLAnalyzerExpressions[MT <: MetaTypes] extends MetaTypeHelper[MT] {

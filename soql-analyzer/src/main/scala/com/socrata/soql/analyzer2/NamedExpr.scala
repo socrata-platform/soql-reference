@@ -4,7 +4,7 @@ import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 case class NamedExpr[MT <: MetaTypes](expr: Expr[MT], name: ColumnName) extends LabelHelper[MT] {
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     this.copy(expr = expr.doRewriteDatabaseNames(state))
 
   private[analyzer2] def doRelabel(state: RelabelState) =

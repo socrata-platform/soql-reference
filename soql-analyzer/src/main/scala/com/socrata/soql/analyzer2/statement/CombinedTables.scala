@@ -18,10 +18,7 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
 
   def asSelf = this
 
-  type EffectiveColumnLabel = left.EffectiveColumnLabel
-
   val schema = left.schema
-  def getColumn(cl: ColumnLabel) = left.getColumn(cl)
 
   def unique = LazyList.empty
 
@@ -37,7 +34,7 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
     left.columnReferences.mergeWith(right.columnReferences)(_ ++ _)
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     copy(
       left = left.doRewriteDatabaseNames(state),
       right = right.doRewriteDatabaseNames(state)

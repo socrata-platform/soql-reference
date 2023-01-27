@@ -95,8 +95,8 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
     )
   }
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Join[MT] = {
-    map[MT](
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]): Join[MT2] = {
+    map[MT2](
        _.doRewriteDatabaseNames(state),
        { (joinType, lateral, left, right, on) =>
          val newRight = right.doRewriteDatabaseNames(state)

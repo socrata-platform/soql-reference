@@ -20,8 +20,6 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
   type Self[MT <: MetaTypes] = Select[MT]
   def asSelf = this
 
-  type EffectiveColumnLabel = AutoColumnLabel
-
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = {
     var refs = distinctiveness.columnReferences
     for(e <- selectList.values) {
@@ -110,9 +108,12 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
     selectList.valuesIterator.exists(_.expr.isWindowed)
 
   lazy val unique: LazyList[Seq[AutoColumnLabel]] = {
-    val selectedColumns = selectList.iterator.collect { case (columnLabel, NamedExpr(Column(table, col, typ), _name)) =>
-      Column(table, col, typ)(AtomicPositionInfo.None) -> columnLabel
-    }.toMap
+    val selectedColumns = selectList.iterator.collect {
+      case (columnLabel, NamedExpr(PhysicalColumn(physTable, table, col, typ), _name)) =>
+        PhysicalColumn(physTable, table, col, typ)(AtomicPositionInfo.None) -> columnLabel
+      case (columnLabel, NamedExpr(VirtualColumn(table, col, typ), _name)) =>
+        VirtualColumn(table, col, typ)(AtomicPositionInfo.None) -> columnLabel
+    }.toMap[Column[MT], AutoColumnLabel]
 
     if(isAggregated) {
       // if we've selected all our grouping-exprs, then those columns
@@ -155,7 +156,7 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
 
   private[analyzer2] def realTables = from.realTables
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) = {
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) = {
     Select(
       distinctiveness = distinctiveness.doRewriteDatabaseNames(state),
       selectList = selectList.withValuesMapped(_.doRewriteDatabaseNames(state)),

@@ -53,7 +53,8 @@ object NameEntry {
   }
 }
 
-case class Entry[MT <: MetaTypes](name: ColumnName, label: ColumnLabel[MT#DatabaseColumnNameImpl], typ: MT#CT)
+case class VirtualEntry[MT <: MetaTypes](name: ColumnName, label: AutoColumnLabel, typ: MT#CT)
+case class PhysicalEntry[MT <: MetaTypes](name: ColumnName, label: DatabaseColumnName[MT#DatabaseColumnNameImpl], typ: MT#CT)
 
 sealed trait ErasureWorkaround
 object ErasureWorkaround {
@@ -67,38 +68,42 @@ object ScopeName {
   case class Explicit(name: ResourceName) extends ScopeName
 }
 
-class Scope[MT <: MetaTypes] private (
-  val schemaByName: OrderedMap[ColumnName, Entry[MT]],
-  val schemaByLabel: OrderedMap[ColumnLabel[MT#DatabaseColumnNameImpl], Entry[MT]],
-  val label: TableLabel[MT#DatabaseTableNameImpl]
-) extends LabelHelper[MT] {
-  require(schemaByName.size == schemaByLabel.size, "Duplicate labels in schema")
+sealed trait Scope[MT <: MetaTypes] extends LabelHelper[MT] {
+  val label: TableLabel
+  // def types = schemaByName.iterator.map { case (_, e) => e.typ }.toSeq
 
-  def types = schemaByName.iterator.map { case (_, e) => e.typ }.toSeq
-  def relabelled(newLabel: TableLabel) = new Scope(schemaByName, schemaByLabel, newLabel)
-
-  override def toString =
-    new StringBuilder(label.toString).
-      append(" -> ").
-      append(schemaByLabel).
-      toString
 }
 
 object Scope {
-  def fromNames[MT <: MetaTypes](schema: OrderedMap[ColumnName, LabelEntry[MT]], label: TableLabel[MT#DatabaseTableNameImpl]) = {
-    new Scope[MT](
-      OrderedMap() ++ schema.iterator.map { case (name, LabelEntry(label, typ)) => (name, Entry[MT](name, label, typ)) },
-      OrderedMap() ++ schema.iterator.map { case (name, LabelEntry(label, typ)) => (label, Entry[MT](name, label, typ)) },
-      label
-    )
+  final class Virtual[MT <: MetaTypes] (
+    val label: AutoTableLabel,
+    schema: OrderedMap[AutoColumnLabel, NameEntry[MT#CT]]
+  ) extends Scope[MT] {
+    val schemaByName = OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (name, VirtualEntry[MT](name, label, typ)) }
+    val schemaByLabel = OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (label, VirtualEntry[MT](name, label, typ)) }
+
+    override def toString =
+      new StringBuilder(label.toString).
+        append(" -> ").
+        append(schemaByLabel).
+        toString
   }
 
-  def fromLabels[MT <: MetaTypes, DCN](schema: OrderedMap[DCN, NameEntry[MT#CT]], label: TableLabel[MT#DatabaseTableNameImpl])(implicit ev: DCN <:< ColumnLabel[MT#DatabaseColumnNameImpl]) = {
-    new Scope[MT](
-      OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (name, Entry[MT](name, label, typ)) },
-      OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (label, Entry[MT](name, label, typ)) },
-      label
-    )
+  final class Physical[MT <: MetaTypes] (
+    val tableName: DatabaseTableName[MT#DatabaseTableNameImpl],
+    val label: AutoTableLabel,
+    schema: OrderedMap[DatabaseColumnName[MT#DatabaseColumnNameImpl], NameEntry[MT#CT]]
+  ) extends Scope[MT] {
+    val schemaByName = OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (name, PhysicalEntry[MT](name, label, typ)) }
+    val schemaByLabel = OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (label, PhysicalEntry[MT](name, label, typ)) }
+
+    require(schemaByName.size == schemaByLabel.size, "Duplicate labels in schema")
+
+    override def toString =
+      new StringBuilder(label.toString).
+        append(" -> ").
+        append(schemaByLabel).
+        toString
   }
 }
 
@@ -146,7 +151,11 @@ sealed abstract class Environment[MT <: MetaTypes](parent: Option[Environment[MT
 object Environment {
   def empty[MT <: MetaTypes]: Environment[MT] = new EmptyEnvironment(None)
 
-  case class LookupResult[MT <: MetaTypes](table: TableLabel[MT#DatabaseTableNameImpl], column: ColumnLabel[MT#DatabaseColumnNameImpl], typ: MT#CT)
+  sealed abstract class LookupResult[MT <: MetaTypes]
+  object LookupResult {
+    case class Virtual[MT <: MetaTypes](table: AutoTableLabel, column: AutoColumnLabel, typ: MT#CT) extends LookupResult[MT]
+    case class Physical[MT <: MetaTypes](tableName: DatabaseTableName[MT#DatabaseTableNameImpl], table: AutoTableLabel, column: DatabaseColumnName[MT#DatabaseColumnNameImpl], typ: MT#CT) extends LookupResult[MT]
+  }
 
   private class EmptyEnvironment[MT <: MetaTypes](parent: Option[Environment[MT]]) extends Environment(parent) with MetaTypeHelper[MT] {
     override def lookupHere(name: ColumnName) = None
@@ -170,8 +179,15 @@ object Environment {
     parent: Option[Environment[MT]]
   ) extends Environment(parent) {
     override def lookupHere(name: ColumnName) =
-      implicitScope.schemaByName.get(name).map { entry =>
-        LookupResult(implicitScope.label, entry.label, entry.typ)
+      implicitScope match {
+        case virtual: Scope.Virtual[MT] =>
+          virtual.schemaByName.get(name).map { entry =>
+            LookupResult.Virtual(virtual.label, entry.label, entry.typ)
+          }
+        case physical: Scope.Physical[MT] =>
+          physical.schemaByName.get(name).map { entry =>
+            LookupResult.Physical(physical.tableName, physical.label, entry.label, entry.typ)
+          }
       }
 
     override def toString = {
@@ -188,11 +204,17 @@ object Environment {
     override def extend: Environment[MT] = new EmptyEnvironment(Some(this))
 
     override def lookupHere(resource: ResourceName, name: ColumnName) =
-      for {
-        scope <- explicitScopes.get(resource)
-        entry <- scope.schemaByName.get(name)
-      } yield {
-        LookupResult(scope.label, entry.label, entry.typ)
+      explicitScopes.get(resource).flatMap { scope =>
+        scope match {
+          case virtual: Scope.Virtual[MT] =>
+            virtual.schemaByName.get(name).map { entry =>
+              LookupResult.Virtual(virtual.label, entry.label, entry.typ)
+            }
+          case physical: Scope.Physical[MT] =>
+            physical.schemaByName.get(name).map { entry =>
+              LookupResult.Physical(physical.tableName, physical.label, entry.label, entry.typ)
+            }
+        }
       }
 
     override def addScope(name: Option[ResourceName], scope: Scope[MT]): Either[AddScopeError, Environment[MT]] = {

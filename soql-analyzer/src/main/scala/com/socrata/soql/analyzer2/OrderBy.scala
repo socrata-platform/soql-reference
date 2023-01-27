@@ -6,7 +6,7 @@ import com.socrata.soql.typechecker.{FunctionInfo, HasType, HasDoc}
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 case class OrderBy[MT <: MetaTypes](expr: Expr[MT], ascending: Boolean, nullLast: Boolean) extends MetaTypeHelper[MT] with LabelHelper[MT] {
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]): OrderBy[MT2] =
     this.copy(expr = expr.doRewriteDatabaseNames(state))
 
   private[analyzer2] def doRelabel(state: RelabelState) =

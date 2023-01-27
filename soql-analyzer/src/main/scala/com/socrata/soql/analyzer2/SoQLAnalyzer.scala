@@ -135,7 +135,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case from: FromTable =>
           selectFromFrom(
             from.columns.map { case (label, NameEntry(name, typ)) =>
-              labelProvider.columnLabel() -> NamedExpr(Column(from.label, label, typ)(AtomicPositionInfo.None), name)
+              labelProvider.columnLabel() -> NamedExpr(PhysicalColumn(from.tableName, from.label, label, typ)(AtomicPositionInfo.None), name)
             },
             from
           )
@@ -202,7 +202,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               if(desc.hiddenColumns(name)) {
                 None
               } else {
-                Some(outputLabel -> NamedExpr(Column(from.label, dcn, typ)(AtomicPositionInfo.None), name))
+                Some(outputLabel -> NamedExpr(PhysicalColumn(from.tableName, from.label, dcn, typ)(AtomicPositionInfo.None), name))
               }
             },
             from,
@@ -211,7 +211,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             None,
             desc.ordering.map { case TableDescription.Ordering(dcn, ascending) =>
               val NameEntry(_, typ) = from.columns(dcn)
-              OrderBy(Column(from.label, dcn, typ)(AtomicPositionInfo.None), ascending = ascending, nullLast = ascending)
+              OrderBy(PhysicalColumn(from.tableName, from.label, dcn, typ)(AtomicPositionInfo.None), ascending = ascending, nullLast = ascending)
             },
             None,
             None,
@@ -403,13 +403,13 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     final def findSystemColumns(from: From): Iterable[(ColumnName, Column)] =
       from match {
         case j: Join => findSystemColumns(j.left)
-        case FromTable(_, _, _, tableLabel, columns, _) =>
+        case FromTable(tableName, _, _, tableLabel, columns, _) =>
           columns.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>
-            name -> Column(tableLabel, colLabel, typ)(AtomicPositionInfo.None)
+            name -> PhysicalColumn(tableName, tableLabel, colLabel, typ)(AtomicPositionInfo.None)
           }
         case FromStatement(stmt, tableLabel, _, _) =>
           stmt.schema.iterator.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>
-            name -> Column(tableLabel, colLabel, typ)(AtomicPositionInfo.None)
+            name -> VirtualColumn(tableLabel, colLabel, typ)(AtomicPositionInfo.None)
           }.toSeq
         case FromSingleRow(_, _) =>
           Nil
@@ -624,7 +624,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                   if(ctx.hiddenColumns(cn)) {
                     None
                   } else {
-                    Some(labelProvider.columnLabel() -> NamedExpr(Column(unfilteredFrom.label, label, expr.typ)(AtomicPositionInfo.None), cn))
+                    Some(labelProvider.columnLabel() -> NamedExpr(VirtualColumn(unfilteredFrom.label, label, expr.typ)(AtomicPositionInfo.None), cn))
                   }
                 },
                 unfilteredFrom,
@@ -639,7 +639,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                       throw new Exception("Internal error: found an order by whose expr is not in the select list??")
                     }
 
-                  ob.copy(expr = Column(unfilteredFrom.label, columnLabel, columnTyp)(AtomicPositionInfo.None))
+                  ob.copy(expr = VirtualColumn(unfilteredFrom.label, columnLabel, columnTyp)(AtomicPositionInfo.None))
                 },
                 limit = potentialLimit,
                 offset = potentialOffset,
@@ -834,7 +834,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               val outOfLineParamsLabel = labelProvider.tableLabel()
               val innerUdfParams =
                 outOfLineParamsQuery.schema.keys.lazyZip(typecheckedParams).map { case (colLabel, (name, expr)) =>
-                  name -> { (p: Position) => Column(outOfLineParamsLabel, colLabel, expr.typ)(new AtomicPositionInfo(p)) }
+                  name -> { (p: Position) => VirtualColumn(outOfLineParamsLabel, colLabel, expr.typ)(new AtomicPositionInfo(p)) }
                 }.toMap
 
               val udfCtx = Ctx(
@@ -853,7 +853,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 Select(
                   Distinctiveness.Indistinct(),
                   OrderedMap() ++ useQuery.statement.schema.iterator.map { case (label, NameEntry(name, typ)) =>
-                    labelProvider.columnLabel() -> NamedExpr(Column(useQuery.label, label, typ)(AtomicPositionInfo.None), name)
+                    labelProvider.columnLabel() -> NamedExpr(VirtualColumn(useQuery.label, label, typ)(AtomicPositionInfo.None), name)
                   },
                   Join(
                     JoinType.Inner,
@@ -952,7 +952,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case FunctionCall(_f, args) =>
           // This is a valid aggregate if all our arguments are valid aggregates
           args.foreach(verifyAggregatesAndWindowFunctions(ctx, _))
-        case c@Column(_table, _col, _typ) if ctx.allowAggregates =>
+        case c: Column if ctx.allowAggregates =>
           // Column reference, but it's not from the group by clause.
           // Fail!
           ctx.ctx.ungroupedColumnReference(c.position.logicalPosition)

@@ -19,21 +19,25 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   def find(predicate: Expr[MT] => Boolean) = None
   def contains(e: Expr[MT]): Boolean = false
 
-  def unique = primaryKeys.to(LazyList).map(_.map { dcn => Column(label, dcn, columns(dcn).typ)(AtomicPositionInfo.None) })
+  def unique = primaryKeys.to(LazyList).map(_.map { dcn => PhysicalColumn(this.tableName, label, dcn, columns(dcn).typ)(AtomicPositionInfo.None) })
 
   lazy val resourceName = Some(definiteResourceName)
 
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
 
-  private[analyzer2] override final val scope: Scope[MT] = Scope.fromLabels(columns, label)
+  private[analyzer2] override final val scope: Scope[MT] = new Scope.Physical(tableName, label, columns)
 
   def debugDoc(implicit ev: HasDoc[CV]) =
     (tableName.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
-    copy(
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
+    copy[MT2](
       tableName = state.convert(this.tableName),
-      columns = OrderedMap() ++ columns.iterator.map { case (n, ne) => state.convert(this.tableName, n) -> ne }
+      definiteResourceName = state.changesOnlyLabels.convertScopedRNS(definiteResourceName),
+      columns = OrderedMap() ++ columns.iterator.map { case (n, ne) =>
+        state.convert(this.tableName, n) -> state.changesOnlyLabels.convertNameEntry(ne)
+      },
+      primaryKeys = primaryKeys.map(_.map(state.convert(this.tableName, _)))
     )
 
   private[analyzer2] def doRelabel(state: RelabelState) = {

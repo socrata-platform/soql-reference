@@ -8,7 +8,7 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.typechecker.HasDoc
 
-trait ColumnImpl[MT <: MetaTypes] extends LabelHelper[MT] { this: Column[MT] =>
+trait VirtualColumnImpl[MT <: MetaTypes] extends LabelHelper[MT] { this: VirtualColumn[MT] =>
   type Self[MT <: MetaTypes] = Column[MT]
 
   def isAggregated = false
@@ -19,7 +19,7 @@ trait ColumnImpl[MT <: MetaTypes] extends LabelHelper[MT] { this: Column[MT] =>
 
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean = {
     that match {
-      case Column(thatTable, thatColumn, thatTyp) =>
+      case VirtualColumn(thatTable, thatColumn, thatTyp) =>
         this.typ == that.typ &&
           state.tryAssociate(Some(this.table), this.column, Some(thatTable), thatColumn)
       case _ =>
@@ -27,13 +27,12 @@ trait ColumnImpl[MT <: MetaTypes] extends LabelHelper[MT] { this: Column[MT] =>
     }
   }
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
-    column match {
-      case dcn: DatabaseColumnName =>
-        copy(column = state.convert(table, dcn))(position)
-      case _ =>
-        this
-    }
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
+    VirtualColumn(
+      table = table,
+      column = column,
+      typ = state.changesOnlyLabels.convertCT(typ)
+    )(position)
 
   private[analyzer2] def doRelabel(state: RelabelState) =
     copy(table = state.convert(table), column = state.convert(column))(position)
@@ -42,16 +41,16 @@ trait ColumnImpl[MT <: MetaTypes] extends LabelHelper[MT] { this: Column[MT] =>
 
   def doDebugDoc(implicit ev: HasDoc[CV]) =
     (table.debugDoc ++ d"." ++ column.debugDoc).
-      annotate(Annotation.ColumnRef(table, column))
+      annotate(Annotation.ColumnRef[MT](table, column))
 
   private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
 
   def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] = Some(this).filter(predicate)
 }
 
-trait OColumnImpl { this: Column.type =>
-  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#CT], writableDTN : Writable[MT#DatabaseTableNameImpl], writableDCN : Writable[MT#DatabaseColumnNameImpl]): Writable[Column[MT]] = new Writable[Column[MT]] {
-    def writeTo(buffer: WriteBuffer, c: Column[MT]): Unit = {
+trait OVirtualColumnImpl { this: VirtualColumn.type =>
+  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#CT]) = new Writable[VirtualColumn[MT]] {
+    def writeTo(buffer: WriteBuffer, c: VirtualColumn[MT]): Unit = {
       buffer.write(c.table)
       buffer.write(c.column)
       buffer.write(c.typ)
@@ -59,11 +58,11 @@ trait OColumnImpl { this: Column.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#CT], readableDTN : Readable[MT#DatabaseTableNameImpl], readableDCN : Readable[MT#DatabaseColumnNameImpl]): Readable[Column[MT]] = new Readable[Column[MT]] with MetaTypeHelper[MT] with LabelHelper[MT] {
-    def readFrom(buffer: ReadBuffer): Column[MT] = {
-      Column(
-        table = buffer.read[TableLabel](),
-        column = buffer.read[ColumnLabel](),
+  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#CT]): Readable[VirtualColumn[MT]] = new Readable[VirtualColumn[MT]] with MetaTypeHelper[MT] with LabelHelper[MT] {
+    def readFrom(buffer: ReadBuffer): VirtualColumn[MT] = {
+      VirtualColumn(
+        table = buffer.read[AutoTableLabel](),
+        column = buffer.read[AutoColumnLabel](),
         typ = buffer.read[CT]()
       )(
         buffer.read[AtomicPositionInfo]()

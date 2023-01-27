@@ -13,6 +13,7 @@ import com.socrata.soql.environment.{ColumnName, ResourceName, TableName}
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.analyzer2
 
 import DocUtils._
 
@@ -20,25 +21,21 @@ sealed abstract class Statement[MT <: MetaTypes] extends MetaTypeHelper[MT] with
   type Self[MT <: MetaTypes] <: Statement[MT]
   def asSelf: Self[MT]
 
-  type EffectiveColumnLabel <: ColumnLabel
+  val schema: OrderedMap[AutoColumnLabel, NameEntry[CT]]
 
-  val schema: OrderedMap[EffectiveColumnLabel, NameEntry[CT]]
-
-  // These exist because the _ on the schema makes it so you can't
-  // look up a column with an arbitrary column label directly.
-  def getColumn(c: ColumnLabel): Option[NameEntry[CT]]
-  def column(c: ColumnLabel) = getColumn(c).get
-
-  def unique: LazyList[Seq[ColumnLabel]]
+  // See the comment in From for an explanation of this.  It's just
+  // labels here because, as a Statement, we don't have enough
+  // information to produce a full Column.
+  def unique: LazyList[Seq[AutoColumnLabel]]
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
-  final def rewriteDatabaseNames(
-    tableName: DatabaseTableName => DatabaseTableName,
+  final def rewriteDatabaseNames[MT2 <: MetaTypes](
+    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
     // This is given the _original_ database table name
-    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): Self[MT] =
-    doRewriteDatabaseNames(new RewriteDatabaseNamesState(realTables, tableName, columnName))
+    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+  )(implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): Self[MT2] =
+    doRewriteDatabaseNames(new RewriteDatabaseNamesState[MT2](tableName, columnName, changesOnlyLabels))
 
   /** The names that the SoQLAnalyzer produces aren't necessarily safe
     * for use in any particular database.  This lets those
@@ -60,7 +57,7 @@ sealed abstract class Statement[MT <: MetaTypes] extends MetaTypeHelper[MT] with
     that: Statement[MT]
   ): Boolean
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[MT]
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]): Self[MT2]
 
   def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]]
   def contains(e: Expr[MT]): Boolean
