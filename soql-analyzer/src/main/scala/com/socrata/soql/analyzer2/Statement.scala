@@ -20,7 +20,9 @@ sealed abstract class Statement[MT <: MetaTypes] extends MetaTypeHelper[MT] with
   type Self[MT <: MetaTypes] <: Statement[MT]
   def asSelf: Self[MT]
 
-  val schema: OrderedMap[_ <: ColumnLabel, NameEntry[CT]]
+  type EffectiveColumnLabel <: ColumnLabel
+
+  val schema: OrderedMap[EffectiveColumnLabel, NameEntry[CT]]
 
   // These exist because the _ on the schema makes it so you can't
   // look up a column with an arbitrary column label directly.
@@ -80,7 +82,7 @@ sealed abstract class Statement[MT <: MetaTypes] extends MetaTypeHelper[MT] with
 }
 
 object Statement {
-  implicit def serialize[MT <: MetaTypes](implicit writableRNS: Writable[MT#RNS], writableCT: Writable[MT#CT], writeableExpr: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl]): Writable[Statement[MT]] = new Writable[Statement[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableRNS: Writable[MT#RNS], writableCT: Writable[MT#CT], writeableExpr: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[Statement[MT]] = new Writable[Statement[MT]] {
     def writeTo(buffer: WriteBuffer, stmt: Statement[MT]): Unit = {
       stmt match {
         case s: Select[MT] =>
@@ -99,7 +101,7 @@ object Statement {
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableRNS: Readable[MT#RNS], readableCT: Readable[MT#CT], readableExpr: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl]): Readable[Statement[MT]] = new Readable[Statement[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableRNS: Readable[MT#RNS], readableCT: Readable[MT#CT], readableExpr: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[Statement[MT]] = new Readable[Statement[MT]] {
     def readFrom(buffer: ReadBuffer): Statement[MT] = {
       buffer.read[Int]() match {
         case 0 => buffer.read[Select[MT]]()
@@ -131,8 +133,10 @@ case class CTE[MT <: MetaTypes](
 object CTE extends statement.OCTEImpl
 
 case class Values[MT <: MetaTypes](
+  labels: OrderedSet[AutoColumnLabel],
   values: NonEmptySeq[NonEmptySeq[Expr[MT]]]
 ) extends Statement[MT] with statement.ValuesImpl[MT] {
+  require(labels.size == values.head.length)
   require(values.tail.forall(_.length == values.head.length))
   require(values.tail.forall(_.iterator.zip(values.head.iterator).forall { case (a, b) => a.typ == b.typ }))
 }

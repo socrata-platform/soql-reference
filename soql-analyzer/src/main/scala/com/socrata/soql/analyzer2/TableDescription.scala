@@ -44,9 +44,10 @@ object TableDescription {
         }
     }
 
-  case class Ordering(column: DatabaseColumnName, ascending: Boolean)
+  case class Ordering[MT <: MetaTypes](column: DatabaseColumnName[MT#DatabaseColumnNameImpl], ascending: Boolean)
   object Ordering {
-    private[analyzer2] implicit val codec = AutomaticJsonCodecBuilder[Ordering]
+    private[analyzer2] implicit def encode[MT <: MetaTypes](implicit colEnc: JsonEncode[MT#DatabaseColumnNameImpl]) = AutomaticJsonEncodeBuilder[Ordering[MT]]
+    private[analyzer2] implicit def decode[MT <: MetaTypes](implicit colDec: JsonDecode[MT#DatabaseColumnNameImpl]) = AutomaticJsonDecodeBuilder[Ordering[MT]]
   }
 
   case class DatasetColumnInfo[+ColumnType](name: ColumnName, typ: ColumnType, hidden: Boolean)
@@ -58,9 +59,9 @@ object TableDescription {
   case class Dataset[MT <: MetaTypes](
     name: DatabaseTableName[MT#DatabaseTableNameImpl],
     canonicalName: CanonicalName,
-    columns: OrderedMap[DatabaseColumnName, DatasetColumnInfo[MT#ColumnType]],
-    ordering: Seq[Ordering],
-    primaryKeys: Seq[Seq[DatabaseColumnName]]
+    columns: OrderedMap[DatabaseColumnName[MT#DatabaseColumnNameImpl], DatasetColumnInfo[MT#ColumnType]],
+    ordering: Seq[Ordering[MT]],
+    primaryKeys: Seq[Seq[DatabaseColumnName[MT#DatabaseColumnNameImpl]]]
   ) extends TableDescription[MT] {
     for(o <- ordering) {
       require(columns.contains(o.column), "Ordering not in dataset")
@@ -83,7 +84,7 @@ object TableDescription {
     require(ordering.forall { o => columns.contains(o.column) })
 
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#RNS])(implicit ev: ChangesOnlyRNS[MT, MT2]): TableDescription[MT2] =
-      this.asInstanceOf[TableDescription[MT2]] // SAFETY: We only care about DatabaseTableNameImpl and ColumnType, neither of which are changing
+      this.asInstanceOf[TableDescription[MT2]] // SAFETY: We only care about the NameImpls and ColumnType, neither of which are changing
 
     def asUnparsedTableDescription =
       UnparsedTableDescription.Dataset(name, canonicalName, columns, ordering, primaryKeys)

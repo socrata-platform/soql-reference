@@ -50,7 +50,7 @@ trait ColumnImpl[MT <: MetaTypes] extends LabelHelper[MT] { this: Column[MT] =>
 }
 
 trait OColumnImpl { this: Column.type =>
-  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#CT], writableDCN : Writable[MT#DatabaseTableNameImpl]): Writable[Column[MT]] = new Writable[Column[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#CT], writableDTN : Writable[MT#DatabaseTableNameImpl], writableDCN : Writable[MT#DatabaseColumnNameImpl]): Writable[Column[MT]] = new Writable[Column[MT]] {
     def writeTo(buffer: WriteBuffer, c: Column[MT]): Unit = {
       buffer.write(c.table)
       buffer.write(c.column)
@@ -59,7 +59,7 @@ trait OColumnImpl { this: Column.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#CT], readableDCN : Readable[MT#DatabaseTableNameImpl]): Readable[Column[MT]] = new Readable[Column[MT]] with MetaTypeHelper[MT] with LabelHelper[MT] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#CT], readableDTN : Readable[MT#DatabaseTableNameImpl], readableDCN : Readable[MT#DatabaseColumnNameImpl]): Readable[Column[MT]] = new Readable[Column[MT]] with MetaTypeHelper[MT] with LabelHelper[MT] {
     def readFrom(buffer: ReadBuffer): Column[MT] = {
       Column(
         table = buffer.read[TableLabel](),

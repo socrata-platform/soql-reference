@@ -52,7 +52,7 @@ sealed abstract class Expr[MT <: MetaTypes] extends Product with MetaTypeHelper[
   final def contains(e: Expr[MT]): Boolean = find(_ == e).isDefined
 }
 object Expr {
-  implicit def serialize[MT <: MetaTypes](implicit writableCT: Writable[MT#CT], writableCV: Writable[MT#CV], writableDTN: Writable[MT#DatabaseTableNameImpl]): Writable[Expr[MT]] = new Writable[Expr[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableCT: Writable[MT#CT], writableCV: Writable[MT#CV], writableDTN: Writable[MT#DatabaseTableNameImpl], writableDCN: Writable[MT#DatabaseColumnNameImpl]): Writable[Expr[MT]] = new Writable[Expr[MT]] {
     implicit val self = this
     def writeTo(buffer: WriteBuffer, t: Expr[MT]): Unit =
       t match {
@@ -80,7 +80,7 @@ object Expr {
       }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableCT: Readable[MT#CT], readableCV: Readable[MT#CV], hasType: HasType[MT#CV, MT#CT], mf: Readable[MonomorphicFunction[MT#CT]], readableDTN: Readable[MT#DatabaseTableNameImpl]): Readable[Expr[MT]] = new Readable[Expr[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCT: Readable[MT#CT], readableCV: Readable[MT#CV], hasType: HasType[MT#CV, MT#CT], mf: Readable[MonomorphicFunction[MT#CT]], readableDTN: Readable[MT#DatabaseTableNameImpl], readableDCN: Readable[MT#DatabaseColumnNameImpl]): Readable[Expr[MT]] = new Readable[Expr[MT]] {
     implicit val self = this
     def readFrom(buffer: ReadBuffer): Expr[MT] =
       buffer.read[Int]() match {
@@ -104,7 +104,7 @@ sealed abstract class AtomicExpr[MT <: MetaTypes] extends Expr[MT] with Product 
 
 final case class Column[MT <: MetaTypes](
   table: TableLabel[MT#DatabaseTableNameImpl],
-  column: ColumnLabel,
+  column: ColumnLabel[MT#DatabaseColumnNameImpl],
   typ: MT#CT
 )(
   val position: AtomicPositionInfo

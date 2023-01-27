@@ -9,23 +9,24 @@ import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName}
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
-case class LabelEntry[+CT](label: ColumnLabel, @JsonKey("type") typ: CT)
+case class LabelEntry[MT <: MetaTypes](label: ColumnLabel[MT#DatabaseColumnNameImpl], @JsonKey("type") typ: MT#CT)
 object LabelEntry {
-  implicit def jEncode[CT: JsonEncode] = AutomaticJsonEncodeBuilder[LabelEntry[CT]]
-  implicit def jDecode[CT: JsonDecode] = AutomaticJsonDecodeBuilder[LabelEntry[CT]]
+  implicit def jEncode[MT <: MetaTypes](implicit encLabel: JsonEncode[MT#DatabaseColumnNameImpl], encCT: JsonEncode[MT#CT]) = AutomaticJsonEncodeBuilder[LabelEntry[MT]]
 
-  implicit def serialize[CT: Writable] = new Writable[LabelEntry[CT]] {
-    def writeTo(buffer: WriteBuffer, ne: LabelEntry[CT]): Unit = {
+  implicit def jDecode[MT <: MetaTypes](implicit decLabel: JsonDecode[MT#DatabaseColumnNameImpl], decCT: JsonDecode[MT#CT]) = AutomaticJsonDecodeBuilder[LabelEntry[MT]]
+
+  implicit def serialize[MT <: MetaTypes](implicit encLabel: Writable[MT#DatabaseColumnNameImpl], encCT: Writable[MT#CT]) = new Writable[LabelEntry[MT]] {
+    def writeTo(buffer: WriteBuffer, ne: LabelEntry[MT]): Unit = {
       buffer.write(ne.label)
       buffer.write(ne.typ)
     }
   }
 
-  implicit def deserialize[CT: Readable] = new Readable[LabelEntry[CT]] {
-    def readFrom(buffer: ReadBuffer): LabelEntry[CT] = {
+  implicit def deserialize[MT <: MetaTypes](implicit decLabel: Readable[MT#DatabaseColumnNameImpl], decCT: Readable[MT#CT]) = new Readable[LabelEntry[MT]] {
+    def readFrom(buffer: ReadBuffer): LabelEntry[MT] = {
       LabelEntry(
-        buffer.read[ColumnLabel](),
-        buffer.read[CT]()
+        buffer.read[ColumnLabel[MT#DatabaseColumnNameImpl]](),
+        buffer.read[MT#CT]()
       )
     }
   }
@@ -52,7 +53,7 @@ object NameEntry {
   }
 }
 
-case class Entry[+CT](name: ColumnName, label: ColumnLabel, typ: CT)
+case class Entry[MT <: MetaTypes](name: ColumnName, label: ColumnLabel[MT#DatabaseColumnNameImpl], typ: MT#CT)
 
 sealed trait ErasureWorkaround
 object ErasureWorkaround {
@@ -67,8 +68,8 @@ object ScopeName {
 }
 
 class Scope[MT <: MetaTypes] private (
-  val schemaByName: OrderedMap[ColumnName, Entry[MT#CT]],
-  val schemaByLabel: OrderedMap[ColumnLabel, Entry[MT#CT]],
+  val schemaByName: OrderedMap[ColumnName, Entry[MT]],
+  val schemaByLabel: OrderedMap[ColumnLabel[MT#DatabaseColumnNameImpl], Entry[MT]],
   val label: TableLabel[MT#DatabaseTableNameImpl]
 ) extends LabelHelper[MT] {
   require(schemaByName.size == schemaByLabel.size, "Duplicate labels in schema")
@@ -84,18 +85,18 @@ class Scope[MT <: MetaTypes] private (
 }
 
 object Scope {
-  def apply[MT <: MetaTypes](schema: OrderedMap[ColumnName, LabelEntry[MT#CT]], label: TableLabel[MT#DatabaseTableNameImpl]) = {
-    new Scope(
-      OrderedMap() ++ schema.iterator.map { case (name, LabelEntry(label, typ)) => (name, Entry(name, label, typ)) },
-      OrderedMap() ++ schema.iterator.map { case (name, LabelEntry(label, typ)) => (label, Entry(name, label, typ)) },
+  def fromNames[MT <: MetaTypes](schema: OrderedMap[ColumnName, LabelEntry[MT]], label: TableLabel[MT#DatabaseTableNameImpl]) = {
+    new Scope[MT](
+      OrderedMap() ++ schema.iterator.map { case (name, LabelEntry(label, typ)) => (name, Entry[MT](name, label, typ)) },
+      OrderedMap() ++ schema.iterator.map { case (name, LabelEntry(label, typ)) => (label, Entry[MT](name, label, typ)) },
       label
     )
   }
 
-  def apply[MT <: MetaTypes, L <: ColumnLabel](schema: OrderedMap[L, NameEntry[MT#CT]], label: TableLabel[MT#DatabaseTableNameImpl])(implicit erasureWorkaround: ErasureWorkaround) = {
-    new Scope(
-      OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (name, Entry(name, label, typ)) },
-      OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (label, Entry(name, label, typ)) },
+  def fromLabels[MT <: MetaTypes, L[CNI] <: ColumnLabel[CNI]](schema: OrderedMap[L[MT#DatabaseColumnNameImpl], NameEntry[MT#CT]], label: TableLabel[MT#DatabaseTableNameImpl])(implicit erasureWorkaround: ErasureWorkaround) = {
+    new Scope[MT](
+      OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (name, Entry[MT](name, label, typ)) },
+      OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (label, Entry[MT](name, label, typ)) },
       label
     )
   }
@@ -145,7 +146,7 @@ sealed abstract class Environment[MT <: MetaTypes](parent: Option[Environment[MT
 object Environment {
   def empty[MT <: MetaTypes]: Environment[MT] = new EmptyEnvironment(None)
 
-  case class LookupResult[MT <: MetaTypes](table: TableLabel[MT#DatabaseTableNameImpl], column: ColumnLabel, typ: MT#CT)
+  case class LookupResult[MT <: MetaTypes](table: TableLabel[MT#DatabaseTableNameImpl], column: ColumnLabel[MT#DatabaseColumnNameImpl], typ: MT#CT)
 
   private class EmptyEnvironment[MT <: MetaTypes](parent: Option[Environment[MT]]) extends Environment(parent) with MetaTypeHelper[MT] {
     override def lookupHere(name: ColumnName) = None

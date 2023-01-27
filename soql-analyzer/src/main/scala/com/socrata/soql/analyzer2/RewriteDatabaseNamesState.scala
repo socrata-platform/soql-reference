@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2
 private[analyzer2] case class RewriteDatabaseNamesState[MT <: MetaTypes](
   realTables: Map[AutoTableLabel, DatabaseTableName[MT#DatabaseTableNameImpl]],
   tableName: DatabaseTableName[MT#DatabaseTableNameImpl] => DatabaseTableName[MT#DatabaseTableNameImpl],
-  columnName: (DatabaseTableName[MT#DatabaseTableNameImpl], DatabaseColumnName) => DatabaseColumnName
+  columnName: (DatabaseTableName[MT#DatabaseTableNameImpl], DatabaseColumnName[MT#DatabaseColumnNameImpl]) => DatabaseColumnName[MT#DatabaseColumnNameImpl]
 ) extends LabelHelper[MT] {
   private val tableNames = new scala.collection.mutable.HashMap[DatabaseTableName, DatabaseTableName]
   private val columnNames = new scala.collection.mutable.HashMap[(DatabaseTableName, DatabaseColumnName), DatabaseColumnName]

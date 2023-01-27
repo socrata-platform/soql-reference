@@ -20,6 +20,8 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
   type Self[MT <: MetaTypes] = Select[MT]
   def asSelf = this
 
+  type EffectiveColumnLabel = AutoColumnLabel
+
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = {
     var refs = distinctiveness.columnReferences
     for(e <- selectList.values) {
@@ -263,7 +265,7 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
 }
 
 trait OSelectImpl { this: Select.type =>
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl]) = new Writable[Select[MT]] with MetaTypeHelper[MT] {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]) = new Writable[Select[MT]] with MetaTypeHelper[MT] {
     def writeTo(buffer: WriteBuffer, select: Select[MT]): Unit = {
       val Select(
         distinctiveness: Distinctiveness[MT],
@@ -293,7 +295,7 @@ trait OSelectImpl { this: Select.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl]) = new Readable[Select[MT]] with MetaTypeHelper[MT] {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]) = new Readable[Select[MT]] with MetaTypeHelper[MT] {
     def readFrom(buffer: ReadBuffer): Select[MT] = {
       Select(
         distinctiveness = buffer.read[Distinctiveness[MT]](),

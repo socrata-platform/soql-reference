@@ -11,6 +11,7 @@ import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.analyzer2
 
 import DocUtils._
 
@@ -83,7 +84,7 @@ sealed abstract class From[MT <: MetaTypes] extends MetaTypeHelper[MT] with Labe
 }
 
 object From {
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], ev: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl]): Writable[From[MT]] = new Writable[From[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], ev: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[From[MT]] = new Writable[From[MT]] {
     def writeTo(buffer: WriteBuffer, from: From[MT]): Unit = {
       from match {
         case j: Join[MT] =>
@@ -102,7 +103,7 @@ object From {
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], ev: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl]): Readable[From[MT]] = new Readable[From[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], ev: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[From[MT]] = new Readable[From[MT]] {
     def readFrom(buffer: ReadBuffer): From[MT] = {
       buffer.read[Int]() match {
         case 0 => buffer.read[Join[MT]]()
@@ -134,8 +135,8 @@ case class FromTable[MT <: MetaTypes](
   definiteResourceName: ScopedResourceName[MT#RNS],
   alias: Option[ResourceName],
   label: AutoTableLabel,
-  columns: OrderedMap[DatabaseColumnName, NameEntry[MT#CT]],
-  primaryKeys: Seq[Seq[DatabaseColumnName]]
+  columns: OrderedMap[DatabaseColumnName[MT#DatabaseColumnNameImpl], NameEntry[MT#CT]],
+  primaryKeys: Seq[Seq[DatabaseColumnName[MT#DatabaseColumnNameImpl]]]
 ) extends AtomicFrom[MT] with from.FromTableImpl[MT]
 object FromTable extends from.OFromTableImpl
 
@@ -152,7 +153,7 @@ case class FromStatement[MT <: MetaTypes](
   // I'm not sure why this needs to be here.  The typechecker gets
   // confused about calling Scope.apply if it lives in
   // FromStatementImpl
-  private[analyzer2] val scope: Scope[MT] = Scope(statement.schema, label)
+  private[analyzer2] val scope: Scope[MT] = Scope.fromLabels(statement.schema, label)
 }
 object FromStatement extends from.OFromStatementImpl
 

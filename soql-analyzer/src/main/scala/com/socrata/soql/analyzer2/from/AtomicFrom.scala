@@ -39,7 +39,7 @@ trait AtomicFromImpl[MT <: MetaTypes] { this: AtomicFrom[MT] =>
 }
 
 trait OAtomicFromImpl { this: AtomicFrom.type =>
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl]): Writable[AtomicFrom[MT]] = new Writable[AtomicFrom[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[AtomicFrom[MT]] = new Writable[AtomicFrom[MT]] {
     def writeTo(buffer: WriteBuffer, from: AtomicFrom[MT]): Unit = {
       from match {
         case ft: FromTable[MT] =>
@@ -55,7 +55,7 @@ trait OAtomicFromImpl { this: AtomicFrom.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl]): Readable[AtomicFrom[MT]] = new Readable[AtomicFrom[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[AtomicFrom[MT]] = new Readable[AtomicFrom[MT]] {
     def readFrom(buffer: ReadBuffer): AtomicFrom[MT] = {
       buffer.read[Int]() match {
         case 0 => buffer.read[FromTable[MT]]()

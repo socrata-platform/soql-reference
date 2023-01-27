@@ -10,7 +10,7 @@ import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.StandaloneParser
-import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, TableDescription, CanonicalName, TableMap, ParserUtil, FoundTables, UnparsedFoundTables, UnparsedTableMap, ScopedResourceName, MetaTypes, MetaTypeHelper}
+import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, DatabaseColumnName, TableDescription, CanonicalName, TableMap, ParserUtil, FoundTables, UnparsedFoundTables, UnparsedTableMap, ScopedResourceName, MetaTypes, MetaTypeHelper}
 
 sealed abstract class Thing[+RNS, +CT]
 case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT] {
@@ -192,16 +192,16 @@ object MockTableFinder {
     }
 }
 
-class MockTableFinder[MT <: MetaTypes](private val raw: Map[(MT#RNS, String), Thing[MT#RNS, MT#CT]])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl) extends TableFinder[MT] {
+class MockTableFinder[MT <: MetaTypes](private val raw: Map[(MT#RNS, String), Thing[MT#RNS, MT#CT]])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) extends TableFinder[MT] {
   private val tables: Map[ScopedResourceName, FinderTableDescription] = raw.iterator.map { case ((scope, rawResourceName), thing) =>
     val converted = thing match {
       case d@D(rawSchema @ _*) =>
         Dataset(
           DatabaseTableName(rawResourceName),
           CanonicalName(rawResourceName),
-          OrderedMap() ++ rawSchema.iterator.map {case (rawColumnName, ct) =>
+          OrderedMap() ++ rawSchema.iterator.map { case (rawColumnName, ct) =>
             val cn = ColumnName(rawColumnName)
-            cn -> DatasetColumnInfo(ct, hidden = d.hiddenColumns(cn))
+            DatabaseColumnName[MT#DatabaseColumnNameImpl](rawColumnName) -> DatasetColumnInfo(cn, ct, hidden = d.hiddenColumns(cn))
           },
           d.orderings.map { case (col, asc) => Ordering(ColumnName(col), asc) },
           d.primaryKeys

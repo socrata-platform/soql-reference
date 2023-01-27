@@ -25,7 +25,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
 
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
 
-  private[analyzer2] override final val scope: Scope[MT] = Scope(columns, label)
+  private[analyzer2] override final val scope: Scope[MT] = Scope.fromLabels(columns, label)
 
   def debugDoc(implicit ev: HasDoc[CV]) =
     (tableName.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
@@ -76,7 +76,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
 }
 
 trait OFromTableImpl { this: FromTable.type =>
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl]): Writable[FromTable[MT]] = new Writable[FromTable[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[FromTable[MT]] = new Writable[FromTable[MT]] {
     def writeTo(buffer: WriteBuffer, from: FromTable[MT]): Unit = {
       buffer.write(from.tableName)
       buffer.write(from.definiteResourceName)
@@ -87,7 +87,7 @@ trait OFromTableImpl { this: FromTable.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl]): Readable[FromTable[MT]] = new Readable[FromTable[MT]] with MetaTypeHelper[MT] with LabelHelper[MT] {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[FromTable[MT]] = new Readable[FromTable[MT]] with MetaTypeHelper[MT] with LabelHelper[MT] {
     def readFrom(buffer: ReadBuffer): FromTable[MT] = {
       FromTable(
         tableName = buffer.read[DatabaseTableName](),

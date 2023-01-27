@@ -22,11 +22,11 @@ private[analyzer2] class RelabelState(provider: LabelProvider) {
         fresh
     }
 
-  def convert(label: ColumnLabel): ColumnLabel =
+  def convert[T](label: ColumnLabel[T]): ColumnLabel[T] =
     label match {
       case c: AutoColumnLabel =>
         convert(c)
-      case db: DatabaseColumnName =>
+      case db: DatabaseColumnName[T] =>
         db
     }
 

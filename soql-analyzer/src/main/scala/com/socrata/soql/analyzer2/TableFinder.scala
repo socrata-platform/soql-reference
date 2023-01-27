@@ -35,36 +35,32 @@ trait TableFinder[MT <: MetaTypes] {
     * representation of Datasets' schemas. */
   sealed trait FinderTableDescription
 
-  case class Ordering(column: ColumnName, ascending: Boolean)
+  case class Ordering(column: DatabaseColumnName[MT#DatabaseColumnNameImpl], ascending: Boolean)
 
-  case class DatasetColumnInfo(typ: ColumnType, hidden: Boolean)
+  case class DatasetColumnInfo(name: ColumnName, typ: ColumnType, hidden: Boolean)
 
   /** A base dataset, or a saved query which is being analyzed opaquely. */
   case class Dataset(
     databaseName: DatabaseTableName[MT#DatabaseTableNameImpl],
     canonicalName: CanonicalName,
-    schema: OrderedMap[ColumnName, DatasetColumnInfo],
+    schema: OrderedMap[DatabaseColumnName[MT#DatabaseColumnNameImpl], DatasetColumnInfo],
     ordering: Seq[Ordering],
-    primaryKeys: Seq[Seq[ColumnName]]
+    primaryKeys: Seq[Seq[DatabaseColumnName[MT#DatabaseColumnNameImpl]]]
   ) extends FinderTableDescription {
     require(ordering.forall { ordering => schema.contains(ordering.column) })
+    require(primaryKeys.forall { pk => pk.forall { pkCol => schema.contains(pkCol) } })
 
     private[analyzer2] def toParsed =
       TableDescription.Dataset[MT](
         databaseName,
         canonicalName,
-        schema.map { case (cn, DatasetColumnInfo(ct, hidden)) =>
-          // This is a little icky...?  But at this point we're in
-          // the user-provided names world, so this is at least a
-          // _predictable_ key to use as a "database column name"
-          // before we get to the point of moving over to the
-          // actual-database-names world.
-          DatabaseColumnName(cn.caseFolded) -> TableDescription.DatasetColumnInfo(cn, ct, hidden)
+        schema.map { case (cl, DatasetColumnInfo(cn, ct, hidden)) =>
+          cl -> TableDescription.DatasetColumnInfo(cn, ct, hidden)
         },
         ordering.map { case Ordering(column, ascending) =>
-          TableDescription.Ordering(DatabaseColumnName(column.caseFolded), ascending)
+          TableDescription.Ordering(column, ascending)
         },
-        primaryKeys.map(_.map { col => DatabaseColumnName(col.caseFolded) })
+        primaryKeys
       )
   }
   /** A saved query, with any parameters it (non-transitively!) defines. */

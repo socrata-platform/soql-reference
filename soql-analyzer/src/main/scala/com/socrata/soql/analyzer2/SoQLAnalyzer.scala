@@ -827,7 +827,10 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
 
           NonEmptySeq.fromSeq(typecheckedParams.values.toVector) match {
             case Some(typecheckedExprs) =>
-              val outOfLineParamsQuery = Values(NonEmptySeq(typecheckedExprs))
+              val outOfLineParamsQuery = Values(
+                OrderedSet() ++ typecheckedExprs.iterator.map { _ => labelProvider.columnLabel() },
+                NonEmptySeq(typecheckedExprs)
+              )
               val outOfLineParamsLabel = labelProvider.tableLabel()
               val innerUdfParams =
                 outOfLineParamsQuery.schema.keys.lazyZip(typecheckedParams).map { case (colLabel, (name, expr)) =>

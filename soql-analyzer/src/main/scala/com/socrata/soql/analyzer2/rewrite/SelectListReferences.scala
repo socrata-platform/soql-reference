@@ -15,7 +15,7 @@ class SelectListReferences[MT <: MetaTypes] private () extends SoQLAnalyzerUnive
         case CTE(defLabel, defAlias, defQuery, materializedHint, useQuery) =>
           CTE(defLabel, defAlias, rewriteStatement(defQuery), materializedHint, rewriteStatement(useQuery))
 
-        case v@Values(_) =>
+        case v@Values(_, _) =>
           v
 
         case select: Select =>

@@ -22,14 +22,14 @@ import com.socrata.soql.BinaryTree
 sealed trait UnparsedTableDescription[MT <: MetaTypes] extends TableDescriptionLike with MetaTypeHelper[MT] with LabelHelper[MT]
 
 object UnparsedTableDescription {
-  implicit def jEncode[MT <: MetaTypes](implicit encRNS: JsonEncode[MT#RNS], encCT: JsonEncode[MT#CT], encDTN: JsonEncode[MT#DatabaseTableNameImpl]) =
+  implicit def jEncode[MT <: MetaTypes](implicit encRNS: JsonEncode[MT#RNS], encCT: JsonEncode[MT#CT], encDTN: JsonEncode[MT#DatabaseTableNameImpl], encDCN: JsonEncode[MT#DatabaseColumnNameImpl]) =
     SimpleHierarchyEncodeBuilder[UnparsedTableDescription[MT]](InternalTag("type")).
       branch[Dataset[MT]]("dataset")(Dataset.encode[MT], implicitly).
       branch[Query[MT]]("query")(Query.encode[MT], implicitly).
       branch[TableFunction[MT]]("tablefunc")(TableFunction.encode[MT], implicitly).
       build
 
-  implicit def jDecode[MT <: MetaTypes](implicit decRNS: JsonDecode[MT#RNS], decCT: JsonDecode[MT#CT], decDTN: JsonDecode[MT#DatabaseTableNameImpl]) =
+  implicit def jDecode[MT <: MetaTypes](implicit decRNS: JsonDecode[MT#RNS], decCT: JsonDecode[MT#CT], decDTN: JsonDecode[MT#DatabaseTableNameImpl], decDCN: JsonDecode[MT#DatabaseColumnNameImpl]) =
     SimpleHierarchyDecodeBuilder[UnparsedTableDescription[MT]](InternalTag("type")).
       branch[Dataset[MT]]("dataset")(Dataset.decode[MT], implicitly).
       branch[Query[MT]]("query")(Query.decode[MT], implicitly).
@@ -39,9 +39,9 @@ object UnparsedTableDescription {
   case class Dataset[MT <: MetaTypes](
     name: DatabaseTableName[MT#DatabaseTableNameImpl],
     canonicalName: CanonicalName,
-    columns: OrderedMap[DatabaseColumnName, TableDescription.DatasetColumnInfo[MT#ColumnType]],
-    ordering: Seq[TableDescription.Ordering],
-    primaryKey: Seq[Seq[DatabaseColumnName]]
+    columns: OrderedMap[DatabaseColumnName[MT#DatabaseColumnNameImpl], TableDescription.DatasetColumnInfo[MT#ColumnType]],
+    ordering: Seq[TableDescription.Ordering[MT]],
+    primaryKey: Seq[Seq[DatabaseColumnName[MT#DatabaseColumnNameImpl]]]
   ) extends UnparsedTableDescription[MT] {
     val hiddenColumns = columns.values.flatMap { case TableDescription.DatasetColumnInfo(name, _, hidden) =>
       if(hidden) Some(name) else None
@@ -54,17 +54,17 @@ object UnparsedTableDescription {
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#RNS])(implicit ev: ChangesOnlyRNS[MT, MT2]) = this
   }
   object Dataset {
-    private[UnparsedTableDescription] def encode[MT <: MetaTypes](implicit encCT: JsonEncode[MT#CT], encDTN: JsonEncode[MT#DatabaseTableNameImpl]): JsonEncode[Dataset[MT]] =
+    private[UnparsedTableDescription] def encode[MT <: MetaTypes](implicit encCT: JsonEncode[MT#CT], encDTN: JsonEncode[MT#DatabaseTableNameImpl], encDCN: JsonEncode[MT#DatabaseColumnNameImpl]): JsonEncode[Dataset[MT]] =
       new JsonEncode[Dataset[MT]] with MetaTypeHelper[MT] {
-        implicit val schemaEncode = OrderedMapHelper.jsonEncode[DatabaseColumnName, TableDescription.DatasetColumnInfo[CT]]
+        implicit val schemaEncode = OrderedMapHelper.jsonEncode[DatabaseColumnName[MT#DatabaseColumnNameImpl], TableDescription.DatasetColumnInfo[CT]]
         val encoder = AutomaticJsonEncodeBuilder[Dataset[MT]]
 
         def encode(ds: Dataset[MT]): JValue = encoder.encode(ds)
       }
 
-    private[UnparsedTableDescription] def decode[MT <: MetaTypes](implicit decCT: JsonDecode[MT#CT], decDTN: JsonDecode[MT#DatabaseTableNameImpl]): JsonDecode[Dataset[MT]] =
+    private[UnparsedTableDescription] def decode[MT <: MetaTypes](implicit decCT: JsonDecode[MT#CT], decDTN: JsonDecode[MT#DatabaseTableNameImpl], decDCN: JsonDecode[MT#DatabaseColumnNameImpl]): JsonDecode[Dataset[MT]] =
       new JsonDecode[Dataset[MT]] with MetaTypeHelper[MT] {
-        implicit val schemaDecode = OrderedMapHelper.jsonDecode[DatabaseColumnName, TableDescription.DatasetColumnInfo[CT]]
+        implicit val schemaDecode = OrderedMapHelper.jsonDecode[DatabaseColumnName[MT#DatabaseColumnNameImpl], TableDescription.DatasetColumnInfo[CT]]
         val decoder = AutomaticJsonDecodeBuilder[Dataset[MT]]
 
         def decode(v: JValue) = decoder.decode(v)

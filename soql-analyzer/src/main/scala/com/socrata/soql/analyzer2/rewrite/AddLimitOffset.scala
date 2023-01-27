@@ -7,7 +7,7 @@ import com.socrata.soql.analyzer2
 class AddLimitOffset[MT <: MetaTypes] private (labelProvider: LabelProvider) extends SoQLAnalyzerUniverse[MT] {
   def rewriteStatement(stmt: Statement, desiredLimit: Option[BigInt], desiredOffset: Option[BigInt]): Statement = {
     stmt match {
-      case CombinedTables(_, _, _) | Values(_) =>
+      case CombinedTables(_, _, _) | Values(_, _) =>
         val newTableLabel = labelProvider.tableLabel()
         Select(
           Distinctiveness.Indistinct(),

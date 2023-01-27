@@ -36,7 +36,7 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
       case cte@CTE(defLabel, defAlias, defQuery, materializedHint, useQuery) =>
         cte.copy(useQuery = rewriteStatement(useQuery))
 
-      case v@Values(_) =>
+      case v@Values(_, _) =>
         // This cannot be a top-level thing; if we ever want to impose
         // an ordering on a Values, it too will have to get rewritten
         // into a select-that-imposes-an-order (probably by adding an

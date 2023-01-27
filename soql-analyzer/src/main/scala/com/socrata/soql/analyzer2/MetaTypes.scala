@@ -16,6 +16,7 @@ trait MetaTypes {
   type ResourceNameScope
 
   type DatabaseTableNameImpl
+  type DatabaseColumnNameImpl
 
   final type CT = ColumnType
   final type CV = ColumnValue
@@ -26,14 +27,21 @@ trait ChangesOnlyRNS[MT1 <: MetaTypes, MT2 <: MetaTypes] {
   def convertCT(t: MT1#CT): MT2#CT
   def convertCV(v: MT1#CV): MT2#CV
   def convertDTN(dtn: DatabaseTableName[MT1#DatabaseTableNameImpl]): DatabaseTableName[MT2#DatabaseTableNameImpl]
+  def convertDCN(dcn: DatabaseColumnName[MT1#DatabaseColumnNameImpl]): DatabaseColumnName[MT2#DatabaseColumnNameImpl]
 }
 
 object ChangesOnlyRNS {
-  implicit def evidence[MT1 <: MetaTypes, MT2 <: MetaTypes](implicit ev1: MT1#CT =:= MT2#CT, ev2: MT1#CV =:= MT2#CV, ev3: DatabaseTableName[MT1#DatabaseTableNameImpl] =:= DatabaseTableName[MT2#DatabaseTableNameImpl]): ChangesOnlyRNS[MT1, MT2] =
+  implicit def evidence[MT1 <: MetaTypes, MT2 <: MetaTypes](
+    implicit ev1: MT1#CT =:= MT2#CT,
+    ev2: MT1#CV =:= MT2#CV,
+    ev3: DatabaseTableName[MT1#DatabaseTableNameImpl] =:= DatabaseTableName[MT2#DatabaseTableNameImpl],
+    ev4: DatabaseColumnName[MT1#DatabaseColumnNameImpl] =:= DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+  ): ChangesOnlyRNS[MT1, MT2] =
     new ChangesOnlyRNS[MT1, MT2] {
       def convertCT(t: MT1#CT): MT2#CT = t
       def convertCV(v: MT1#CV): MT2#CV = v
       def convertDTN(dtn: DatabaseTableName[MT1#DatabaseTableNameImpl]): DatabaseTableName[MT2#DatabaseTableNameImpl] = dtn
+      def convertDCN(dcn: DatabaseColumnName[MT1#DatabaseColumnNameImpl]): DatabaseColumnName[MT2#DatabaseColumnNameImpl] = dcn
     }
 }
 
@@ -51,6 +59,10 @@ trait LabelHelper[MT <: MetaTypes] {
   type TableLabel = analyzer2.TableLabel[MT#DatabaseTableNameImpl]
   type AutoTableLabel = analyzer2.AutoTableLabel
   type DatabaseTableName = analyzer2.DatabaseTableName[MT#DatabaseTableNameImpl]
+
+  type ColumnLabel = analyzer2.ColumnLabel[MT#DatabaseColumnNameImpl]
+  type AutoColumnLabel = analyzer2.AutoColumnLabel
+  type DatabaseColumnName = analyzer2.DatabaseColumnName[MT#DatabaseColumnNameImpl]
 
   private[analyzer2] type IsomorphismState = analyzer2.IsomorphismState[MT]
   private[analyzer2] type RewriteDatabaseNamesState = analyzer2.RewriteDatabaseNamesState[MT]

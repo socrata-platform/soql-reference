@@ -95,6 +95,7 @@ final class Intified[MT <: MetaTypes] extends MetaTypes {
   type ColumnType = MT#ColumnType
   type ColumnValue = MT#ColumnValue
   type DatabaseTableNameImpl = MT#DatabaseTableNameImpl
+  type DatabaseColumnNameImpl = MT#DatabaseColumnNameImpl
 }
 
 object FoundTables {
@@ -138,12 +139,12 @@ object FoundTables {
         }
     }
 
-  implicit def jsonEncode[MT <: MetaTypes](implicit rnsEncode: JsonEncode[MT#RNS], ctEncode: JsonEncode[MT#CT], dtnEncode: JsonEncode[MT#DatabaseTableNameImpl]): JsonEncode[FoundTables[MT]] =
+  implicit def jsonEncode[MT <: MetaTypes](implicit rnsEncode: JsonEncode[MT#RNS], ctEncode: JsonEncode[MT#CT], dtnEncode: JsonEncode[MT#DatabaseTableNameImpl], dcnEncode: JsonEncode[MT#DatabaseColumnNameImpl]): JsonEncode[FoundTables[MT]] =
     new JsonEncode[FoundTables[MT]] {
       def encode(v: FoundTables[MT]) = JsonEncode.toJValue(v.asUnparsedFoundTables)
     }
 
-  implicit def jsonDecode[MT <: MetaTypes](implicit rnsDecode: JsonDecode[MT#RNS], ctDecode: JsonDecode[MT#CT], dtnDecode: JsonDecode[MT#DatabaseTableNameImpl]) =
+  implicit def jsonDecode[MT <: MetaTypes](implicit rnsDecode: JsonDecode[MT#RNS], ctDecode: JsonDecode[MT#CT], dtnDecode: JsonDecode[MT#DatabaseTableNameImpl], dcnDecode: JsonDecode[MT#DatabaseColumnNameImpl]) =
     new JsonDecode[FoundTables[MT]] with MetaTypeHelper[MT] {
       def decode(x: JValue): Either[DecodeError, FoundTables[MT]] = x match {
         case JObject(fields) =>

@@ -18,7 +18,7 @@ class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends SoQLAnalyzerUniver
           useQuery = newUseQuery
         )
 
-      case v@Values(_) =>
+      case v@Values(_, _) =>
         v
 
       case select@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>

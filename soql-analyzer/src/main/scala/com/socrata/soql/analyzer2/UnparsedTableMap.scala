@@ -62,12 +62,12 @@ class UnparsedTableMap[MT <: MetaTypes] private[analyzer2] (private val underlyi
 }
 
 object UnparsedTableMap {
-  implicit def jsonEncode[MT <: MetaTypes](implicit encRNS: JsonEncode[MT#RNS], encCT: JsonEncode[MT#CT], encDTN: JsonEncode[MT#DatabaseTableNameImpl]): JsonEncode[UnparsedTableMap[MT]] =
+  implicit def jsonEncode[MT <: MetaTypes](implicit encRNS: JsonEncode[MT#RNS], encCT: JsonEncode[MT#CT], encDTN: JsonEncode[MT#DatabaseTableNameImpl], encDCN: JsonEncode[MT#DatabaseColumnNameImpl]): JsonEncode[UnparsedTableMap[MT]] =
     new JsonEncode[UnparsedTableMap[MT]] {
       def encode(t: UnparsedTableMap[MT]) = JsonEncode.toJValue(t.underlying.toSeq)
     }
 
-  implicit def jsonDecode[MT <: MetaTypes](implicit encRNS: JsonDecode[MT#RNS], encCT: JsonDecode[MT#CT], decDTN: JsonDecode[MT#DatabaseTableNameImpl]): JsonDecode[UnparsedTableMap[MT]] =
+  implicit def jsonDecode[MT <: MetaTypes](implicit encRNS: JsonDecode[MT#RNS], encCT: JsonDecode[MT#CT], decDTN: JsonDecode[MT#DatabaseTableNameImpl], decDCN: JsonDecode[MT#DatabaseColumnNameImpl]): JsonDecode[UnparsedTableMap[MT]] =
     new JsonDecode[UnparsedTableMap[MT]] with MetaTypeHelper[MT] {
       def decode(v: JValue) =
         JsonDecode.fromJValue[Seq[(RNS, Map[ResourceName, UnparsedTableDescription[MT]])]](v).map { fields =>

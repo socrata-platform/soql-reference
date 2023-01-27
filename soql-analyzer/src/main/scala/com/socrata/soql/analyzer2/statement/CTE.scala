@@ -15,6 +15,8 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
   type Self[MT <: MetaTypes] = CTE[MT]
   def asSelf = this
 
+  type EffectiveColumnLabel = useQuery.EffectiveColumnLabel
+
   val schema = useQuery.schema
   def getColumn(cl: ColumnLabel) = useQuery.getColumn(cl)
 
@@ -84,7 +86,7 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
 }
 
 trait OCTEImpl { this: CTE.type =>
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl]): Writable[CTE[MT]] =
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[CTE[MT]] =
     new Writable[CTE[MT]] {
       def writeTo(buffer: WriteBuffer, ct: CTE[MT]): Unit = {
         buffer.write(ct.definitionLabel)
@@ -95,7 +97,7 @@ trait OCTEImpl { this: CTE.type =>
       }
     }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl]): Readable[CTE[MT]] =
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[CTE[MT]] =
     new Readable[CTE[MT]] {
       def readFrom(buffer: ReadBuffer): CTE[MT] = {
         CTE(

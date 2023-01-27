@@ -22,7 +22,7 @@ trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
   def unique = LazyList(Nil)
 
   private[analyzer2] val scope: Scope[MT] =
-    Scope(
+    Scope.fromLabels(
       OrderedMap.empty[ColumnLabel, NameEntry[Nothing]],
       label
     )

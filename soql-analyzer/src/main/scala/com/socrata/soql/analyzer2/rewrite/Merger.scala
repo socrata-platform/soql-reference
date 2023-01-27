@@ -115,7 +115,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnaly
           ),
           where.map(xform), groupBy.map(xform), having.map(xform), orderBy.map { ob => ob.copy(expr=xform(ob.expr)) },
           limit, offset, search, hint)
-      case Values(vs) => Values(vs.map(_.map(xform)))
+      case Values(labels, vs) => Values(labels, vs.map(_.map(xform)))
       case CombinedTables(op, left, right) => CombinedTables(op, rewrite(left, xform), rewrite(right, xform))
       case CTE(defLbl, defAlias, defQ, useLbl, useQ) => CTE(defLbl, defAlias, rewrite(defQ, xform), useLbl, rewrite(useQ, xform))
     }

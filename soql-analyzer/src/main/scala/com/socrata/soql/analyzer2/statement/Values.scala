@@ -20,11 +20,9 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
   def unique = if(values.tail.isEmpty) LazyList(Nil) else LazyList.empty
 
   // This lets us see the schema with DatabaseColumnNames as keys
-  def typeVariedSchema[T >: DatabaseColumnName]: OrderedMap[T, NameEntry[CT]] =
-    OrderedMap() ++ values.head.iterator.zipWithIndex.map { case (expr, idx) =>
-      // This is definitely a postgresqlism, unfortunately
-      val name = s"column${idx+1}"
-      DatabaseColumnName(name) -> NameEntry(ColumnName(name), expr.typ)
+  def typeVariedSchema: OrderedMap[AutoColumnLabel, NameEntry[CT]] =
+    OrderedMap() ++ values.head.iterator.zip(labels.iterator).zipWithIndex.map { case ((expr, label), idx) =>
+      label -> NameEntry(ColumnName(s"column_${idx+1}"), expr.typ)
     }
 
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
@@ -37,8 +35,11 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
     that: Statement[MT]
   ): Boolean =
     that match {
-      case Values(thatValues) =>
+      case Values(thatLabels, thatValues) =>
         this.values.length == thatValues.length &&
+        this.labels.iterator.zip(thatLabels.iterator).forall { case (l1, l2) =>
+          state.tryAssociate(thisCurrentTableLabel, l1, thatCurrentTableLabel, l2)
+        } &&
         this.schema.size == that.schema.size &&
           this.values.iterator.zip(thatValues.iterator).forall { case (thisRow, thatRow) =>
             thisRow.iterator.zip(thatRow.iterator).forall { case (thisExpr, thatExpr) =>
@@ -52,7 +53,7 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
   val schema = typeVariedSchema
   def getColumn(cl: ColumnLabel) =
     cl match {
-      case dcn: DatabaseColumnName => schema.get(dcn)
+      case acn: AutoColumnLabel => schema.get(acn)
       case _ => None
     }
 
@@ -95,6 +96,7 @@ trait OValuesImpl { this: Values.type =>
   implicit def serialize[MT <: MetaTypes](implicit ev: Writable[Expr[MT]]): Writable[Values[MT]] =
     new Writable[Values[MT]] {
       def writeTo(buffer: WriteBuffer, values: Values[MT]): Unit = {
+        buffer.write(values.labels)
         buffer.write(values.values)
       }
     }
@@ -102,7 +104,10 @@ trait OValuesImpl { this: Values.type =>
   implicit def deserialize[MT <: MetaTypes](implicit ev: Readable[Expr[MT]]): Readable[Values[MT]] =
     new Readable[Values[MT]] {
       def readFrom(buffer: ReadBuffer): Values[MT] = {
-        Values(buffer.read[NonEmptySeq[NonEmptySeq[Expr[MT]]]]())
+        Values(
+          labels = buffer.read[OrderedSet[AutoColumnLabel]](),
+          values = buffer.read[NonEmptySeq[NonEmptySeq[Expr[MT]]]]()
+        )
       }
     }
 }

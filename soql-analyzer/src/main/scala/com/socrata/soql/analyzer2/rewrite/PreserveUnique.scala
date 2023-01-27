@@ -22,7 +22,7 @@ class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends 
           useQuery = newUseQuery
         )
 
-      case v@Values(_) =>
+      case v@Values(_, _) =>
         // TODO, should this rewrite into a SELECT ... FROM
         // (values...) ORDER BY synthetic_column ?  If so, we'll need
         // a way to generate synthetic_column (== have a way to turn
