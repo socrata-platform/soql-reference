@@ -100,7 +100,7 @@ object TableDescription {
         canonicalName,
         OrderedMap(
           columns.iterator.map { case (dcn, ne) =>
-            columnName(name, dcn) -> DatasetColumnInfo(ne.name, ev.convertCT(ne.typ), ne.hidden)
+            columnName(name, dcn) -> ev.convertCTOnly(ne)
           }.toSeq : _*
         ),
         ordering.map { case TableDescription.Ordering(dcn, ascending) =>
