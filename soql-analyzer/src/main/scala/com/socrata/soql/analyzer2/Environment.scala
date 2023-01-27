@@ -93,7 +93,7 @@ object Scope {
     )
   }
 
-  def fromLabels[MT <: MetaTypes, L[CNI] <: ColumnLabel[CNI]](schema: OrderedMap[L[MT#DatabaseColumnNameImpl], NameEntry[MT#CT]], label: TableLabel[MT#DatabaseTableNameImpl])(implicit erasureWorkaround: ErasureWorkaround) = {
+  def fromLabels[MT <: MetaTypes, DCN](schema: OrderedMap[DCN, NameEntry[MT#CT]], label: TableLabel[MT#DatabaseTableNameImpl])(implicit ev: DCN <:< ColumnLabel[MT#DatabaseColumnNameImpl]) = {
     new Scope[MT](
       OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (name, Entry[MT](name, label, typ)) },
       OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (label, Entry[MT](name, label, typ)) },

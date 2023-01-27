@@ -15,8 +15,8 @@ import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, DatabaseColum
 sealed abstract class Thing[+RNS, +CT]
 case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT] {
   private var orderings_ : List[(String, Boolean)] = Nil
-  private var hiddenColumns_ : Set[ColumnName] = Set.empty
-  private var primaryKeys_ : List[Seq[ColumnName]] = Nil
+  private var hiddenColumns_ : Set[String] = Set.empty
+  private var primaryKeys_ : List[Seq[String]] = Nil
 
   def withOrdering(column: String, ascending: Boolean = true): D[CT] = {
     val result = D(schema : _*)
@@ -30,7 +30,7 @@ case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT] {
   def withHiddenColumns(column: String*): D[CT] = {
     val result = D(schema : _*)
     result.orderings_ = orderings_
-    result.hiddenColumns_ = hiddenColumns_ ++ column.iterator.map(ColumnName(_))
+    result.hiddenColumns_ = hiddenColumns_ ++ column
     result.primaryKeys_ = primaryKeys_
     result
   }
@@ -40,7 +40,7 @@ case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT] {
     val result = D(schema : _*)
     result.orderings_ = orderings_
     result.hiddenColumns_ = hiddenColumns_
-    result.primaryKeys_ = column.map(ColumnName(_)) :: primaryKeys_
+    result.primaryKeys_ = column :: primaryKeys_
     result
   }
   def primaryKeys = primaryKeys_.reverse
@@ -87,17 +87,17 @@ case class U[+RNS, CT](scope: RNS, soql: String, params: (String, CT)*) extends 
 }
 
 object MockTableFinder {
-  def empty[MT <: MetaTypes](implicit dtnIsString: String =:= MT#DatabaseTableNameImpl) = new MockTableFinder[MT](Map.empty)
-  def apply[MT <: MetaTypes](items: ((MT#RNS, String), Thing[MT#RNS, MT#CT])*)(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl) = new MockTableFinder[MT](items.toMap)
-  def apply[MT <: MetaTypes](items: UnparsedFoundTables[MT])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl) = UnparsedTableMap.asMockTableFinder(items.tableMap)
-  def apply[MT <: MetaTypes](items: FoundTables[MT])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl): MockTableFinder[MT] = this(items.asUnparsedFoundTables)
+  def empty[MT <: MetaTypes](implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) = new MockTableFinder[MT](Map.empty)
+  def apply[MT <: MetaTypes](items: ((MT#RNS, String), Thing[MT#RNS, MT#CT])*)(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) = new MockTableFinder[MT](items.toMap)
+  def apply[MT <: MetaTypes](items: UnparsedFoundTables[MT])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) = UnparsedTableMap.asMockTableFinder(items.tableMap)
+  def apply[MT <: MetaTypes](items: FoundTables[MT])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl): MockTableFinder[MT] = this(items.asUnparsedFoundTables)
 
   private sealed abstract class JThing[+RNS, +CT]
   private case class JD[+CT](schema: Seq[(String, CT)], orderings: Option[Seq[(String, Boolean)]], hiddenColumns: Option[Seq[String]], primaryKeys: Option[Seq[Seq[String]]]) extends JThing[Nothing, CT]
   private case class JQ[+RNS,+CT](scope: Option[RNS], parent: String, soql: String, params: Map[String, CT], canonicalName: Option[String], hiddenColumns: Option[Seq[String]]) extends JThing[RNS, CT]
   private case class JU[+RNS,+CT](scope: Option[RNS], soql: String, params: Seq[(String, CT)], canonicalName: Option[String], hiddenColumns: Option[Seq[String]]) extends JThing[RNS, CT]
 
-  implicit def jDecode[MT <: MetaTypes](implicit rnsFieldDecode: FieldDecode[MT#RNS], rnsDecode: JsonDecode[MT#RNS], ctDecode: JsonDecode[MT#CT], dtnIsString: String =:= MT#DatabaseTableNameImpl): JsonDecode[MockTableFinder[MT]] =
+  implicit def jDecode[MT <: MetaTypes](implicit rnsFieldDecode: FieldDecode[MT#RNS], rnsDecode: JsonDecode[MT#RNS], ctDecode: JsonDecode[MT#CT], dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl): JsonDecode[MockTableFinder[MT]] =
     new JsonDecode[MockTableFinder[MT]] with MetaTypeHelper[MT] {
       private implicit val jdDecode = AutomaticJsonDecodeBuilder[JD[CT]]
       private implicit val jqDecode = AutomaticJsonDecodeBuilder[JQ[RNS, CT]]
@@ -162,8 +162,8 @@ object MockTableFinder {
                       JD(
                         schema,
                         Some(d.orderings).filter(_.nonEmpty),
-                        Some(d.hiddenColumns.map(_.name).toSeq).filter(_.nonEmpty),
-                        Some(d.primaryKeys.map(_.map(_.name))).filter(_.nonEmpty)
+                        Some(d.hiddenColumns.toSeq).filter(_.nonEmpty),
+                        Some(d.primaryKeys).filter(_.nonEmpty)
                       )
                     case q@Q(scope, parent, soql, params@_*) =>
                       JQ(
@@ -196,15 +196,16 @@ class MockTableFinder[MT <: MetaTypes](private val raw: Map[(MT#RNS, String), Th
   private val tables: Map[ScopedResourceName, FinderTableDescription] = raw.iterator.map { case ((scope, rawResourceName), thing) =>
     val converted = thing match {
       case d@D(rawSchema @ _*) =>
+        val hiddenColumns = d.hiddenColumns.map(ColumnName(_))
         Dataset(
           DatabaseTableName(rawResourceName),
           CanonicalName(rawResourceName),
           OrderedMap() ++ rawSchema.iterator.map { case (rawColumnName, ct) =>
             val cn = ColumnName(rawColumnName)
-            DatabaseColumnName[MT#DatabaseColumnNameImpl](rawColumnName) -> DatasetColumnInfo(cn, ct, hidden = d.hiddenColumns(cn))
+            DatabaseColumnName[MT#DatabaseColumnNameImpl](cn.caseFolded) -> DatasetColumnInfo(cn, ct, hidden = hiddenColumns(cn))
           },
-          d.orderings.map { case (col, asc) => Ordering(ColumnName(col), asc) },
-          d.primaryKeys
+          d.orderings.map { case (col, asc) => Ordering(DatabaseColumnName(ColumnName(col).caseFolded), asc) },
+          d.primaryKeys.map(_.map { col => DatabaseColumnName[MT#DatabaseColumnNameImpl](ColumnName(col).caseFolded) })
         )
       case q@Q(scope, parent, soql, params @ _*) =>
         Query(

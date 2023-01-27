@@ -20,6 +20,7 @@ class TableFinderTest extends FunSuite with MustMatchers {
     type ColumnType = String
     type ColumnValue = Nothing
     type DatabaseTableNameImpl = String
+    type DatabaseColumnNameImpl = String
   }
 
   val tables = new MockTableFinder[MT](

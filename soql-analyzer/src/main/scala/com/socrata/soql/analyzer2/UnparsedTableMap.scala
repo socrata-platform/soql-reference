@@ -75,7 +75,7 @@ object UnparsedTableMap {
         }
     }
 
-  private[analyzer2] def asMockTableFinder[MT <: MetaTypes](self: UnparsedTableMap[MT])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl): mocktablefinder.MockTableFinder[MT] = {
+  private[analyzer2] def asMockTableFinder[MT <: MetaTypes](self: UnparsedTableMap[MT])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl): mocktablefinder.MockTableFinder[MT] = {
     new mocktablefinder.MockTableFinder[MT](
       self.underlying.iterator.flatMap { case (rns, resources) =>
         resources.iterator.map { case (rn, desc) =>

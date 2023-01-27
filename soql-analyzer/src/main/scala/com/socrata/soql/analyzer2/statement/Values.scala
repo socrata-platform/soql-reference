@@ -50,6 +50,7 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
         false
     }
 
+  type EffectiveColumnLabel = AutoColumnLabel
   val schema = typeVariedSchema
   def getColumn(cl: ColumnLabel) =
     cl match {

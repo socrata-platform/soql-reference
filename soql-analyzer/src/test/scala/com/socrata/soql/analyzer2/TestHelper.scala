@@ -14,6 +14,7 @@ object TestHelper {
     type ColumnType = TestType
     type ColumnValue = TestValue
     type DatabaseTableNameImpl = String
+    type DatabaseColumnNameImpl = String
   }
 
   val testTypeInfoProjection = TestTypeInfo.metaProject[TestMT]
