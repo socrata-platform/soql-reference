@@ -109,7 +109,7 @@ trait WindowedFunctionCallImpl[MT <: MetaTypes] { this: WindowedFunctionCall[MT]
 }
 
 trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
-  implicit def serialize[MT <: MetaTypes](implicit expr: Writable[Expr[MT]], mf: Writable[MonomorphicFunction[MT#CT]]) = new Writable[WindowedFunctionCall[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit expr: Writable[Expr[MT]], mf: Writable[MonomorphicFunction[MT#ColumnType]]) = new Writable[WindowedFunctionCall[MT]] {
     def writeTo(buffer: WriteBuffer, wfc: WindowedFunctionCall[MT]): Unit = {
       buffer.write(wfc.function)
       buffer.write(wfc.args)
@@ -121,13 +121,13 @@ trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit expr: Readable[Expr[MT]], mf: Readable[MonomorphicFunction[MT#CT]]) = new Readable[WindowedFunctionCall[MT]] {
-    def readFrom(buffer: ReadBuffer): WindowedFunctionCall[MT] = {
-      val function = buffer.read[MonomorphicFunction[MT#CT]]()
-      val args = buffer.read[Seq[Expr[MT]]]()
-      val filter = buffer.read[Option[Expr[MT]]]()
-      val partitionBy = buffer.read[Seq[Expr[MT]]]()
-      val orderBy = buffer.read[Seq[OrderBy[MT]]]()
+  implicit def deserialize[MT <: MetaTypes](implicit expr: Readable[Expr[MT]], mf: Readable[MonomorphicFunction[MT#ColumnType]]): Readable[WindowedFunctionCall[MT]] = new Readable[WindowedFunctionCall[MT]] with ExpressionUniverse[MT] {
+    def readFrom(buffer: ReadBuffer): WindowedFunctionCall = {
+      val function = buffer.read[MonomorphicFunction]()
+      val args = buffer.read[Seq[Expr]]()
+      val filter = buffer.read[Option[Expr]]()
+      val partitionBy = buffer.read[Seq[Expr]]()
+      val orderBy = buffer.read[Seq[OrderBy]]()
       val frame = buffer.read[Option[Frame]]()(Readable.option(Frame.serialize))
       val position = buffer.read[FuncallPositionInfo]()
       WindowedFunctionCall(

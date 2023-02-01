@@ -8,8 +8,8 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.typechecker.HasDoc
 
-trait VirtualColumnImpl[MT <: MetaTypes] extends LabelHelper[MT] { this: VirtualColumn[MT] =>
-  type Self[MT <: MetaTypes] = Column[MT]
+trait VirtualColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: VirtualColumn[MT] =>
+  type Self[MT <: MetaTypes] = VirtualColumn[MT]
 
   def isAggregated = false
   def isWindowed = false
@@ -49,7 +49,7 @@ trait VirtualColumnImpl[MT <: MetaTypes] extends LabelHelper[MT] { this: Virtual
 }
 
 trait OVirtualColumnImpl { this: VirtualColumn.type =>
-  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#CT]) = new Writable[VirtualColumn[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#ColumnType]) = new Writable[VirtualColumn[MT]] {
     def writeTo(buffer: WriteBuffer, c: VirtualColumn[MT]): Unit = {
       buffer.write(c.table)
       buffer.write(c.column)
@@ -58,7 +58,7 @@ trait OVirtualColumnImpl { this: VirtualColumn.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#CT]): Readable[VirtualColumn[MT]] = new Readable[VirtualColumn[MT]] with MetaTypeHelper[MT] with LabelHelper[MT] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#ColumnType]): Readable[VirtualColumn[MT]] = new Readable[VirtualColumn[MT]] with LabelUniverse[MT] {
     def readFrom(buffer: ReadBuffer): VirtualColumn[MT] = {
       VirtualColumn(
         table = buffer.read[AutoTableLabel](),

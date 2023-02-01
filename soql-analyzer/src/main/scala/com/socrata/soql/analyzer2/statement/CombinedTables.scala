@@ -71,7 +71,7 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
 }
 
 trait OCombinedTablesImpl { this: CombinedTables.type =>
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[CombinedTables[MT]] =
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#ResourceNameScope], ctWritable: Writable[MT#ColumnType], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[CombinedTables[MT]] =
     new Writable[CombinedTables[MT]] {
       def writeTo(buffer: WriteBuffer, ct: CombinedTables[MT]): Unit = {
         buffer.write(ct.op)
@@ -80,7 +80,7 @@ trait OCombinedTablesImpl { this: CombinedTables.type =>
       }
     }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[CombinedTables[MT]] =
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope], ctReadable: Readable[MT#ColumnType], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[CombinedTables[MT]] =
     new Readable[CombinedTables[MT]] {
       def readFrom(buffer: ReadBuffer): CombinedTables[MT] = {
         CombinedTables(

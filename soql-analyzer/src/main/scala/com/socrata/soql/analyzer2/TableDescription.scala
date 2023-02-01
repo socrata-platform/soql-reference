@@ -19,12 +19,12 @@ trait TableDescriptionLike {
   val hiddenColumns: Set[ColumnName]
 }
 
-sealed trait TableDescription[MT <: MetaTypes] extends TableDescriptionLike with MetaTypeHelper[MT] with LabelHelper[MT] {
-  private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#RNS])(implicit ev: ChangesOnlyRNS[MT, MT2]): TableDescription[MT2]
+sealed trait TableDescription[MT <: MetaTypes] extends TableDescriptionLike with LabelUniverse[MT] {
+  private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): TableDescription[MT2]
   private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
     tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
     columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
-  )(implicit ev: ChangesOnlyLabels[MT, MT2]): TableDescription[MT2]
+  )(implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]): TableDescription[MT2]
 
   def asUnparsedTableDescription: UnparsedTableDescription[MT]
 }
@@ -88,13 +88,13 @@ object TableDescription {
 
     require(ordering.forall { o => columns.contains(o.column) })
 
-    private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#RNS])(implicit ev: ChangesOnlyRNS[MT, MT2]): TableDescription[MT2] =
+    private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): TableDescription[MT2] =
       this.asInstanceOf[TableDescription[MT2]] // SAFETY: We only care about the NameImpls and ColumnType, neither of which are changing
 
     private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
       tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
       columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
-    )(implicit ev: ChangesOnlyLabels[MT, MT2]): Dataset[MT2] = {
+    )(implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]): Dataset[MT2] = {
       Dataset[MT2](
         tableName(name),
         canonicalName,
@@ -123,7 +123,7 @@ object TableDescription {
     parameters: Map[HoleName, MT#ColumnType],
     hiddenColumns: Set[ColumnName]
   ) extends TableDescription[MT] {
-    private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#RNS])(implicit ev: ChangesOnlyRNS[MT, MT2]): Query[MT2] =
+    private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): Query[MT2] =
       copy(
         scope = scopeMap(scope),
         parameters = parameters.asInstanceOf // SAFETY: ColumnType isn't changing
@@ -132,7 +132,7 @@ object TableDescription {
     private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
       tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
       columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
-    )(implicit ev: ChangesOnlyLabels[MT, MT2]): Query[MT2] =
+    )(implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]): Query[MT2] =
       this.asInstanceOf[Query[MT2]] // SAFETY: ColumnType isn't changing
 
     def asUnparsedTableDescription =
@@ -147,16 +147,16 @@ object TableDescription {
     parameters: OrderedMap[HoleName, MT#ColumnType],
     hiddenColumns: Set[ColumnName]
   ) extends TableDescription[MT] {
-    private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#RNS])(implicit ev: ChangesOnlyRNS[MT, MT2]): TableFunction[MT2] =
+    private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): TableFunction[MT2] =
       copy(
         scope = scopeMap(scope),
-        parameters = parameters.asInstanceOf // SAFET: ColumnType isn't changing
+        parameters = parameters.asInstanceOf // SAFETY: ColumnType isn't changing
       )
 
     private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
       tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
       columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
-    )(implicit ev: ChangesOnlyLabels[MT, MT2]): TableFunction[MT2] =
+    )(implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]): TableFunction[MT2] =
       this.asInstanceOf[TableFunction[MT2]] // SAFETY: ColumnType isn't changing
 
     def asUnparsedTableDescription =

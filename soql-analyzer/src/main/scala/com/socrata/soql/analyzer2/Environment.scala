@@ -9,24 +9,24 @@ import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName}
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
-case class LabelEntry[MT <: MetaTypes](label: ColumnLabel[MT#DatabaseColumnNameImpl], @JsonKey("type") typ: MT#CT)
+case class LabelEntry[MT <: MetaTypes](label: ColumnLabel[MT#DatabaseColumnNameImpl], @JsonKey("type") typ: MT#ColumnType)
 object LabelEntry {
-  implicit def jEncode[MT <: MetaTypes](implicit encLabel: JsonEncode[MT#DatabaseColumnNameImpl], encCT: JsonEncode[MT#CT]) = AutomaticJsonEncodeBuilder[LabelEntry[MT]]
+  implicit def jEncode[MT <: MetaTypes](implicit encLabel: JsonEncode[MT#DatabaseColumnNameImpl], encCT: JsonEncode[MT#ColumnType]) = AutomaticJsonEncodeBuilder[LabelEntry[MT]]
 
-  implicit def jDecode[MT <: MetaTypes](implicit decLabel: JsonDecode[MT#DatabaseColumnNameImpl], decCT: JsonDecode[MT#CT]) = AutomaticJsonDecodeBuilder[LabelEntry[MT]]
+  implicit def jDecode[MT <: MetaTypes](implicit decLabel: JsonDecode[MT#DatabaseColumnNameImpl], decCT: JsonDecode[MT#ColumnType]) = AutomaticJsonDecodeBuilder[LabelEntry[MT]]
 
-  implicit def serialize[MT <: MetaTypes](implicit encLabel: Writable[MT#DatabaseColumnNameImpl], encCT: Writable[MT#CT]) = new Writable[LabelEntry[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit encLabel: Writable[MT#DatabaseColumnNameImpl], encCT: Writable[MT#ColumnType]) = new Writable[LabelEntry[MT]] {
     def writeTo(buffer: WriteBuffer, ne: LabelEntry[MT]): Unit = {
       buffer.write(ne.label)
       buffer.write(ne.typ)
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit decLabel: Readable[MT#DatabaseColumnNameImpl], decCT: Readable[MT#CT]) = new Readable[LabelEntry[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit decLabel: Readable[MT#DatabaseColumnNameImpl], decCT: Readable[MT#ColumnType]) = new Readable[LabelEntry[MT]] with LabelUniverse[MT] {
     def readFrom(buffer: ReadBuffer): LabelEntry[MT] = {
       LabelEntry(
-        buffer.read[ColumnLabel[MT#DatabaseColumnNameImpl]](),
-        buffer.read[MT#CT]()
+        buffer.read[ColumnLabel](),
+        buffer.read[CT]()
       )
     }
   }
@@ -53,8 +53,8 @@ object NameEntry {
   }
 }
 
-case class VirtualEntry[MT <: MetaTypes](name: ColumnName, label: AutoColumnLabel, typ: MT#CT)
-case class PhysicalEntry[MT <: MetaTypes](name: ColumnName, label: DatabaseColumnName[MT#DatabaseColumnNameImpl], typ: MT#CT)
+case class VirtualEntry[MT <: MetaTypes](name: ColumnName, label: AutoColumnLabel, typ: MT#ColumnType)
+case class PhysicalEntry[MT <: MetaTypes](name: ColumnName, label: DatabaseColumnName[MT#DatabaseColumnNameImpl], typ: MT#ColumnType)
 
 sealed trait ErasureWorkaround
 object ErasureWorkaround {
@@ -68,7 +68,7 @@ object ScopeName {
   case class Explicit(name: ResourceName) extends ScopeName
 }
 
-sealed trait Scope[MT <: MetaTypes] extends LabelHelper[MT] {
+sealed trait Scope[MT <: MetaTypes] extends LabelUniverse[MT] {
   val label: TableLabel
   // def types = schemaByName.iterator.map { case (_, e) => e.typ }.toSeq
 
@@ -77,7 +77,7 @@ sealed trait Scope[MT <: MetaTypes] extends LabelHelper[MT] {
 object Scope {
   final class Virtual[MT <: MetaTypes] (
     val label: AutoTableLabel,
-    schema: OrderedMap[AutoColumnLabel, NameEntry[MT#CT]]
+    schema: OrderedMap[AutoColumnLabel, NameEntry[MT#ColumnType]]
   ) extends Scope[MT] {
     val schemaByName = OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (name, VirtualEntry[MT](name, label, typ)) }
     val schemaByLabel = OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (label, VirtualEntry[MT](name, label, typ)) }
@@ -92,7 +92,7 @@ object Scope {
   final class Physical[MT <: MetaTypes] (
     val tableName: DatabaseTableName[MT#DatabaseTableNameImpl],
     val label: AutoTableLabel,
-    schema: OrderedMap[DatabaseColumnName[MT#DatabaseColumnNameImpl], NameEntry[MT#CT]]
+    schema: OrderedMap[DatabaseColumnName[MT#DatabaseColumnNameImpl], NameEntry[MT#ColumnType]]
   ) extends Scope[MT] {
     val schemaByName = OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (name, PhysicalEntry[MT](name, label, typ)) }
     val schemaByLabel = OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (label, PhysicalEntry[MT](name, label, typ)) }
@@ -153,8 +153,8 @@ object Environment {
 
   sealed abstract class LookupResult[MT <: MetaTypes]
   object LookupResult {
-    case class Virtual[MT <: MetaTypes](table: AutoTableLabel, column: AutoColumnLabel, typ: MT#CT) extends LookupResult[MT]
-    case class Physical[MT <: MetaTypes](tableName: DatabaseTableName[MT#DatabaseTableNameImpl], table: AutoTableLabel, column: DatabaseColumnName[MT#DatabaseColumnNameImpl], typ: MT#CT) extends LookupResult[MT]
+    case class Virtual[MT <: MetaTypes](table: AutoTableLabel, column: AutoColumnLabel, typ: MT#ColumnType) extends LookupResult[MT]
+    case class Physical[MT <: MetaTypes](tableName: DatabaseTableName[MT#DatabaseTableNameImpl], table: AutoTableLabel, column: DatabaseColumnName[MT#DatabaseColumnNameImpl], typ: MT#ColumnType) extends LookupResult[MT]
   }
 
   private class EmptyEnvironment[MT <: MetaTypes](parent: Option[Environment[MT]]) extends Environment(parent) with MetaTypeHelper[MT] {

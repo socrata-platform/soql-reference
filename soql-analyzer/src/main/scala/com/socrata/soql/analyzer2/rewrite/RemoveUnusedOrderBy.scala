@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2.rewrite
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 
-class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends SoQLAnalyzerUniverse[MT] {
+class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[MT] {
   def rewriteStatement(stmt: Statement, callerCaresAboutOrder: Boolean): Statement = {
     stmt match {
       case CombinedTables(op, left, right) =>

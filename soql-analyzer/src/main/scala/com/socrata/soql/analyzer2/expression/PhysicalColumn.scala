@@ -8,8 +8,8 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.typechecker.HasDoc
 
-trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelHelper[MT] { this: PhysicalColumn[MT] =>
-  type Self[MT <: MetaTypes] = Column[MT]
+trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: PhysicalColumn[MT] =>
+  type Self[MT <: MetaTypes] = PhysicalColumn[MT]
 
   def isAggregated = false
   def isWindowed = false
@@ -51,7 +51,7 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelHelper[MT] { this: Physic
 }
 
 trait OPhysicalColumnImpl { this: PhysicalColumn.type =>
-  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#CT], writableDTN : Writable[MT#DatabaseTableNameImpl], writableDCN : Writable[MT#DatabaseColumnNameImpl]): Writable[PhysicalColumn[MT]] = new Writable[PhysicalColumn[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#ColumnType], writableDTN : Writable[MT#DatabaseTableNameImpl], writableDCN : Writable[MT#DatabaseColumnNameImpl]): Writable[PhysicalColumn[MT]] = new Writable[PhysicalColumn[MT]] {
     def writeTo(buffer: WriteBuffer, c: PhysicalColumn[MT]): Unit = {
       buffer.write(c.physicalTable)
       buffer.write(c.table)
@@ -61,7 +61,7 @@ trait OPhysicalColumnImpl { this: PhysicalColumn.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#CT], readableDTN : Readable[MT#DatabaseTableNameImpl], readableDCN : Readable[MT#DatabaseColumnNameImpl]): Readable[PhysicalColumn[MT]] = new Readable[PhysicalColumn[MT]] with MetaTypeHelper[MT] with LabelHelper[MT] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#ColumnType], readableDTN : Readable[MT#DatabaseTableNameImpl], readableDCN : Readable[MT#DatabaseColumnNameImpl]): Readable[PhysicalColumn[MT]] = new Readable[PhysicalColumn[MT]] with LabelUniverse[MT] {
     def readFrom(buffer: ReadBuffer): PhysicalColumn[MT] = {
       PhysicalColumn(
         physicalTable = buffer.read[DatabaseTableName](),

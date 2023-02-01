@@ -8,7 +8,7 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.functions.MonomorphicFunction
 
-class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends SoQLAnalyzerUniverse[MT] {
+class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends StatementUniverse[MT] {
   def rewriteStatement(stmt: Statement, wantColumns: Boolean): Statement = {
     stmt match {
       case ct@CombinedTables(op, left, right) =>

@@ -21,17 +21,17 @@ trait LiteralValueImpl[MT <: MetaTypes] { this: LiteralValue[MT] =>
 }
 
 trait OLiteralValueImpl { this: LiteralValue.type =>
-  implicit def serialize[MT <: MetaTypes](implicit writableCV: Writable[MT#CV]) = new Writable[LiteralValue[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableCV: Writable[MT#ColumnValue]) = new Writable[LiteralValue[MT]] {
     def writeTo(buffer: WriteBuffer, lv: LiteralValue[MT]): Unit = {
       buffer.write(lv.value)
       buffer.write(lv.position)
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableCV: Readable[MT#CV], ht: HasType[MT#CV, MT#CT]) = new Readable[LiteralValue[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCV: Readable[MT#ColumnValue], ht: HasType[MT#ColumnValue, MT#ColumnType]): Readable[LiteralValue[MT]] = new Readable[LiteralValue[MT]] with MetaTypeHelper[MT] {
     def readFrom(buffer: ReadBuffer): LiteralValue[MT] = {
       LiteralValue(
-        buffer.read[MT#CV]()
+        buffer.read[CV]()
       )(
         buffer.read[AtomicPositionInfo]()
       )

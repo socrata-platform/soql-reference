@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2
 private[analyzer2] case class RewriteDatabaseNamesState[MT1 <: MetaTypes, MT2 <: MetaTypes](
   tableName: DatabaseTableName[MT1#DatabaseTableNameImpl] => DatabaseTableName[MT2#DatabaseTableNameImpl],
   columnName: (DatabaseTableName[MT1#DatabaseTableNameImpl], DatabaseColumnName[MT1#DatabaseColumnNameImpl]) => DatabaseColumnName[MT2#DatabaseColumnNameImpl],
-  val changesOnlyLabels: ChangesOnlyLabels[MT1, MT2]
+  val changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT1, MT2]
 ) {
   type TableLabel1 = TableLabel[MT1#DatabaseTableNameImpl]
   type TableLabel2 = TableLabel[MT2#DatabaseTableNameImpl]

@@ -63,7 +63,7 @@ trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
 }
 
 trait OFromSingleRowImpl { this: FromSingleRow.type =>
-  implicit def serialize[MT <: MetaTypes](implicit rnsWRitable: Writable[MT#RNS]): Writable[FromSingleRow[MT]] =
+  implicit def serialize[MT <: MetaTypes](implicit rnsWRitable: Writable[MT#ResourceNameScope]): Writable[FromSingleRow[MT]] =
     new Writable[FromSingleRow[MT]] {
       def writeTo(buffer: WriteBuffer, fsr: FromSingleRow[MT]): Unit = {
         buffer.write(fsr.label)
@@ -71,7 +71,7 @@ trait OFromSingleRowImpl { this: FromSingleRow.type =>
       }
     }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS]): Readable[FromSingleRow[MT]] =
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope]): Readable[FromSingleRow[MT]] =
     new Readable[FromSingleRow[MT]] {
       def readFrom(buffer: ReadBuffer): FromSingleRow[MT] = {
         FromSingleRow(

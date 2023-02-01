@@ -28,10 +28,10 @@ object SoQLAnalyzer {
 
 class SoQLAnalyzer[MT <: MetaTypes] private (
   typeInfo: TypeInfoMetaProjection[MT],
-  functionInfo: FunctionInfo[MT#CT],
+  functionInfo: FunctionInfo[MT#ColumnType],
   aggregateMerge: Option[(ColumnName, Expr[MT]) => Option[Expr[MT]]]
-) extends SoQLAnalyzerUniverse[MT] {
-  def this(typeInfo: TypeInfo2[MT#CT, MT#CV], functionInfo: FunctionInfo[MT#CT]) =
+) extends StatementUniverse[MT] {
+  def this(typeInfo: TypeInfo2[MT#ColumnType, MT#ColumnValue], functionInfo: FunctionInfo[MT#ColumnType]) =
     this(typeInfo.metaProject[MT], functionInfo, None)
 
   type ScopedResourceName = com.socrata.soql.analyzer2.ScopedResourceName[RNS]

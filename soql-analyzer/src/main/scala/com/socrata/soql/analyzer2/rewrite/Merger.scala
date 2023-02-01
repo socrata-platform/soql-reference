@@ -9,7 +9,7 @@ import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.HasDoc
 import com.socrata.soql.analyzer2._
 
-class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#CT]) extends SoQLAnalyzerUniverse[MT] with SoQLAnalyzerExpressions[MT] with LabelHelper[MT] {
+class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends StatementUniverse[MT] {
   private implicit val hd = new HasDoc[CV] {
     override def docOf(v: CV) = com.socrata.prettyprint.Doc(v.toString)
   }

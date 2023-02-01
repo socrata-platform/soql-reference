@@ -80,7 +80,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
 }
 
 trait OFromTableImpl { this: FromTable.type =>
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[FromTable[MT]] = new Writable[FromTable[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#ResourceNameScope], ctWritable: Writable[MT#ColumnType], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[FromTable[MT]] = new Writable[FromTable[MT]] {
     def writeTo(buffer: WriteBuffer, from: FromTable[MT]): Unit = {
       buffer.write(from.tableName)
       buffer.write(from.definiteResourceName)
@@ -91,7 +91,7 @@ trait OFromTableImpl { this: FromTable.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[FromTable[MT]] = new Readable[FromTable[MT]] with MetaTypeHelper[MT] with LabelHelper[MT] {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope], ctReadable: Readable[MT#ColumnType], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[FromTable[MT]] = new Readable[FromTable[MT]] with LabelUniverse[MT] {
     def readFrom(buffer: ReadBuffer): FromTable[MT] = {
       FromTable(
         tableName = buffer.read[DatabaseTableName](),

@@ -181,7 +181,7 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
 }
 
 trait OJoinImpl { this: Join.type =>
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[Join[MT]] = new Writable[Join[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#ResourceNameScope], ctWritable: Writable[MT#ColumnType], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[Join[MT]] = new Writable[Join[MT]] {
     val afSer = AtomicFrom.serialize[MT]
 
     def writeTo(buffer: WriteBuffer, join: Join[MT]): Unit = {
@@ -199,7 +199,7 @@ trait OJoinImpl { this: Join.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[Join[MT]] =
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope], ctReadable: Readable[MT#ColumnType], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[Join[MT]] =
     new Readable[Join[MT]] with MetaTypeHelper[MT] {
       val afDer = AtomicFrom.deserialize[MT]
 

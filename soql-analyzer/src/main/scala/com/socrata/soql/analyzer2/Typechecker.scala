@@ -9,15 +9,15 @@ import com.socrata.soql.environment.{ColumnName, HoleName, ResourceName, TableNa
 import com.socrata.soql.typechecker.{TypeInfoMetaProjection, FunctionInfo, FunctionCallTypechecker, Passed, TypeMismatchFailure, HasType}
 
 class Typechecker[MT <: MetaTypes](
-  scope: MT#RNS,
+  scope: MT#ResourceNameScope,
   canonicalName: Option[CanonicalName],
   env: Environment[MT],
   namedExprs: Map[ColumnName, Expr[MT]],
   udfParams: Map[HoleName, Position => Expr[MT]],
-  userParameters: UserParameters[MT#CT, MT#CV],
+  userParameters: UserParameters[MT#ColumnType, MT#ColumnValue],
   typeInfo: TypeInfoMetaProjection[MT],
-  functionInfo: FunctionInfo[MT#CT]
-) extends SoQLAnalyzerUniverse[MT] {
+  functionInfo: FunctionInfo[MT#ColumnType]
+) extends ExpressionUniverse[MT] {
   type Error = TypecheckError[RNS]
   private val TypecheckError = SoQLAnalyzerError.AnalysisError.TypecheckError
   import TypecheckError._

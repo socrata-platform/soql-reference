@@ -17,7 +17,7 @@ import com.socrata.soql.analyzer2
 
 import DocUtils._
 
-sealed abstract class Statement[MT <: MetaTypes] extends MetaTypeHelper[MT] with LabelHelper[MT] {
+sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
   type Self[MT <: MetaTypes] <: Statement[MT]
   def asSelf: Self[MT]
 
@@ -34,7 +34,7 @@ sealed abstract class Statement[MT <: MetaTypes] extends MetaTypeHelper[MT] with
     tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
     // This is given the _original_ database table name
     columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
-  )(implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): Self[MT2] =
+  )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): Self[MT2] =
     doRewriteDatabaseNames(new RewriteDatabaseNamesState[MT2](tableName, columnName, changesOnlyLabels))
 
   /** The names that the SoQLAnalyzer produces aren't necessarily safe
@@ -79,7 +79,7 @@ sealed abstract class Statement[MT <: MetaTypes] extends MetaTypeHelper[MT] with
 }
 
 object Statement {
-  implicit def serialize[MT <: MetaTypes](implicit writableRNS: Writable[MT#RNS], writableCT: Writable[MT#CT], writeableExpr: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[Statement[MT]] = new Writable[Statement[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableRNS: Writable[MT#ResourceNameScope], writableCT: Writable[MT#ColumnType], writeableExpr: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[Statement[MT]] = new Writable[Statement[MT]] {
     def writeTo(buffer: WriteBuffer, stmt: Statement[MT]): Unit = {
       stmt match {
         case s: Select[MT] =>
@@ -98,7 +98,7 @@ object Statement {
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableRNS: Readable[MT#RNS], readableCT: Readable[MT#CT], readableExpr: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[Statement[MT]] = new Readable[Statement[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableRNS: Readable[MT#ResourceNameScope], readableCT: Readable[MT#ColumnType], readableExpr: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[Statement[MT]] = new Readable[Statement[MT]] {
     def readFrom(buffer: ReadBuffer): Statement[MT] = {
       buffer.read[Int]() match {
         case 0 => buffer.read[Select[MT]]()

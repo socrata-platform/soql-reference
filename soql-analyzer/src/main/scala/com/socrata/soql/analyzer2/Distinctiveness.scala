@@ -6,7 +6,7 @@ import com.socrata.soql.collection._
 import com.socrata.soql.typechecker.HasDoc
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
-sealed trait Distinctiveness[MT <: MetaTypes] extends MetaTypeHelper[MT] with LabelHelper[MT] {
+sealed trait Distinctiveness[MT <: MetaTypes] extends LabelUniverse[MT] {
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]): Distinctiveness[MT2]
   private[analyzer2] def doRelabel(state: RelabelState): Distinctiveness[MT]
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Distinctiveness[MT]): Boolean

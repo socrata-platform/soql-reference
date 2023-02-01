@@ -35,7 +35,7 @@ trait SelectListReferenceImpl[MT <: MetaTypes] { this: SelectListReference[MT] =
 }
 
 trait OSelectListReferenceImpl { this: SelectListReference.type =>
-  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#CT]) = new Writable[SelectListReference[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#ColumnType]) = new Writable[SelectListReference[MT]] {
     def writeTo(buffer: WriteBuffer, slr: SelectListReference[MT]): Unit = {
       buffer.write(slr.index)
       buffer.write(slr.isAggregated)
@@ -45,13 +45,13 @@ trait OSelectListReferenceImpl { this: SelectListReference.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#CT]) = new Readable[SelectListReference[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#ColumnType]) = new Readable[SelectListReference[MT]] {
     def readFrom(buffer: ReadBuffer): SelectListReference[MT] = {
       SelectListReference(
         index = buffer.read[Int](),
         isAggregated = buffer.read[Boolean](),
         isWindowed = buffer.read[Boolean](),
-        typ = buffer.read[MT#CT]()
+        typ = buffer.read[MT#ColumnType]()
       )(
         buffer.read[AtomicPositionInfo]()
       )

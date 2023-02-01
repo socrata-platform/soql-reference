@@ -6,7 +6,7 @@ import com.socrata.soql.collection._
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 
-class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isOrderable: MT#CT => Boolean) extends SoQLAnalyzerUniverse[MT] {
+class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isOrderable: MT#ColumnType => Boolean) extends StatementUniverse[MT] {
   def rewriteStatement(stmt: Statement): Statement = {
     stmt match {
       case ct@CombinedTables(op, left, right) =>
@@ -110,6 +110,6 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
 }
 
 object ImposeOrdering {
-  def apply[MT <: MetaTypes](labelProvider: LabelProvider, isOrderable: MT#CT => Boolean, stmt: Statement[MT]): Statement[MT] =
+  def apply[MT <: MetaTypes](labelProvider: LabelProvider, isOrderable: MT#ColumnType => Boolean, stmt: Statement[MT]): Statement[MT] =
     new ImposeOrdering[MT](labelProvider, isOrderable).rewriteStatement(stmt)
 }

@@ -42,7 +42,7 @@ trait TypeInfo2[Type, Value] extends TypeInfoCommon[Type, Value] {
   ): TypeInfoMetaProjection[MT]
 }
 
-abstract class TypeInfoMetaProjection[MT <: analyzer2.MetaTypes] extends analyzer2.MetaTypeHelper[MT] with TypeInfoCommon[MT#CT, MT#CV] {
+abstract class TypeInfoMetaProjection[MT <: analyzer2.MetaTypes] extends analyzer2.MetaTypeHelper[MT] with TypeInfoCommon[MT#ColumnType, MT#ColumnValue] {
   val unproject: TypeInfo2[CT, CV]
 
   val hasType: HasType[CV, CT]

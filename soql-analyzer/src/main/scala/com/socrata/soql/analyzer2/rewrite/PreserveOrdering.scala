@@ -8,7 +8,7 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.functions.MonomorphicFunction
 
-class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extends MetaTypeHelper[MT] with SoQLAnalyzerUniverse[MT] {
+class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extends StatementUniverse[MT] {
   // "wantOutputOrdered" == "if this statement can be rewritten to
   // preserve the ordering of its underlying query, do so".
   // "wantOrderingColumns" == "The caller needs column from this table

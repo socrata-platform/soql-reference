@@ -4,7 +4,7 @@ import com.socrata.soql.collection._
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.analyzer2
 
-class AddLimitOffset[MT <: MetaTypes] private (labelProvider: LabelProvider) extends SoQLAnalyzerUniverse[MT] {
+class AddLimitOffset[MT <: MetaTypes] private (labelProvider: LabelProvider) extends StatementUniverse[MT] {
   def rewriteStatement(stmt: Statement, desiredLimit: Option[BigInt], desiredOffset: Option[BigInt]): Statement = {
     stmt match {
       case CombinedTables(_, _, _) | Values(_, _) =>

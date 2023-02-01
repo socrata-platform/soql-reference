@@ -23,17 +23,17 @@ trait NullLiteralImpl[MT <: MetaTypes] { this: NullLiteral[MT] =>
 }
 
 trait ONullLiteralImpl { this: NullLiteral.type =>
-  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#CT]) = new Writable[NullLiteral[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#ColumnType]) = new Writable[NullLiteral[MT]] {
     def writeTo(buffer: WriteBuffer, nl: NullLiteral[MT]): Unit = {
       buffer.write(nl.typ)
       buffer.write(nl.position)
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#CT]) = new Readable[NullLiteral[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#ColumnType]) = new Readable[NullLiteral[MT]] {
     def readFrom(buffer: ReadBuffer): NullLiteral[MT] = {
       NullLiteral(
-        buffer.read[MT#CT]()
+        buffer.read[MT#ColumnType]()
       )(
         buffer.read[AtomicPositionInfo]()
       )

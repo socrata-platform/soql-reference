@@ -56,7 +56,7 @@ trait FunctionCallImpl[MT <: MetaTypes] { this: FunctionCall[MT] =>
 }
 
 trait OFunctionCallImpl { this: FunctionCall.type =>
-  implicit def serialize[MT <: MetaTypes](implicit writableExpr: Writable[Expr[MT]], mf: Writable[MonomorphicFunction[MT#CT]]): Writable[FunctionCall[MT]] = new Writable[FunctionCall[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableExpr: Writable[Expr[MT]], mf: Writable[MonomorphicFunction[MT#ColumnType]]): Writable[FunctionCall[MT]] = new Writable[FunctionCall[MT]] {
     def writeTo(buffer: WriteBuffer, fc: FunctionCall[MT]): Unit = {
       buffer.write(fc.function)
       buffer.write(fc.args)
@@ -64,10 +64,10 @@ trait OFunctionCallImpl { this: FunctionCall.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableExpr: Readable[Expr[MT]], mf: Readable[MonomorphicFunction[MT#CT]]): Readable[FunctionCall[MT]] = new Readable[FunctionCall[MT]] {
-    def readFrom(buffer: ReadBuffer): FunctionCall[MT] = {
-      val function = buffer.read[MonomorphicFunction[MT#CT]]()
-      val args = buffer.read[Seq[Expr[MT]]]()
+  implicit def deserialize[MT <: MetaTypes](implicit readableExpr: Readable[Expr[MT]], mf: Readable[MonomorphicFunction[MT#ColumnType]]): Readable[FunctionCall[MT]] = new Readable[FunctionCall[MT]] with ExpressionUniverse[MT] {
+    def readFrom(buffer: ReadBuffer): FunctionCall = {
+      val function = buffer.read[MonomorphicFunction]()
+      val args = buffer.read[Seq[Expr]]()
       val position = buffer.read[FuncallPositionInfo]()
       FunctionCall(function, args)(position)
     }

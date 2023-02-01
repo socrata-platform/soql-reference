@@ -15,7 +15,7 @@ import com.socrata.soql.analyzer2
 
 import DocUtils._
 
-sealed abstract class From[MT <: MetaTypes] extends MetaTypeHelper[MT] with LabelHelper[MT] {
+sealed abstract class From[MT <: MetaTypes] extends LabelUniverse[MT] {
   type Self[MT <: MetaTypes] <: From[MT]
   def asSelf: Self[MT]
 
@@ -84,7 +84,7 @@ sealed abstract class From[MT <: MetaTypes] extends MetaTypeHelper[MT] with Labe
 }
 
 object From {
-  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#RNS], ctWritable: Writable[MT#CT], ev: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[From[MT]] = new Writable[From[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#ResourceNameScope], ctWritable: Writable[MT#ColumnType], ev: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[From[MT]] = new Writable[From[MT]] {
     def writeTo(buffer: WriteBuffer, from: From[MT]): Unit = {
       from match {
         case j: Join[MT] =>
@@ -103,7 +103,7 @@ object From {
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#RNS], ctReadable: Readable[MT#CT], ev: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[From[MT]] = new Readable[From[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope], ctReadable: Readable[MT#ColumnType], ev: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[From[MT]] = new Readable[From[MT]] {
     def readFrom(buffer: ReadBuffer): From[MT] = {
       buffer.read[Int]() match {
         case 0 => buffer.read[Join[MT]]()
@@ -132,10 +132,10 @@ object AtomicFrom extends from.OAtomicFromImpl
 
 case class FromTable[MT <: MetaTypes](
   tableName: DatabaseTableName[MT#DatabaseTableNameImpl],
-  definiteResourceName: ScopedResourceName[MT#RNS],
+  definiteResourceName: ScopedResourceName[MT#ResourceNameScope],
   alias: Option[ResourceName],
   label: AutoTableLabel,
-  columns: OrderedMap[DatabaseColumnName[MT#DatabaseColumnNameImpl], NameEntry[MT#CT]],
+  columns: OrderedMap[DatabaseColumnName[MT#DatabaseColumnNameImpl], NameEntry[MT#ColumnType]],
   primaryKeys: Seq[Seq[DatabaseColumnName[MT#DatabaseColumnNameImpl]]]
 ) extends AtomicFrom[MT] with from.FromTableImpl[MT]
 object FromTable extends from.OFromTableImpl
@@ -147,7 +147,7 @@ object FromTable extends from.OFromTableImpl
 case class FromStatement[MT <: MetaTypes](
   statement: Statement[MT],
   label: AutoTableLabel,
-  resourceName: Option[ScopedResourceName[MT#RNS]],
+  resourceName: Option[ScopedResourceName[MT#ResourceNameScope]],
   alias: Option[ResourceName]
 ) extends AtomicFrom[MT] with from.FromStatementImpl[MT]
 object FromStatement extends from.OFromStatementImpl

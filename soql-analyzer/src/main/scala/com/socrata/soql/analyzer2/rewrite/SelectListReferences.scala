@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2.rewrite
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 
-class SelectListReferences[MT <: MetaTypes] private () extends SoQLAnalyzerUniverse[MT] {
+class SelectListReferences[MT <: MetaTypes] private () extends StatementUniverse[MT] {
   abstract class Transform {
     def rewriteSelect(select: Select): Select
 

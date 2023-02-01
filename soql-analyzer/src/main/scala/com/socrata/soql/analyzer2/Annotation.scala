@@ -15,5 +15,5 @@ object Annotation {
   case class ColumnRef[MT <: MetaTypes](table: TableLabel[MT#DatabaseTableNameImpl], label: ColumnLabel[MT#DatabaseColumnNameImpl]) extends Annotation[MT]
   case class SelectListDefinition[MT <: MetaTypes](idx: Int) extends Annotation[MT]
   case class SelectListReference[MT <: MetaTypes](idx: Int) extends Annotation[MT]
-  case class Typed[MT <: MetaTypes](typ: MT#CT) extends Annotation[MT]
+  case class Typed[MT <: MetaTypes](typ: MT#ColumnType) extends Annotation[MT]
 }

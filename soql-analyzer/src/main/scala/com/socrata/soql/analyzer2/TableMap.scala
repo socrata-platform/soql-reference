@@ -11,13 +11,13 @@ import com.socrata.soql.environment.{ResourceName, ColumnName}
 import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.analyzer2
 
-trait TableMapLike[MT <: MetaTypes] extends MetaTypeHelper[MT] with LabelHelper[MT] {
+trait TableMapLike[MT <: MetaTypes] extends LabelUniverse[MT] {
   type Self[MT <: MetaTypes] <: TableMapLike[MT]
 
   def rewriteDatabaseNames[MT2 <: MetaTypes](
     tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
     columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
-  )(implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): Self[MT2]
+  )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): Self[MT2]
 }
 
 class TableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[MT#ResourceNameScope, Map[ResourceName, TableDescription[MT]]]) extends TableMapLike[MT] {
@@ -80,7 +80,7 @@ class TableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[
   def rewriteDatabaseNames[MT2 <: MetaTypes](
     tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
     columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
-  )(implicit changesOnlyLabels: ChangesOnlyLabels[MT, MT2]): TableMap[MT2] = {
+  )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): TableMap[MT2] = {
     new TableMap(underlying.iterator.map { case (rns, m) =>
       changesOnlyLabels.convertRNS(rns) -> m.iterator.map { case (rn, ptd) =>
         rn -> ptd.rewriteDatabaseNames(tableName, columnName)
@@ -99,7 +99,7 @@ object TableMap {
       def encode(t: TableMap[MT]) = JsonEncode.toJValue(t.asUnparsedTableMap)
     }
 
-  private [analyzer2] def jsonDecode[MT <: MetaTypes](parameters: AbstractParser.Parameters)(implicit decRNS: JsonDecode[MT#RNS], decUnparsed: JsonDecode[UnparsedTableDescription[MT]]): JsonDecode[TableMap[MT]] =
+  private [analyzer2] def jsonDecode[MT <: MetaTypes](parameters: AbstractParser.Parameters)(implicit decRNS: JsonDecode[MT#ResourceNameScope], decUnparsed: JsonDecode[UnparsedTableDescription[MT]]): JsonDecode[TableMap[MT]] =
     new JsonDecode[TableMap[MT]] with MetaTypeHelper[MT] {
       // this can't just go via UnparsedTableMap for error-tracking
       // reasons.  We have to use the TableDescription

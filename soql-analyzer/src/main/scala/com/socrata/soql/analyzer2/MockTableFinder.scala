@@ -88,7 +88,7 @@ case class U[+RNS, CT](scope: RNS, soql: String, params: (String, CT)*) extends 
 
 object MockTableFinder {
   def empty[MT <: MetaTypes](implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) = new MockTableFinder[MT](Map.empty)
-  def apply[MT <: MetaTypes](items: ((MT#RNS, String), Thing[MT#RNS, MT#CT])*)(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) = new MockTableFinder[MT](items.toMap)
+  def apply[MT <: MetaTypes](items: ((MT#ResourceNameScope, String), Thing[MT#ResourceNameScope, MT#ColumnType])*)(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) = new MockTableFinder[MT](items.toMap)
   def apply[MT <: MetaTypes](items: UnparsedFoundTables[MT])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) = UnparsedTableMap.asMockTableFinder(items.tableMap)
   def apply[MT <: MetaTypes](items: FoundTables[MT])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl): MockTableFinder[MT] = this(items.asUnparsedFoundTables)
 
@@ -97,7 +97,7 @@ object MockTableFinder {
   private case class JQ[+RNS,+CT](scope: Option[RNS], parent: String, soql: String, params: Map[String, CT], canonicalName: Option[String], hiddenColumns: Option[Seq[String]]) extends JThing[RNS, CT]
   private case class JU[+RNS,+CT](scope: Option[RNS], soql: String, params: Seq[(String, CT)], canonicalName: Option[String], hiddenColumns: Option[Seq[String]]) extends JThing[RNS, CT]
 
-  implicit def jDecode[MT <: MetaTypes](implicit rnsFieldDecode: FieldDecode[MT#RNS], rnsDecode: JsonDecode[MT#RNS], ctDecode: JsonDecode[MT#CT], dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl): JsonDecode[MockTableFinder[MT]] =
+  implicit def jDecode[MT <: MetaTypes](implicit rnsFieldDecode: FieldDecode[MT#ResourceNameScope], rnsDecode: JsonDecode[MT#ResourceNameScope], ctDecode: JsonDecode[MT#ColumnType], dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl): JsonDecode[MockTableFinder[MT]] =
     new JsonDecode[MockTableFinder[MT]] with MetaTypeHelper[MT] {
       private implicit val jdDecode = AutomaticJsonDecodeBuilder[JD[CT]]
       private implicit val jqDecode = AutomaticJsonDecodeBuilder[JQ[RNS, CT]]
@@ -137,7 +137,7 @@ object MockTableFinder {
         }
     }
 
-  implicit def jEncode[MT <: MetaTypes](implicit rnsFieldEncode: FieldEncode[MT#RNS], rnsEncode: JsonEncode[MT#RNS], ctEncode: JsonEncode[MT#CT]): JsonEncode[MockTableFinder[MT]] =
+  implicit def jEncode[MT <: MetaTypes](implicit rnsFieldEncode: FieldEncode[MT#ResourceNameScope], rnsEncode: JsonEncode[MT#ResourceNameScope], ctEncode: JsonEncode[MT#ColumnType]): JsonEncode[MockTableFinder[MT]] =
     new JsonEncode[MockTableFinder[MT]] with MetaTypeHelper[MT] {
       private implicit val jdEncode = AutomaticJsonEncodeBuilder[JD[CT]]
       private implicit val jqEncode = AutomaticJsonEncodeBuilder[JQ[RNS, CT]]
@@ -192,7 +192,7 @@ object MockTableFinder {
     }
 }
 
-class MockTableFinder[MT <: MetaTypes](private val raw: Map[(MT#RNS, String), Thing[MT#RNS, MT#CT]])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) extends TableFinder[MT] {
+class MockTableFinder[MT <: MetaTypes](private val raw: Map[(MT#ResourceNameScope, String), Thing[MT#ResourceNameScope, MT#ColumnType]])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) extends TableFinder[MT] {
   private val tables: Map[ScopedResourceName, FinderTableDescription] = raw.iterator.map { case ((scope, rawResourceName), thing) =>
     val converted = thing match {
       case d@D(rawSchema @ _*) =>
@@ -254,7 +254,7 @@ class MockTableFinder[MT <: MetaTypes](private val raw: Map[(MT#RNS, String), Th
     }
   }
 
-  def apply(names: (MT#RNS, String)*): Result[TableMap] = {
+  def apply(names: (MT#ResourceNameScope, String)*): Result[TableMap] = {
     val r = names.foldLeft(TableMap.empty[MT]) { (tableMap, scopeName) =>
       val (scope, n) = scopeName
       val name = ResourceName(n)

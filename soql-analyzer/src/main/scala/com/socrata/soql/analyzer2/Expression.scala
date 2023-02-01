@@ -21,7 +21,7 @@ private[analyzer2] trait HashedExpr { this: Product =>
   override final val hashCode: Int = scala.runtime.ScalaRunTime._hashCode(this)
 }
 
-sealed abstract class Expr[MT <: MetaTypes] extends Product with MetaTypeHelper[MT] with LabelHelper[MT] { this: HashedExpr =>
+sealed abstract class Expr[MT <: MetaTypes] extends Product with LabelUniverse[MT] { this: HashedExpr =>
   type Self[MT <: MetaTypes] <: Expr[MT]
 
   val typ: CT
@@ -52,61 +52,65 @@ sealed abstract class Expr[MT <: MetaTypes] extends Product with MetaTypeHelper[
   final def contains(e: Expr[MT]): Boolean = find(_ == e).isDefined
 }
 object Expr {
-  implicit def serialize[MT <: MetaTypes](implicit writableCT: Writable[MT#CT], writableCV: Writable[MT#CV], writableDTN: Writable[MT#DatabaseTableNameImpl], writableDCN: Writable[MT#DatabaseColumnNameImpl]): Writable[Expr[MT]] = new Writable[Expr[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableCT: Writable[MT#ColumnType], writableCV: Writable[MT#ColumnValue], writableDTN: Writable[MT#DatabaseTableNameImpl], writableDCN: Writable[MT#DatabaseColumnNameImpl]): Writable[Expr[MT]] = new Writable[Expr[MT]] with ExpressionUniverse[MT] {
     implicit val self = this
-    def writeTo(buffer: WriteBuffer, t: Expr[MT]): Unit =
+    def writeTo(buffer: WriteBuffer, t: Expr): Unit =
       t match {
-        case c : PhysicalColumn[MT] =>
+        case c : PhysicalColumn =>
           buffer.write(0)
           buffer.write(c)
-        case c : VirtualColumn[MT] =>
+        case c : VirtualColumn =>
           buffer.write(1)
           buffer.write(c)
-        case slr: SelectListReference[MT] =>
+        case slr: SelectListReference =>
           buffer.write(2)
           buffer.write(slr)
-        case lv: LiteralValue[MT] =>
+        case lv: LiteralValue =>
           buffer.write(3)
           buffer.write(lv)
-        case nl: NullLiteral[MT] =>
+        case nl: NullLiteral =>
           buffer.write(4)
           buffer.write(nl)
-        case fc: FunctionCall[MT] =>
+        case fc: FunctionCall =>
           buffer.write(5)
           buffer.write(fc)
-        case afc: AggregateFunctionCall[MT] =>
+        case afc: AggregateFunctionCall =>
           buffer.write(6)
           buffer.write(afc)
-        case wfc: WindowedFunctionCall[MT] =>
+        case wfc: WindowedFunctionCall =>
           buffer.write(7)
           buffer.write(wfc)
       }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableCT: Readable[MT#CT], readableCV: Readable[MT#CV], hasType: HasType[MT#CV, MT#CT], mf: Readable[MonomorphicFunction[MT#CT]], readableDTN: Readable[MT#DatabaseTableNameImpl], readableDCN: Readable[MT#DatabaseColumnNameImpl]): Readable[Expr[MT]] = new Readable[Expr[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCT: Readable[MT#ColumnType], readableCV: Readable[MT#ColumnValue], hasType: HasType[MT#ColumnValue, MT#ColumnType], mf: Readable[MonomorphicFunction[MT#ColumnType]], readableDTN: Readable[MT#DatabaseTableNameImpl], readableDCN: Readable[MT#DatabaseColumnNameImpl]): Readable[Expr[MT]] = new Readable[Expr[MT]] with ExpressionUniverse[MT] {
     implicit val self = this
-    def readFrom(buffer: ReadBuffer): Expr[MT] =
+    def readFrom(buffer: ReadBuffer): Expr =
       buffer.read[Int]() match {
-        case 0 => buffer.read[PhysicalColumn[MT]]()
-        case 1 => buffer.read[VirtualColumn[MT]]()
-        case 2 => buffer.read[SelectListReference[MT]]()
-        case 3 => buffer.read[LiteralValue[MT]]()
-        case 4 => buffer.read[NullLiteral[MT]]()
-        case 5 => buffer.read[FunctionCall[MT]]()
-        case 6 => buffer.read[AggregateFunctionCall[MT]]()
-        case 7 => buffer.read[WindowedFunctionCall[MT]]()
+        case 0 => buffer.read[PhysicalColumn]()
+        case 1 => buffer.read[VirtualColumn]()
+        case 2 => buffer.read[SelectListReference]()
+        case 3 => buffer.read[LiteralValue]()
+        case 4 => buffer.read[NullLiteral]()
+        case 5 => buffer.read[FunctionCall]()
+        case 6 => buffer.read[AggregateFunctionCall]()
+        case 7 => buffer.read[WindowedFunctionCall]()
         case other => fail("Unknown expression tag " + other)
       }
   }
 }
 
 sealed abstract class AtomicExpr[MT <: MetaTypes] extends Expr[MT] with Product { this: HashedExpr =>
+  type Self[MT <: MetaTypes] <: AtomicExpr[MT]
+
   override val position: AtomicPositionInfo
 }
 
 /********* Column *********/
 
 sealed abstract class Column[MT <: MetaTypes] extends AtomicExpr[MT] { this: HashedExpr =>
+  type Self[MT <: MetaTypes] <: Column[MT]
+
   val table: AutoTableLabel
   val column: ColumnLabel
 }
@@ -115,7 +119,7 @@ final case class PhysicalColumn[MT <: MetaTypes](
   physicalTable: DatabaseTableName[MT#DatabaseTableNameImpl],
   table: AutoTableLabel,
   column: DatabaseColumnName[MT#DatabaseColumnNameImpl],
-  typ: MT#CT
+  typ: MT#ColumnType
 )(
   val position: AtomicPositionInfo
 ) extends
@@ -127,7 +131,7 @@ object PhysicalColumn extends expression.OPhysicalColumnImpl
 final case class VirtualColumn[MT <: MetaTypes](
   table: AutoTableLabel,
   column: AutoColumnLabel,
-  typ: MT#CT
+  typ: MT#ColumnType
 )(
   val position: AtomicPositionInfo
 ) extends
@@ -142,7 +146,7 @@ final case class SelectListReference[MT <: MetaTypes](
   index: Int,
   isAggregated: Boolean,
   isWindowed: Boolean,
-  typ: MT#CT
+  typ: MT#ColumnType
 )(
   val position: AtomicPositionInfo
 ) extends
@@ -161,11 +165,11 @@ sealed abstract class Literal[MT <: MetaTypes]
 /********* Literal value *********/
 
 final case class LiteralValue[MT <: MetaTypes](
-  value: MT#CV
+  value: MT#ColumnValue
 )(
   val position: AtomicPositionInfo
 )(
-  implicit ev: HasType[MT#CV, MT#CT]
+  implicit ev: HasType[MT#ColumnValue, MT#ColumnType]
 ) extends
     Literal[MT]
     with expression.LiteralValueImpl[MT]
@@ -180,7 +184,7 @@ object LiteralValue extends expression.OLiteralValueImpl
 /********* Null literal *********/
 
 final case class NullLiteral[MT <: MetaTypes](
-  typ: MT#CT
+  typ: MT#ColumnType
 )(
   val position: AtomicPositionInfo
 ) extends
@@ -198,7 +202,7 @@ sealed abstract class FuncallLike[MT <: MetaTypes] extends Expr[MT] with Product
 /********* Function call *********/
 
 final case class FunctionCall[MT <: MetaTypes](
-  function: MonomorphicFunction[MT#CT],
+  function: MonomorphicFunction[MT#ColumnType],
   args: Seq[Expr[MT]]
 )(
   val position: FuncallPositionInfo
@@ -211,7 +215,7 @@ object FunctionCall extends expression.OFunctionCallImpl
 /********* Aggregate function call *********/
 
 final case class AggregateFunctionCall[MT <: MetaTypes](
-  function: MonomorphicFunction[MT#CT],
+  function: MonomorphicFunction[MT#ColumnType],
   args: Seq[Expr[MT]],
   distinct: Boolean,
   filter: Option[Expr[MT]]
@@ -229,7 +233,7 @@ object AggregateFunctionCall extends expression.OAggregateFunctionCallImpl
 /********* Windowed function call *********/
 
 final case class WindowedFunctionCall[MT <: MetaTypes](
-  function: MonomorphicFunction[MT#CT],
+  function: MonomorphicFunction[MT#ColumnType],
   args: Seq[Expr[MT]],
   filter: Option[Expr[MT]],
   partitionBy: Seq[Expr[MT]], // is normal right here, or should it be aggregate?

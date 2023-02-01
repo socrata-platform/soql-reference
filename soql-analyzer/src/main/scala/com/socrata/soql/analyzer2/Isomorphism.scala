@@ -41,7 +41,7 @@ private[analyzer2] object IsomorphismState {
     backwardTables: DMap[TableLabel[MT#DatabaseTableNameImpl]],
     forwardColumns: DMap[(Option[TableLabel[MT#DatabaseTableNameImpl]], ColumnLabel[MT#DatabaseColumnNameImpl])],
     backwardColumns: DMap[(Option[TableLabel[MT#DatabaseTableNameImpl]], ColumnLabel[MT#DatabaseColumnNameImpl])]
-  ) extends LabelHelper[MT] {
+  ) extends LabelUniverse[MT] {
     def reverse: View[MT] =
       new View(backwardTables, forwardTables, backwardColumns, forwardColumns)
 
@@ -60,7 +60,7 @@ private[analyzer2] class IsomorphismState[MT <: MetaTypes] private (
   backwardTables: IsomorphismState.DMap[TableLabel[MT#DatabaseTableNameImpl]],
   forwardColumns: IsomorphismState.DMap[(Option[TableLabel[MT#DatabaseTableNameImpl]], ColumnLabel[MT#DatabaseColumnNameImpl])],
   backwardColumns: IsomorphismState.DMap[(Option[TableLabel[MT#DatabaseTableNameImpl]], ColumnLabel[MT#DatabaseColumnNameImpl])]
-) extends LabelHelper[MT] {
+) extends LabelUniverse[MT] {
   def this() = this(new IsomorphismState.DMap,new IsomorphismState.DMap,new IsomorphismState.DMap,new IsomorphismState.DMap)
 
   def finish = new IsomorphismState.View(forwardTables, backwardTables, forwardColumns, backwardColumns)
