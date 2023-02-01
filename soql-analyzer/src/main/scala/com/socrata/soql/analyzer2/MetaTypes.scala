@@ -125,6 +125,9 @@ trait SoQLAnalyzerUniverse[MT <: MetaTypes] extends SoQLAnalyzerExpressions[MT] 
   type CombinedTables = analyzer2.CombinedTables[MT]
   type Values = analyzer2.Values[MT]
 
+  type Distinctiveness = analyzer2.Distinctiveness[MT]
+  type NamedExpr = analyzer2.NamedExpr[MT]
+
   type From = analyzer2.From[MT]
   type Join = analyzer2.Join[MT]
   type AtomicFrom = analyzer2.AtomicFrom[MT]

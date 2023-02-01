@@ -140,7 +140,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             from
           )
         case from: FromSingleRow =>
-          selectFromFrom(OrderedMap.empty[AutoColumnLabel, NamedExpr[MT]], from)
+          selectFromFrom(OrderedMap.empty[AutoColumnLabel, NamedExpr], from)
         case from: FromStatement =>
           // Just short-circuit it and return the underlying Statement
           from.statement
@@ -148,7 +148,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     }
 
     def selectFromFrom(
-      selectList: OrderedMap[AutoColumnLabel, NamedExpr[MT]],
+      selectList: OrderedMap[AutoColumnLabel, NamedExpr],
       from: AtomicFrom
     ): Statement = {
       Select(
@@ -493,7 +493,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         state.update(colName, typed)
       }
 
-      val checkedDistinct: Distinctiveness[MT] = distinct match {
+      val checkedDistinct: Distinctiveness = distinct match {
         case ast.Indistinct => Distinctiveness.Indistinct()
         case ast.FullyDistinct => Distinctiveness.FullyDistinct()
         case ast.DistinctOn(exprs) =>
