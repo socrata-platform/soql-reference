@@ -22,8 +22,8 @@ import com.socrata.soql.analyzer2
 
 sealed trait UnparsedTableDescription[MT <: MetaTypes] extends TableDescriptionLike with LabelUniverse[MT] {
   private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
-    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
-    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+    tableName: DatabaseTableName => types.DatabaseTableName[MT2],
+    columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
   )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): UnparsedTableDescription[MT2]
 }
 
@@ -45,9 +45,9 @@ object UnparsedTableDescription {
   case class Dataset[MT <: MetaTypes](
     name: DatabaseTableName[MT#DatabaseTableNameImpl],
     canonicalName: CanonicalName,
-    columns: OrderedMap[DatabaseColumnName[MT#DatabaseColumnNameImpl], TableDescription.DatasetColumnInfo[MT#ColumnType]],
+    columns: OrderedMap[types.DatabaseColumnName[MT], types.TableDescription.DatasetColumnInfo[MT]],
     ordering: Seq[TableDescription.Ordering[MT]],
-    primaryKey: Seq[Seq[DatabaseColumnName[MT#DatabaseColumnNameImpl]]]
+    primaryKey: Seq[Seq[types.DatabaseColumnName[MT]]]
   ) extends UnparsedTableDescription[MT] {
     val hiddenColumns = columns.values.flatMap { case TableDescription.DatasetColumnInfo(name, _, hidden) =>
       if(hidden) Some(name) else None
@@ -60,8 +60,8 @@ object UnparsedTableDescription {
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]) = this
 
     private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
-      tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
-      columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+      tableName: DatabaseTableName => types.DatabaseTableName[MT2],
+      columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
     )(implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]): Dataset[MT2] = {
       Dataset(
         tableName(name),
@@ -80,16 +80,16 @@ object UnparsedTableDescription {
   }
   object Dataset {
     private[UnparsedTableDescription] def encode[MT <: MetaTypes](implicit encCT: JsonEncode[MT#ColumnType], encDTN: JsonEncode[MT#DatabaseTableNameImpl], encDCN: JsonEncode[MT#DatabaseColumnNameImpl]): JsonEncode[Dataset[MT]] =
-      new JsonEncode[Dataset[MT]] with MetaTypeHelper[MT] {
-        implicit val schemaEncode = OrderedMapHelper.jsonEncode[DatabaseColumnName[MT#DatabaseColumnNameImpl], TableDescription.DatasetColumnInfo[CT]]
+      new JsonEncode[Dataset[MT]] with LabelUniverse[MT] {
+        implicit val schemaEncode = OrderedMapHelper.jsonEncode[DatabaseColumnName, TableDescription.DatasetColumnInfo[CT]]
         val encoder = AutomaticJsonEncodeBuilder[Dataset[MT]]
 
         def encode(ds: Dataset[MT]): JValue = encoder.encode(ds)
       }
 
     private[UnparsedTableDescription] def decode[MT <: MetaTypes](implicit decCT: JsonDecode[MT#ColumnType], decDTN: JsonDecode[MT#DatabaseTableNameImpl], decDCN: JsonDecode[MT#DatabaseColumnNameImpl]): JsonDecode[Dataset[MT]] =
-      new JsonDecode[Dataset[MT]] with MetaTypeHelper[MT] {
-        implicit val schemaDecode = OrderedMapHelper.jsonDecode[DatabaseColumnName[MT#DatabaseColumnNameImpl], TableDescription.DatasetColumnInfo[CT]]
+      new JsonDecode[Dataset[MT]] with LabelUniverse[MT] {
+        implicit val schemaDecode = OrderedMapHelper.jsonDecode[DatabaseColumnName, TableDescription.DatasetColumnInfo[CT]]
         val decoder = AutomaticJsonDecodeBuilder[Dataset[MT]]
 
         def decode(v: JValue) = decoder.decode(v)
@@ -128,8 +128,8 @@ object UnparsedTableDescription {
       }
 
     private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
-      tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
-      columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+      tableName: DatabaseTableName => types.DatabaseTableName[MT2],
+      columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
     )(implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]): Query[MT2] = {
       this.asInstanceOf[Query[MT2]] // SAFETY: We have no labels
     }
@@ -167,8 +167,8 @@ object UnparsedTableDescription {
       }
 
     private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
-      tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
-      columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+      tableName: DatabaseTableName => types.DatabaseTableName[MT2],
+      columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
     )(implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]): TableFunction[MT2] = {
       this.asInstanceOf[TableFunction[MT2]] // SAFETY: We have no labels
     }

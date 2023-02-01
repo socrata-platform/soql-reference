@@ -22,8 +22,8 @@ trait TableDescriptionLike {
 sealed trait TableDescription[MT <: MetaTypes] extends TableDescriptionLike with LabelUniverse[MT] {
   private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): TableDescription[MT2]
   private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
-    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
-    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+    tableName: DatabaseTableName => types.DatabaseTableName[MT2],
+    columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
   )(implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]): TableDescription[MT2]
 
   def asUnparsedTableDescription: UnparsedTableDescription[MT]
@@ -49,7 +49,7 @@ object TableDescription {
         }
     }
 
-  case class Ordering[MT <: MetaTypes](column: DatabaseColumnName[MT#DatabaseColumnNameImpl], ascending: Boolean)
+  case class Ordering[MT <: MetaTypes](column: types.DatabaseColumnName[MT], ascending: Boolean)
   object Ordering {
     private[analyzer2] implicit def encode[MT <: MetaTypes](implicit colEnc: JsonEncode[MT#DatabaseColumnNameImpl]) = AutomaticJsonEncodeBuilder[Ordering[MT]]
     private[analyzer2] implicit def decode[MT <: MetaTypes](implicit colDec: JsonDecode[MT#DatabaseColumnNameImpl]) = AutomaticJsonDecodeBuilder[Ordering[MT]]
@@ -62,11 +62,11 @@ object TableDescription {
   }
 
   case class Dataset[MT <: MetaTypes](
-    name: DatabaseTableName[MT#DatabaseTableNameImpl],
+    name: types.DatabaseTableName[MT],
     canonicalName: CanonicalName,
-    columns: OrderedMap[DatabaseColumnName[MT#DatabaseColumnNameImpl], DatasetColumnInfo[MT#ColumnType]],
+    columns: OrderedMap[types.DatabaseColumnName[MT], DatasetColumnInfo[MT#ColumnType]],
     ordering: Seq[Ordering[MT]],
-    primaryKeys: Seq[Seq[DatabaseColumnName[MT#DatabaseColumnNameImpl]]]
+    primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]]
   ) extends TableDescription[MT] {
     for(o <- ordering) {
       require(columns.contains(o.column), "Ordering not in dataset")
@@ -92,8 +92,8 @@ object TableDescription {
       this.asInstanceOf[TableDescription[MT2]] // SAFETY: We only care about the NameImpls and ColumnType, neither of which are changing
 
     private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
-      tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
-      columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+      tableName: DatabaseTableName => types.DatabaseTableName[MT2],
+      columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
     )(implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]): Dataset[MT2] = {
       Dataset[MT2](
         tableName(name),
@@ -130,8 +130,8 @@ object TableDescription {
       )
 
     private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
-      tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
-      columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+      tableName: DatabaseTableName => types.DatabaseTableName[MT2],
+      columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
     )(implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]): Query[MT2] =
       this.asInstanceOf[Query[MT2]] // SAFETY: ColumnType isn't changing
 
@@ -154,8 +154,8 @@ object TableDescription {
       )
 
     private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
-      tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
-      columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+      tableName: DatabaseTableName => types.DatabaseTableName[MT2],
+      columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
     )(implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]): TableFunction[MT2] =
       this.asInstanceOf[TableFunction[MT2]] // SAFETY: ColumnType isn't changing
 

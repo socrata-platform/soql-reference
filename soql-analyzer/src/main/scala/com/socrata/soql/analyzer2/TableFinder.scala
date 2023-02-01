@@ -35,18 +35,19 @@ trait TableFinder[MT <: MetaTypes] {
     * representation of Datasets' schemas. */
   sealed trait FinderTableDescription
 
-  case class Ordering(column: DatabaseColumnName[MT#DatabaseColumnNameImpl], ascending: Boolean)
+  case class Ordering(column: types.DatabaseColumnName[MT], ascending: Boolean)
 
   case class DatasetColumnInfo(name: ColumnName, typ: ColumnType, hidden: Boolean)
 
   /** A base dataset, or a saved query which is being analyzed opaquely. */
   case class Dataset(
-    databaseName: DatabaseTableName[MT#DatabaseTableNameImpl],
+    databaseName: types.DatabaseTableName[MT],
     canonicalName: CanonicalName,
-    schema: OrderedMap[DatabaseColumnName[MT#DatabaseColumnNameImpl], DatasetColumnInfo],
+    schema: OrderedMap[types.DatabaseColumnName[MT], DatasetColumnInfo],
     ordering: Seq[Ordering],
-    primaryKeys: Seq[Seq[DatabaseColumnName[MT#DatabaseColumnNameImpl]]]
+    primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]]
   ) extends FinderTableDescription {
+    require(schema.valuesIterator.map(_.name).toSet.size == schema.size)
     require(ordering.forall { ordering => schema.contains(ordering.column) })
     require(primaryKeys.forall { pk => pk.forall { pkCol => schema.contains(pkCol) } })
 

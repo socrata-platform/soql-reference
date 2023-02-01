@@ -31,9 +31,9 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
   final def rewriteDatabaseNames[MT2 <: MetaTypes](
-    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
+    tableName: DatabaseTableName => types.DatabaseTableName[MT2],
     // This is given the _original_ database table name
-    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+    columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
   )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): Self[MT2] =
     doRewriteDatabaseNames(new RewriteDatabaseNamesState[MT2](tableName, columnName, changesOnlyLabels))
 

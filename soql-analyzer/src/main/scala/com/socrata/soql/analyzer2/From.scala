@@ -131,12 +131,12 @@ sealed abstract class AtomicFrom[MT <: MetaTypes] extends From[MT] with from.Ato
 object AtomicFrom extends from.OAtomicFromImpl
 
 case class FromTable[MT <: MetaTypes](
-  tableName: DatabaseTableName[MT#DatabaseTableNameImpl],
-  definiteResourceName: ScopedResourceName[MT#ResourceNameScope],
+  tableName: types.DatabaseTableName[MT],
+  definiteResourceName: types.ScopedResourceName[MT],
   alias: Option[ResourceName],
   label: AutoTableLabel,
-  columns: OrderedMap[DatabaseColumnName[MT#DatabaseColumnNameImpl], NameEntry[MT#ColumnType]],
-  primaryKeys: Seq[Seq[DatabaseColumnName[MT#DatabaseColumnNameImpl]]]
+  columns: OrderedMap[types.DatabaseColumnName[MT], NameEntry[types.ColumnType[MT]]],
+  primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]]
 ) extends AtomicFrom[MT] with from.FromTableImpl[MT]
 object FromTable extends from.OFromTableImpl
 
@@ -147,7 +147,7 @@ object FromTable extends from.OFromTableImpl
 case class FromStatement[MT <: MetaTypes](
   statement: Statement[MT],
   label: AutoTableLabel,
-  resourceName: Option[ScopedResourceName[MT#ResourceNameScope]],
+  resourceName: Option[types.ScopedResourceName[MT]],
   alias: Option[ResourceName]
 ) extends AtomicFrom[MT] with from.FromStatementImpl[MT]
 object FromStatement extends from.OFromStatementImpl

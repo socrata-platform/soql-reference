@@ -35,8 +35,8 @@ class UnparsedTableMap[MT <: MetaTypes] private[analyzer2] (private val underlyi
     }.toMap))
 
   def rewriteDatabaseNames[MT2 <: MetaTypes](
-    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
-    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+    tableName: DatabaseTableName => types.DatabaseTableName[MT2],
+    columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
   )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): UnparsedTableMap[MT2] = {
     new UnparsedTableMap(underlying.iterator.map { case (rns, m) =>
       changesOnlyLabels.convertRNS(rns) -> m.iterator.map { case (rn, ptd) =>

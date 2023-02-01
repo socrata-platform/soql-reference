@@ -10,6 +10,7 @@ import com.socrata.soql.types._
 import com.socrata.soql.typechecker.{TypeInfo, TypeInfo2, HasType, TypeInfoMetaProjection}
 import com.socrata.soql.ast
 import com.socrata.soql.analyzer2
+import com.socrata.soql.functions
 
 import scala.util.parsing.input.{Position, NoPosition}
 
@@ -17,16 +18,16 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
   val typeParameterUniverse = OrderedSet(SoQLType.typePreferences : _*)
 
   def metaProject[MT <: analyzer2.MetaTypes](
-    implicit typeEv: SoQLType =:= MT#ColumnType,
-    typeEvRev: MT#ColumnType =:= SoQLType,
-    valueEv: SoQLValue =:= MT#ColumnValue,
-    valueEvRev: MT#ColumnValue =:= SoQLValue
+    implicit typeEv: SoQLType =:= analyzer2.types.ColumnType[MT],
+    typeEvRev: analyzer2.types.ColumnType[MT] =:= SoQLType,
+    valueEv: SoQLValue =:= analyzer2.types.ColumnValue[MT],
+    valueEvRev: analyzer2.types.ColumnValue[MT] =:= SoQLValue
   ): TypeInfoMetaProjection[MT] =
-    new TypeInfoMetaProjection[MT] {
+    new TypeInfoMetaProjection[MT] with analyzer2.StatementUniverse[MT] {
       val unproject = SoQLTypeInfo.asInstanceOf[TypeInfo2[CT, CV]]
 
-      private implicit def monomorphicFunctionConvert(f: MonomorphicFunction[SoQLType]): MonomorphicFunction[CT] =
-        f.asInstanceOf[MonomorphicFunction[CT]]
+      private implicit def monomorphicFunctionConvert(f: functions.MonomorphicFunction[SoQLType]): MonomorphicFunction =
+        f.asInstanceOf[MonomorphicFunction]
 
       implicit object hasType extends HasType[CV, CT] {
         def typeOf(cv: CV): CT = cv.typ
@@ -74,7 +75,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
     type DatabaseTableNameImpl = Nothing
   }
 
-  implicit object hasType extends HasType[FakeMT#CV, FakeMT#CT] {
+  implicit object hasType extends HasType[FakeMT#ColumnValue, FakeMT#ColumnType] {
     def typeOf(cv: SoQLValue) = cv.typ
   }
 

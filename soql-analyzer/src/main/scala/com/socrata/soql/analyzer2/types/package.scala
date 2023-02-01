@@ -24,4 +24,15 @@ package object types {
   type FunctionInfo[MT <: MetaTypes] = typechecker.FunctionInfo[MT#ColumnType]
   type HasType[MT <: MetaTypes] = typechecker.HasType[MT#ColumnValue, MT#ColumnType]
   type TypeInfoMetaProjection[MT <: MetaTypes] = typechecker.TypeInfoMetaProjection[MT]
+
+  type ScopedResourceName[MT <: MetaTypes] = analyzer2.ScopedResourceName[MT#ResourceNameScope]
+  type NameEntry[MT <: MetaTypes] = analyzer2.NameEntry[MT#ColumnType]
+
+  object LabelMap {
+    type TableReference[MT <: MetaTypes] = analyzer2.LabelMap.TableReference[MT#ResourceNameScope]
+  }
+
+  object TableDescription {
+    type DatasetColumnInfo[MT <: MetaTypes] = analyzer2.TableDescription.DatasetColumnInfo[MT#ColumnType]
+  }
 }

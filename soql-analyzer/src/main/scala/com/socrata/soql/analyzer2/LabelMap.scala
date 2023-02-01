@@ -9,8 +9,8 @@ import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, NullForNone}
 import com.socrata.soql.environment.{ColumnName, ResourceName}
 
 class LabelMap[MT <: MetaTypes] private[analyzer2] (
-  val tableMap: Map[TableLabel[MT#DatabaseTableNameImpl], LabelMap.TableReference[MT#ResourceNameScope]],
-  val columnMap: Map[(TableLabel[MT#DatabaseTableNameImpl], ColumnLabel[MT#DatabaseColumnNameImpl]), (LabelMap.TableReference[MT#ResourceNameScope], ColumnName)]
+  val tableMap: Map[types.TableLabel[MT], types.LabelMap.TableReference[MT]],
+  val columnMap: Map[(types.TableLabel[MT], types.ColumnLabel[MT]), (types.LabelMap.TableReference[MT], ColumnName)]
 ) {
   override def toString = s"LabelMap($tableMap, $columnMap)"
 }
@@ -25,7 +25,7 @@ object LabelMap {
     implicit def encode[RNS: JsonEncode] = AutomaticJsonEncodeBuilder[TableReference[RNS]]
   }
 
-  implicit def encode[MT <: MetaTypes](implicit rnsEncode: JsonEncode[MT#ResourceNameScope], tlEncode: JsonEncode[MT#DatabaseTableNameImpl], clEncode: JsonEncode[MT#DatabaseColumnNameImpl]) = new JsonEncode[LabelMap[MT]] {
+  implicit def encode[MT <: MetaTypes](implicit rnsEncode: JsonEncode[types.ResourceNameScope[MT]], tlEncode: JsonEncode[types.TableLabel[MT]], clEncode: JsonEncode[types.ColumnLabel[MT]]) = new JsonEncode[LabelMap[MT]] {
     def encode(x: LabelMap[MT]) = {
       val tmSeq = x.tableMap.to(LazyList).map { case (label, table) =>
         json"""{ label: $label, table: $table }"""

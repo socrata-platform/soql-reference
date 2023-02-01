@@ -10,15 +10,15 @@ import com.socrata.soql.analyzer2
 
 class UnparsedFoundTables[MT <: MetaTypes] private[analyzer2] (
   private[analyzer2] val tableMap: UnparsedTableMap[MT],
-  private[analyzer2] val initialScope: MT#ResourceNameScope,
+  private[analyzer2] val initialScope: types.ResourceNameScope[MT],
   private[analyzer2] val initialQuery: UnparsedFoundTables.Query[MT],
   private[analyzer2] val parserParameters: EncodableParameters
 ) extends FoundTablesLike[MT] {
   type Self[MT <: MetaTypes] = UnparsedFoundTables[MT]
 
   final def rewriteDatabaseNames[MT2 <: MetaTypes](
-    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
-    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+    tableName: DatabaseTableName => types.DatabaseTableName[MT2],
+    columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
   )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): UnparsedFoundTables[MT2] =
     new UnparsedFoundTables(
       tableMap.rewriteDatabaseNames(tableName, columnName),

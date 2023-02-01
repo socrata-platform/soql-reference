@@ -9,20 +9,20 @@ import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName}
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
-case class LabelEntry[MT <: MetaTypes](label: ColumnLabel[MT#DatabaseColumnNameImpl], @JsonKey("type") typ: MT#ColumnType)
+case class LabelEntry[MT <: MetaTypes](label: types.ColumnLabel[MT], @JsonKey("type") typ: types.ColumnType[MT])
 object LabelEntry {
-  implicit def jEncode[MT <: MetaTypes](implicit encLabel: JsonEncode[MT#DatabaseColumnNameImpl], encCT: JsonEncode[MT#ColumnType]) = AutomaticJsonEncodeBuilder[LabelEntry[MT]]
+  implicit def jEncode[MT <: MetaTypes](implicit encLabel: JsonEncode[types.ColumnLabel[MT]], encCT: JsonEncode[types.ColumnType[MT]]) = AutomaticJsonEncodeBuilder[LabelEntry[MT]]
 
-  implicit def jDecode[MT <: MetaTypes](implicit decLabel: JsonDecode[MT#DatabaseColumnNameImpl], decCT: JsonDecode[MT#ColumnType]) = AutomaticJsonDecodeBuilder[LabelEntry[MT]]
+  implicit def jDecode[MT <: MetaTypes](implicit decLabel: JsonDecode[types.ColumnLabel[MT]], decCT: JsonDecode[types.ColumnType[MT]]) = AutomaticJsonDecodeBuilder[LabelEntry[MT]]
 
-  implicit def serialize[MT <: MetaTypes](implicit encLabel: Writable[MT#DatabaseColumnNameImpl], encCT: Writable[MT#ColumnType]) = new Writable[LabelEntry[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit encLabel: Writable[types.ColumnLabel[MT]], encCT: Writable[types.ColumnType[MT]]) = new Writable[LabelEntry[MT]] {
     def writeTo(buffer: WriteBuffer, ne: LabelEntry[MT]): Unit = {
       buffer.write(ne.label)
       buffer.write(ne.typ)
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit decLabel: Readable[MT#DatabaseColumnNameImpl], decCT: Readable[MT#ColumnType]) = new Readable[LabelEntry[MT]] with LabelUniverse[MT] {
+  implicit def deserialize[MT <: MetaTypes](implicit decLabel: Readable[types.ColumnLabel[MT]], decCT: Readable[types.ColumnType[MT]]) = new Readable[LabelEntry[MT]] with LabelUniverse[MT] {
     def readFrom(buffer: ReadBuffer): LabelEntry[MT] = {
       LabelEntry(
         buffer.read[ColumnLabel](),
@@ -53,8 +53,8 @@ object NameEntry {
   }
 }
 
-case class VirtualEntry[MT <: MetaTypes](name: ColumnName, label: AutoColumnLabel, typ: MT#ColumnType)
-case class PhysicalEntry[MT <: MetaTypes](name: ColumnName, label: DatabaseColumnName[MT#DatabaseColumnNameImpl], typ: MT#ColumnType)
+case class VirtualEntry[MT <: MetaTypes](name: ColumnName, label: AutoColumnLabel, typ: types.ColumnType[MT])
+case class PhysicalEntry[MT <: MetaTypes](name: ColumnName, label: types.DatabaseColumnName[MT], typ: types.ColumnType[MT])
 
 sealed trait ErasureWorkaround
 object ErasureWorkaround {
@@ -77,7 +77,7 @@ sealed trait Scope[MT <: MetaTypes] extends LabelUniverse[MT] {
 object Scope {
   final class Virtual[MT <: MetaTypes] (
     val label: AutoTableLabel,
-    schema: OrderedMap[AutoColumnLabel, NameEntry[MT#ColumnType]]
+    schema: OrderedMap[AutoColumnLabel, NameEntry[types.ColumnType[MT]]]
   ) extends Scope[MT] {
     val schemaByName = OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (name, VirtualEntry[MT](name, label, typ)) }
     val schemaByLabel = OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (label, VirtualEntry[MT](name, label, typ)) }
@@ -90,9 +90,9 @@ object Scope {
   }
 
   final class Physical[MT <: MetaTypes] (
-    val tableName: DatabaseTableName[MT#DatabaseTableNameImpl],
+    val tableName: types.DatabaseTableName[MT],
     val label: AutoTableLabel,
-    schema: OrderedMap[DatabaseColumnName[MT#DatabaseColumnNameImpl], NameEntry[MT#ColumnType]]
+    schema: OrderedMap[types.DatabaseColumnName[MT], types.NameEntry[MT]]
   ) extends Scope[MT] {
     val schemaByName = OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (name, PhysicalEntry[MT](name, label, typ)) }
     val schemaByLabel = OrderedMap() ++ schema.iterator.map { case (label, NameEntry(name, typ)) => (label, PhysicalEntry[MT](name, label, typ)) }
@@ -154,7 +154,7 @@ object Environment {
   sealed abstract class LookupResult[MT <: MetaTypes]
   object LookupResult {
     case class Virtual[MT <: MetaTypes](table: AutoTableLabel, column: AutoColumnLabel, typ: MT#ColumnType) extends LookupResult[MT]
-    case class Physical[MT <: MetaTypes](tableName: DatabaseTableName[MT#DatabaseTableNameImpl], table: AutoTableLabel, column: DatabaseColumnName[MT#DatabaseColumnNameImpl], typ: MT#ColumnType) extends LookupResult[MT]
+    case class Physical[MT <: MetaTypes](tableName: types.DatabaseTableName[MT], table: AutoTableLabel, column: types.DatabaseColumnName[MT], typ: types.ColumnType[MT]) extends LookupResult[MT]
   }
 
   private class EmptyEnvironment[MT <: MetaTypes](parent: Option[Environment[MT]]) extends Environment(parent) with MetaTypeHelper[MT] {
@@ -182,11 +182,11 @@ object Environment {
       implicitScope match {
         case virtual: Scope.Virtual[MT] =>
           virtual.schemaByName.get(name).map { entry =>
-            LookupResult.Virtual(virtual.label, entry.label, entry.typ)
+            LookupResult.Virtual[MT](virtual.label, entry.label, entry.typ)
           }
         case physical: Scope.Physical[MT] =>
           physical.schemaByName.get(name).map { entry =>
-            LookupResult.Physical(physical.tableName, physical.label, entry.label, entry.typ)
+            LookupResult.Physical[MT](physical.tableName, physical.label, entry.label, entry.typ)
           }
       }
 
@@ -208,11 +208,11 @@ object Environment {
         scope match {
           case virtual: Scope.Virtual[MT] =>
             virtual.schemaByName.get(name).map { entry =>
-              LookupResult.Virtual(virtual.label, entry.label, entry.typ)
+              LookupResult.Virtual[MT](virtual.label, entry.label, entry.typ)
             }
           case physical: Scope.Physical[MT] =>
             physical.schemaByName.get(name).map { entry =>
-              LookupResult.Physical(physical.tableName, physical.label, entry.label, entry.typ)
+              LookupResult.Physical[MT](physical.tableName, physical.label, entry.label, entry.typ)
             }
         }
       }

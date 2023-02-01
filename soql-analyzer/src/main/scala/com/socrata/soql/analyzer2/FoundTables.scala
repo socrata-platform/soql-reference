@@ -17,8 +17,8 @@ trait FoundTablesLike[MT <: MetaTypes] extends LabelUniverse[MT] {
   type Self[MT <: MetaTypes] <: FoundTablesLike[MT]
 
   def rewriteDatabaseNames[MT2 <: MetaTypes](
-    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
-    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+    tableName: DatabaseTableName => types.DatabaseTableName[MT2],
+    columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
   )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): Self[MT2]
 }
 
@@ -29,7 +29,7 @@ case class UserParameterSpecs[+ColumnType](
 
 final case class FoundTables[MT <: MetaTypes] private[analyzer2] (
   tableMap: TableMap[MT],
-  initialScope: MT#ResourceNameScope,
+  initialScope: types.ResourceNameScope[MT],
   initialQuery: FoundTables.Query[MT],
   parserParameters: AbstractParser.Parameters
 ) extends FoundTablesLike[MT] {
@@ -62,8 +62,8 @@ final case class FoundTables[MT <: MetaTypes] private[analyzer2] (
   }
 
   final def rewriteDatabaseNames[MT2 <: MetaTypes](
-    tableName: DatabaseTableName => analyzer2.DatabaseTableName[MT2#DatabaseTableNameImpl],
-    columnName: (DatabaseTableName, DatabaseColumnName) => analyzer2.DatabaseColumnName[MT2#DatabaseColumnNameImpl]
+    tableName: DatabaseTableName => types.DatabaseTableName[MT2],
+    columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
   )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): FoundTables[MT2] =
     copy(
       tableMap = tableMap.rewriteDatabaseNames[MT2](tableName, columnName),

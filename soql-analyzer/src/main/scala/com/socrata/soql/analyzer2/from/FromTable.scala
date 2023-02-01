@@ -19,13 +19,13 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   def find(predicate: Expr[MT] => Boolean) = None
   def contains(e: Expr[MT]): Boolean = false
 
-  def unique = primaryKeys.to(LazyList).map(_.map { dcn => PhysicalColumn(this.tableName, label, dcn, columns(dcn).typ)(AtomicPositionInfo.None) })
+  def unique = primaryKeys.to(LazyList).map(_.map { dcn => PhysicalColumn[MT](this.tableName, label, dcn, columns(dcn).typ)(AtomicPositionInfo.None) })
 
   lazy val resourceName = Some(definiteResourceName)
 
   private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
 
-  private[analyzer2] override final val scope: Scope[MT] = new Scope.Physical(tableName, label, columns)
+  private[analyzer2] override final val scope: Scope[MT] = new Scope.Physical[MT](tableName, label, columns)
 
   def debugDoc(implicit ev: HasDoc[CV]) =
     (tableName.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))

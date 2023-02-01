@@ -128,7 +128,7 @@ class Typechecker[MT <: MetaTypes](
               case Some(Environment.LookupResult.Virtual(table, column, typ)) =>
                 Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(col.position))))
               case Some(Environment.LookupResult.Physical(tableName, tableLabel, column, typ)) =>
-                Right(Seq(PhysicalColumn(tableName, tableLabel, column, typ)(new AtomicPositionInfo(col.position))))
+                Right(Seq(PhysicalColumn[MT](tableName, tableLabel, column, typ)(new AtomicPositionInfo(col.position))))
             }
         }
       case col@ast.ColumnOrAliasRef(Some(qual), name) =>
@@ -138,7 +138,7 @@ class Typechecker[MT <: MetaTypes](
           case Some(Environment.LookupResult.Virtual(table, column, typ)) =>
             Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(col.position))))
           case Some(Environment.LookupResult.Physical(tableName, tableLabel, column, typ)) =>
-            Right(Seq(PhysicalColumn(tableName, tableLabel, column, typ)(new AtomicPositionInfo(col.position))))
+            Right(Seq(PhysicalColumn[MT](tableName, tableLabel, column, typ)(new AtomicPositionInfo(col.position))))
         }
       case l: ast.Literal =>
         squash(typeInfo.potentialExprs(l), l.position)

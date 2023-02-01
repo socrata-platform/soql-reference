@@ -116,9 +116,9 @@ sealed abstract class Column[MT <: MetaTypes] extends AtomicExpr[MT] { this: Has
 }
 
 final case class PhysicalColumn[MT <: MetaTypes](
-  physicalTable: DatabaseTableName[MT#DatabaseTableNameImpl],
+  physicalTable: types.DatabaseTableName[MT],
   table: AutoTableLabel,
-  column: DatabaseColumnName[MT#DatabaseColumnNameImpl],
+  column: types.DatabaseColumnName[MT],
   typ: MT#ColumnType
 )(
   val position: AtomicPositionInfo

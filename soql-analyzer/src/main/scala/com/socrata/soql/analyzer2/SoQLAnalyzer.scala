@@ -135,7 +135,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case from: FromTable =>
           selectFromFrom(
             from.columns.map { case (label, NameEntry(name, typ)) =>
-              labelProvider.columnLabel() -> NamedExpr(PhysicalColumn(from.tableName, from.label, label, typ)(AtomicPositionInfo.None), name)
+              labelProvider.columnLabel() -> NamedExpr(PhysicalColumn[MT](from.tableName, from.label, label, typ)(AtomicPositionInfo.None), name)
             },
             from
           )
@@ -202,7 +202,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               if(desc.hiddenColumns(name)) {
                 None
               } else {
-                Some(outputLabel -> NamedExpr(PhysicalColumn(from.tableName, from.label, dcn, typ)(AtomicPositionInfo.None), name))
+                Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.tableName, from.label, dcn, typ)(AtomicPositionInfo.None), name))
               }
             },
             from,
@@ -211,7 +211,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             None,
             desc.ordering.map { case TableDescription.Ordering(dcn, ascending) =>
               val NameEntry(_, typ) = from.columns(dcn)
-              OrderBy(PhysicalColumn(from.tableName, from.label, dcn, typ)(AtomicPositionInfo.None), ascending = ascending, nullLast = ascending)
+              OrderBy(PhysicalColumn[MT](from.tableName, from.label, dcn, typ)(AtomicPositionInfo.None), ascending = ascending, nullLast = ascending)
             },
             None,
             None,
@@ -405,7 +405,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case j: Join => findSystemColumns(j.left)
         case FromTable(tableName, _, _, tableLabel, columns, _) =>
           columns.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>
-            name -> PhysicalColumn(tableName, tableLabel, colLabel, typ)(AtomicPositionInfo.None)
+            name -> PhysicalColumn[MT](tableName, tableLabel, colLabel, typ)(AtomicPositionInfo.None)
           }
         case FromStatement(stmt, tableLabel, _, _) =>
           stmt.schema.iterator.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>

@@ -37,10 +37,10 @@ private[analyzer2] object IsomorphismState {
   }
 
   private[analyzer2] class View[MT <: MetaTypes] private[IsomorphismState](
-    forwardTables: DMap[TableLabel[MT#DatabaseTableNameImpl]],
-    backwardTables: DMap[TableLabel[MT#DatabaseTableNameImpl]],
-    forwardColumns: DMap[(Option[TableLabel[MT#DatabaseTableNameImpl]], ColumnLabel[MT#DatabaseColumnNameImpl])],
-    backwardColumns: DMap[(Option[TableLabel[MT#DatabaseTableNameImpl]], ColumnLabel[MT#DatabaseColumnNameImpl])]
+    forwardTables: DMap[types.TableLabel[MT]],
+    backwardTables: DMap[types.TableLabel[MT]],
+    forwardColumns: DMap[(Option[types.TableLabel[MT]], types.ColumnLabel[MT])],
+    backwardColumns: DMap[(Option[types.TableLabel[MT]], types.ColumnLabel[MT])]
   ) extends LabelUniverse[MT] {
     def reverse: View[MT] =
       new View(backwardTables, forwardTables, backwardColumns, forwardColumns)
@@ -56,10 +56,10 @@ private[analyzer2] object IsomorphismState {
 }
 
 private[analyzer2] class IsomorphismState[MT <: MetaTypes] private (
-  forwardTables: IsomorphismState.DMap[TableLabel[MT#DatabaseTableNameImpl]],
-  backwardTables: IsomorphismState.DMap[TableLabel[MT#DatabaseTableNameImpl]],
-  forwardColumns: IsomorphismState.DMap[(Option[TableLabel[MT#DatabaseTableNameImpl]], ColumnLabel[MT#DatabaseColumnNameImpl])],
-  backwardColumns: IsomorphismState.DMap[(Option[TableLabel[MT#DatabaseTableNameImpl]], ColumnLabel[MT#DatabaseColumnNameImpl])]
+  forwardTables: IsomorphismState.DMap[types.TableLabel[MT]],
+  backwardTables: IsomorphismState.DMap[types.TableLabel[MT]],
+  forwardColumns: IsomorphismState.DMap[(Option[types.TableLabel[MT]], types.ColumnLabel[MT])],
+  backwardColumns: IsomorphismState.DMap[(Option[types.TableLabel[MT]], types.ColumnLabel[MT])]
 ) extends LabelUniverse[MT] {
   def this() = this(new IsomorphismState.DMap,new IsomorphismState.DMap,new IsomorphismState.DMap,new IsomorphismState.DMap)
 

@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2.rewrite
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 
-class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[TableLabel[MT#DatabaseTableNameImpl], Set[ColumnLabel[MT#DatabaseColumnNameImpl]]]) extends StatementUniverse[MT] {
+class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.TableLabel[MT], Set[types.ColumnLabel[MT]]]) extends StatementUniverse[MT] {
   // myLabel being "None" means "keep all of my output columns,
   // whether or not they appear to be used".  This is for both the
   // top-level (where of course all the columns will be used by
