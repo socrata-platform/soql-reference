@@ -9,7 +9,6 @@ import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable,
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName}
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.typechecker.HasDoc
 
 import DocUtils._
 

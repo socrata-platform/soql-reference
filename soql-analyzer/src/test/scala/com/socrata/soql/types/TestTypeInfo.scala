@@ -3,7 +3,7 @@ package com.socrata.soql.types
 import com.socrata.soql.ast.{Hole, Literal}
 import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
-import com.socrata.soql.typechecker.{TypeInfo, HasType}
+import com.socrata.soql.typechecker.TypeInfo
 import com.socrata.soql.typed
 
 import scala.util.parsing.input.Position

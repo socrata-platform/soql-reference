@@ -3,7 +3,6 @@ package com.socrata.soql.analyzer2
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.collection._
-import com.socrata.soql.typechecker.HasDoc
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 sealed trait Distinctiveness[MT <: MetaTypes] extends LabelUniverse[MT] {

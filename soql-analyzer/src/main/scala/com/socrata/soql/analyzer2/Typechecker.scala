@@ -6,7 +6,7 @@ import scala.util.parsing.input.{Position, NoPosition}
 import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, CovariantSet}
 import com.socrata.soql.environment.{ColumnName, HoleName, ResourceName, TableName, FunctionName}
-import com.socrata.soql.typechecker.{TypeInfoMetaProjection, FunctionInfo, FunctionCallTypechecker, Passed, TypeMismatchFailure, HasType}
+import com.socrata.soql.typechecker.{TypeInfoMetaProjection, FunctionInfo, FunctionCallTypechecker, Passed, TypeMismatchFailure}
 
 class Typechecker[MT <: MetaTypes](
   scope: MT#ResourceNameScope,

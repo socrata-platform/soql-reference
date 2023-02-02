@@ -5,7 +5,7 @@ import scala.util.parsing.input.Position
 import com.socrata.soql.ast
 import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
-import com.socrata.soql.typechecker.{TypeInfo2, HasType, TypeInfoMetaProjection}
+import com.socrata.soql.typechecker.{TypeInfo2, TypeInfoMetaProjection}
 
 object TestTypeInfo extends TypeInfo2[TestType, TestValue] {
   def metaProject[MT <: MetaTypes](

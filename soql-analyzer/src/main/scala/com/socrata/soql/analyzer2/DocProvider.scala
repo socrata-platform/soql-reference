@@ -1,7 +1,5 @@
 package com.socrata.soql.analyzer2
 
-import com.socrata.soql.typechecker.HasDoc
-
 private[analyzer2] class ExprDocProvider[MT <: MetaTypes](
   val cv: HasDoc[MT#ColumnValue],
   val columnNameImpl: HasDoc[MT#DatabaseColumnNameImpl]

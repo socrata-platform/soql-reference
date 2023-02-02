@@ -7,7 +7,6 @@ import com.rojoma.json.v3.util.{SimpleHierarchyEncodeBuilder, SimpleHierarchyDec
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2.serialization.{ReadBuffer, WriteBuffer, Readable, Writable}
-import com.socrata.soql.typechecker.HasDoc
 
 class LabelProvider extends Cloneable {
   private var tables = 0

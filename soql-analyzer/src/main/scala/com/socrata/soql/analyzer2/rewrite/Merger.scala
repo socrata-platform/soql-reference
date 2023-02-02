@@ -6,7 +6,6 @@ import scala.util.parsing.input.NoPosition
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.typechecker.HasDoc
 import com.socrata.soql.analyzer2._
 
 class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends StatementUniverse[MT] {

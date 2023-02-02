@@ -7,7 +7,7 @@ import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.typed
 import com.socrata.soql.types._
-import com.socrata.soql.typechecker.{TypeInfo, TypeInfo2, HasType, TypeInfoMetaProjection}
+import com.socrata.soql.typechecker.{TypeInfo, TypeInfo2, TypeInfoMetaProjection}
 import com.socrata.soql.ast
 import com.socrata.soql.analyzer2
 import com.socrata.soql.functions
@@ -29,7 +29,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
       private implicit def monomorphicFunctionConvert(f: functions.MonomorphicFunction[SoQLType]): MonomorphicFunction =
         f.asInstanceOf[MonomorphicFunction]
 
-      implicit object hasType extends HasType[CV, CT] {
+      implicit object hasType extends analyzer2.HasType[CV, CT] {
         def typeOf(cv: CV): CT = cv.typ
       }
 
@@ -75,7 +75,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
     type DatabaseTableNameImpl = Nothing
   }
 
-  implicit object hasType extends HasType[FakeMT#ColumnValue, FakeMT#ColumnType] {
+  implicit object hasType extends analyzer2.HasType[FakeMT#ColumnValue, FakeMT#ColumnType] {
     def typeOf(cv: SoQLValue) = cv.typ
   }
 

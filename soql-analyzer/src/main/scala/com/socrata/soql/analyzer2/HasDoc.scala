@@ -1,4 +1,4 @@
-package com.socrata.soql.typechecker
+package com.socrata.soql.analyzer2
 
 import com.socrata.prettyprint.prelude._
 

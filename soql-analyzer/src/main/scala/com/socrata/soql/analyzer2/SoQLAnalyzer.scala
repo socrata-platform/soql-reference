@@ -15,7 +15,7 @@ import com.socrata.soql.parsing.SoQLPosition
 import com.socrata.soql.ast
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName, HoleName, UntypedDatasetContext, FunctionName}
-import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, HasType, TypeInfoMetaProjection}
+import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, TypeInfoMetaProjection}
 import com.socrata.soql.aliases.AliasAnalysis
 import com.socrata.soql.exceptions.AliasAnalysisException
 

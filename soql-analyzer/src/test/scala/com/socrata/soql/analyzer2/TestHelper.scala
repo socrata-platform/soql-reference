@@ -4,7 +4,6 @@ import org.scalatest.Assertions
 import org.scalatest.matchers.{BeMatcher, MatchResult}
 
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName}
-import com.socrata.soql.typechecker.HasDoc
 
 import mocktablefinder._
 

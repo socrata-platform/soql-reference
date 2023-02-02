@@ -10,7 +10,6 @@ import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable,
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.typechecker.HasDoc
 
 trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
   type Self[MT <: MetaTypes] = Join[MT]

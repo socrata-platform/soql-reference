@@ -8,7 +8,7 @@ import com.socrata.prettyprint.Pretty
 
 import com.socrata.soql.collection._
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.typechecker.{FunctionInfo, HasType, HasDoc}
+import com.socrata.soql.typechecker.FunctionInfo
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 import DocUtils._

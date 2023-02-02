@@ -6,7 +6,6 @@ import com.rojoma.json.v3.util.{WrapperJsonEncode, WrapperJsonDecode}
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2.serialization.{ReadBuffer, WriteBuffer, Readable, Writable}
-import com.socrata.soql.typechecker.HasDoc
 
 final case class DatabaseTableName[+T](name: T) {
   def debugDoc(implicit ev: HasDoc[T]): Doc[Nothing] = ev.docOf(name)

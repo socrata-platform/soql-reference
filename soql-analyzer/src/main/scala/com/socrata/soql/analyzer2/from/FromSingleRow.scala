@@ -10,7 +10,6 @@ import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable,
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.typechecker.HasDoc
 
 trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
   type Self[MT <: MetaTypes] = FromSingleRow[MT]

@@ -2,7 +2,7 @@ package com.socrata.soql.analyzer2
 
 import com.socrata.prettyprint.prelude._
 
-import com.socrata.soql.typechecker.{FunctionInfo, HasType, HasDoc}
+import com.socrata.soql.typechecker.FunctionInfo
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 case class OrderBy[MT <: MetaTypes](expr: Expr[MT], ascending: Boolean, nullLast: Boolean) extends LabelUniverse[MT] {

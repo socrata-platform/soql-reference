@@ -6,7 +6,6 @@ import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
-import com.socrata.soql.typechecker.{HasDoc, HasType}
 
 trait LiteralValueImpl[MT <: MetaTypes] { this: LiteralValue[MT] =>
   type Self[MT <: MetaTypes] = LiteralValue[MT]
