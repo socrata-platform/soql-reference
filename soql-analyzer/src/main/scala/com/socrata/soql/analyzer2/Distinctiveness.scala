@@ -11,7 +11,7 @@ sealed trait Distinctiveness[MT <: MetaTypes] extends LabelUniverse[MT] {
   private[analyzer2] def doRelabel(state: RelabelState): Distinctiveness[MT]
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Distinctiveness[MT]): Boolean
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
-  def debugDoc(implicit ev: HasDoc[CV]): Option[Doc[Annotation[MT]]]
+  private[analyzer2] def debugDoc(implicit ev: ExprDocProvider[MT]): Option[Doc[Annotation[MT]]]
 }
 object Distinctiveness {
   case class Indistinct[MT <: MetaTypes]() extends Distinctiveness[MT] {
@@ -22,7 +22,7 @@ object Distinctiveness {
       that == this
     private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = Map.empty
 
-    def debugDoc(implicit ev: HasDoc[CV]) = None
+    private[analyzer2] def debugDoc(implicit ev: ExprDocProvider[MT]) = None
   }
 
   case class FullyDistinct[MT <: MetaTypes]() extends Distinctiveness[MT] {
@@ -37,7 +37,7 @@ object Distinctiveness {
     // all columns in the select in which it appears.
     private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = Map.empty
 
-    def debugDoc(implicit ev: HasDoc[CV]) = Some(d"DISTINCT")
+    private[analyzer2] def debugDoc(implicit ev: ExprDocProvider[MT]) = Some(d"DISTINCT")
   }
 
   case class On[MT <: MetaTypes](exprs: Seq[Expr[MT]]) extends Distinctiveness[MT] {
@@ -59,8 +59,8 @@ object Distinctiveness {
         case _ => false
       }
 
-    def debugDoc(implicit ev: HasDoc[CV]) =
-      Some(exprs.map(_.debugDoc).encloseNesting(d"DISTINCT ON (", d",", d")"))
+    private[analyzer2] def debugDoc(implicit ev: ExprDocProvider[MT]) =
+      Some(exprs.map(_.debugDoc(ev)).encloseNesting(d"DISTINCT ON (", d",", d")"))
   }
 
   implicit def serialize[MT <: MetaTypes](implicit ev: Writable[Expr[MT]]) = new Writable[Distinctiveness[MT]] {

@@ -7,6 +7,7 @@ import com.rojoma.json.v3.util.{SimpleHierarchyEncodeBuilder, SimpleHierarchyDec
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2.serialization.{ReadBuffer, WriteBuffer, Readable, Writable}
+import com.socrata.soql.typechecker.HasDoc
 
 class LabelProvider extends Cloneable {
   private var tables = 0
@@ -107,7 +108,7 @@ object AutoTableLabel {
 }
 
 final case class DatabaseTableName[+T](name: T) {
-  def debugDoc: Doc[Nothing] = Doc(toString)
+  def debugDoc(implicit ev: HasDoc[T]): Doc[Nothing] = ev.docOf(name)
 }
 
 object DatabaseTableName {
@@ -126,11 +127,13 @@ object DatabaseTableName {
 }
 
 sealed abstract class ColumnLabel[+T] {
-  def debugDoc: Doc[Nothing] = Doc(toString)
+  def debugDoc(implicit ev: HasDoc[T]): Doc[Nothing]
 }
 
 final class AutoColumnLabel private[analyzer2] (private val name: Int) extends ColumnLabel[Nothing] {
   override def toString = s"c${LabelProvider.subscript(name)}"
+
+  def debugDoc(implicit ev: HasDoc[Nothing]): Doc[Nothing] = Doc(toString)
 
   override def hashCode = name.hashCode
   override def equals(that: Any) =
@@ -168,7 +171,9 @@ object AutoColumnLabel {
   }
 }
 
-final case class DatabaseColumnName[T](name: T) extends ColumnLabel[T]
+final case class DatabaseColumnName[T](name: T) extends ColumnLabel[T] {
+  def debugDoc(implicit ev: HasDoc[T]) = ev.docOf(name)
+}
 
 object DatabaseColumnName {
   implicit def jEncode[T: JsonEncode] = WrapperJsonEncode[DatabaseColumnName[T]](_.name)

@@ -53,7 +53,7 @@ trait TestHelper { this: Assertions =>
     }
   }
 
-  class IsomorphicToMatcher[MT <: MetaTypes](right: Statement[MT])(implicit ev: HasDoc[MT#ColumnValue]) extends BeMatcher[Statement[MT]] {
+  class IsomorphicToMatcher[MT <: MetaTypes](right: Statement[MT])(implicit ev: HasDoc[MT#ColumnValue], ev2: HasDoc[MT#DatabaseTableNameImpl], ev3: HasDoc[MT#DatabaseColumnNameImpl]) extends BeMatcher[Statement[MT]] {
     def apply(left: Statement[MT]) =
       MatchResult(
         left.isIsomorphic(right),
@@ -62,7 +62,7 @@ trait TestHelper { this: Assertions =>
       )
   }
 
-  def isomorphicTo[MT <: MetaTypes](right: Statement[MT])(implicit ev: HasDoc[MT#ColumnValue]) = new IsomorphicToMatcher(right)
+  def isomorphicTo[MT <: MetaTypes](right: Statement[MT])(implicit ev: HasDoc[MT#ColumnValue], ev2: HasDoc[MT#DatabaseTableNameImpl], ev3: HasDoc[MT#DatabaseColumnNameImpl]) = new IsomorphicToMatcher(right)
 
   def specFor(params: Map[HoleName, UserParameters.PossibleValue[TestType, TestValue]]): Map[HoleName, TestType] =
     params.iterator.map { case (hn, cv) =>

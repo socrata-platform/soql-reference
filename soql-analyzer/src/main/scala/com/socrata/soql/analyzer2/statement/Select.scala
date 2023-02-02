@@ -238,24 +238,24 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
         false
     }
 
-  override def debugDoc(implicit ev: HasDoc[CV]) =
+  private[analyzer2] override def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
     Seq[Option[Doc[Annotation[MT]]]](
       Some(
-        (Seq(Some(d"SELECT"), distinctiveness.debugDoc).flatten.hsep +:
+        (Seq(Some(d"SELECT"), distinctiveness.debugDoc(ev)).flatten.hsep +:
           selectList.toSeq.zipWithIndex.map { case ((columnLabel, NamedExpr(expr, columnName)), idx) =>
-            expr.debugDoc.annotate(Annotation.SelectListDefinition[MT](idx+1)) ++ Doc.softlineSep ++ d"AS" +#+ columnLabel.debugDoc.annotate(Annotation.ColumnAliasDefinition[MT](columnName, columnLabel))
+            expr.debugDoc(ev).annotate(Annotation.SelectListDefinition[MT](idx+1)) ++ Doc.softlineSep ++ d"AS" +#+ columnLabel.debugDoc.annotate(Annotation.ColumnAliasDefinition[MT](columnName, columnLabel))
           }.punctuate(d",")).sep.nest(2)
       ),
-      Some((d"FROM" +#+ from.debugDoc).nest(2)),
-      where.map { w => Seq(d"WHERE", w.debugDoc).sep.nest(2) },
+      Some((d"FROM" +#+ from.doDebugDoc).nest(2)),
+      where.map { w => Seq(d"WHERE", w.debugDoc(ev)).sep.nest(2) },
       if(groupBy.nonEmpty) {
-        Some((d"GROUP BY" +: groupBy.map(_.debugDoc).punctuate(d",")).sep.nest(2))
+        Some((d"GROUP BY" +: groupBy.map(_.debugDoc(ev)).punctuate(d",")).sep.nest(2))
       } else {
         None
       },
-      having.map { h => Seq(d"HAVING", h.debugDoc).sep.nest(2) },
+      having.map { h => Seq(d"HAVING", h.debugDoc(ev)).sep.nest(2) },
       if(orderBy.nonEmpty) {
-        Some((d"ORDER BY" +: orderBy.map(_.debugDoc).punctuate(d",")).sep.nest(2))
+        Some((d"ORDER BY" +: orderBy.map(_.debugDoc(ev)).punctuate(d",")).sep.nest(2))
       } else {
         None
       },

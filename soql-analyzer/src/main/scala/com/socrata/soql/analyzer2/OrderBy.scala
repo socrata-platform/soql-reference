@@ -17,9 +17,9 @@ case class OrderBy[MT <: MetaTypes](expr: Expr[MT], ascending: Boolean, nullLast
       this.nullLast == that.nullLast &&
       this.expr.findIsomorphism(state, that.expr)
 
-  def debugDoc(implicit ev: HasDoc[CV]) =
+  private[analyzer2] def debugDoc(implicit ev: ExprDocProvider[MT]) =
     Seq(
-      expr.debugDoc,
+      expr.debugDoc(ev),
       Seq(
         if(ascending) d"ASC" else d"DESC",
         if(nullLast) d"NULLS LAST" else d"NULLS FIRST"

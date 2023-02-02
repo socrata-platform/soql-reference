@@ -151,9 +151,9 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
         false
     }
 
-  def debugDoc(implicit ev: HasDoc[CV]) =
+  private[analyzer2] def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
     reduce[Doc[Annotation[MT]]](
-      _.debugDoc,
+      _.doDebugDoc,
       { (leftDoc, j) =>
         val Join(joinType, lateral, _left, right, on) = j
         Seq(
@@ -161,9 +161,9 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
           Seq(
             Some(joinType.debugDoc),
             if(lateral) Some(d"LATERAL") else None,
-            Some(right.debugDoc),
+            Some(right.doDebugDoc),
             Some(d"ON"),
-            Some(on.debugDoc)
+            Some(on.debugDoc(ev))
           ).flatten.hsep
         ).sep
       },

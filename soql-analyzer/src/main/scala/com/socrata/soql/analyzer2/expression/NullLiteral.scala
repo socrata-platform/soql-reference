@@ -13,7 +13,7 @@ trait NullLiteralImpl[MT <: MetaTypes] { this: NullLiteral[MT] =>
 
   val size = 1
 
-  protected def doDebugDoc(implicit ev: HasDoc[CV]) = d"NULL"
+  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) = d"NULL"
 
   def doRelabel(state: RelabelState) = this
   def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =

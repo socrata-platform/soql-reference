@@ -81,17 +81,17 @@ trait WindowedFunctionCallImpl[MT <: MetaTypes] { this: WindowedFunctionCall[MT]
          partitionBy = partitionBy.map(_.doRelabel(state)),
          orderBy = orderBy.map(_.doRelabel(state)))(position)
 
-  protected def doDebugDoc(implicit ev: HasDoc[CV]) = {
+  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) = {
     val preArgs: Doc[Nothing] = Doc(function.name.name) ++ d"("
     val windowParts: Doc[Annotation[MT]] =
       Seq[Option[Doc[Annotation[MT]]]](
         if(partitionBy.nonEmpty) {
-          Some((d"PARTITION BY" +: partitionBy.map(_.debugDoc).punctuate(d",")).sep.nest(2))
+          Some((d"PARTITION BY" +: partitionBy.map(_.debugDoc(ev)).punctuate(d",")).sep.nest(2))
         } else {
           None
         },
         if(orderBy.nonEmpty) {
-          Some((d"ORDER BY" +: orderBy.map(_.debugDoc).punctuate(d",")).sep.nest(2))
+          Some((d"ORDER BY" +: orderBy.map(_.debugDoc(ev)).punctuate(d",")).sep.nest(2))
         } else {
           None
         },
@@ -99,10 +99,10 @@ trait WindowedFunctionCallImpl[MT <: MetaTypes] { this: WindowedFunctionCall[MT]
       ).flatten.sep.encloseNesting(d"(", d")")
     val postArgs = Seq(
       Some(d")"),
-      filter.map { w => w.debugDoc.encloseNesting(d"FILTER (", d")") },
+      filter.map { w => w.debugDoc(ev).encloseNesting(d"FILTER (", d")") },
       Some(d"OVER" +#+ windowParts)
     ).flatten.hsep
-    args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs)
+    args.map(_.debugDoc(ev)).encloseNesting(preArgs, d",", postArgs)
   }
 
   private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))

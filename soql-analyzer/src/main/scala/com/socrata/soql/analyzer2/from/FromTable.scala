@@ -27,8 +27,8 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
 
   private[analyzer2] override final val scope: Scope[MT] = new Scope.Physical[MT](tableName, label, columns)
 
-  def debugDoc(implicit ev: HasDoc[CV]) =
-    (tableName.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
+  private[analyzer2] def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
+    (tableName.debugDoc(ev.tableNameImpl) ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
 
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     copy[MT2](

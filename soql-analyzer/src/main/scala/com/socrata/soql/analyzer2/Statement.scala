@@ -62,10 +62,13 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
   def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]]
   def contains(e: Expr[MT]): Boolean
 
-  final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
-  final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder =
+  final def debugStr(implicit ev1: HasDoc[CV], ev2: HasDoc[MT#DatabaseTableNameImpl], ev3: HasDoc[MT#DatabaseColumnNameImpl]): String = debugStr(new StringBuilder).toString
+  final def debugStr(sb: StringBuilder)(implicit ev1: HasDoc[CV], ev2: HasDoc[MT#DatabaseTableNameImpl], ev3: HasDoc[MT#DatabaseColumnNameImpl]): StringBuilder =
     debugDoc.layoutSmart().toStringBuilder(sb)
-  def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[MT]]
+  final def debugDoc(implicit ev1: HasDoc[CV], ev2: HasDoc[MT#DatabaseTableNameImpl], ev3: HasDoc[MT#DatabaseColumnNameImpl]): Doc[Annotation[MT]] =
+    doDebugDoc(new StatementDocProvider(ev1, ev2, ev3))
+
+  private[analyzer2] def doDebugDoc(implicit ev: StatementDocProvider[MT]): Doc[Annotation[MT]]
 
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT]
 

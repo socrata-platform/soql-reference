@@ -61,14 +61,14 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =
     copy(definitionQuery = definitionQuery.mapAlias(f), definitionAlias = f(definitionAlias), useQuery = useQuery.mapAlias(f))
 
-  override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[MT]] =
+  private[analyzer2] override def doDebugDoc(implicit ev: StatementDocProvider[MT]): Doc[Annotation[MT]] =
     Seq(
       Seq(
         Some(d"WITH" +#+ definitionLabel.debugDoc +#+ d"AS"),
         materializedHint.debugDoc
       ).flatten.hsep,
-      definitionQuery.debugDoc.encloseNesting(d"(", d")"),
-      useQuery.debugDoc
+      definitionQuery.doDebugDoc.encloseNesting(d"(", d")"),
+      useQuery.doDebugDoc
     ).sep
 
   private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {

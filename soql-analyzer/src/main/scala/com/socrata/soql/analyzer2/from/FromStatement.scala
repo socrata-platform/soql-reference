@@ -67,8 +67,8 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
     }
   }
 
-  def debugDoc(implicit ev: HasDoc[CV]) =
-    (statement.debugDoc.encloseNesting(d"(", d")") +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
+  private[analyzer2] def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
+    (statement.doDebugDoc.encloseNesting(d"(", d")") +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
 }
 
 trait OFromStatementImpl { this: FromStatement.type =>

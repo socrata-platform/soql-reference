@@ -49,8 +49,8 @@ trait FunctionCallImpl[MT <: MetaTypes] { this: FunctionCall[MT] =>
   private[analyzer2] def doRelabel(state: RelabelState) =
     copy(args = args.map(_.doRelabel(state)))(position)
 
-  protected def doDebugDoc(implicit ev: HasDoc[CV]) =
-    args.map(_.debugDoc).encloseHanging(Doc(function.name.name) ++ d"(", d",", d")")
+  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) =
+    args.map(_.debugDoc(ev)).encloseHanging(Doc(function.name.name) ++ d"(", d",", d")")
 
   private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
 }

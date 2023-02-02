@@ -26,7 +26,7 @@ trait SelectListReferenceImpl[MT <: MetaTypes] { this: SelectListReference[MT] =
     this == that
   }
 
-  protected def doDebugDoc(implicit ev: HasDoc[CV]) =
+  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) =
     Doc(index).annotate(Annotation.SelectListReference[MT](index))
 
   private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))

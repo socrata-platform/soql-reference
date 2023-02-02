@@ -40,8 +40,8 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
 
   val size = 1
 
-  def doDebugDoc(implicit ev: HasDoc[CV]) =
-    (table.debugDoc ++ d"." ++ column.debugDoc).
+  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) =
+    (table.debugDoc ++ d"." ++ column.debugDoc(ev.columnNameImpl)).
       annotate(Annotation.ColumnRef(table, column))
 
   private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))

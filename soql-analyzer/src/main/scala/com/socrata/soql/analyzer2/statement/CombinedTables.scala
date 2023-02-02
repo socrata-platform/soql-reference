@@ -65,8 +65,8 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =
     copy(left = left.mapAlias(f), right = right.mapAlias(f))
 
-  override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[MT]] = {
-    left.debugDoc.encloseNesting(d"(", d")") +#+ op.debugDoc +#+ right.debugDoc.encloseNesting(d"(", d")")
+  private[analyzer2] override def doDebugDoc(implicit ev: StatementDocProvider[MT]): Doc[Annotation[MT]] = {
+    left.doDebugDoc.encloseNesting(d"(", d")") +#+ op.debugDoc +#+ right.doDebugDoc.encloseNesting(d"(", d")")
   }
 }
 

@@ -39,7 +39,7 @@ trait VirtualColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Virtu
 
   val size = 1
 
-  def doDebugDoc(implicit ev: HasDoc[CV]) =
+  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) =
     (table.debugDoc ++ d"." ++ column.debugDoc).
       annotate(Annotation.ColumnRef[MT](table, column))
 

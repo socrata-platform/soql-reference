@@ -63,7 +63,7 @@ trait AggregateFunctionCallImpl[MT <: MetaTypes] { this: AggregateFunctionCall[M
     copy(args = args.map(_.doRelabel(state)),
          filter = filter.map(_.doRelabel(state)))(position)
 
-  protected def doDebugDoc(implicit ev: HasDoc[CV]) = {
+  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) = {
     val preArgs = Seq(
       Some(Doc(function.name.name)),
       Some(d"("),
@@ -71,9 +71,9 @@ trait AggregateFunctionCallImpl[MT <: MetaTypes] { this: AggregateFunctionCall[M
     ).flatten.hcat
     val postArgs = Seq(
       Some(d")"),
-      filter.map { w => w.debugDoc.encloseNesting(d"FILTER (", d")") }
+      filter.map { w => w.debugDoc(ev).encloseNesting(d"FILTER (", d")") }
     ).flatten.hsep
-    args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs)
+    args.map(_.debugDoc(ev)).encloseNesting(preArgs, d",", postArgs)
   }
 
   private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))

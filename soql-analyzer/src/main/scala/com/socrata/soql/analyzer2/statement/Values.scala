@@ -67,13 +67,13 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
   private[analyzer2] def doRelabel(state: RelabelState): Self[MT] =
     copy(values = values.map(_.map(_.doRelabel(state))))
 
-  override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[MT]] = {
+  private[analyzer2] override def doDebugDoc(implicit ev: StatementDocProvider[MT]): Doc[Annotation[MT]] = {
     Seq(
       d"VALUES",
       values.toSeq.map { row =>
         row.toSeq.zip(schema.keys).
           map { case (expr, label) =>
-            expr.debugDoc.annotate(Annotation.ColumnAliasDefinition(schema(label).name, label))
+            expr.debugDoc(ev).annotate(Annotation.ColumnAliasDefinition(schema(label).name, label))
           }.encloseNesting(d"(", d",", d")")
       }.encloseNesting(d"(", d",", d")")
     ).sep.nest(2)

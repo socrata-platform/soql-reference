@@ -58,7 +58,7 @@ trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
     // no columns
   }
 
-  def debugDoc(implicit ev: HasDoc[CV]) =
+  private[analyzer2] def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
     (d"(SELECT)" +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
 }
 

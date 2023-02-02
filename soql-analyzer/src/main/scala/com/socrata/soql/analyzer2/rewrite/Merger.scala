@@ -10,8 +10,14 @@ import com.socrata.soql.typechecker.HasDoc
 import com.socrata.soql.analyzer2._
 
 class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends StatementUniverse[MT] {
-  private implicit val hd = new HasDoc[CV] {
+  private implicit val cvDoc = new HasDoc[CV] {
     override def docOf(v: CV) = com.socrata.prettyprint.Doc(v.toString)
+  }
+  private implicit val dcnDoc = new HasDoc[MT#DatabaseColumnNameImpl] {
+    override def docOf(v: MT#DatabaseColumnNameImpl) = com.socrata.prettyprint.Doc(v.toString)
+  }
+  private implicit val dtnDoc = new HasDoc[MT#DatabaseTableNameImpl] {
+    override def docOf(v: MT#DatabaseTableNameImpl) = com.socrata.prettyprint.Doc(v.toString)
   }
 
   def merge(stmt: Statement): Statement = {
