@@ -19,9 +19,9 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
 
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean = {
     that match {
-      case PhysicalColumn(thatPhysicalTable, thatTable, thatColumn, thatTyp) =>
+      case PhysicalColumn(thatTable, thatColumn, thatTyp) =>
         this.typ == that.typ &&
-          this.physicalTable == thatPhysicalTable &&
+          state.physicalTableLeft(this.table) == state.physicalTableRight(thatTable) &&
           state.tryAssociate(Some(this.table), this.column, Some(thatTable), thatColumn)
       case _ =>
         false
@@ -30,9 +30,8 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
 
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     PhysicalColumn(
-      physicalTable = state.convert(physicalTable),
       table = table,
-      column = state.convert(physicalTable, column),
+      column = state.convert(table, column),
       typ = state.changesOnlyLabels.convertCT(typ)
     )(position)
 
@@ -53,7 +52,6 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
 trait OPhysicalColumnImpl { this: PhysicalColumn.type =>
   implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#ColumnType], writableDTN : Writable[MT#DatabaseTableNameImpl], writableDCN : Writable[MT#DatabaseColumnNameImpl]): Writable[PhysicalColumn[MT]] = new Writable[PhysicalColumn[MT]] {
     def writeTo(buffer: WriteBuffer, c: PhysicalColumn[MT]): Unit = {
-      buffer.write(c.physicalTable)
       buffer.write(c.table)
       buffer.write(c.column)
       buffer.write(c.typ)
@@ -64,7 +62,6 @@ trait OPhysicalColumnImpl { this: PhysicalColumn.type =>
   implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#ColumnType], readableDTN : Readable[MT#DatabaseTableNameImpl], readableDCN : Readable[MT#DatabaseColumnNameImpl]): Readable[PhysicalColumn[MT]] = new Readable[PhysicalColumn[MT]] with LabelUniverse[MT] {
     def readFrom(buffer: ReadBuffer): PhysicalColumn[MT] = {
       PhysicalColumn(
-        physicalTable = buffer.read[DatabaseTableName](),
         table = buffer.read[AutoTableLabel](),
         column = buffer.read[DatabaseColumnName](),
         typ = buffer.read[CT]()

@@ -37,16 +37,16 @@ private[analyzer2] object IsomorphismState {
   }
 
   private[analyzer2] class View[MT <: MetaTypes] private[IsomorphismState](
-    forwardTables: DMap[types.AutoTableLabel[MT]],
-    backwardTables: DMap[types.AutoTableLabel[MT]],
+    forwardTables: scm.Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
+    backwardTables: scm.Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
     forwardColumns: DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])],
     backwardColumns: DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])]
   ) extends LabelUniverse[MT] {
     def reverse: View[MT] =
       new View(backwardTables, forwardTables, backwardColumns, forwardColumns)
 
-    def renameForward[T <: AutoTableLabel](t: T): T = forwardTables.getOrElse(t, t)
-    def renameBackward[T <: AutoTableLabel](t: T): T = backwardTables.getOrElse(t, t)
+    def renameForward(t: AutoTableLabel): AutoTableLabel = forwardTables.getOrElse(t, t)
+    def renameBackward(t: AutoTableLabel): AutoTableLabel = backwardTables.getOrElse(t, t)
 
     def renameForward[T <: AutoTableLabel, C <: ColumnLabel](t: Option[T], c: C): (Option[T], C) =
       forwardColumns.getOrElse((t, c), (t, c))
@@ -56,14 +56,22 @@ private[analyzer2] object IsomorphismState {
 }
 
 private[analyzer2] class IsomorphismState[MT <: MetaTypes] private (
-  forwardTables: IsomorphismState.DMap[types.AutoTableLabel[MT]],
-  backwardTables: IsomorphismState.DMap[types.AutoTableLabel[MT]],
+  tableMapLeft: Map[AutoTableLabel, types.DatabaseTableName[MT]],
+  tableMapRight: Map[AutoTableLabel, types.DatabaseTableName[MT]],
+  forwardTables: scm.Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
+  backwardTables: scm.Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
   forwardColumns: IsomorphismState.DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])],
   backwardColumns: IsomorphismState.DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])]
 ) extends LabelUniverse[MT] {
-  def this() = this(new IsomorphismState.DMap,new IsomorphismState.DMap,new IsomorphismState.DMap,new IsomorphismState.DMap)
+  def this(
+    tableMapLeft: Map[AutoTableLabel, types.DatabaseTableName[MT]],
+    tableMapRight: Map[AutoTableLabel, types.DatabaseTableName[MT]]
+  ) = this(tableMapLeft, tableMapRight, new scm.HashMap, new scm.HashMap, new IsomorphismState.DMap, new IsomorphismState.DMap)
 
   def finish = new IsomorphismState.View(forwardTables, backwardTables, forwardColumns, backwardColumns)
+
+  def physicalTableLeft(table: AutoTableLabel): DatabaseTableName = tableMapLeft(table)
+  def physicalTableRight(table: AutoTableLabel): DatabaseTableName = tableMapRight(table)
 
   def tryAssociate(tableA: AutoTableLabel, tableB: AutoTableLabel): Boolean = {
     (tableA, tableB) match {

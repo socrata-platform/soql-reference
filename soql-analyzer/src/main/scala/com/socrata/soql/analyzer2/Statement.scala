@@ -35,7 +35,7 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
     // This is given the _original_ database table name
     columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
   )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): Self[MT2] =
-    doRewriteDatabaseNames(new RewriteDatabaseNamesState[MT2](tableName, columnName, changesOnlyLabels))
+    doRewriteDatabaseNames(new RewriteDatabaseNamesState[MT2](tableName, columnName, realTables, changesOnlyLabels))
 
   /** The names that the SoQLAnalyzer produces aren't necessarily safe
     * for use in any particular database.  This lets those
@@ -48,7 +48,7 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
 
   def isIsomorphic(that: Statement[MT]): Boolean =
-    findIsomorphism(new IsomorphismState, None, None, that)
+    findIsomorphism(new IsomorphismState(this.realTables, that.realTables), None, None, that)
 
   private[analyzer2] def findIsomorphism(
     state: IsomorphismState,

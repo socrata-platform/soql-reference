@@ -3,6 +3,7 @@ package com.socrata.soql.analyzer2
 private[analyzer2] case class RewriteDatabaseNamesState[MT1 <: MetaTypes, MT2 <: MetaTypes](
   tableName: types.DatabaseTableName[MT1] => types.DatabaseTableName[MT2],
   columnName: (types.DatabaseTableName[MT1], types.DatabaseColumnName[MT1]) => types.DatabaseColumnName[MT2],
+  val realTables: Map[AutoTableLabel, types.DatabaseTableName[MT1]],
   val changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT1, MT2]
 ) {
   type DatabaseTableName1 = types.DatabaseTableName[MT1]
@@ -33,6 +34,13 @@ private[analyzer2] case class RewriteDatabaseNamesState[MT1 <: MetaTypes, MT2 <:
         val fresh = columnName(tName, cName)
         columnNames += (tName, cName) -> fresh
         fresh
+    }
+  }
+
+  def convert(tLabel: AutoTableLabel, cName: DatabaseColumnName1): DatabaseColumnName2 = {
+    realTables.get(tLabel) match {
+      case Some(tName) => convert(tName, cName)
+      case None => throw new Exception("realTables doesn't contain an AutoTableLabel that was found???")
     }
   }
 }
