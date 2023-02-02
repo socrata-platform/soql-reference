@@ -28,7 +28,7 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
   private[analyzer2] def realTables =
     definitionQuery.realTables ++ useQuery.realTables
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] =
     definitionQuery.columnReferences.mergeWith(useQuery.columnReferences)(_ ++ _)
 
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
@@ -44,8 +44,8 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
 
   private[analyzer2] def findIsomorphism(
     state: IsomorphismState,
-    thisCurrentTableLabel: Option[TableLabel],
-    thatCurrentTableLabel: Option[TableLabel],
+    thisCurrentTableLabel: Option[AutoTableLabel],
+    thatCurrentTableLabel: Option[AutoTableLabel],
     that: Statement[MT]
   ): Boolean =
     that match {

@@ -65,11 +65,7 @@ object LabelProvider {
   }
 }
 
-sealed abstract class TableLabel[+T] {
-  def debugDoc: Doc[Nothing] = Doc(toString)
-}
-
-final class AutoTableLabel private[analyzer2] (private val name: Int) extends TableLabel[Nothing] {
+final class AutoTableLabel private[analyzer2] (private val name: Int) {
   override def toString = s"t${LabelProvider.subscript(name)}"
 
   override def hashCode = name.hashCode
@@ -78,6 +74,8 @@ final class AutoTableLabel private[analyzer2] (private val name: Int) extends Ta
       case atl: AutoTableLabel => this.name == atl.name
       case _ => false
     }
+
+  def debugDoc: Doc[Nothing] = Doc(toString)
 }
 object AutoTableLabel {
   def unapply(atl: AutoTableLabel): Some[Int] = Some(atl.name)
@@ -108,7 +106,9 @@ object AutoTableLabel {
   }
 }
 
-final case class DatabaseTableName[+T](name: T) extends TableLabel[T]
+final case class DatabaseTableName[+T](name: T) {
+  def debugDoc: Doc[Nothing] = Doc(toString)
+}
 
 object DatabaseTableName {
   implicit def jEncode[T: JsonEncode] = WrapperJsonEncode[DatabaseTableName[T]](_.name)
@@ -122,44 +122,6 @@ object DatabaseTableName {
   implicit def deserialize[T: Readable] = new Readable[DatabaseTableName[T]] {
     def readFrom(buffer: ReadBuffer) =
       DatabaseTableName(buffer.read[T]())
-  }
-}
-
-object TableLabel {
-  implicit def jEncode[T : JsonEncode] = SimpleHierarchyEncodeBuilder[TableLabel[T]](TagToValue)
-    .branch[AutoTableLabel]("auto")
-    .branch[DatabaseTableName[T]]("dtn")
-    .build
-
-  implicit def jDecode[T : JsonDecode] = SimpleHierarchyDecodeBuilder[TableLabel[T]](TagToValue)
-    .branch[AutoTableLabel]("auto")
-    .branch[DatabaseTableName[T]]("dtn")
-    .build
-
-  implicit def serialize[T : Writable] = new Writable[TableLabel[T]] {
-    def writeTo(buffer: WriteBuffer, label: TableLabel[T]): Unit = {
-      label match {
-        case a: AutoTableLabel =>
-          buffer.write(0)
-          buffer.write(a)
-        case d: DatabaseTableName[T] =>
-          buffer.write(1)
-          buffer.write(d)
-      }
-    }
-  }
-
-  implicit def deserialize[T : Readable] = new Readable[TableLabel[T]] {
-    def readFrom(buffer: ReadBuffer): TableLabel[T] = {
-      buffer.read[Int]() match {
-        case 0 =>
-          buffer.read[AutoTableLabel]()
-        case 1 =>
-          buffer.read[DatabaseTableName[T]]()
-        case other =>
-          fail("Unknown table label type " + other)
-      }
-    }
   }
 }
 

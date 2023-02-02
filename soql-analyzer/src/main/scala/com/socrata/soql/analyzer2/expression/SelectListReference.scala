@@ -13,7 +13,7 @@ trait SelectListReferenceImpl[MT <: MetaTypes] { this: SelectListReference[MT] =
 
   val size = 1
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] =
     throw new Exception("Cannot ask for ColumnReferences on a query with SelectListReferences")
 
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =

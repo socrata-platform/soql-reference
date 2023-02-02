@@ -17,7 +17,7 @@ trait AtomicFromImpl[MT <: MetaTypes] { this: AtomicFrom[MT] =>
 
   val resourceName: Option[ScopedResourceName[RNS]]
   val alias: Option[ResourceName]
-  val label: TableLabel
+  val label: AutoTableLabel
 
   private[analyzer2] val scope: Scope[MT]
 

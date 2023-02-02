@@ -45,15 +45,15 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[MT]
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
 
   def isIsomorphic(that: Statement[MT]): Boolean =
     findIsomorphism(new IsomorphismState, None, None, that)
 
   private[analyzer2] def findIsomorphism(
     state: IsomorphismState,
-    thisCurrentTableLabel: Option[TableLabel],
-    thatCurrentTableLabel: Option[TableLabel],
+    thisCurrentTableLabel: Option[AutoTableLabel],
+    thatCurrentTableLabel: Option[AutoTableLabel],
     that: Statement[MT]
   ): Boolean
 

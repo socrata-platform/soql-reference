@@ -20,7 +20,7 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
   type Self[MT <: MetaTypes] = Select[MT]
   def asSelf = this
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = {
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = {
     var refs = distinctiveness.columnReferences
     for(e <- selectList.values) {
       refs = refs.mergeWith(e.expr.columnReferences)(_ ++ _)
@@ -196,8 +196,8 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
 
   private[analyzer2] def findIsomorphism(
     state: IsomorphismState,
-    thisCurrentTableLabel: Option[TableLabel],
-    thatCurrentTableLabel: Option[TableLabel],
+    thisCurrentTableLabel: Option[AutoTableLabel],
+    thatCurrentTableLabel: Option[AutoTableLabel],
     that: Statement[MT]
   ): Boolean =
     that match {

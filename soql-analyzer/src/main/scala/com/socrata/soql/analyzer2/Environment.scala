@@ -69,7 +69,7 @@ object ScopeName {
 }
 
 sealed trait Scope[MT <: MetaTypes] extends LabelUniverse[MT] {
-  val label: TableLabel
+  val label: AutoTableLabel
   // def types = schemaByName.iterator.map { case (_, e) => e.typ }.toSeq
 
 }

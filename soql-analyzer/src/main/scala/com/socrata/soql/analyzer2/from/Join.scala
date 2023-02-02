@@ -82,8 +82,8 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
     loop(this, Nil).asInstanceOf[(S, Join[MT2])]
   }
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
-    reduce[Map[TableLabel, Set[ColumnLabel]]](
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] =
+    reduce[Map[AutoTableLabel, Set[ColumnLabel]]](
       _.columnReferences,
       (acc, join) => acc.mergeWith(join.right.columnReferences)(_ ++ _).mergeWith(join.on.columnReferences)(_ ++ _)
     )

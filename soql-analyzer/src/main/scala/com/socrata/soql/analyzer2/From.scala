@@ -42,7 +42,7 @@ sealed abstract class From[MT <: MetaTypes] extends LabelUniverse[MT] {
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
 
   def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]]
   def contains(e: Expr[MT]): Boolean

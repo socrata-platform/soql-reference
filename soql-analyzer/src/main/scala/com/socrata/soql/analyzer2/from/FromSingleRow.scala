@@ -51,7 +51,7 @@ trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
 
   private[analyzer2] def realTables = Map.empty[AutoTableLabel, DatabaseTableName]
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = Map.empty
 
   private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
     state.tableMap += label -> LabelMap.TableReference(resourceName, alias)

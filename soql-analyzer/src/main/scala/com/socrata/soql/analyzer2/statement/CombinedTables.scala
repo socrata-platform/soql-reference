@@ -31,7 +31,7 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName] =
     left.realTables ++ right.realTables
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] =
     left.columnReferences.mergeWith(right.columnReferences)(_ ++ _)
 
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
@@ -50,8 +50,8 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
 
   private[analyzer2] def findIsomorphism(
     state: IsomorphismState,
-    thisCurrentTableLabel: Option[TableLabel],
-    thatCurrentTableLabel: Option[TableLabel],
+    thisCurrentTableLabel: Option[AutoTableLabel],
+    thatCurrentTableLabel: Option[AutoTableLabel],
     that: Statement[MT]
   ): Boolean =
     that match {

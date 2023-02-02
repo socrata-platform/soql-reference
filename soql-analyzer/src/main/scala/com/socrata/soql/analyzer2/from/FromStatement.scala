@@ -20,7 +20,7 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
 
   private[analyzer2] val scope: Scope[MT] = new Scope.Virtual[MT](label, statement.schema)
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = statement.columnReferences
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = statement.columnReferences
 
   def find(predicate: Expr[MT] => Boolean) = statement.find(predicate)
   def contains(e: Expr[MT]): Boolean =

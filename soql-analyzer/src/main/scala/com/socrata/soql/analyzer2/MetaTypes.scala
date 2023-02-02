@@ -86,7 +86,6 @@ trait MetaTypeHelper[MT <: MetaTypes] {
 trait LabelUniverse[MT <: MetaTypes] extends MetaTypeHelper[MT] {
   import com.socrata.soql.analyzer2
 
-  type TableLabel = analyzer2.TableLabel[MT#DatabaseTableNameImpl]
   type AutoTableLabel = analyzer2.AutoTableLabel
   type DatabaseTableName = analyzer2.DatabaseTableName[MT#DatabaseTableNameImpl]
 

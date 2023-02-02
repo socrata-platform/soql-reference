@@ -10,7 +10,7 @@ sealed trait Distinctiveness[MT <: MetaTypes] extends LabelUniverse[MT] {
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]): Distinctiveness[MT2]
   private[analyzer2] def doRelabel(state: RelabelState): Distinctiveness[MT]
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Distinctiveness[MT]): Boolean
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
   def debugDoc(implicit ev: HasDoc[CV]): Option[Doc[Annotation[MT]]]
 }
 object Distinctiveness {
@@ -20,7 +20,7 @@ object Distinctiveness {
     private[analyzer2] def doRelabel(state: RelabelState) = this
     private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Distinctiveness[MT]): Boolean =
       that == this
-    private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
+    private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = Map.empty
 
     def debugDoc(implicit ev: HasDoc[CV]) = None
   }
@@ -35,7 +35,7 @@ object Distinctiveness {
     // Uggh.. this is a little weird (and the reason this method is
     // "private[analyzer2]") since FullyDistinct kind of references
     // all columns in the select in which it appears.
-    private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
+    private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = Map.empty
 
     def debugDoc(implicit ev: HasDoc[CV]) = Some(d"DISTINCT")
   }
@@ -46,8 +46,8 @@ object Distinctiveness {
     private[analyzer2] def doRelabel(state: RelabelState) =
       On(exprs.map(_.doRelabel(state)))
 
-    private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
-      exprs.foldLeft(Map.empty[TableLabel, Set[ColumnLabel]]) { (acc, e) =>
+    private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] =
+      exprs.foldLeft(Map.empty[AutoTableLabel, Set[ColumnLabel]]) { (acc, e) =>
         acc.mergeWith(e.columnReferences)(_ ++ _)
       }
 

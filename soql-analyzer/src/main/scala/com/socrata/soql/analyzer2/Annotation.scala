@@ -9,7 +9,7 @@ import com.socrata.soql.environment.{ResourceName, ColumnName}
 
 sealed abstract class Annotation[MT <: MetaTypes]
 object Annotation {
-  case class TableAliasDefinition[MT <: MetaTypes](name: Option[ResourceName], label: TableLabel[MT]) extends Annotation[MT]
+  case class TableAliasDefinition[MT <: MetaTypes](name: Option[ResourceName], label: AutoTableLabel) extends Annotation[MT]
   case class ColumnAliasDefinition[MT <: MetaTypes](name: ColumnName, label: types.ColumnLabel[MT]) extends Annotation[MT]
   case class TableDefinition[MT <: MetaTypes](label: types.AutoTableLabel[MT]) extends Annotation[MT]
   case class ColumnRef[MT <: MetaTypes](table: types.AutoTableLabel[MT], label: ColumnLabel[MT#DatabaseColumnNameImpl]) extends Annotation[MT]

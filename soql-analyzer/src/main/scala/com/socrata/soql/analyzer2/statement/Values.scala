@@ -24,13 +24,13 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
       label -> NameEntry(ColumnName(s"column_${idx+1}"), expr.typ)
     }
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] =
     Map.empty
 
   private[analyzer2] def findIsomorphism(
     state: IsomorphismState,
-    thisCurrentTableLabel: Option[TableLabel],
-    thatCurrentTableLabel: Option[TableLabel],
+    thisCurrentTableLabel: Option[AutoTableLabel],
+    thatCurrentTableLabel: Option[AutoTableLabel],
     that: Statement[MT]
   ): Boolean =
     that match {

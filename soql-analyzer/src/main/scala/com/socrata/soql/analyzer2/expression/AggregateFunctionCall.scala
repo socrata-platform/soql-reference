@@ -21,9 +21,9 @@ trait AggregateFunctionCallImpl[MT <: MetaTypes] { this: AggregateFunctionCall[M
 
   val size = 1 + args.iterator.map(_.size).sum + filter.fold(0)(_.size)
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = {
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = {
     var refs =
-      args.foldLeft(Map.empty[TableLabel, Set[ColumnLabel]]) { (acc, arg) =>
+      args.foldLeft(Map.empty[AutoTableLabel, Set[ColumnLabel]]) { (acc, arg) =>
         acc.mergeWith(arg.columnReferences)(_ ++ _)
       }
     for(f <- filter) {

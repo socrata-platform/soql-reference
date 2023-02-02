@@ -9,7 +9,7 @@ trait LiteralImpl[MT <: MetaTypes] { this: Literal[MT] =>
   def isAggregated = false
   def isWindowed = false
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] =
     Map.empty
 
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean = {

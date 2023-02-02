@@ -14,7 +14,6 @@ package object types {
   type AutoColumnLabel[MT <: MetaTypes] = analyzer2.AutoColumnLabel
   type DatabaseColumnName[MT <: MetaTypes] = analyzer2.DatabaseColumnName[MT#DatabaseColumnNameImpl]
 
-  type TableLabel[MT <: MetaTypes] = analyzer2.TableLabel[MT#DatabaseTableNameImpl]
   type AutoTableLabel[MT <: MetaTypes] = analyzer2.AutoTableLabel
   type DatabaseTableName[MT <: MetaTypes] = analyzer2.DatabaseTableName[MT#DatabaseTableNameImpl]
 

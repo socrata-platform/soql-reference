@@ -22,9 +22,9 @@ trait WindowedFunctionCallImpl[MT <: MetaTypes] { this: WindowedFunctionCall[MT]
   def isAggregated = args.exists(_.isAggregated) || partitionBy.exists(_.isAggregated) || orderBy.exists(_.expr.isAggregated)
   def isWindowed = true
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = {
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = {
     var refs =
-      args.foldLeft(Map.empty[TableLabel, Set[ColumnLabel]]) { (acc, arg) =>
+      args.foldLeft(Map.empty[AutoTableLabel, Set[ColumnLabel]]) { (acc, arg) =>
         acc.mergeWith(arg.columnReferences)(_ ++ _)
       }
     for(f <- filter) {

@@ -39,7 +39,7 @@ sealed abstract class Expr[MT <: MetaTypes] extends Product with LabelUniverse[M
   private[analyzer2] def reposition(p: Position): Self[MT]
 
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
 
   final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
   final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder = debugDoc.layoutSmart().toStringBuilder(sb)

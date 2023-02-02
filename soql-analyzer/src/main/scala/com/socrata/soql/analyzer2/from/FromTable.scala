@@ -23,7 +23,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
 
   lazy val resourceName = Some(definiteResourceName)
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = Map.empty
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = Map.empty
 
   private[analyzer2] override final val scope: Scope[MT] = new Scope.Physical[MT](tableName, label, columns)
 

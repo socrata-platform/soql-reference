@@ -5,8 +5,6 @@ private[analyzer2] case class RewriteDatabaseNamesState[MT1 <: MetaTypes, MT2 <:
   columnName: (types.DatabaseTableName[MT1], types.DatabaseColumnName[MT1]) => types.DatabaseColumnName[MT2],
   val changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT1, MT2]
 ) {
-  type TableLabel1 = types.TableLabel[MT1]
-  type TableLabel2 = types.TableLabel[MT2]
   type DatabaseTableName1 = types.DatabaseTableName[MT1]
   type DatabaseTableName2 = types.DatabaseTableName[MT2]
 

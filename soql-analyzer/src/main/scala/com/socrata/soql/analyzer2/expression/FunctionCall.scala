@@ -20,8 +20,8 @@ trait FunctionCallImpl[MT <: MetaTypes] { this: FunctionCall[MT] =>
   def isAggregated = args.exists(_.isAggregated)
   def isWindowed = args.exists(_.isWindowed)
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
-    args.foldLeft(Map.empty[TableLabel, Set[ColumnLabel]]) { (acc, arg) =>
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] =
+    args.foldLeft(Map.empty[AutoTableLabel, Set[ColumnLabel]]) { (acc, arg) =>
       acc.mergeWith(arg.columnReferences)(_ ++ _)
     }
 
