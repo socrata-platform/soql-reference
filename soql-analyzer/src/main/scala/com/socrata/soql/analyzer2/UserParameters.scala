@@ -14,7 +14,7 @@ case class UserParameters[+CT, +CV](
 object UserParameters {
   val empty = UserParameters[Nothing, Nothing](Map.empty, Map.empty)
 
-  def emptyFor[RNS, CT](map: FoundTables[RNS, CT]) = {
+  def emptyFor[MT <: MetaTypes](map: FoundTables[MT]) = {
     val UserParameterSpecs(qualifiedSpecs, anonymousSpecs) = map.knownUserParameters
     val qualified = qualifiedSpecs.iterator.map { case (cn, hnct) =>
       cn -> hnct.iterator.map { case (hn, ct) => hn -> Null(ct) }.toMap
@@ -23,7 +23,7 @@ object UserParameters {
       case Right(hnct) =>
         hnct.iterator.map { case (hn, ct) => hn -> Null(ct) }.toMap
       case Left(_) =>
-        Map.empty[HoleName, PossibleValue[CT, Nothing]]
+        Map.empty[HoleName, PossibleValue[MT#ColumnType, Nothing]]
     }
     UserParameters(qualified, anonymous)
   }

@@ -3,16 +3,7 @@ package com.socrata.soql.analyzer2.rewrite
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 
-class RemoveUnusedOrderBy[RNS, CT, CV] private () {
-  type Statement = analyzer2.Statement[RNS, CT, CV]
-  type Select = analyzer2.Select[RNS, CT, CV]
-  type From = analyzer2.From[RNS, CT, CV]
-  type Join = analyzer2.Join[RNS, CT, CV]
-  type AtomicFrom = analyzer2.AtomicFrom[RNS, CT, CV]
-  type FromTable = analyzer2.FromTable[RNS, CT]
-  type FromSingleRow = analyzer2.FromSingleRow[RNS]
-  type OrderBy = analyzer2.OrderBy[CT, CV]
-
+class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[MT] {
   def rewriteStatement(stmt: Statement, callerCaresAboutOrder: Boolean): Statement = {
     stmt match {
       case CombinedTables(op, left, right) =>
@@ -27,7 +18,7 @@ class RemoveUnusedOrderBy[RNS, CT, CV] private () {
           useQuery = newUseQuery
         )
 
-      case v@Values(_) =>
+      case v@Values(_, _) =>
         v
 
       case select@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
@@ -41,7 +32,7 @@ class RemoveUnusedOrderBy[RNS, CT, CV] private () {
   }
 
   def rewriteFrom(from: From): From = {
-    from.map[RNS, CT, CV](
+    from.map[MT](
       rewriteAtomicFrom(_),
       { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, rewriteAtomicFrom(right), on) }
     )
@@ -60,7 +51,7 @@ class RemoveUnusedOrderBy[RNS, CT, CV] private () {
 /** Attempt to preserve ordering from inner queries to outer ones.
   * SelectListReferences must not be present (this is unchecked!!). */
 object RemoveUnusedOrderBy {
-  def apply[RNS, CT, CV](stmt: Statement[RNS, CT, CV]): Statement[RNS, CT, CV] = {
-    new RemoveUnusedOrderBy[RNS, CT, CV]().rewriteStatement(stmt, true)
+  def apply[MT <: MetaTypes](stmt: Statement[MT]): Statement[MT] = {
+    new RemoveUnusedOrderBy[MT]().rewriteStatement(stmt, true)
   }
 }

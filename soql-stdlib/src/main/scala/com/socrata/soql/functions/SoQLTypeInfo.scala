@@ -7,82 +7,111 @@ import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.environment.TypeName
 import com.socrata.soql.typed
 import com.socrata.soql.types._
-import com.socrata.soql.typechecker.{TypeInfo, TypeInfo2, HasType}
+import com.socrata.soql.typechecker.{TypeInfo, TypeInfo2, TypeInfoMetaProjection}
 import com.socrata.soql.ast
 import com.socrata.soql.analyzer2
+import com.socrata.soql.functions
 
 import scala.util.parsing.input.{Position, NoPosition}
 
 object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLType, SoQLValue] {
   val typeParameterUniverse = OrderedSet(SoQLType.typePreferences : _*)
 
-  implicit object hasType extends HasType[SoQLValue, SoQLType] {
-    def typeOf(cv: SoQLValue) = cv.typ
-  }
+  def metaProject[MT <: analyzer2.MetaTypes](
+    implicit typeEv: SoQLType =:= analyzer2.types.ColumnType[MT],
+    typeEvRev: analyzer2.types.ColumnType[MT] =:= SoQLType,
+    valueEv: SoQLValue =:= analyzer2.types.ColumnValue[MT],
+    valueEvRev: analyzer2.types.ColumnValue[MT] =:= SoQLValue
+  ): TypeInfoMetaProjection[MT] =
+    new TypeInfoMetaProjection[MT] with analyzer2.StatementUniverse[MT] {
+      val unproject = SoQLTypeInfo.asInstanceOf[TypeInfo2[CT, CV]]
 
-  def potentialExprs(l: ast.Literal) =
-    l match {
-      case ast.NullLiteral() => typeParameterUniverse.iterator.map(analyzer2.NullLiteral(_)(new analyzer2.AtomicPositionInfo(l.position))).toVector
-      case ast.BooleanLiteral(b) => Seq(analyzer2.LiteralValue(SoQLBoolean(b))(new analyzer2.AtomicPositionInfo(l.position)))
-      case ast.NumberLiteral(n) =>
-        val baseNumber = analyzer2.LiteralValue(SoQLNumber(n.bigDecimal))(new analyzer2.AtomicPositionInfo(l.position))
-        Seq(
-          baseNumber,
-          analyzer2.FunctionCall(numberToMoneyFunc, Seq(baseNumber))(new analyzer2.FuncallPositionInfo(l.position, NoPosition, NoPosition)),
-          analyzer2.FunctionCall(numberToDoubleFunc, Seq(baseNumber))(new analyzer2.FuncallPositionInfo(l.position, NoPosition, NoPosition)),
-        )
-      case ast.StringLiteral(s) =>
-        val baseString = analyzer2.LiteralValue(SoQLText(s))(new analyzer2.AtomicPositionInfo(l.position))
-        val results = Seq.newBuilder[analyzer2.Expr[SoQLType, SoQLValue]]
-        results += baseString
-        for {
-          conversion <- stringConversions
-          v <- conversion.test(s)
-          expr <- conversion.exprs
-        } {
-          results += expr(v, l.position)
+      private implicit def monomorphicFunctionConvert(f: functions.MonomorphicFunction[SoQLType]): MonomorphicFunction =
+        f.asInstanceOf[MonomorphicFunction]
+
+      implicit object hasType extends analyzer2.HasType[CV, CT] {
+        def typeOf(cv: CV): CT = cv.typ
+      }
+
+      def potentialExprs(l: ast.Literal) =
+        l match {
+          case ast.NullLiteral() => typeParameterUniverse.iterator.map(analyzer2.NullLiteral(_)(new analyzer2.AtomicPositionInfo(l.position))).toVector
+          case ast.BooleanLiteral(b) => Seq(analyzer2.LiteralValue[MT](SoQLBoolean(b))(new analyzer2.AtomicPositionInfo(l.position)))
+          case ast.NumberLiteral(n) =>
+            val baseNumber = analyzer2.LiteralValue[MT](SoQLNumber(n.bigDecimal))(new analyzer2.AtomicPositionInfo(l.position))
+            Seq(
+              baseNumber,
+              analyzer2.FunctionCall[MT](numberToMoneyFunc, Seq(baseNumber))(new analyzer2.FuncallPositionInfo(l.position, NoPosition, NoPosition)),
+              analyzer2.FunctionCall[MT](numberToDoubleFunc, Seq(baseNumber))(new analyzer2.FuncallPositionInfo(l.position, NoPosition, NoPosition))
+            )
+          case ast.StringLiteral(s) =>
+            val baseString = analyzer2.LiteralValue[MT](SoQLText(s))(new analyzer2.AtomicPositionInfo(l.position))
+            val results = Seq.newBuilder[analyzer2.Expr[MT]]
+            results += baseString
+            for {
+              conversion <- stringConversions
+              v <- conversion.test(s)
+              expr <- conversion.exprs
+            } {
+              results += expr(v, l.position).asInstanceOf[analyzer2.Expr[MT]] // SAFETY: CT and CV are the same, and that's all this cares about
+            }
+            results += analyzer2.FunctionCall[MT](textToBlobFunc, Seq(baseString))(new analyzer2.FuncallPositionInfo(l.position, NoPosition, NoPosition))
+            results += analyzer2.FunctionCall[MT](textToPhotoFunc, Seq(baseString))(new analyzer2.FuncallPositionInfo(l.position, NoPosition, NoPosition))
+            results.result()
         }
-        results += analyzer2.FunctionCall(textToBlobFunc, Seq(baseString))(new analyzer2.FuncallPositionInfo(l.position, NoPosition, NoPosition))
-        results += analyzer2.FunctionCall(textToPhotoFunc, Seq(baseString))(new analyzer2.FuncallPositionInfo(l.position, NoPosition, NoPosition))
-        results.result()
+
+      def boolType = SoQLBoolean.t
+
+      def literalBoolean(b: Boolean, pos: Position) =
+        analyzer2.LiteralValue[MT](SoQLBoolean(b))(new analyzer2.AtomicPositionInfo(pos))
     }
 
-  def boolType = SoQLBoolean.t
   def booleanLiteralExpr(b: Boolean, pos: Position) = Seq(typed.BooleanLiteral(b, SoQLBoolean.t)(pos))
+
+  private final class FakeMT extends analyzer2.MetaTypes {
+    type ColumnType = SoQLType
+    type ColumnValue = SoQLValue
+    type ResourceNameScope = Nothing
+    type DatabaseTableNameImpl = Nothing
+  }
+
+  implicit object hasType extends analyzer2.HasType[FakeMT#ColumnValue, FakeMT#ColumnType] {
+    def typeOf(cv: SoQLValue) = cv.typ
+  }
 
   private def getMonomorphically(f: Function[SoQLType]): MonomorphicFunction[SoQLType] =
     f.monomorphic.getOrElse(sys.error(f.identity + " not monomorphic?"))
 
   private def funcExpr(f: MonomorphicFunction[SoQLType]) = { (t: SoQLValue, pos: Position) =>
-    analyzer2.FunctionCall(f, Seq(analyzer2.LiteralValue(t)(new analyzer2.AtomicPositionInfo(pos))))(new analyzer2.FuncallPositionInfo(pos, NoPosition, NoPosition))
+    analyzer2.FunctionCall[FakeMT](f, Seq(analyzer2.LiteralValue[FakeMT](t)(new analyzer2.AtomicPositionInfo(pos))))(new analyzer2.FuncallPositionInfo(pos, NoPosition, NoPosition))
   }
 
   private def textToFixedTimestampExpr(dt: DateTime, pos: Position) =
-    analyzer2.LiteralValue(SoQLFixedTimestamp(dt))(new analyzer2.AtomicPositionInfo(pos))
+    analyzer2.LiteralValue[FakeMT](SoQLFixedTimestamp(dt))(new analyzer2.AtomicPositionInfo(pos))
   private def textToFloatingTimestampExpr(ldt: LocalDateTime, pos: Position) =
-    analyzer2.LiteralValue(SoQLFloatingTimestamp(ldt))(new analyzer2.AtomicPositionInfo(pos))
+    analyzer2.LiteralValue[FakeMT](SoQLFloatingTimestamp(ldt))(new analyzer2.AtomicPositionInfo(pos))
   private def textToDateExpr(d: LocalDate, pos: Position) =
-    analyzer2.LiteralValue(SoQLDate(d))(new analyzer2.AtomicPositionInfo(pos))
+    analyzer2.LiteralValue[FakeMT](SoQLDate(d))(new analyzer2.AtomicPositionInfo(pos))
   private def textToTimeExpr(t: LocalTime, pos: Position) =
-    analyzer2.LiteralValue(SoQLTime(t))(new analyzer2.AtomicPositionInfo(pos))
+    analyzer2.LiteralValue[FakeMT](SoQLTime(t))(new analyzer2.AtomicPositionInfo(pos))
   private def textToIntervalExpr(p: Period, pos: Position) =
-    analyzer2.LiteralValue(SoQLInterval(p))(new analyzer2.AtomicPositionInfo(pos))
+    analyzer2.LiteralValue[FakeMT](SoQLInterval(p))(new analyzer2.AtomicPositionInfo(pos))
   private def textToNumberExpr(s: SoQLText, pos: Position) =
-    analyzer2.LiteralValue(SoQLNumber(new java.math.BigDecimal(s.value)))(new analyzer2.AtomicPositionInfo(pos))
+    analyzer2.LiteralValue[FakeMT](SoQLNumber(new java.math.BigDecimal(s.value)))(new analyzer2.AtomicPositionInfo(pos))
   private def textToMoneyExpr(s: SoQLText, pos: Position) =
-    analyzer2.LiteralValue(SoQLMoney(new java.math.BigDecimal(s.value)))(new analyzer2.AtomicPositionInfo(pos))
+    analyzer2.LiteralValue[FakeMT](SoQLMoney(new java.math.BigDecimal(s.value)))(new analyzer2.AtomicPositionInfo(pos))
   private def textToPointExpr(p: Point, pos: Position) =
-    analyzer2.LiteralValue(SoQLPoint(p))(new analyzer2.AtomicPositionInfo(pos))
+    analyzer2.LiteralValue[FakeMT](SoQLPoint(p))(new analyzer2.AtomicPositionInfo(pos))
   private def textToMultiPointExpr(mp: MultiPoint, pos: Position) =
-    analyzer2.LiteralValue(SoQLMultiPoint(mp))(new analyzer2.AtomicPositionInfo(pos))
+    analyzer2.LiteralValue[FakeMT](SoQLMultiPoint(mp))(new analyzer2.AtomicPositionInfo(pos))
   private def textToLineExpr(l: LineString, pos: Position) =
-    analyzer2.LiteralValue(SoQLLine(l))(new analyzer2.AtomicPositionInfo(pos))
+    analyzer2.LiteralValue[FakeMT](SoQLLine(l))(new analyzer2.AtomicPositionInfo(pos))
   private def textToMultiLineExpr(ml: MultiLineString, pos: Position) =
-    analyzer2.LiteralValue(SoQLMultiLine(ml))(new analyzer2.AtomicPositionInfo(pos))
+    analyzer2.LiteralValue[FakeMT](SoQLMultiLine(ml))(new analyzer2.AtomicPositionInfo(pos))
   private def textToPolygonExpr(p: Polygon, pos: Position) =
-    analyzer2.LiteralValue(SoQLPolygon(p))(new analyzer2.AtomicPositionInfo(pos))
+    analyzer2.LiteralValue[FakeMT](SoQLPolygon(p))(new analyzer2.AtomicPositionInfo(pos))
   private def textToMultiPolygonExpr(mp: MultiPolygon, pos: Position) =
-    analyzer2.LiteralValue(SoQLMultiPolygon(mp))(new analyzer2.AtomicPositionInfo(pos))
+    analyzer2.LiteralValue[FakeMT](SoQLMultiPolygon(mp))(new analyzer2.AtomicPositionInfo(pos))
 
   private val textToFixedTimestampFunc = getMonomorphically(SoQLFunctions.TextToFixedTimestamp)
   private val textToFloatingTimestampFunc = getMonomorphically(SoQLFunctions.TextToFloatingTimestamp)
@@ -135,20 +164,20 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
   }
 
   // This is a bit icky now; it can be simplified when/if the old type tree format goes away
-  sealed abstract class Conversions {
+  sealed private abstract class Conversions {
     type TestResult
     def test(s: String): Option[TestResult]
     val functions: Seq[MonomorphicFunction[SoQLType]]
-    val exprs: Seq[(TestResult, Position) => analyzer2.Expr[SoQLType, SoQLValue]]
+    val exprs: Seq[(TestResult, Position) => analyzer2.Expr[FakeMT]]
   }
-  object Conversions {
-    def apply[T](tst: String => Option[T], fs: Seq[MonomorphicFunction[SoQLType]], es: Seq[(T, Position) => analyzer2.Expr[SoQLType, SoQLValue]]) = new Conversions {
+  private object Conversions {
+    def apply[T](tst: String => Option[T], fs: Seq[MonomorphicFunction[SoQLType]], es: Seq[(T, Position) => analyzer2.Expr[FakeMT]]) = new Conversions {
       type TestResult = T
       def test(s: String) = tst(s)
       val functions = fs
       val exprs = es
     }
-    def simple(tst: String => Boolean, fs: Seq[MonomorphicFunction[SoQLType]], es: Seq[(SoQLText, Position) => analyzer2.Expr[SoQLType, SoQLValue]]) = new Conversions {
+    def simple(tst: String => Boolean, fs: Seq[MonomorphicFunction[SoQLType]], es: Seq[(SoQLText, Position) => analyzer2.Expr[FakeMT]]) = new Conversions {
       type TestResult = String
       def test(s: String) = if(tst(s)) Some(s) else None
       val functions = fs
@@ -156,7 +185,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
     }
   }
 
-  val stringConversions = Seq[Conversions](
+  private val stringConversions = Seq[Conversions](
     Conversions(SoQLFixedTimestamp.StringRep.unapply(_), Seq(textToFixedTimestampFunc), Seq(textToFixedTimestampExpr _)),
     Conversions(SoQLFloatingTimestamp.StringRep.unapply(_), Seq(textToFloatingTimestampFunc), Seq(textToFloatingTimestampExpr _)),
     Conversions(SoQLDate.StringRep.unapply(_), Seq(textToDateFunc), Seq(textToDateExpr _)),
@@ -212,9 +241,6 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
   def isGroupable(typ: SoQLType): Boolean = SoQLTypeClasses.Equatable(typ)
 
   def typeOf(value: SoQLValue) = value.typ
-
-  def literalBoolean(b: Boolean, pos: Position) =
-    analyzer2.LiteralValue(SoQLBoolean(b))(new analyzer2.AtomicPositionInfo(pos))
 
   def literalExprFor(value: SoQLValue, pos: Position) =
     value match {

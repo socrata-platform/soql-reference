@@ -8,12 +8,12 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.typechecker.{FunctionInfo, HasDoc, HasType}
+import com.socrata.soql.typechecker.FunctionInfo
 
 import DocUtils._
 
-trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
-  type Self[+CT, +CV] = WindowedFunctionCall[CT, CV]
+trait WindowedFunctionCallImpl[MT <: MetaTypes] { this: WindowedFunctionCall[MT] =>
+  type Self[MT <: MetaTypes] = WindowedFunctionCall[MT]
 
   val typ = function.result
 
@@ -22,9 +22,9 @@ trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
   def isAggregated = args.exists(_.isAggregated) || partitionBy.exists(_.isAggregated) || orderBy.exists(_.expr.isAggregated)
   def isWindowed = true
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = {
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = {
     var refs =
-      args.foldLeft(Map.empty[TableLabel, Set[ColumnLabel]]) { (acc, arg) =>
+      args.foldLeft(Map.empty[AutoTableLabel, Set[ColumnLabel]]) { (acc, arg) =>
         acc.mergeWith(arg.columnReferences)(_ ++ _)
       }
     for(f <- filter) {
@@ -39,7 +39,7 @@ trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
     refs
   }
 
-  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] =
     Some(this).filter(predicate).orElse {
       args.iterator.flatMap(_.find(predicate)).nextOption()
     }.orElse {
@@ -50,7 +50,7 @@ trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
       orderBy.iterator.flatMap(_.expr.find(predicate)).nextOption()
     }
 
-  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean =
+  private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean =
     that match {
       case WindowedFunctionCall(thatFunction, thatArgs, thatFilter, thatPartitionBy, thatOrderBy, thatFrame) =>
         this.function == thatFunction &&
@@ -67,9 +67,11 @@ trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
         false
     }
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
-    this.copy(
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
+    copy[MT2](
+      function = state.changesOnlyLabels.convertCTOnly(function),
       args = args.map(_.doRewriteDatabaseNames(state)),
+      filter = filter.map(_.doRewriteDatabaseNames(state)),
       partitionBy = partitionBy.map(_.doRewriteDatabaseNames(state)),
       orderBy = orderBy.map(_.doRewriteDatabaseNames(state))
     )(position)
@@ -79,17 +81,17 @@ trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
          partitionBy = partitionBy.map(_.doRelabel(state)),
          orderBy = orderBy.map(_.doRelabel(state)))(position)
 
-  protected def doDebugDoc(implicit ev: HasDoc[CV]) = {
+  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) = {
     val preArgs: Doc[Nothing] = Doc(function.name.name) ++ d"("
-    val windowParts: Doc[Annotation[Nothing, CT]] =
-      Seq[Option[Doc[Annotation[Nothing, CT]]]](
+    val windowParts: Doc[Annotation[MT]] =
+      Seq[Option[Doc[Annotation[MT]]]](
         if(partitionBy.nonEmpty) {
-          Some((d"PARTITION BY" +: partitionBy.map(_.debugDoc).punctuate(d",")).sep.nest(2))
+          Some((d"PARTITION BY" +: partitionBy.map(_.debugDoc(ev)).punctuate(d",")).sep.nest(2))
         } else {
           None
         },
         if(orderBy.nonEmpty) {
-          Some((d"ORDER BY" +: orderBy.map(_.debugDoc).punctuate(d",")).sep.nest(2))
+          Some((d"ORDER BY" +: orderBy.map(_.debugDoc(ev)).punctuate(d",")).sep.nest(2))
         } else {
           None
         },
@@ -97,18 +99,18 @@ trait WindowedFunctionCallImpl[+CT, +CV] { this: WindowedFunctionCall[CT, CV] =>
       ).flatten.sep.encloseNesting(d"(", d")")
     val postArgs = Seq(
       Some(d")"),
-      filter.map { w => w.debugDoc.encloseNesting(d"FILTER (", d")") },
+      filter.map { w => w.debugDoc(ev).encloseNesting(d"FILTER (", d")") },
       Some(d"OVER" +#+ windowParts)
     ).flatten.hsep
-    args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs)
+    args.map(_.debugDoc(ev)).encloseNesting(preArgs, d",", postArgs)
   }
 
-  private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = position.logicallyReposition(p))
+  private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
 }
 
 trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
-  implicit def serialize[CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]) = new Writable[WindowedFunctionCall[CT, CV]] {
-    def writeTo(buffer: WriteBuffer, wfc: WindowedFunctionCall[CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit expr: Writable[Expr[MT]], mf: Writable[MonomorphicFunction[MT#ColumnType]]) = new Writable[WindowedFunctionCall[MT]] {
+    def writeTo(buffer: WriteBuffer, wfc: WindowedFunctionCall[MT]): Unit = {
       buffer.write(wfc.function)
       buffer.write(wfc.args)
       buffer.write(wfc.filter)
@@ -119,13 +121,13 @@ trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
     }
   }
 
-  implicit def deserialize[CT: Readable, CV](implicit mf: Readable[MonomorphicFunction[CT]], e: Readable[Expr[CT, CV]]) = new Readable[WindowedFunctionCall[CT, CV]] {
-    def readFrom(buffer: ReadBuffer): WindowedFunctionCall[CT, CV] = {
-      val function = buffer.read[MonomorphicFunction[CT]]()
-      val args = buffer.read[Seq[Expr[CT, CV]]]()
-      val filter = buffer.read[Option[Expr[CT, CV]]]()
-      val partitionBy = buffer.read[Seq[Expr[CT, CV]]]()
-      val orderBy = buffer.read[Seq[OrderBy[CT, CV]]]()
+  implicit def deserialize[MT <: MetaTypes](implicit expr: Readable[Expr[MT]], mf: Readable[MonomorphicFunction[MT#ColumnType]]): Readable[WindowedFunctionCall[MT]] = new Readable[WindowedFunctionCall[MT]] with ExpressionUniverse[MT] {
+    def readFrom(buffer: ReadBuffer): WindowedFunctionCall = {
+      val function = buffer.read[MonomorphicFunction]()
+      val args = buffer.read[Seq[Expr]]()
+      val filter = buffer.read[Option[Expr]]()
+      val partitionBy = buffer.read[Seq[Expr]]()
+      val orderBy = buffer.read[Seq[OrderBy]]()
       val frame = buffer.read[Option[Frame]]()(Readable.option(Frame.serialize))
       val position = buffer.read[FuncallPositionInfo]()
       WindowedFunctionCall(

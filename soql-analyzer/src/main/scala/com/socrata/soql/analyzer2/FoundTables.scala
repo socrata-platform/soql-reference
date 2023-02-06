@@ -11,15 +11,15 @@ import com.socrata.soql.environment.{ResourceName, HoleName, ColumnName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.BinaryTree
+import com.socrata.soql.analyzer2
 
-trait FoundTablesLike[ResourceNameScope, +ColumnType] {
-  type Self[RNS, +CT]
+trait FoundTablesLike[MT <: MetaTypes] extends LabelUniverse[MT] {
+  type Self[MT <: MetaTypes] <: FoundTablesLike[MT]
 
-  def rewriteDatabaseNames(
-    tableName: DatabaseTableName => DatabaseTableName,
-    // This is given the _original_ database table name
-    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): Self[ResourceNameScope, ColumnType]
+  def rewriteDatabaseNames[MT2 <: MetaTypes](
+    tableName: DatabaseTableName => types.DatabaseTableName[MT2],
+    columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
+  )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): Self[MT2]
 }
 
 case class UserParameterSpecs[+ColumnType](
@@ -27,28 +27,28 @@ case class UserParameterSpecs[+ColumnType](
   unqualified: Either[CanonicalName, Map[HoleName, ColumnType]]
 )
 
-final case class FoundTables[ResourceNameScope, +ColumnType] private[analyzer2] (
-  tableMap: TableMap[ResourceNameScope, ColumnType],
-  initialScope: ResourceNameScope,
-  initialQuery: FoundTables.Query[ColumnType],
+final case class FoundTables[MT <: MetaTypes] private[analyzer2] (
+  tableMap: TableMap[MT],
+  initialScope: types.ResourceNameScope[MT],
+  initialQuery: FoundTables.Query[MT],
   parserParameters: AbstractParser.Parameters
-) extends FoundTablesLike[ResourceNameScope, ColumnType] {
-  type Self[RNS, +CT] = FoundTables[RNS, CT]
+) extends FoundTablesLike[MT] {
+  type Self[MT <: MetaTypes] = FoundTables[MT]
 
   def asUnparsedFoundTables =
-    new UnparsedFoundTables(
+    new UnparsedFoundTables[MT](
       tableMap.asUnparsedTableMap,
       initialScope,
       initialQuery.asUnparsedQuery,
       EncodableParameters.fromParams(parserParameters)
     )
 
-  val knownUserParameters: UserParameterSpecs[ColumnType] = {
+  val knownUserParameters: UserParameterSpecs[CT] = {
     val named =
-      tableMap.descriptions.foldLeft(Map.empty[CanonicalName, Map[HoleName, ColumnType]]) { (acc, desc) =>
+      tableMap.descriptions.foldLeft(Map.empty[CanonicalName, Map[HoleName, CT]]) { (acc, desc) =>
         desc match {
-          case _ : TableDescription.Dataset[_] | _ : TableDescription.TableFunction[_, _] => acc
-          case q: TableDescription.Query[_, ColumnType] => acc + (q.canonicalName -> q.parameters)
+          case _ : TableDescription.Dataset[_] | _ : TableDescription.TableFunction[_] => acc
+          case q: TableDescription.Query[_] => acc + (q.canonicalName -> q.parameters)
         }
       }
     initialQuery match {
@@ -61,12 +61,15 @@ final case class FoundTables[ResourceNameScope, +ColumnType] private[analyzer2] 
     }
   }
 
-  final def rewriteDatabaseNames(
-    tableName: DatabaseTableName => DatabaseTableName,
-    // This is given the _original_ database table name
-    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): FoundTables[ResourceNameScope, ColumnType] =
-    copy(tableMap = tableMap.rewriteDatabaseNames(tableName, columnName))
+  final def rewriteDatabaseNames[MT2 <: MetaTypes](
+    tableName: DatabaseTableName => types.DatabaseTableName[MT2],
+    columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
+  )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): FoundTables[MT2] =
+    copy(
+      tableMap = tableMap.rewriteDatabaseNames[MT2](tableName, columnName),
+      initialScope = changesOnlyLabels.convertRNS(initialScope),
+      initialQuery = initialQuery.changeLabels[MT2]
+    )
 
   // This lets you convert resource scope names to a simplified form
   // if your resource scope names in one location have semantic
@@ -77,10 +80,10 @@ final case class FoundTables[ResourceNameScope, +ColumnType] private[analyzer2] 
   lazy val (withSimplifiedScopes, simplifiedScopeMap) = locally {
     val (newMap, newToOld, oldToNew) = tableMap.rewriteScopes(initialScope)
 
-    val newFT = FoundTables(
+    val newFT = FoundTables[Intified[MT]](
       newMap,
       oldToNew(initialScope),
-      initialQuery,
+      initialQuery.changeRNS[Intified[MT]],
       parserParameters
     )
 
@@ -88,46 +91,72 @@ final case class FoundTables[ResourceNameScope, +ColumnType] private[analyzer2] 
   }
 }
 
+final class Intified[MT <: MetaTypes] extends MetaTypes {
+  type ResourceNameScope = Int
+  type ColumnType = MT#ColumnType
+  type ColumnValue = MT#ColumnValue
+  type DatabaseTableNameImpl = MT#DatabaseTableNameImpl
+  type DatabaseColumnNameImpl = MT#DatabaseColumnNameImpl
+}
+
 object FoundTables {
-  sealed abstract class Query[+CT] {
-    def asUnparsedQuery: UnparsedFoundTables.Query[CT]
+  sealed abstract class Query[MT <: MetaTypes] {
+    def asUnparsedQuery: UnparsedFoundTables.Query[MT]
+    def changeRNS[MT2 <: MetaTypes](implicit changesOnlyRNS: MetaTypes.ChangesOnlyRNS[MT, MT2]): Query[MT2]
+    def changeLabels[MT2 <: MetaTypes](implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): Query[MT2]
   }
 
-  case class Saved(name: ResourceName) extends Query[Nothing] {
+  case class Saved[MT <: MetaTypes](name: ResourceName) extends Query[MT] {
     def asUnparsedQuery = UnparsedFoundTables.Saved(name)
+    def changeRNS[MT2 <: MetaTypes](implicit changesOnlyRNS: MetaTypes.ChangesOnlyRNS[MT, MT2]): Saved[MT2] =
+      this.asInstanceOf[Saved[MT2]] // SAFETY: we don't care about _anything_ in MT
+    def changeLabels[MT2 <: MetaTypes](implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): Saved[MT2] =
+      this.asInstanceOf[Saved[MT2]] // SAFETY: we don't care about _anything_ in MT
   }
 
-  case class InContext[+CT](parent: ResourceName, soql: BinaryTree[ast.Select], text: String, parameters: Map[HoleName, CT]) extends Query[CT] {
+  case class InContext[MT <: MetaTypes](parent: ResourceName, soql: BinaryTree[ast.Select], text: String, parameters: Map[HoleName, MT#ColumnType]) extends Query[MT] {
     def asUnparsedQuery = UnparsedFoundTables.InContext(parent, text, parameters)
+    def changeRNS[MT2 <: MetaTypes](implicit changesOnlyRNS: MetaTypes.ChangesOnlyRNS[MT, MT2]): InContext[MT2] =
+      this.asInstanceOf[InContext[MT2]] // SAFETY: we only care about CT, which isn't changing
+    def changeLabels[MT2 <: MetaTypes](implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): InContext[MT2] =
+      this.asInstanceOf[InContext[MT2]] // SAFETY: we only care about CT, which isn't changing
   }
-  case class InContextImpersonatingSaved[+CT](parent: ResourceName, soql: BinaryTree[ast.Select], text: String, parameters: Map[HoleName, CT], fake: CanonicalName) extends Query[CT] {
+  case class InContextImpersonatingSaved[MT <: MetaTypes](parent: ResourceName, soql: BinaryTree[ast.Select], text: String, parameters: Map[HoleName, MT#ColumnType], fake: CanonicalName) extends Query[MT] {
     def asUnparsedQuery = UnparsedFoundTables.InContextImpersonatingSaved(parent, text, parameters, fake)
+    def changeRNS[MT2 <: MetaTypes](implicit changesOnlyRNS: MetaTypes.ChangesOnlyRNS[MT, MT2]): InContextImpersonatingSaved[MT2] =
+      this.asInstanceOf[InContextImpersonatingSaved[MT2]] // SAFETY: we only care about CT, which isn't changing
+    def changeLabels[MT2 <: MetaTypes](implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): InContextImpersonatingSaved[MT2] =
+      this.asInstanceOf[InContextImpersonatingSaved[MT2]] // SAFETY: we only care about CT, which isn't changing
   }
-  case class Standalone[+CT](soql: BinaryTree[ast.Select], text: String, parameters: Map[HoleName, CT]) extends Query[CT] {
+  case class Standalone[MT <: MetaTypes](soql: BinaryTree[ast.Select], text: String, parameters: Map[HoleName, MT#ColumnType]) extends Query[MT] {
     def asUnparsedQuery = UnparsedFoundTables.Standalone(text, parameters)
+    def changeRNS[MT2 <: MetaTypes](implicit changesOnlyRNS: MetaTypes.ChangesOnlyRNS[MT, MT2]): Standalone[MT2] =
+      this.asInstanceOf[Standalone[MT2]] // SAFETY: we only care about CT, which isn't changing
+    def changeLabels[MT2 <: MetaTypes](implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): Standalone[MT2] =
+      this.asInstanceOf[Standalone[MT2]] // SAFETY: we only care about CT, which isn't changing
   }
 
-  private implicit def queryJsonEncode[CT : JsonEncode] = new JsonEncode[Query[CT]] {
-    def encode(v: Query[CT]) = JsonEncode.toJValue(v.asUnparsedQuery)
+  private implicit def queryJsonEncode[MT <: MetaTypes](implicit encCT : JsonEncode[MT#ColumnType]) = new JsonEncode[Query[MT]] {
+    def encode(v: Query[MT]) = JsonEncode.toJValue(v.asUnparsedQuery)
   }
-  private def queryJsonDecode[CT : JsonDecode](params: AbstractParser.Parameters): JsonDecode[Query[CT]] =
-    new JsonDecode[Query[CT]] {
+  private def queryJsonDecode[MT <: MetaTypes](params: AbstractParser.Parameters)(implicit decCT : JsonDecode[MT#ColumnType]): JsonDecode[Query[MT]] =
+    new JsonDecode[Query[MT]] {
       def decode(x: JValue) =
-        JsonDecode[UnparsedFoundTables.Query[CT]].decode(x).flatMap { c =>
+        JsonDecode[UnparsedFoundTables.Query[MT]].decode(x).flatMap { c =>
           c.parse(params.copy(allowHoles = false)).left.map { _ =>
             DecodeError.InvalidValue(JString(c.soql)).prefix("soql")
           }
         }
     }
 
-  implicit def jsonEncode[RNS: JsonEncode, CT: JsonEncode]: JsonEncode[FoundTables[RNS, CT]] =
-    new JsonEncode[FoundTables[RNS, CT]] {
-      def encode(v: FoundTables[RNS, CT]) = JsonEncode.toJValue(v.asUnparsedFoundTables)
+  implicit def jsonEncode[MT <: MetaTypes](implicit rnsEncode: JsonEncode[MT#ResourceNameScope], ctEncode: JsonEncode[MT#ColumnType], dtnEncode: JsonEncode[MT#DatabaseTableNameImpl], dcnEncode: JsonEncode[MT#DatabaseColumnNameImpl]): JsonEncode[FoundTables[MT]] =
+    new JsonEncode[FoundTables[MT]] {
+      def encode(v: FoundTables[MT]) = JsonEncode.toJValue(v.asUnparsedFoundTables)
     }
 
-  implicit def jsonDecode[RNS: JsonDecode, CT: JsonDecode]: JsonDecode[FoundTables[RNS, CT]] =
-    new JsonDecode[FoundTables[RNS, CT]] {
-      def decode(x: JValue): Either[DecodeError, FoundTables[RNS, CT]] = x match {
+  implicit def jsonDecode[MT <: MetaTypes](implicit rnsDecode: JsonDecode[MT#ResourceNameScope], ctDecode: JsonDecode[MT#ColumnType], dtnDecode: JsonDecode[MT#DatabaseTableNameImpl], dcnDecode: JsonDecode[MT#DatabaseColumnNameImpl]) =
+    new JsonDecode[FoundTables[MT]] with MetaTypeHelper[MT] {
+      def decode(x: JValue): Either[DecodeError, FoundTables[MT]] = x match {
         case JObject(fields) =>
           val params =
             fields.get("parserParameters") match {
@@ -140,13 +169,13 @@ object FoundTables {
                 return Left(DecodeError.MissingField("parserParameters"))
             }
 
-          implicit val tableMapDecode = TableMap.jsonDecode[RNS, CT](params)
-          implicit val queryDecode = queryJsonDecode[CT](params)
+          implicit val tableMapDecode = TableMap.jsonDecode[MT](params)
+          implicit val queryDecode = queryJsonDecode[MT](params)
 
           case class DecodeHelper(
-            tableMap: TableMap[RNS, CT],
+            tableMap: TableMap[MT],
             initialScope: RNS,
-            initialQuery: FoundTables.Query[CT]
+            initialQuery: FoundTables.Query[MT]
           )
 
           AutomaticJsonDecodeBuilder[DecodeHelper].decode(x).map { dh =>

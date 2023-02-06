@@ -154,6 +154,18 @@ object Readable {
     }
   }
 
+  implicit def orderedSet[T : Readable] = new Readable[OrderedSet[T]] {
+    def readFrom(buffer: ReadBuffer): OrderedSet[T] = {
+      var n = buffer.data.readUInt32()
+      val mb = Vector.newBuilder[T]
+      while(n != 0) {
+        n -= 1
+        mb += buffer.read[T]()
+      }
+      OrderedSet() ++ mb.result()
+    }
+  }
+
   implicit def option[T : Readable] = new Readable[Option[T]] {
     def readFrom(buffer: ReadBuffer): Option[T] = {
       buffer.data.readUInt32() match {

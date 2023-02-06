@@ -3,21 +3,14 @@ package com.socrata.soql.analyzer2.rewrite
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 
-class RemoveUnusedColumns[RNS, CT, CV] private (columnReferences: Map[TableLabel, Set[ColumnLabel]]) {
-  type Statement = analyzer2.Statement[RNS, CT, CV]
-  type From = analyzer2.From[RNS, CT, CV]
-  type Join = analyzer2.Join[RNS, CT, CV]
-  type AtomicFrom = analyzer2.AtomicFrom[RNS, CT, CV]
-  type FromTable = analyzer2.FromTable[RNS, CT]
-  type FromSingleRow = analyzer2.FromSingleRow[RNS]
-
+class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.AutoTableLabel[MT], Set[types.ColumnLabel[MT]]]) extends StatementUniverse[MT] {
   // myLabel being "None" means "keep all of my output columns,
   // whether or not they appear to be used".  This is for both the
   // top-level (where of course all the columns will be used by
   // whatever's running the query) as well as inside CombinedTables,
   // where the operation combining the tables will care about
   // apparently-unused columns.
-  def rewriteStatement(stmt: Statement, myLabel: Option[TableLabel]): (Statement, Boolean) = {
+  def rewriteStatement(stmt: Statement, myLabel: Option[AutoTableLabel]): (Statement, Boolean) = {
     stmt match {
       case CombinedTables(op, left, right) =>
         val (newLeft, removedAnythingLeft) = rewriteStatement(left, None)
@@ -29,12 +22,12 @@ class RemoveUnusedColumns[RNS, CT, CV] private (columnReferences: Map[TableLabel
         val (newUseQuery, removedAnythingUse) = rewriteStatement(useQuery, myLabel)
         (CTE(defLabel, defAlias, newDefQuery, materializedHint, newUseQuery), removedAnythingDef || removedAnythingUse)
 
-      case v@Values(_) =>
+      case v@Values(_, _) =>
         (v, false)
 
       case stmt@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
         val newSelectList = (myLabel, distinctiveness) match {
-          case (_, Distinctiveness.FullyDistinct) | (None, _) =>
+          case (_, Distinctiveness.FullyDistinct()) | (None, _) =>
             // need to keep all my columns
             selectList
           case (Some(tl), _) =>
@@ -62,7 +55,7 @@ class RemoveUnusedColumns[RNS, CT, CV] private (columnReferences: Map[TableLabel
   }
 
   def rewriteFrom(from: From): (From, Boolean) = {
-    from.reduceMap[Boolean, RNS, CT, CV](
+    from.reduceMap[Boolean, MT](
       rewriteAtomicFrom(_).swap,
       { (removedAnythingLeft, joinType, lateral, left, right, on) =>
         val (newRight, removedAnythingRight) = rewriteAtomicFrom(right)
@@ -85,9 +78,9 @@ class RemoveUnusedColumns[RNS, CT, CV] private (columnReferences: Map[TableLabel
 /** Remove columns that are not useful from inner selects.
   * SelectListReferences must not be present (this is unchecked!!). */
 object RemoveUnusedColumns {
-  def apply[RNS, CT, CV](stmt: Statement[RNS, CT, CV]): Statement[RNS, CT, CV] = {
+  def apply[MT <: MetaTypes](stmt: Statement[MT]): Statement[MT] = {
     val (newStmt, removedAnything) =
-      new RemoveUnusedColumns[RNS, CT, CV](stmt.columnReferences).rewriteStatement(stmt, None)
+      new RemoveUnusedColumns[MT](stmt.columnReferences).rewriteStatement(stmt, None)
     if(removedAnything) {
       this(newStmt)
     } else {

@@ -2,6 +2,7 @@ package com.socrata.soql.analyzer2
 
 import com.rojoma.json.v3.ast.{JValue, JNumber, JString}
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
+import com.rojoma.json.v3.util.{SimpleHierarchyEncodeBuilder, SimpleHierarchyDecodeBuilder, TagToValue, WrapperJsonEncode, WrapperJsonDecode}
 
 import com.socrata.prettyprint.prelude._
 
@@ -64,51 +65,7 @@ object LabelProvider {
   }
 }
 
-sealed abstract class TableLabel {
-  def debugDoc: Doc[Nothing] = Doc(toString)
-}
-object TableLabel {
-  implicit object jCodec extends JsonEncode[TableLabel] with JsonDecode[TableLabel] {
-    def encode(v: TableLabel) = v match {
-      case a: AutoTableLabel => AutoTableLabel.jCodec.encode(a)
-      case d: DatabaseTableName => DatabaseTableName.jCodec.encode(d)
-    }
-
-    def decode(v: JValue) = v match {
-      case n: JNumber => AutoTableLabel.jCodec.decodeNum(n)
-      case s: JString => DatabaseTableName.jCodec.decodeStr(s)
-      case other => Left(DecodeError.join(Seq(
-                                            DecodeError.InvalidType(expected = JNumber, got = other.jsonType),
-                                            DecodeError.InvalidType(expected = JString, got = other.jsonType))))
-    }
-  }
-
-  implicit object serialize extends Writable[TableLabel] with Readable[TableLabel] {
-    def writeTo(buffer: WriteBuffer, label: TableLabel): Unit = {
-      label match {
-        case a: AutoTableLabel =>
-          buffer.write(0)
-          AutoTableLabel.serialize.writeTo(buffer, a)
-        case d: DatabaseTableName =>
-          buffer.write(1)
-          DatabaseTableName.serialize.writeTo(buffer, d)
-      }
-    }
-
-    def readFrom(buffer: ReadBuffer): TableLabel = {
-      buffer.read[Int]() match {
-        case 0 =>
-          AutoTableLabel.serialize.readFrom(buffer)
-        case 1 =>
-          DatabaseTableName.serialize.readFrom(buffer)
-        case other =>
-          fail("Unknown table label type " + other)
-      }
-    }
-  }
-}
-
-final class AutoTableLabel private[analyzer2] (private val name: Int) extends TableLabel {
+final class AutoTableLabel private[analyzer2] (private val name: Int) {
   override def toString = s"t${LabelProvider.subscript(name)}"
 
   override def hashCode = name.hashCode
@@ -117,6 +74,8 @@ final class AutoTableLabel private[analyzer2] (private val name: Int) extends Ta
       case atl: AutoTableLabel => this.name == atl.name
       case _ => false
     }
+
+  def debugDoc: Doc[Nothing] = Doc(toString)
 }
 object AutoTableLabel {
   def unapply(atl: AutoTableLabel): Some[Int] = Some(atl.name)
@@ -147,75 +106,14 @@ object AutoTableLabel {
   }
 }
 
-final case class DatabaseTableName(name: String) extends TableLabel {
-  override def toString = name
-}
-object DatabaseTableName {
-  implicit object jCodec extends JsonEncode[DatabaseTableName] with JsonDecode[DatabaseTableName] {
-    def encode(v: DatabaseTableName) = JString(v.name)
-    def decode(x: JValue) = x match {
-      case s: JString => decodeStr(s)
-      case other => Left(DecodeError.InvalidType(expected = JString, got = other.jsonType))
-    }
-    private[analyzer2] def decodeStr(s: JString) =
-      Right(DatabaseTableName(s.string))
-  }
-
-  implicit object serialize extends Writable[DatabaseTableName] with Readable[DatabaseTableName] {
-    def writeTo(buffer: WriteBuffer, d: DatabaseTableName) =
-      buffer.write(d.name)
-
-    def readFrom(buffer: ReadBuffer) =
-      DatabaseTableName(buffer.read[String]())
-  }
+sealed abstract class ColumnLabel[+T] {
+  def debugDoc(implicit ev: HasDoc[T]): Doc[Nothing]
 }
 
-sealed abstract class ColumnLabel {
-  def debugDoc: Doc[Nothing] = Doc(toString)
-}
-object ColumnLabel {
-  implicit object jCodec extends JsonEncode[ColumnLabel] with JsonDecode[ColumnLabel] {
-    def encode(v: ColumnLabel) = v match {
-      case a: AutoColumnLabel => AutoColumnLabel.jCodec.encode(a)
-      case d: DatabaseColumnName => DatabaseColumnName.jCodec.encode(d)
-    }
-
-    def decode(v: JValue) = v match {
-      case n: JNumber => AutoColumnLabel.jCodec.decodeNum(n)
-      case s: JString => DatabaseColumnName.jCodec.decodeStr(s)
-      case other => Left(DecodeError.join(Seq(
-                                            DecodeError.InvalidType(expected = JNumber, got = other.jsonType),
-                                            DecodeError.InvalidType(expected = JString, got = other.jsonType))))
-    }
-  }
-
-  implicit object serialize extends Writable[ColumnLabel] with Readable[ColumnLabel] {
-    def writeTo(buffer: WriteBuffer, label: ColumnLabel): Unit = {
-      label match {
-        case a: AutoColumnLabel =>
-          buffer.write(0)
-          AutoColumnLabel.serialize.writeTo(buffer, a)
-        case d: DatabaseColumnName =>
-          buffer.write(1)
-          DatabaseColumnName.serialize.writeTo(buffer, d)
-      }
-    }
-
-    def readFrom(buffer: ReadBuffer): ColumnLabel = {
-      buffer.read[Int]() match {
-        case 0 =>
-          AutoColumnLabel.serialize.readFrom(buffer)
-        case 1 =>
-          DatabaseColumnName.serialize.readFrom(buffer)
-        case other =>
-          fail("Unknown column label type " + other)
-      }
-    }
-  }
-}
-
-final class AutoColumnLabel private[analyzer2] (private val name: Int) extends ColumnLabel {
+final class AutoColumnLabel private[analyzer2] (private val name: Int) extends ColumnLabel[Nothing] {
   override def toString = s"c${LabelProvider.subscript(name)}"
+
+  def debugDoc(implicit ev: HasDoc[Nothing]): Doc[Nothing] = Doc(toString)
 
   override def hashCode = name.hashCode
   override def equals(that: Any) =
@@ -253,25 +151,60 @@ object AutoColumnLabel {
   }
 }
 
-final case class DatabaseColumnName(name: String) extends ColumnLabel {
-  override def toString = name
+final case class DatabaseColumnName[T](name: T) extends ColumnLabel[T] {
+  def debugDoc(implicit ev: HasDoc[T]) = ev.docOf(name)
 }
+
 object DatabaseColumnName {
-  implicit object jCodec extends JsonEncode[DatabaseColumnName] with JsonDecode[DatabaseColumnName] {
-    def encode(v: DatabaseColumnName) = JString(v.name)
-    def decode(x: JValue) = x match {
-      case s: JString => decodeStr(s)
-      case other => Left(DecodeError.InvalidType(expected = JString, got = other.jsonType))
-    }
-    private[analyzer2] def decodeStr(s: JString) =
-      Right(DatabaseColumnName(s.string))
+  implicit def jEncode[T: JsonEncode] = WrapperJsonEncode[DatabaseColumnName[T]](_.name)
+  implicit def jDecode[T: JsonDecode] = WrapperJsonDecode[DatabaseColumnName[T]](DatabaseColumnName[T](_))
+
+  implicit def serialize[T : Writable] = new Writable[DatabaseColumnName[T]] {
+    def writeTo(buffer: WriteBuffer, d: DatabaseColumnName[T]) =
+      buffer.write(d.name)
   }
 
-  implicit object serialize extends Writable[DatabaseColumnName] with Readable[DatabaseColumnName] {
-    def writeTo(buffer: WriteBuffer, d: DatabaseColumnName) =
-      buffer.write(d.name)
-
+  implicit def deserialize[T : Readable] = new Readable[DatabaseColumnName[T]] {
     def readFrom(buffer: ReadBuffer) =
-      DatabaseColumnName(buffer.read[String]())
+      DatabaseColumnName(buffer.read[T]())
+  }
+}
+
+object ColumnLabel {
+  implicit def jEncode[T : JsonEncode] = SimpleHierarchyEncodeBuilder[ColumnLabel[T]](TagToValue)
+    .branch[AutoColumnLabel]("auto")
+    .branch[DatabaseColumnName[T]]("dcn")
+    .build
+
+  implicit def jDecode[T : JsonDecode] = SimpleHierarchyDecodeBuilder[ColumnLabel[T]](TagToValue)
+    .branch[AutoColumnLabel]("auto")
+    .branch[DatabaseColumnName[T]]("dcn")
+    .build
+
+
+  implicit def serialize[T : Writable] = new Writable[ColumnLabel[T]] {
+    def writeTo(buffer: WriteBuffer, label: ColumnLabel[T]): Unit = {
+      label match {
+        case a: AutoColumnLabel =>
+          buffer.write(0)
+          buffer.write(a)
+        case d: DatabaseColumnName[T] =>
+          buffer.write(1)
+          buffer.write(d)
+      }
+    }
+  }
+
+  implicit def deserialize[T : Readable] = new Readable[ColumnLabel[T]] {
+    def readFrom(buffer: ReadBuffer): ColumnLabel[T] = {
+      buffer.read[Int]() match {
+        case 0 =>
+          buffer.read[AutoColumnLabel]()
+        case 1 =>
+          buffer.read[DatabaseColumnName[T]]()
+        case other =>
+          fail("Unknown column label type " + other)
+      }
+    }
   }
 }

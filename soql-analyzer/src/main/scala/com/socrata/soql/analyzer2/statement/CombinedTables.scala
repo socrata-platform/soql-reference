@@ -9,51 +9,49 @@ import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable,
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.typechecker.HasDoc
 
 import DocUtils._
 
-trait CombinedTablesImpl[+RNS, +CT, +CV] { this: CombinedTables[RNS, CT, CV] =>
-  type Self[+RNS, +CT, +CV] = CombinedTables[RNS, CT, CV]
+trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
+  type Self[MT <: MetaTypes] = CombinedTables[MT]
 
   def asSelf = this
 
   val schema = left.schema
-  def getColumn(cl: ColumnLabel) = left.getColumn(cl)
 
   def unique = LazyList.empty
 
-  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] =
     left.find(predicate).orElse(right.find(predicate))
 
-  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+  def contains(e: Expr[MT]): Boolean =
     left.contains(e) || right.contains(e)
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName] =
     left.realTables ++ right.realTables
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] =
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] =
     left.columnReferences.mergeWith(right.columnReferences)(_ ++ _)
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     copy(
       left = left.doRewriteDatabaseNames(state),
       right = right.doRewriteDatabaseNames(state)
     )
 
-  private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV] =
+  private[analyzer2] def doRelabel(state: RelabelState): Self[MT] =
     copy(left = left.doRelabel(state), right = right.doRelabel(state))
 
-  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
+  private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
     left.doLabelMap(state)
     right.doLabelMap(state)
   }
 
-  private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](
+  private[analyzer2] def findIsomorphism(
     state: IsomorphismState,
-    thisCurrentTableLabel: Option[TableLabel],
-    thatCurrentTableLabel: Option[TableLabel],
-    that: Statement[RNS2, CT2, CV2]
+    thisCurrentTableLabel: Option[AutoTableLabel],
+    thatCurrentTableLabel: Option[AutoTableLabel],
+    that: Statement[MT]
   ): Boolean =
     that match {
       case CombinedTables(_, thatLeft, thatRight) =>
@@ -63,31 +61,31 @@ trait CombinedTablesImpl[+RNS, +CT, +CV] { this: CombinedTables[RNS, CT, CV] =>
         false
     }
 
-  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =
     copy(left = left.mapAlias(f), right = right.mapAlias(f))
 
-  override def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]] = {
-    left.debugDoc.encloseNesting(d"(", d")") +#+ op.debugDoc +#+ right.debugDoc.encloseNesting(d"(", d")")
+  private[analyzer2] override def doDebugDoc(implicit ev: StatementDocProvider[MT]): Doc[Annotation[MT]] = {
+    left.doDebugDoc.encloseNesting(d"(", d")") +#+ op.debugDoc +#+ right.doDebugDoc.encloseNesting(d"(", d")")
   }
 }
 
 trait OCombinedTablesImpl { this: CombinedTables.type =>
-  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[CombinedTables[RNS, CT, CV]] =
-    new Writable[CombinedTables[RNS, CT, CV]] {
-      def writeTo(buffer: WriteBuffer, ct: CombinedTables[RNS, CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#ResourceNameScope], ctWritable: Writable[MT#ColumnType], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[CombinedTables[MT]] =
+    new Writable[CombinedTables[MT]] {
+      def writeTo(buffer: WriteBuffer, ct: CombinedTables[MT]): Unit = {
         buffer.write(ct.op)
         buffer.write(ct.left)
         buffer.write(ct.right)
       }
     }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[CombinedTables[RNS, CT, CV]] =
-    new Readable[CombinedTables[RNS, CT, CV]] {
-      def readFrom(buffer: ReadBuffer): CombinedTables[RNS, CT, CV] = {
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope], ctReadable: Readable[MT#ColumnType], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[CombinedTables[MT]] =
+    new Readable[CombinedTables[MT]] {
+      def readFrom(buffer: ReadBuffer): CombinedTables[MT] = {
         CombinedTables(
           op = buffer.read[TableFunc](),
-          left = buffer.read[Statement[RNS, CT, CV]](),
-          right = buffer.read[Statement[RNS, CT, CV]]()
+          left = buffer.read[Statement[MT]](),
+          right = buffer.read[Statement[MT]]()
         )
       }
     }

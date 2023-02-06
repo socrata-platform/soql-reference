@@ -6,22 +6,27 @@ import scala.util.parsing.input.NoPosition
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.typechecker.HasDoc
 import com.socrata.soql.analyzer2._
 
-class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
-  private implicit val hd = new HasDoc[CV] {
+class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends StatementUniverse[MT] {
+  private implicit val cvDoc = new HasDoc[CV] {
     override def docOf(v: CV) = com.socrata.prettyprint.Doc(v.toString)
   }
+  private implicit val dcnDoc = new HasDoc[MT#DatabaseColumnNameImpl] {
+    override def docOf(v: MT#DatabaseColumnNameImpl) = com.socrata.prettyprint.Doc(v.toString)
+  }
+  private implicit val dtnDoc = new HasDoc[MT#DatabaseTableNameImpl] {
+    override def docOf(v: MT#DatabaseTableNameImpl) = com.socrata.prettyprint.Doc(v.toString)
+  }
 
-  def merge(stmt: Statement[RNS, CT, CV]): Statement[RNS, CT, CV] = {
+  def merge(stmt: Statement): Statement = {
     val r = doMerge(stmt)
     debug("finished", r)
     debugDone()
     r
   }
 
-  private def doMerge(stmt: Statement[RNS, CT, CV]): Statement[RNS, CT, CV] =
+  private def doMerge(stmt: Statement): Statement =
     stmt match {
       case c@CombinedTables(_, left, right) =>
         debug("combined tables")
@@ -30,13 +35,13 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         // TODO: maybe make this not a CTE at all, sometimes?
         debug("CTE")
         cte.copy(definitionQuery = doMerge(defQ), useQuery = doMerge(useQ))
-      case v: Values[CT, CV] =>
+      case v: Values =>
         debug("values")
         v
-      case select: Select[RNS, CT, CV] =>
+      case select: Select =>
         debug("select")
         select.copy(from = mergeFrom(select.from)) match {
-          case b@Select(_, _, Unjoin(FromStatement(a: Select[RNS, CT, CV], aLabel, aResourceName, aAlias), bRejoin), _, _, _, _, _, _, _, _) =>
+          case b@Select(_, _, Unjoin(FromStatement(a: Select, aLabel, aResourceName, aAlias), bRejoin), _, _, _, _, _, _, _, _) =>
             // This privileges the first query in b's FROM because our
             // queries are frequently constructed in a chain.
             mergeSelects(a, aLabel, aResourceName, aAlias, b, bRejoin) match {
@@ -47,7 +52,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
                 debug("merged")
                 merged
             }
-          case other: Select[_, _, _] =>
+          case other: Select =>
             debug("select on not-from-select")
             other
           case other =>
@@ -56,22 +61,22 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         }
     }
 
-  private def mergeFrom(from: From[RNS, CT, CV]): From[RNS, CT, CV] = {
-    from.map[RNS, CT, CV](
+  private def mergeFrom(from: From): From = {
+    from.map[MT](
       mergeAtomicFrom,
       (jt, lat, left, right, on) => Join(jt, lat, left, mergeAtomicFrom(right), on)
     )
   }
 
-  private def mergeAtomicFrom(from: AtomicFrom[RNS, CT, CV]): AtomicFrom[RNS, CT, CV] = {
+  private def mergeAtomicFrom(from: AtomicFrom): AtomicFrom = {
     from match {
       case s@FromStatement(stmt, _, _, _) => s.copy(statement = doMerge(stmt))
       case other => other
     }
   }
 
-  private type ExprRewriter = Expr[CT, CV] => Expr[CT, CV]
-  private type FromRewriter = (From[RNS, CT, CV], ExprRewriter) => From[RNS, CT, CV]
+  private type ExprRewriter = Expr => Expr
+  private type FromRewriter = (From, ExprRewriter) => From
 
   private object Unjoin {
     // case ... join@Unjoin(leftmost, rebuild) ... =>
@@ -83,12 +88,12 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
     //    lateral subqueries when merging.
     //
     //    One thing to note: rebuild(leftmost, identity) == join
-    def unapply(x: From[RNS, CT, CV]): Some[(AtomicFrom[RNS, CT, CV], FromRewriter)] = {
+    def unapply(x: From): Some[(AtomicFrom, FromRewriter)] = {
       @tailrec
-      def loop(here: From[RNS, CT, CV], stack: List[FromRewriter]): (AtomicFrom[RNS, CT, CV], List[FromRewriter]) = {
+      def loop(here: From, stack: List[FromRewriter]): (AtomicFrom, List[FromRewriter]) = {
         here match {
-          case atom: AtomicFrom[RNS, CT, CV] => (atom, stack)
-          case Join(jt, lat, left, right, on) => loop(left, { (newLeft: From[RNS, CT, CV], xform: ExprRewriter) => Join(jt, lat, newLeft, if(lat) rewrite(right, xform) else right, xform(on)) } :: stack)
+          case atom: AtomicFrom => (atom, stack)
+          case Join(jt, lat, left, right, on) => loop(left, { (newLeft: From, xform: ExprRewriter) => Join(jt, lat, newLeft, if(lat) rewrite(right, xform) else right, xform(on)) } :: stack)
         }
       }
 
@@ -97,41 +102,40 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
     }
   }
 
-  private def rewrite(from: AtomicFrom[RNS, CT, CV], xform: ExprRewriter): AtomicFrom[RNS, CT, CV] =
+  private def rewrite(from: AtomicFrom, xform: ExprRewriter): AtomicFrom =
     from match {
       case fs@FromStatement(s, _, _, _) => fs.copy(statement = rewrite(s, xform))
       case other => other
     }
 
-  private def rewrite(s: Statement[RNS, CT, CV], xform: ExprRewriter): Statement[RNS, CT, CV] =
+  private def rewrite(s: Statement, xform: ExprRewriter): Statement =
     s match {
       case Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
         Select(
           rewrite(distinctiveness, xform),
           rewrite(selectList, xform),
-          from.map[RNS, CT, CV](
+          from.map(
             rewrite(_, xform),
             (jt, lat, left, right, on) => Join(jt, lat, left, rewrite(right, xform), xform(on))
           ),
           where.map(xform), groupBy.map(xform), having.map(xform), orderBy.map { ob => ob.copy(expr=xform(ob.expr)) },
           limit, offset, search, hint)
-      case Values(vs) => Values(vs.map(_.map(xform)))
+      case Values(labels, vs) => Values(labels, vs.map(_.map(xform)))
       case CombinedTables(op, left, right) => CombinedTables(op, rewrite(left, xform), rewrite(right, xform))
       case CTE(defLbl, defAlias, defQ, useLbl, useQ) => CTE(defLbl, defAlias, rewrite(defQ, xform), useLbl, rewrite(useQ, xform))
     }
-  private def rewrite(d: Distinctiveness[CT, CV], xform: ExprRewriter): Distinctiveness[CT, CV] =
+  private def rewrite(d: Distinctiveness, xform: ExprRewriter): Distinctiveness =
     d match {
-      case Distinctiveness.Indistinct => Distinctiveness.Indistinct
-      case Distinctiveness.FullyDistinct => Distinctiveness.FullyDistinct
       case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(xform))
+      case x@(Distinctiveness.Indistinct() | Distinctiveness.FullyDistinct()) => x
     }
-  private def rewrite(d: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]], xform: ExprRewriter): OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]] =
+  private def rewrite(d: OrderedMap[AutoColumnLabel, NamedExpr], xform: ExprRewriter): OrderedMap[AutoColumnLabel, NamedExpr] =
     d.withValuesMapped { ne => ne.copy(expr = xform(ne.expr)) }
 
   private def mergeSelects(
-    a: Select[RNS, CT, CV], aLabel: TableLabel, aResourceName: Option[ScopedResourceName[RNS]], aAlias: Option[ResourceName],
-    b: Select[RNS, CT, CV], bRejoin: FromRewriter
-  ): Option[Statement[RNS, CT, CV]] =
+    a: Select, aLabel: AutoTableLabel, aResourceName: Option[ScopedResourceName[RNS]], aAlias: Option[ResourceName],
+    b: Select, bRejoin: FromRewriter
+  ): Option[Statement] =
     // If we decide to merge this, we're going to create some flavor of
     //   select merged_projection from bRejoin(FromStatement(a.from)) ...)
     (a, b) match {
@@ -215,7 +219,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         None
     }
 
-  private def definitelyRequiresSubselect(a: Select[RNS, CT, CV], aLabel: TableLabel, b: Select[RNS, CT, CV]): Boolean = {
+  private def definitelyRequiresSubselect(a: Select, aLabel: AutoTableLabel, b: Select): Boolean = {
     if(b.hint(SelectHint.NoChainMerge)) {
       debug("B asks not to merge with its upstream")
       return true
@@ -226,14 +230,14 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
       return true
     }
 
-    if(a.distinctiveness != Distinctiveness.Indistinct) {
+    if(a.distinctiveness != Distinctiveness.Indistinct()) {
       // selecting from a DISTINCT query is tricky to merge; let's
       // not.
       debug("A is distinct in some way")
       return true
     }
 
-    if(b.isWindowed || b.isAggregated || b.distinctiveness != Distinctiveness.Indistinct) {
+    if(b.isWindowed || b.isAggregated || b.distinctiveness != Distinctiveness.Indistinct()) {
       if(a.limit.isDefined || a.offset.isDefined) {
         // can't smash the queries together because a trims out some
         // of its rows after-the-fact, so b's windows (or groups)
@@ -250,7 +254,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         return true
       }
 
-      if(!b.from.isInstanceOf[AtomicFrom[_, _, _]]) {
+      if(!b.from.isInstanceOf[AtomicFrom]) {
         // b multiplies the rows, which affects grouping; can't merge.
         debug("join-on-aggregate")
         return true
@@ -264,7 +268,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
       val windowUsed =
         a.orderBy.exists(_.expr.isWindowed) ||
           a.selectList.iterator.filter(_._2.expr.isWindowed).exists { case (k, namedExpr) =>
-            b.directlyContains(Column(aLabel, k, namedExpr.expr.typ)(AtomicPositionInfo.None))
+            b.directlyContains(VirtualColumn(aLabel, k, namedExpr.expr.typ)(AtomicPositionInfo.None))
           }
 
       if(windowUsed) {
@@ -284,9 +288,9 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
         if(b.isWindowed) {
           val windowsWithinWindows =
             a.selectList.iterator.filter(_._2.expr.isWindowed).exists { case (k, namedExpr) =>
-              val target = Column(aLabel, k, namedExpr.expr.typ)(AtomicPositionInfo.None)
+              val target = VirtualColumn(aLabel, k, namedExpr.expr.typ)(AtomicPositionInfo.None)
               b.directlyFind {
-                case e: WindowedFunctionCall[CT, CV] => e.contains(target)
+                case e: WindowedFunctionCall => e.contains(target)
                 case _ => false
               }.isDefined
             }
@@ -304,61 +308,60 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
   }
 
   // true if "q" reorders, groups, or filters its input-rows
-  private def shapeChanging(q: Select[RNS, CT, CV]): Boolean =
+  private def shapeChanging(q: Select): Boolean =
     q.isAggregated ||
-      !q.from.isInstanceOf[AtomicFrom[_, _, _]] ||
+      !q.from.isInstanceOf[AtomicFrom] ||
       q.where.isDefined ||
       q.orderBy.nonEmpty ||
-      q.distinctiveness != Distinctiveness.Indistinct
+      q.distinctiveness != Distinctiveness.Indistinct()
 
   private def mergeDistinct(
-    aTable: TableLabel,
-    aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]],
-    b: Distinctiveness[CT, CV]
-  ): Distinctiveness[CT, CV] =
+    aTable: AutoTableLabel,
+    aColumns: OrderedMap[AutoColumnLabel, Expr],
+    b: Distinctiveness
+  ): Distinctiveness =
     b match {
-      case Distinctiveness.Indistinct => Distinctiveness.Indistinct
-      case Distinctiveness.FullyDistinct => Distinctiveness.FullyDistinct
       case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(replaceRefs(aTable, aColumns, _)))
+      case x@(Distinctiveness.Indistinct() | Distinctiveness.FullyDistinct()) => x
     }
 
   private def mergeSelection(
-    aTable: TableLabel,
-    aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]],
-    b: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]]
-  ): OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]] =
+    aTable: AutoTableLabel,
+    aColumns: OrderedMap[AutoColumnLabel, Expr],
+    b: OrderedMap[AutoColumnLabel, NamedExpr]
+  ): OrderedMap[AutoColumnLabel, NamedExpr] =
     b.withValuesMapped { bExpr =>
       bExpr.copy(expr = replaceRefs(aTable, aColumns, bExpr.expr))
     }
 
-  private def mergeGroupBy(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]], gb: Seq[Expr[CT, CV]]): Seq[Expr[CT, CV]] = {
+  private def mergeGroupBy(aTable: AutoTableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr], gb: Seq[Expr]): Seq[Expr] = {
     gb.map(replaceRefs(aTable, aColumns, _))
   }
 
-  private def orderByVsDistinct(orderBy: Seq[OrderBy[CT, CV]], columns: OrderedMap[AutoColumnLabel, Expr[CT, CV]], bDistinct: Distinctiveness[CT, CV]) = {
+  private def orderByVsDistinct(orderBy: Seq[OrderBy], columns: OrderedMap[AutoColumnLabel, Expr], bDistinct: Distinctiveness) = {
     orderBy.filter { ob =>
       bDistinct match {
-        case Distinctiveness.Indistinct => true
-        case Distinctiveness.FullyDistinct => columns.values.exists(_ == ob.expr)
+        case Distinctiveness.Indistinct() => true
+        case Distinctiveness.FullyDistinct() => columns.values.exists(_ == ob.expr)
         case Distinctiveness.On(exprs) => exprs.contains(ob.expr)
       }
     }
   }
 
   private def mergeOrderBy(
-    aTable: TableLabel,
-    aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]],
-    obA: Seq[OrderBy[CT, CV]],
-    obB: Seq[OrderBy[CT, CV]]
-  ): Seq[OrderBy[CT, CV]] =
+    aTable: AutoTableLabel,
+    aColumns: OrderedMap[AutoColumnLabel, Expr],
+    obA: Seq[OrderBy],
+    obB: Seq[OrderBy]
+  ): Seq[OrderBy] =
     obB.map { ob => ob.copy(expr = replaceRefs(aTable, aColumns, ob.expr)) } ++ obA
 
   private def mergeWhereLike(
-    aTable: TableLabel,
-    aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]],
-    a: Option[Expr[CT, CV]],
-    b: Option[Expr[CT, CV]]
-  ): Option[Expr[CT, CV]] =
+    aTable: AutoTableLabel,
+    aColumns: OrderedMap[AutoColumnLabel, Expr],
+    a: Option[Expr],
+    b: Option[Expr]
+  ): Option[Expr] =
     (a, b) match {
       case (None, None) => None
       case (Some(a), None) => Some(a)
@@ -366,13 +369,13 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
       case (Some(a), Some(b)) => Some(FunctionCall(and, Seq(a, replaceRefs(aTable, aColumns, b)))(FuncallPositionInfo.None))
     }
 
-  private def replaceRefs(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]], b: Expr[CT, CV]) =
+  private def replaceRefs(aTable: AutoTableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr], b: Expr) =
     new ReplaceRefs(aTable, aColumns).go(b)
 
-  private class ReplaceRefs(aTable: TableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr[CT, CV]]) {
-    def go(b: Expr[CT, CV]): Expr[CT, CV] =
+  private class ReplaceRefs(aTable: AutoTableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr]) {
+    def go(b: Expr): Expr =
       b match {
-        case Column(`aTable`, c : AutoColumnLabel, t) =>
+        case VirtualColumn(`aTable`, c : AutoColumnLabel, t) =>
           aColumns.get(c) match {
             case Some(aExpr) if aExpr.typ == t =>
               aExpr
@@ -381,9 +384,9 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
             case None =>
               oops("Found a dangling column reference!")
           }
-        case c: Column[CT] =>
+        case c: Column =>
           c
-        case l: Literal[CT, CV] =>
+        case l: Literal =>
           l
         case fc@FunctionCall(f, params) =>
           FunctionCall(f, params.map(go _))(fc.position)
@@ -403,7 +406,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
             orderBy.map { ob => ob.copy(expr = go(ob.expr)) },
             frame
           )(fc.position)
-        case sr: SelectListReference[CT] =>
+        case sr: SelectListReference =>
           // This is safe because we're creating a new query with the
           // same output as b's query, so this just refers to the new
           // (possibly rewritten) column in the same position
@@ -430,7 +433,7 @@ class Merger[RNS, CT, CV](and: MonomorphicFunction[CT]) {
       debugOne = false
     }
   }
-  private def debug(message: String, a: Statement[RNS, CT, CV], bs: Statement[RNS, CT, CV]*): Unit = {
+  private def debug(message: String, a: Statement, bs: Statement*): Unit = {
     debug(message)
     debug(a.debugStr)
     bs.foreach { b => debug(b.debugStr) }

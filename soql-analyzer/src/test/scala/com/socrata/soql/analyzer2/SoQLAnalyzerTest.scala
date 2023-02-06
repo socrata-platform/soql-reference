@@ -15,7 +15,7 @@ import mocktablefinder._
 
 class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
   test("alias analysis qualifiers are correct") {
-    val tf = MockTableFinder.empty[Int, TestType]
+    val tf = MockTableFinder.empty[TestMT]
     val Right(start) = tf.findTables(0, "select @bleh.whatever from @single_row", Map.empty)
     analyzer(start, UserParameters.empty) match {
       case Right(_) => fail("Expected an error")
@@ -28,7 +28,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
   }
 
   test("simple contextless") {
-    val tf = MockTableFinder.empty[Int, TestType]
+    val tf = MockTableFinder.empty[TestMT]
 
     // Getting rid of parents, literal coersions, function overloading, disambiguation....
     val analysis = analyze(tf, "select ((('5' + 7))), 'hello' + 'world', '1' + '2' from @single_row")
@@ -42,38 +42,38 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
     select.selectList must equal (
       OrderedMap(
         c(1) -> NamedExpr(
-          FunctionCall(
+          FunctionCall[TestMT](
             MonomorphicFunction(TestFunctions.BinaryPlus, Map("a" -> TestNumber)),
             Seq(
-              LiteralValue(TestNumber(5))(AtomicPositionInfo.None),
-              LiteralValue(TestNumber(7))(AtomicPositionInfo.None)
+              LiteralValue[TestMT](TestNumber(5))(AtomicPositionInfo.None),
+              LiteralValue[TestMT](TestNumber(7))(AtomicPositionInfo.None)
             )
           )(FuncallPositionInfo.None),
           cn("_5_7")
         ),
         c(2) -> NamedExpr(
-          FunctionCall(
+          FunctionCall[TestMT](
             MonomorphicFunction(TestFunctions.BinaryPlus, Map("a" -> TestText)),
             Seq(
-              LiteralValue(TestText("hello"))(AtomicPositionInfo.None),
-              LiteralValue(TestText("world"))(AtomicPositionInfo.None)
+              LiteralValue[TestMT](TestText("hello"))(AtomicPositionInfo.None),
+              LiteralValue[TestMT](TestText("world"))(AtomicPositionInfo.None)
             )
           )(FuncallPositionInfo.None),
           cn("hello_world")
         ),
         c(3) -> NamedExpr(
-          FunctionCall(
+          FunctionCall[TestMT](
             MonomorphicFunction(TestFunctions.BinaryPlus, Map("a" -> TestText)),
             Seq(
-              LiteralValue(TestText("1"))(AtomicPositionInfo.None),
-              LiteralValue(TestText("2"))(AtomicPositionInfo.None)
+              LiteralValue[TestMT](TestText("1"))(AtomicPositionInfo.None),
+              LiteralValue[TestMT](TestText("2"))(AtomicPositionInfo.None)
             )
           )(FuncallPositionInfo.None),
           cn("_1_2")
@@ -84,7 +84,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     select.from must equal (FromSingleRow(t(1), Some(rn("single_row"))))
 
     // and the rest is empty
-    val Select(Distinctiveness.Indistinct, _, _, None, Nil, None, Nil, None, None, None, _) = select
+    val Select(Distinctiveness.Indistinct(), _, _, None, Nil, None, Nil, None, None, None, _) = select
   }
 
   test("simple context") {
@@ -102,22 +102,22 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
     select.selectList must equal (
       OrderedMap(
         c(1) -> NamedExpr(
-          Column(t(1), dcn("text"), TestText)(AtomicPositionInfo.None),
+          PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None),
           cn("t")
         ),
         c(2) -> NamedExpr(
-          FunctionCall(
+          FunctionCall[TestMT](
             TestFunctions.Times.monomorphic.get,
             Seq(
-              Column(t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None),
-              Column(t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None)
+              PhysicalColumn[TestMT](t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None),
+              PhysicalColumn[TestMT](t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None)
             )
           )(FuncallPositionInfo.None),
           cn("num_num")
@@ -126,7 +126,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     select.from must equal (
-      FromTable(
+      FromTable[TestMT](
         dtn("aaaa-aaaa"),
         ScopedResourceName(0, rn("aaaa-aaaa")),
         None,
@@ -140,7 +140,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     // and the rest is empty
-    val Select(Distinctiveness.Indistinct, _, _, None, Nil, None, Nil, None, None, None, _) = select
+    val Select(Distinctiveness.Indistinct(), _, _, None, Nil, None, Nil, None, None, None, _) = select
   }
 
   test("untagged parameters in anonymous soql - impersonating a saved query") {
@@ -159,14 +159,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
     select.selectList must equal (
       OrderedMap(
         c(1) -> NamedExpr(
-          LiteralValue(TestText("Hello world"))(AtomicPositionInfo.None),
+          LiteralValue[TestMT](TestText("Hello world"))(AtomicPositionInfo.None),
           cn("param_gnu")
         )
       )
@@ -186,14 +186,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
     select.selectList must equal (
       OrderedMap(
         c(1) -> NamedExpr(
-          LiteralValue(TestText("Hello world"))(AtomicPositionInfo.None),
+          LiteralValue[TestMT](TestText("Hello world"))(AtomicPositionInfo.None),
           cn("param_gnu")
         )
       )
@@ -212,14 +212,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
     select.selectList must equal (
       OrderedMap(
         c(1) -> NamedExpr(
-          LiteralValue(TestText("Hello world"))(AtomicPositionInfo.None),
+          LiteralValue[TestMT](TestText("Hello world"))(AtomicPositionInfo.None),
           cn("param_gnu")
         )
       )
@@ -234,18 +234,18 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis = analyzeSaved(tf, "aaaa-aaaa")
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
     select must equal (
-      Select(
-        Distinctiveness.Indistinct,
+      Select[TestMT](
+        Distinctiveness.Indistinct(),
         OrderedMap(
-          c(1) -> NamedExpr(Column(t(1), dcn("text"), TestText)(AtomicPositionInfo.None), cn("text")),
-          c(2) -> NamedExpr(Column(t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None), cn("num"))
+          c(1) -> NamedExpr(PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None), cn("text")),
+          c(2) -> NamedExpr(PhysicalColumn[TestMT](t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None), cn("num"))
         ),
-        FromTable(
+        FromTable[TestMT](
           dtn("aaaa-aaaa"),
           ScopedResourceName(0, rn("aaaa-aaaa")),
           None,
@@ -258,7 +258,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         ),
         None, Nil, None,
         List(
-          OrderBy(Column(t(1), dcn("text"), TestText)(AtomicPositionInfo.None),true,true)
+          OrderBy(PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None),true,true)
         ),
         None,None,None,Set.empty
       )
@@ -274,25 +274,25 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis = analyze(tf, "aaaa-aaaa", "select *")
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
     select must equal (
-      Select(
-        Distinctiveness.Indistinct,
+      Select[TestMT](
+        Distinctiveness.Indistinct(),
         OrderedMap(
-          c(3) -> NamedExpr(Column(t(2),c(1),TestText)(AtomicPositionInfo.None),cn("text")),
-          c(4) -> NamedExpr(Column(t(2),c(2),TestNumber)(AtomicPositionInfo.None),cn("num"))
+          c(3) -> NamedExpr(VirtualColumn[TestMT](t(2),c(1),TestText)(AtomicPositionInfo.None),cn("text")),
+          c(4) -> NamedExpr(VirtualColumn[TestMT](t(2),c(2),TestNumber)(AtomicPositionInfo.None),cn("num"))
         ),
-        FromStatement(
-          Select(
-            Distinctiveness.Indistinct,
+        FromStatement[TestMT](
+          Select[TestMT](
+            Distinctiveness.Indistinct(),
             OrderedMap(
-              c(1) -> NamedExpr(Column(t(1), dcn("text"), TestText)(AtomicPositionInfo.None), cn("text")),
-              c(2) -> NamedExpr(Column(t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None), cn("num"))
+              c(1) -> NamedExpr(PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None), cn("text")),
+              c(2) -> NamedExpr(PhysicalColumn[TestMT](t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None), cn("num"))
             ),
-            FromTable(
+            FromTable[TestMT](
               dtn("aaaa-aaaa"),
               ScopedResourceName(0, rn("aaaa-aaaa")),
               None,
@@ -305,7 +305,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             ),
             None, Nil, None,
             List(
-              OrderBy(Column(t(1), dcn("text"), TestText)(AtomicPositionInfo.None),true,true)
+              OrderBy(PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None),true,true)
             ),
             None,None,None,Set.empty
           ),
@@ -363,28 +363,28 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis = analyze(tf, "aaaa-aaaa", "select * join @cccc-cccc('bob') on true")
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
     select.selectList must equal (
       OrderedMap(
-        c(3) -> NamedExpr(
-          Column(t(1), dcn("text"), TestText)(AtomicPositionInfo.None),
+        c(4) -> NamedExpr(
+          PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None),
           cn("text")
         ),
-        c(4) -> NamedExpr(
-          Column(t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None),
+        c(5) -> NamedExpr(
+          PhysicalColumn[TestMT](t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None),
           cn("num")
         )
       )
     )
 
     select.from must equal (
-      Join(
+      Join[TestMT](
         JoinType.Inner,
         true,
-        FromTable(
+        FromTable[TestMT](
           dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
@@ -392,26 +392,26 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           ),
           Nil
         ),
-        FromStatement(
-          Select(
-            Distinctiveness.Indistinct,
+        FromStatement[TestMT](
+          Select[TestMT](
+            Distinctiveness.Indistinct(),
             OrderedMap(
-              c(2) -> NamedExpr(Column(t(4),c(1),TestNumber)(AtomicPositionInfo.None), cn("_1"))
+              c(3) -> NamedExpr(VirtualColumn[TestMT](t(4),c(2),TestNumber)(AtomicPositionInfo.None), cn("_1"))
             ),
-            Join(
+            Join[TestMT](
               JoinType.Inner,
               true,
-              FromStatement(
-                Values(NonEmptySeq(NonEmptySeq(LiteralValue(TestText("bob"))(AtomicPositionInfo.None),Nil),Nil)),
+              FromStatement[TestMT](
+                Values[TestMT](OrderedSet(c(1)), NonEmptySeq(NonEmptySeq(LiteralValue[TestMT](TestText("bob"))(AtomicPositionInfo.None),Nil),Nil)),
                 t(2), None, None
               ),
-              FromStatement(
-                Select(
-                  Distinctiveness.Indistinct,
+              FromStatement[TestMT](
+                Select[TestMT](
+                  Distinctiveness.Indistinct(),
                   OrderedMap(
-                    c(1) -> NamedExpr(LiteralValue(TestNumber(1))(AtomicPositionInfo.None),cn("_1"))
+                    c(2) -> NamedExpr(LiteralValue[TestMT](TestNumber(1))(AtomicPositionInfo.None),cn("_1"))
                   ),
-                  FromTable(
+                  FromTable[TestMT](
                     dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")),Some(rn("bbbb-bbbb")),
                     t(3),
                     OrderedMap(
@@ -421,17 +421,17 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     Nil
                   ),
                   Some(
-                    FunctionCall(
+                    FunctionCall[TestMT](
                       TestFunctions.And.monomorphic.get,
                       Seq(
-                        FunctionCall(
+                        FunctionCall[TestMT](
                           MonomorphicFunction(TestFunctions.Eq, Map("a" -> TestText)),
                           Seq(
-                            Column(t(3),dcn("user"),TestText)(AtomicPositionInfo.None),
-                            Column(t(2),dcn("column1"),TestText)(AtomicPositionInfo.None)
+                            PhysicalColumn[TestMT](t(3),dcn("user"),TestText)(AtomicPositionInfo.None),
+                            VirtualColumn[TestMT](t(2),c(1),TestText)(AtomicPositionInfo.None)
                           )
                         )(FuncallPositionInfo.None),
-                        Column(t(3),dcn("allowed"),TestBoolean)(AtomicPositionInfo.None)
+                        PhysicalColumn[TestMT](t(3),dcn("allowed"),TestBoolean)(AtomicPositionInfo.None)
                       )
                     )(FuncallPositionInfo.None)
                   ),
@@ -439,14 +439,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                 ),
                 t(4), None, None
               ),
-              LiteralValue(TestBoolean(true))(AtomicPositionInfo.None)
+              LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.None)
             ),
             None,Nil,None,Nil,None,None,None,Set.empty
           ),
           t(5),
           Some(ScopedResourceName(0,rn("cccc-cccc"))),Some(rn("cccc-cccc"))
         ),
-        LiteralValue(TestBoolean(true))(AtomicPositionInfo.None)
+        LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.None)
       )
     )
   }
@@ -461,28 +461,28 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis = analyze(tf, "aaaa-aaaa", "select * join @cccc-cccc(text) on true")
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
     select.selectList must equal (
       OrderedMap(
-        c(3) -> NamedExpr(
-          Column(t(1), dcn("text"), TestText)(AtomicPositionInfo.None),
+        c(4) -> NamedExpr(
+          PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None),
           cn("text")
         ),
-        c(4) -> NamedExpr(
-          Column(t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None),
+        c(5) -> NamedExpr(
+          PhysicalColumn[TestMT](t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None),
           cn("num")
         )
       )
     )
 
     select.from must equal (
-      Join(
+      Join[TestMT](
         JoinType.Inner,
         true,
-        FromTable(
+        FromTable[TestMT](
           dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
@@ -490,26 +490,26 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           ),
           Nil
         ),
-        FromStatement(
-          Select(
-            Distinctiveness.Indistinct,
+        FromStatement[TestMT](
+          Select[TestMT](
+            Distinctiveness.Indistinct(),
             OrderedMap(
-              c(2) -> NamedExpr(Column(t(4),c(1),TestNumber)(AtomicPositionInfo.None), cn("_1"))
+              c(3) -> NamedExpr(VirtualColumn[TestMT](t(4),c(2),TestNumber)(AtomicPositionInfo.None), cn("_1"))
             ),
-            Join(
+            Join[TestMT](
               JoinType.Inner,
               true,
               FromStatement(
-                Values(NonEmptySeq(NonEmptySeq(Column(t(1),dcn("text"),TestText)(AtomicPositionInfo.None),Nil),Nil)),
+                Values[TestMT](OrderedSet(c(1)), NonEmptySeq(NonEmptySeq(PhysicalColumn[TestMT](t(1),dcn("text"),TestText)(AtomicPositionInfo.None),Nil),Nil)),
                 t(2), None, None
               ),
-              FromStatement(
-                Select(
-                  Distinctiveness.Indistinct,
+              FromStatement[TestMT](
+                Select[TestMT](
+                  Distinctiveness.Indistinct(),
                   OrderedMap(
-                    c(1) -> NamedExpr(LiteralValue(TestNumber(1))(AtomicPositionInfo.None),cn("_1"))
+                    c(2) -> NamedExpr(LiteralValue[TestMT](TestNumber(1))(AtomicPositionInfo.None),cn("_1"))
                   ),
-                  FromTable(
+                  FromTable[TestMT](
                     dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")),Some(rn("bbbb-bbbb")),
                     t(3),
                     OrderedMap(
@@ -519,17 +519,17 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     Nil
                   ),
                   Some(
-                    FunctionCall(
+                    FunctionCall[TestMT](
                       TestFunctions.And.monomorphic.get,
                       Seq(
-                        FunctionCall(
+                        FunctionCall[TestMT](
                           MonomorphicFunction(TestFunctions.Eq, Map("a" -> TestText)),
                           Seq(
-                            Column(t(3),dcn("user"),TestText)(AtomicPositionInfo.None),
-                            Column(t(2),dcn("column1"),TestText)(AtomicPositionInfo.None)
+                            PhysicalColumn[TestMT](t(3),dcn("user"),TestText)(AtomicPositionInfo.None),
+                            VirtualColumn[TestMT](t(2),c(1),TestText)(AtomicPositionInfo.None)
                           )
                         )(FuncallPositionInfo.None),
-                        Column(t(3),dcn("allowed"),TestBoolean)(AtomicPositionInfo.None)
+                        PhysicalColumn[TestMT](t(3),dcn("allowed"),TestBoolean)(AtomicPositionInfo.None)
                       )
                     )(FuncallPositionInfo.None)
                   ),
@@ -537,14 +537,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                 ),
                 t(4), None, None
               ),
-              LiteralValue(TestBoolean(true))(AtomicPositionInfo.None)
+              LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.None)
             ),
             None,Nil,None,Nil,None,None,None,Set.empty
           ),
           t(5),
           Some(ScopedResourceName(0,rn("cccc-cccc"))),Some(rn("cccc-cccc"))
         ),
-        LiteralValue(TestBoolean(true))(AtomicPositionInfo.None)
+        LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.None)
       )
     )
   }
@@ -558,28 +558,28 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis = analyze(tf, "aaaa-aaaa", "select * join @bbbb-bbbb('hello' :: text, 5, true :: boolean, text) on true")
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
     select.selectList must equal (
       OrderedMap(
-        c(9) -> NamedExpr(
-          Column(t(1), dcn("text"), TestText)(AtomicPositionInfo.None),
+        c(13) -> NamedExpr(
+          PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None),
           cn("text")
         ),
-        c(10) -> NamedExpr(
-          Column(t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None),
+        c(14) -> NamedExpr(
+          PhysicalColumn[TestMT](t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None),
           cn("num")
         )
       )
     )
 
     select.from must equal (
-      Join(
+      Join[TestMT](
         JoinType.Inner,
         true,
-        FromTable(
+        FromTable[TestMT](
           dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
@@ -587,33 +587,34 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           ),
           Nil
         ),
-        FromStatement(
-          Select(
-            Distinctiveness.Indistinct,
+        FromStatement[TestMT](
+          Select[TestMT](
+            Distinctiveness.Indistinct(),
             OrderedMap(
-              c(5) -> NamedExpr(Column(t(4), c(1), TestText)(AtomicPositionInfo.None), cn("a")),
-              c(6) -> NamedExpr(Column(t(4), c(2), TestBoolean)(AtomicPositionInfo.None), cn("b")),
-              c(7) -> NamedExpr(Column(t(4), c(3), TestNumber)(AtomicPositionInfo.None), cn("c")),
-              c(8) -> NamedExpr(Column(t(4), c(4), TestText)(AtomicPositionInfo.None), cn("d"))
+              c(9) -> NamedExpr(VirtualColumn[TestMT](t(4), c(5), TestText)(AtomicPositionInfo.None), cn("a")),
+              c(10) -> NamedExpr(VirtualColumn[TestMT](t(4), c(6), TestBoolean)(AtomicPositionInfo.None), cn("b")),
+              c(11) -> NamedExpr(VirtualColumn[TestMT](t(4), c(7), TestNumber)(AtomicPositionInfo.None), cn("c")),
+              c(12) -> NamedExpr(VirtualColumn[TestMT](t(4), c(8), TestText)(AtomicPositionInfo.None), cn("d"))
             ),
-            Join(
+            Join[TestMT](
               JoinType.Inner,
               true,
-              FromStatement(
-                Values(
+              FromStatement[TestMT](
+                Values[TestMT](
+                  OrderedSet(c(1), c(2), c(3), c(4)),
                   NonEmptySeq(
                     NonEmptySeq(
-                      FunctionCall(
+                      FunctionCall[TestMT](
                         TestFunctions.castIdentitiesByType(TestText).monomorphic.get,
-                        Seq(LiteralValue(TestText("hello"))(AtomicPositionInfo.None))
+                        Seq(LiteralValue[TestMT](TestText("hello"))(AtomicPositionInfo.None))
                       )(FuncallPositionInfo.None),
                       Seq(
-                        LiteralValue(TestNumber(5))(AtomicPositionInfo.None),
-                        FunctionCall(
+                        LiteralValue[TestMT](TestNumber(5))(AtomicPositionInfo.None),
+                        FunctionCall[TestMT](
                           TestFunctions.castIdentitiesByType(TestBoolean).monomorphic.get,
-                          Seq(LiteralValue(TestBoolean(true))(AtomicPositionInfo.None))
+                          Seq(LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.None))
                         )(FuncallPositionInfo.None),
-                        Column(t(1), dcn("text"), TestText)(AtomicPositionInfo.None)
+                        PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None)
                       )
                     )
                   )
@@ -621,26 +622,26 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                 t(2), None, None
               ),
               FromStatement(
-                Select(
-                  Distinctiveness.Indistinct,
+                Select[TestMT](
+                  Distinctiveness.Indistinct(),
                   OrderedMap(
-                    c(1) -> NamedExpr(Column(t(2),dcn("column4"),TestText)(AtomicPositionInfo.None), cn("a")),
-                    c(2) -> NamedExpr(Column(t(2),dcn("column3"),TestBoolean)(AtomicPositionInfo.None), cn("b")),
-                    c(3) -> NamedExpr(Column(t(2),dcn("column2"),TestNumber)(AtomicPositionInfo.None), cn("c")),
-                    c(4) -> NamedExpr(Column(t(2),dcn("column1"),TestText)(AtomicPositionInfo.None), cn("d"))
+                    c(5) -> NamedExpr(VirtualColumn[TestMT](t(2),c(4),TestText)(AtomicPositionInfo.None), cn("a")),
+                    c(6) -> NamedExpr(VirtualColumn[TestMT](t(2),c(3),TestBoolean)(AtomicPositionInfo.None), cn("b")),
+                    c(7) -> NamedExpr(VirtualColumn[TestMT](t(2),c(2),TestNumber)(AtomicPositionInfo.None), cn("c")),
+                    c(8) -> NamedExpr(VirtualColumn[TestMT](t(2),c(1),TestText)(AtomicPositionInfo.None), cn("d"))
                   ),
                   FromSingleRow(t(3), Some(rn("single_row"))),
                   None,Nil,None,Nil,None,None,None,Set()
                 ),
                 t(4), None, None
               ),
-              LiteralValue(TestBoolean(true))(AtomicPositionInfo.None)
+              LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.None)
             ),
             None,Nil,None,Nil,None,None,None,Set()
           ),
           t(5),Some(ScopedResourceName(0,rn("bbbb-bbbb"))), Some(rn("bbbb-bbbb"))
         ),
-        LiteralValue(TestBoolean(true))(AtomicPositionInfo.None)
+        LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.None)
       )
     )
   }
@@ -653,7 +654,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis = analyze(tf, "aaaa-aaaa", "select n1 + n2 as sum where sum = 5")
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
@@ -687,17 +688,17 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis = analyze(tf, "aaaa-aaaa", "select * join @bbbb-bbbb(7) on true")
 
     val select = analysis.statement match {
-      case select: Select[Int, TestType, TestValue] => select
+      case select: Select[TestMT] => select
       case _ => fail("Expected a select")
     }
 
     val subquery = select.from match {
-      case Join(_, _, _, FromStatement(subquery: Select[Int, TestType, TestValue], _, _, _), _) => subquery
+      case Join(_, _, _, FromStatement(subquery: Select[TestMT], _, _, _), _) => subquery
       case _ => fail("Expected a join to a subquery")
     }
 
     val lit = subquery.from match {
-      case Join(_, _, FromStatement(Values(NonEmptySeq(NonEmptySeq(lit@LiteralValue(_), Nil), Nil)), _, _, _), _, _) => lit
+      case Join(_, _, FromStatement(Values(_, NonEmptySeq(NonEmptySeq(lit@LiteralValue(_), Nil), Nil)), _, _, _), _, _) => lit
       case _ => fail("Expected a join to a values")
     }
 

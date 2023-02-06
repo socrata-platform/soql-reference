@@ -15,7 +15,15 @@ import com.socrata.soql.parsing.{StandaloneParser, AbstractParser}
 import mocktablefinder._
 
 class TableFinderTest extends FunSuite with MustMatchers {
-  val tables = new MockTableFinder(
+  final class MT extends MetaTypes {
+    type ResourceNameScope = Int
+    type ColumnType = String
+    type ColumnValue = Nothing
+    type DatabaseTableNameImpl = String
+    type DatabaseColumnNameImpl = String
+  }
+
+  val tables = new MockTableFinder[MT](
     Map(
       (0, "t1") -> D(
         "key" -> "integer",
@@ -116,19 +124,19 @@ class TableFinderTest extends FunSuite with MustMatchers {
   }
 
   test("can rountdtrip a FoundTables through JSON") {
-    def go(ft: tables.Result[FoundTables[Int, String]]): Unit = {
+    def go(ft: tables.Result[FoundTables[MT]]): Unit = {
       val orig = ft.toOption.get
       val jsonized = JsonEncode.toJValue(orig)
 
       // first, can bounce it through UnparsedFoundTables and get the same JSON back out
-      val unparsed = JsonDecode.fromJValue[UnparsedFoundTables[Int, String]](jsonized) match {
+      val unparsed = JsonDecode.fromJValue[UnparsedFoundTables[MT]](jsonized) match {
         case Right(ok) => ok
         case Left(err) => fail(err.english)
       }
       JsonEncode.toJValue(unparsed) must equal (jsonized)
 
       // Then, we can take that json and get the original FoundTables back out
-      val parsed = JsonDecode.fromJValue[FoundTables[Int, String]](jsonized) match {
+      val parsed = JsonDecode.fromJValue[FoundTables[MT]](jsonized) match {
         case Right(ok) => ok
         case Left(err) => fail(err.english)
       }

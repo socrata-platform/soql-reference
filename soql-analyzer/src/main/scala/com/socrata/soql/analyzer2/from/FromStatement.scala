@@ -10,23 +10,24 @@ import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable,
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.typechecker.HasDoc
 
 import DocUtils._
 
-trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
-  type Self[+RNS, +CT, +CV] = FromStatement[RNS, CT, CV]
+trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
+  type Self[MT <: MetaTypes] = FromStatement[MT]
   def asSelf = this
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = statement.columnReferences
+  private[analyzer2] val scope: Scope[MT] = new Scope.Virtual[MT](label, statement.schema)
 
-  def find(predicate: Expr[CT, CV] => Boolean) = statement.find(predicate)
-  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean =
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = statement.columnReferences
+
+  def find(predicate: Expr[MT] => Boolean) = statement.find(predicate)
+  def contains(e: Expr[MT]): Boolean =
     statement.contains(e)
 
-  def unique = statement.unique.map(_.map { cn => Column(label, cn, statement.column(cn).typ)(AtomicPositionInfo.None) })
+  def unique = statement.unique.map(_.map { cn => VirtualColumn(label, cn, statement.schema(cn).typ)(AtomicPositionInfo.None) })
 
-  private[analyzer2] final def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2](state: IsomorphismState, that: From[RNS2, CT2, CV2]): Boolean =
+  private[analyzer2] final def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
       case FromStatement(thatStatement, thatLabel, thatResourceName, thatAlias) =>
@@ -37,23 +38,26 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
         false
     }
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
-    copy(statement = statement.doRewriteDatabaseNames(state))
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
+    copy(
+      statement = statement.doRewriteDatabaseNames(state),
+      resourceName = resourceName.map(state.changesOnlyLabels.convertRNSOnly(_))
+    )
 
   private[analyzer2] def doRelabel(state: RelabelState) = {
     copy(statement = statement.doRelabel(state),
          label = state.convert(label))
   }
 
-  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): FromStatement[RNS, CT, CV] =
+  private[analyzer2] def reAlias(newAlias: Option[ResourceName]): Self[MT] =
     copy(alias = newAlias)
 
-  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV] =
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =
     copy(statement = statement.mapAlias(f), alias = f(alias))
 
   private[analyzer2] def realTables = statement.realTables
 
-  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit = {
+  private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
     statement.doLabelMap(state)
     val tr = LabelMap.TableReference(resourceName, alias)
     state.tableMap += label -> tr
@@ -62,13 +66,13 @@ trait FromStatementImpl[+RNS, +CT, +CV] { this: FromStatement[RNS, CT, CV] =>
     }
   }
 
-  def debugDoc(implicit ev: HasDoc[CV]) =
-    (statement.debugDoc.encloseNesting(d"(", d")") +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition(alias, label))).annotate(Annotation.TableDefinition(label))
+  private[analyzer2] def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
+    (statement.doDebugDoc.encloseNesting(d"(", d")") +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
 }
 
 trait OFromStatementImpl { this: FromStatement.type =>
-  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[FromStatement[RNS, CT, CV]] = new Writable[FromStatement[RNS, CT, CV]] {
-    def writeTo(buffer: WriteBuffer, from: FromStatement[RNS, CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#ResourceNameScope], ctWritable: Writable[MT#ColumnType], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[FromStatement[MT]] = new Writable[FromStatement[MT]] {
+    def writeTo(buffer: WriteBuffer, from: FromStatement[MT]): Unit = {
       buffer.write(from.statement)
       buffer.write(from.label)
       buffer.write(from.resourceName)
@@ -76,11 +80,11 @@ trait OFromStatementImpl { this: FromStatement.type =>
     }
   }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[FromStatement[RNS, CT, CV]] =
-    new Readable[FromStatement[RNS, CT, CV]] {
-      def readFrom(buffer: ReadBuffer): FromStatement[RNS, CT, CV] =
+  implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope], ctReadable: Readable[MT#ColumnType], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[FromStatement[MT]] =
+    new Readable[FromStatement[MT]] with MetaTypeHelper[MT] {
+      def readFrom(buffer: ReadBuffer): FromStatement[MT] =
         FromStatement(
-          statement = buffer.read[Statement[RNS, CT, CV]](),
+          statement = buffer.read[Statement[MT]](),
           label = buffer.read[AutoTableLabel](),
           resourceName = buffer.read[Option[ScopedResourceName[RNS]]](),
           alias = buffer.read[Option[ResourceName]]()

@@ -4,17 +4,15 @@ import com.socrata.soql.collection._
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.analyzer2
 
-class AddLimitOffset[RNS, CT, CV] private (labelProvider: LabelProvider) {
-  type Statement = analyzer2.Statement[RNS, CT, CV]
-
+class AddLimitOffset[MT <: MetaTypes] private (labelProvider: LabelProvider) extends StatementUniverse[MT] {
   def rewriteStatement(stmt: Statement, desiredLimit: Option[BigInt], desiredOffset: Option[BigInt]): Statement = {
     stmt match {
-      case CombinedTables(_, _, _) | Values(_) =>
+      case CombinedTables(_, _, _) | Values(_, _) =>
         val newTableLabel = labelProvider.tableLabel()
         Select(
-          Distinctiveness.Indistinct,
+          Distinctiveness.Indistinct(),
           OrderedMap() ++ stmt.schema.iterator.map { case (colLabel, NameEntry(name, typ)) =>
-            labelProvider.columnLabel() -> NamedExpr(Column(newTableLabel, colLabel, typ)(AtomicPositionInfo.None), name)
+            labelProvider.columnLabel() -> NamedExpr(VirtualColumn(newTableLabel, colLabel, typ)(AtomicPositionInfo.None), name)
           },
           FromStatement(stmt, newTableLabel, None, None),
           None,
@@ -40,7 +38,7 @@ class AddLimitOffset[RNS, CT, CV] private (labelProvider: LabelProvider) {
 object AddLimitOffset {
   private val zero = BigInt(0)
 
-  def apply[RNS, CT, CV](labelProvider: LabelProvider, statement: Statement[RNS, CT, CV], limit: Option[BigInt], offset: Option[BigInt]): Statement[RNS, CT, CV] = {
+  def apply[MT <: MetaTypes](labelProvider: LabelProvider, statement: Statement[MT], limit: Option[BigInt], offset: Option[BigInt]): Statement[MT] = {
     if(limit.isEmpty && offset.isEmpty) {
       statement
     } else {
