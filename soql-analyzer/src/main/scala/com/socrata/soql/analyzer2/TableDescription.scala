@@ -126,7 +126,7 @@ object TableDescription {
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): Query[MT2] =
       copy(
         scope = scopeMap(scope),
-        parameters = parameters.asInstanceOf // SAFETY: ColumnType isn't changing
+        parameters = parameters.asInstanceOf[Map[HoleName, MT2#ColumnType]] // SAFETY: ColumnType isn't changing
       )
 
     private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
@@ -150,7 +150,7 @@ object TableDescription {
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): TableFunction[MT2] =
       copy(
         scope = scopeMap(scope),
-        parameters = parameters.asInstanceOf // SAFETY: ColumnType isn't changing
+        parameters = parameters.asInstanceOf[OrderedMap[HoleName, MT2#ColumnType]] // SAFETY: ColumnType isn't changing
       )
 
     private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
