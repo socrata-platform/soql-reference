@@ -7,17 +7,17 @@ import com.socrata.prettyprint.prelude._
 import com.socrata.prettyprint.{SimpleDocTree, tree}
 
 import com.socrata.soql.environment.{ResourceName, ColumnName}
-import com.socrata.soql.analyzer2.{Annotation, ColumnLabel, AutoColumnLabel, TableLabel, AutoTableLabel, DatabaseColumnName, DatabaseTableName}
+import com.socrata.soql.analyzer2.{Annotation, ColumnLabel, AutoColumnLabel, AutoTableLabel, DatabaseColumnName, DatabaseTableName, types}
 import com.socrata.soql.analyzer2.Annotation._
 
 object Renderer {
-  def renderHtml[RNS: JsonEncode, CT: JsonEncode](doc: SimpleDocTree[Annotation[RNS, CT]]): String = {
-    val renderer = new Renderer[RNS, CT]
-    renderer.go(tree.Ann(TableDefinition(DatabaseTableName(java.util.UUID.randomUUID().toString)), doc))
+  def renderHtml(doc: SimpleDocTree[Annotation[MT]]): String = {
+    val renderer = new Renderer
+    renderer.go(tree.Ann(TableDefinition[MT](AutoTableLabel.forTest(-1)), doc))
     renderer.result
   }
 
-  private class Renderer[RNS: JsonEncode, CT: JsonEncode] {
+  private class Renderer {
     private val sb = new StringBuilder
 
     def result = sb.toString
@@ -29,7 +29,7 @@ object Renderer {
       def encode(rn: ColumnName) = JString(rn.name)
     }
 
-    def go(node: SimpleDocTree[Annotation[RNS, CT]]): Unit = {
+    def go(node: SimpleDocTree[Annotation[MT]]): Unit = {
       node match {
         case tree.Char(c) =>
           sb.append(escapeHtml(c.toString))
@@ -93,15 +93,10 @@ object Renderer {
       }.collect(java.util.stream.Collectors.joining)
     }
     private def escapeAttr(s: String) = escapeHtml(s)
-    private def clsOf(label: TableLabel) = "tbl_" + hash(label)
-    private def clsOf(label: ColumnLabel) = "col_" + hash(label)
+    private def clsOf(label: types.ColumnLabel[MT]) = "col_" + hash(label)
+    private def clsOf(label: AutoTableLabel) = "tbl_" + sha1(1, toString)
 
-    def hash(l: TableLabel) = l match {
-      case DatabaseTableName(tn) => sha1(0, tn)
-      case a: AutoTableLabel => sha1(1, a.toString)
-    }
-
-    def hash(l: ColumnLabel) = l match {
+    def hash(l: types.ColumnLabel[MT]) = l match {
       case DatabaseColumnName(cn) => sha1(0, cn)
       case a: AutoColumnLabel => sha1(1, a.toString)
     }

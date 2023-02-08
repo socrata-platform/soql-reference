@@ -36,25 +36,25 @@ class ToStringTest extends FunSpec with MustMatchers {
         """foo(bar(baz(
           |  `hello`,
           |  `there`,
-          |  'yikes',
-          |  'wow this is a complicated function',
-          |  'the arglist is very long in terms of rendered width',
-          |  'as well as arg count',
-          |  'this is a long arglist so it will get broken up',
-          |  biz(1, 2, 3, 'this', 'wont'),
+          |  "yikes",
+          |  "wow this is a complicated function",
+          |  "the arglist is very long in terms of rendered width",
+          |  "as well as arg count",
+          |  "this is a long arglist so it will get broken up",
+          |  biz(1, 2, 3, "this", "won't"),
           |  this(
-          |    'should',
-          |    'get broken up',
-          |    'becuase it is very long',
-          |    'and this much stuff on one line',
-          |    'will make things',
-          |    'very hard to read',
-          |    'i could maybe write a whole poem',
-          |    'in these tests',
-          |    'but it is 5 oclock',
-          |    'and i am not creative',
-          |    'sorry about that',
-          |    'happy monday'
+          |    "should",
+          |    "get broken up",
+          |    "becuase it is very long",
+          |    "and this much stuff on one line",
+          |    "will make things",
+          |    "very hard to read",
+          |    "i could maybe write a whole poem",
+          |    "in these tests",
+          |    "but it is 5 oclock",
+          |    "and i am not creative",
+          |    "sorry about that",
+          |    "happy monday"
           |  )
           |)))""".stripMargin
       val rendered = parser.expression(expected).toString
@@ -64,39 +64,39 @@ class ToStringTest extends FunSpec with MustMatchers {
     it("nested expressions ((with extra parens))") {
       val expected =
         """case(
-          |  (`species` = 'cat'),
+          |  (`species` = "cat"),
           |  case(
-          |    ((`breed` = 'tabby')),
-          |    'tabby cat',
-          |    `breed` = 'sphinx',
-          |    'sphinx cat',
-          |    `breed` = 'fuzzy',
-          |    'fuzzy cat'
+          |    ((`breed` = "tabby")),
+          |    "tabby cat",
+          |    `breed` = "sphinx",
+          |    "sphinx cat",
+          |    `breed` = "fuzzy",
+          |    "fuzzy cat"
           |  ),
-          |  `species` = 'dog',
+          |  `species` = "dog",
           |  case(
-          |    `breed` = 'corgi',
-          |    'corgis!',
-          |    `breed` = 'greyhound',
-          |    'greyhounds!',
-          |    `breed` = 'husky',
-          |    'huskys!',
-          |    (`breed` == 'shepherd'),
+          |    `breed` = "corgi",
+          |    "corgis!",
+          |    `breed` = "greyhound",
+          |    "greyhounds!",
+          |    `breed` = "husky",
+          |    "huskys!",
+          |    (`breed` == "shepherd"),
           |    case(
-          |      `subbreed` = 'aussie',
-          |      'australian shepherd',
-          |      `subbreed` = 'german',
-          |      'german shepherd',
-          |      `subbreed` = 'border',
-          |      'border collie',
-          |      `subbreed` = 'belgian',
-          |      'belgian shepherd',
-          |      (`subbreed` = 'pyrenees'),
-          |      'great pyrenees'
+          |      `subbreed` = "aussie",
+          |      "australian shepherd",
+          |      `subbreed` = "german",
+          |      "german shepherd",
+          |      `subbreed` = "border",
+          |      "border collie",
+          |      `subbreed` = "belgian",
+          |      "belgian shepherd",
+          |      (`subbreed` = "pyrenees"),
+          |      "great pyrenees"
           |    )
           |  ),
           |  TRUE,
-          |  'other'
+          |  "other"
           |)""".stripMargin
       val rendered = parser.expression(expected).toString
       rendered must equal(expected)
@@ -146,7 +146,7 @@ class ToStringTest extends FunSpec with MustMatchers {
           |  limit 5
           |  offset 10""".stripMargin
       val expected1 = "SELECT `:id`, `balance` AS `amt`, `visits`"
-      val expected2 = "SELECT `:id` AS `i`, sum(`amt`) WHERE `visits` > 0 GROUP BY `i`, `visits` HAVING `sum_amt` < 5 ORDER BY `i` DESC NULL FIRST, sum(`amt`) ASC NULL FIRST SEARCH 'gnu' LIMIT 5 OFFSET 10"
+      val expected2 = "SELECT `:id` AS `i`, sum(`amt`) WHERE `visits` > 0 GROUP BY `i`, `visits` HAVING `sum_amt` < 5 ORDER BY `i` DESC NULL FIRST, sum(`amt`) ASC NULL FIRST SEARCH \"gnu\" LIMIT 5 OFFSET 10"
       val parsed = parser.selectStatement(query).map(_.toString)
       parsed must equal(NonEmptySeq(expected1, List(expected2)))
     }

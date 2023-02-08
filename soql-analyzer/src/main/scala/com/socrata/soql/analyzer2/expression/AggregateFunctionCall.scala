@@ -8,12 +8,12 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.typechecker.{FunctionInfo, HasDoc, HasType}
+import com.socrata.soql.typechecker.FunctionInfo
 
 import DocUtils._
 
-trait AggregateFunctionCallImpl[+CT, +CV] { this: AggregateFunctionCall[CT, CV] =>
-  type Self[+CT, +CV] = AggregateFunctionCall[CT, CV]
+trait AggregateFunctionCallImpl[MT <: MetaTypes] { this: AggregateFunctionCall[MT] =>
+  type Self[MT <: MetaTypes] = AggregateFunctionCall[MT]
 
   val typ = function.result
   def isAggregated = true
@@ -21,9 +21,9 @@ trait AggregateFunctionCallImpl[+CT, +CV] { this: AggregateFunctionCall[CT, CV] 
 
   val size = 1 + args.iterator.map(_.size).sum + filter.fold(0)(_.size)
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]] = {
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = {
     var refs =
-      args.foldLeft(Map.empty[TableLabel, Set[ColumnLabel]]) { (acc, arg) =>
+      args.foldLeft(Map.empty[AutoTableLabel, Set[ColumnLabel]]) { (acc, arg) =>
         acc.mergeWith(arg.columnReferences)(_ ++ _)
       }
     for(f <- filter) {
@@ -32,14 +32,14 @@ trait AggregateFunctionCallImpl[+CT, +CV] { this: AggregateFunctionCall[CT, CV] 
     refs
   }
 
-  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]] =
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] =
     Some(this).filter(predicate).orElse {
       args.iterator.flatMap(_.find(predicate)).nextOption()
     }.orElse {
       filter.flatMap(_.find(predicate))
     }
 
-  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: Expr[CT2, CV2]): Boolean =
+  private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean =
     that match {
       case AggregateFunctionCall(thatFunction, thatArgs, thatDistinct, thatFilter) =>
         this.function == thatFunction &&
@@ -51,17 +51,19 @@ trait AggregateFunctionCallImpl[+CT, +CV] { this: AggregateFunctionCall[CT, CV] 
         false
     }
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
-    this.copy(
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]): Self[MT2] =
+    AggregateFunctionCall(
+      function = state.changesOnlyLabels.convertCTOnly(function),
       args = args.map(_.doRewriteDatabaseNames(state)),
-      filter = filter.map(_.doRewriteDatabaseNames(state))
+      filter = filter.map(_.doRewriteDatabaseNames(state)),
+      distinct = distinct
     )(position)
 
   private[analyzer2] def doRelabel(state: RelabelState) =
     copy(args = args.map(_.doRelabel(state)),
          filter = filter.map(_.doRelabel(state)))(position)
 
-  protected def doDebugDoc(implicit ev: HasDoc[CV]) = {
+  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) = {
     val preArgs = Seq(
       Some(Doc(function.name.name)),
       Some(d"("),
@@ -69,17 +71,17 @@ trait AggregateFunctionCallImpl[+CT, +CV] { this: AggregateFunctionCall[CT, CV] 
     ).flatten.hcat
     val postArgs = Seq(
       Some(d")"),
-      filter.map { w => w.debugDoc.encloseNesting(d"FILTER (", d")") }
+      filter.map { w => w.debugDoc(ev).encloseNesting(d"FILTER (", d")") }
     ).flatten.hsep
-    args.map(_.debugDoc).encloseNesting(preArgs, d",", postArgs)
+    args.map(_.debugDoc(ev)).encloseNesting(preArgs, d",", postArgs)
   }
 
-  private[analyzer2] def reposition(p: Position): Self[CT, CV] = copy()(position = position.logicallyReposition(p))
+  private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
 }
 
 trait OAggregateFunctionCallImpl { this: AggregateFunctionCall.type =>
-  implicit def serialize[CT: Writable, CV](implicit expr: Writable[Expr[CT, CV]]) = new Writable[AggregateFunctionCall[CT, CV]] {
-    def writeTo(buffer: WriteBuffer, afc: AggregateFunctionCall[CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit expr: Writable[Expr[MT]], mf: Writable[MonomorphicFunction[MT#ColumnType]]) = new Writable[AggregateFunctionCall[MT]] {
+    def writeTo(buffer: WriteBuffer, afc: AggregateFunctionCall[MT]): Unit = {
       buffer.write(afc.function)
       buffer.write(afc.args)
       buffer.write(afc.distinct)
@@ -88,12 +90,12 @@ trait OAggregateFunctionCallImpl { this: AggregateFunctionCall.type =>
     }
   }
 
-  implicit def deserialize[CT: Readable, CV](implicit mf: Readable[MonomorphicFunction[CT]], e: Readable[Expr[CT, CV]]) = new Readable[AggregateFunctionCall[CT, CV]] {
-    def readFrom(buffer: ReadBuffer): AggregateFunctionCall[CT, CV] = {
-      val function = buffer.read[MonomorphicFunction[CT]]()
-      val args = buffer.read[Seq[Expr[CT, CV]]]()
+  implicit def deserialize[MT <: MetaTypes](implicit expr: Readable[Expr[MT]], mf: Readable[MonomorphicFunction[MT#ColumnType]]) = new Readable[AggregateFunctionCall[MT]] with ExpressionUniverse[MT] {
+    def readFrom(buffer: ReadBuffer): AggregateFunctionCall = {
+      val function = buffer.read[MonomorphicFunction]()
+      val args = buffer.read[Seq[Expr]]()
       val distinct = buffer.read[Boolean]()
-      val filter = buffer.read[Option[Expr[CT, CV]]]()
+      val filter = buffer.read[Option[Expr]]()
       val position = buffer.read[FuncallPositionInfo]()
       val functionNamePosition = buffer.read[Position]()
       AggregateFunctionCall(

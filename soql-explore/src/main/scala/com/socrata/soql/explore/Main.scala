@@ -19,13 +19,20 @@ import com.socrata.http.server.util.{StrongEntityTag, Precondition}
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2.mocktablefinder._
-import com.socrata.soql.analyzer2.{SoQLAnalyzer, UserParameters, Annotation, Statement, ScopedResourceName}
+import com.socrata.soql.analyzer2.{SoQLAnalyzer, UserParameters, Annotation, Statement, ScopedResourceName, MetaTypes, HasDoc, StatementUniverse}
 import com.socrata.soql.types._
 import com.socrata.soql.functions.{SoQLTypeInfo, SoQLFunctionInfo, SoQLFunctions}
 import com.socrata.soql.types.obfuscation.CryptProvider
-import com.socrata.soql.typechecker.HasDoc
 
-object Main extends App {
+final abstract class MT extends MetaTypes {
+  type ResourceNameScope = String
+  type ColumnType = SoQLType
+  type ColumnValue = SoQLValue
+  type DatabaseTableNameImpl = String
+  type DatabaseColumnNameImpl = String
+}
+
+object Main extends App with StatementUniverse[MT] {
   private def escapeHtml(s: String) = {
     s.codePoints().mapToObj { c =>
       c match {
@@ -39,8 +46,8 @@ object Main extends App {
     }.collect(java.util.stream.Collectors.joining)
   }
 
-  def debugHtml[RNS, CT, CV](thing: Statement[RNS, CT, CV], width: Int)(implicit ev1: HasDoc[CV], ev2: JsonEncode[RNS], ev3: JsonEncode[CT]): String =
-    Renderer.renderHtml[RNS, CT](thing.debugDoc.layoutSmart(LayoutOptions(pageWidth = PageWidth.AvailablePerLine(width, 1.0))).asTree)
+  def debugHtml(thing: Statement, width: Int)(implicit ev1: HasDoc[CV], ev2: JsonEncode[RNS], ev3: JsonEncode[CT]): String =
+    Renderer.renderHtml(thing.debugDoc.layoutSmart(LayoutOptions(pageWidth = PageWidth.AvailablePerLine(width, 1.0))).asTree)
 
   implicit val hasDoc = new HasDoc[SoQLValue] {
     val cryptProvider = new CryptProvider(CryptProvider.generateKey())
@@ -77,7 +84,7 @@ object Main extends App {
 
 
   def result(
-    scope: MockTableFinder[String, SoQLType],
+    scope: MockTableFinder[MT],
     query: String,
     html: String,
     merge: Boolean,
@@ -117,7 +124,7 @@ object Main extends App {
 </html>"""
   }
 
-  val defaultTableFinder = MockTableFinder[String, SoQLType](
+  val defaultTableFinder = MockTableFinder[MT](
     ("one", "twocol") -> D(
       ":id" -> SoQLID,
       ":version" -> SoQLVersion,
@@ -143,7 +150,7 @@ object Main extends App {
     ("one", "secured_view") -> Q("two", "secret_data", "select :*, * (except row_requires_admin) join @permcheck(row_requires_admin) on true")
   )
 
-  val analyzer = new SoQLAnalyzer[String, SoQLType, SoQLValue](SoQLTypeInfo, SoQLFunctionInfo)
+  val analyzer = new SoQLAnalyzer[MT](SoQLTypeInfo, SoQLFunctionInfo)
 
   val index = new SimpleResource {
     override def get: HttpRequest => HttpResponse = { req =>
@@ -169,7 +176,7 @@ object Main extends App {
           return BadRequest ~> Content("text/plain", "No scope?")
         }
         val tableFinder = try {
-          JsonUtil.parseJson[MockTableFinder[String, SoQLType]](scopes(0)) match {
+          JsonUtil.parseJson[MockTableFinder[MT]](scopes(0)) match {
             case Right(s) => s
             case Left(e) =>
               return BadRequest ~> Content("text/plain", "Malformed scope json:\n" + e.english)

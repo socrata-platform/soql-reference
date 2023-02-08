@@ -3,6 +3,7 @@ package com.socrata.soql.analyzer2
 import scala.annotation.tailrec
 import scala.language.higherKinds
 import scala.util.parsing.input.{Position, NoPosition}
+import scala.collection.compat.immutable.LazyList
 
 import com.rojoma.json.v3.ast.JString
 import com.socrata.prettyprint.prelude._
@@ -10,138 +11,148 @@ import com.socrata.prettyprint.prelude._
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName}
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.typechecker.HasDoc
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.analyzer2
 
 import DocUtils._
 
-sealed abstract class Statement[+RNS, +CT, +CV] {
-  type Self[+RNS, +CT, +CV] <: Statement[RNS, CT, CV]
-  def asSelf: Self[RNS, CT, CV]
+sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
+  type Self[MT <: MetaTypes] <: Statement[MT]
+  def asSelf: Self[MT]
 
-  val schema: OrderedMap[_ <: ColumnLabel, NameEntry[CT]]
+  val schema: OrderedMap[AutoColumnLabel, NameEntry[CT]]
+
+  // See the comment in From for an explanation of this.  It's just
+  // labels here because, as a Statement, we don't have enough
+  // information to produce a full Column.
+  def unique: LazyList[Seq[AutoColumnLabel]]
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
-  final def rewriteDatabaseNames(
-    tableName: DatabaseTableName => DatabaseTableName,
+  final def rewriteDatabaseNames[MT2 <: MetaTypes](
+    tableName: DatabaseTableName => types.DatabaseTableName[MT2],
     // This is given the _original_ database table name
-    columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
-  ): Self[RNS, CT, CV] =
-    doRewriteDatabaseNames(new RewriteDatabaseNamesState(realTables, tableName, columnName))
+    columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
+  )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): Self[MT2] =
+    doRewriteDatabaseNames(new RewriteDatabaseNamesState[MT2](tableName, columnName, realTables, changesOnlyLabels))
 
   /** The names that the SoQLAnalyzer produces aren't necessarily safe
     * for use in any particular database.  This lets those
     * automatically-generated names be systematically replaced. */
-  final def relabel(using: LabelProvider): Self[RNS, CT, CV] =
+  final def relabel(using: LabelProvider): Self[MT] =
     doRelabel(new RelabelState(using))
 
-  private[analyzer2] def doRelabel(state: RelabelState): Self[RNS, CT, CV]
+  private[analyzer2] def doRelabel(state: RelabelState): Self[MT]
 
-  private[analyzer2] def columnReferences: Map[TableLabel, Set[ColumnLabel]]
+  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
 
-  def isIsomorphic[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](that: Statement[RNS2, CT2, CV2]): Boolean =
-    findIsomorphism(new IsomorphismState, None, None, that)
+  def isIsomorphic(that: Statement[MT]): Boolean =
+    findIsomorphism(new IsomorphismState(this.realTables, that.realTables), None, None, that)
 
-  private[analyzer2] def findIsomorphism[RNS2 >: RNS, CT2 >: CT, CV2 >: CV](
+  private[analyzer2] def findIsomorphism(
     state: IsomorphismState,
-    thisCurrentTableLabel: Option[TableLabel],
-    thatCurrentTableLabel: Option[TableLabel],
-    that: Statement[RNS2, CT2, CV2]
+    thisCurrentTableLabel: Option[AutoTableLabel],
+    thatCurrentTableLabel: Option[AutoTableLabel],
+    that: Statement[MT]
   ): Boolean
 
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState): Self[RNS, CT, CV]
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]): Self[MT2]
 
-  def find(predicate: Expr[CT, CV] => Boolean): Option[Expr[CT, CV]]
-  def contains[CT2 >: CT, CV2 >: CV](e: Expr[CT2, CV2]): Boolean
+  def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]]
+  def contains(e: Expr[MT]): Boolean
 
-  final def debugStr(implicit ev: HasDoc[CV]): String = debugStr(new StringBuilder).toString
-  final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV]): StringBuilder =
+  final def debugStr(implicit ev1: HasDoc[CV], ev2: HasDoc[MT#DatabaseTableNameImpl], ev3: HasDoc[MT#DatabaseColumnNameImpl]): String = debugStr(new StringBuilder).toString
+  final def debugStr(sb: StringBuilder)(implicit ev1: HasDoc[CV], ev2: HasDoc[MT#DatabaseTableNameImpl], ev3: HasDoc[MT#DatabaseColumnNameImpl]): StringBuilder =
     debugDoc.layoutSmart().toStringBuilder(sb)
-  def debugDoc(implicit ev: HasDoc[CV]): Doc[Annotation[RNS, CT]]
+  final def debugDoc(implicit ev1: HasDoc[CV], ev2: HasDoc[MT#DatabaseTableNameImpl], ev3: HasDoc[MT#DatabaseColumnNameImpl]): Doc[Annotation[MT]] =
+    doDebugDoc(new StatementDocProvider(ev1, ev2, ev3))
 
-  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[RNS, CT, CV]
+  private[analyzer2] def doDebugDoc(implicit ev: StatementDocProvider[MT]): Doc[Annotation[MT]]
 
-  final def labelMap: LabelMap[RNS] = {
-    val state = new LabelMapState[RNS]
+  def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT]
+
+  final def labelMap: LabelMap[MT] = {
+    val state = new LabelMapState[MT]
     doLabelMap(state)
     state.build()
   }
 
-  private[analyzer2] def doLabelMap[RNS2 >: RNS](state: LabelMapState[RNS2]): Unit
+  private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit
 }
 
 object Statement {
-  implicit def serialize[RNS: Writable, CT: Writable, CV](implicit ev: Writable[Expr[CT, CV]]): Writable[Statement[RNS, CT, CV]] = new Writable[Statement[RNS, CT, CV]] {
-    def writeTo(buffer: WriteBuffer, stmt: Statement[RNS, CT, CV]): Unit = {
+  implicit def serialize[MT <: MetaTypes](implicit writableRNS: Writable[MT#ResourceNameScope], writableCT: Writable[MT#ColumnType], writeableExpr: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[Statement[MT]] = new Writable[Statement[MT]] {
+    def writeTo(buffer: WriteBuffer, stmt: Statement[MT]): Unit = {
       stmt match {
-        case s: Select[RNS, CT, CV] =>
+        case s: Select[MT] =>
           buffer.write(0)
           buffer.write(s)
-        case v: Values[CT, CV] =>
+        case v: Values[MT] =>
           buffer.write(1)
           buffer.write(v)
-        case ct: CombinedTables[RNS, CT, CV] =>
+        case ct: CombinedTables[MT] =>
           buffer.write(2)
           buffer.write(ct)
-        case cte: CTE[RNS, CT, CV] =>
+        case cte: CTE[MT] =>
           buffer.write(3)
           buffer.write(cte)
       }
     }
   }
 
-  implicit def deserialize[RNS: Readable, CT: Readable, CV](implicit ev: Readable[Expr[CT, CV]]): Readable[Statement[RNS, CT, CV]] = new Readable[Statement[RNS, CT, CV]] {
-    def readFrom(buffer: ReadBuffer): Statement[RNS, CT, CV] = {
+  implicit def deserialize[MT <: MetaTypes](implicit readableRNS: Readable[MT#ResourceNameScope], readableCT: Readable[MT#ColumnType], readableExpr: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[Statement[MT]] = new Readable[Statement[MT]] {
+    def readFrom(buffer: ReadBuffer): Statement[MT] = {
       buffer.read[Int]() match {
-        case 0 => buffer.read[Select[RNS, CT, CV]]()
-        case 1 => buffer.read[Values[CT, CV]]()
-        case 2 => buffer.read[CombinedTables[RNS, CT, CV]]()
-        case 3 => buffer.read[CTE[RNS, CT, CV]]()
+        case 0 => buffer.read[Select[MT]]()
+        case 1 => buffer.read[Values[MT]]()
+        case 2 => buffer.read[CombinedTables[MT]]()
+        case 3 => buffer.read[CTE[MT]]()
         case other => fail("Unknown statement tag " + other)
       }
     }
   }
 }
 
-case class CombinedTables[+RNS, +CT, +CV](
+case class CombinedTables[MT <: MetaTypes](
   op: TableFunc,
-  left: Statement[RNS, CT, CV],
-  right: Statement[RNS, CT, CV]
-) extends Statement[RNS, CT, CV] with statement.CombinedTablesImpl[RNS, CT, CV] {
+  left: Statement[MT],
+  right: Statement[MT]
+) extends Statement[MT] with statement.CombinedTablesImpl[MT] {
   require(left.schema.values.map(_.typ) == right.schema.values.map(_.typ))
 }
 object CombinedTables extends statement.OCombinedTablesImpl
 
-case class CTE[+RNS, +CT, +CV](
+case class CTE[MT <: MetaTypes](
   definitionLabel: AutoTableLabel,
   definitionAlias: Option[ResourceName], // can this ever be not-some?  If not, perhaps mapAlias's type needs changing
-  definitionQuery: Statement[RNS, CT, CV],
+  definitionQuery: Statement[MT],
   materializedHint: MaterializedHint,
-  useQuery: Statement[RNS, CT, CV]
-) extends Statement[RNS, CT, CV] with statement.CTEImpl[RNS, CT, CV]
+  useQuery: Statement[MT]
+) extends Statement[MT] with statement.CTEImpl[MT]
 object CTE extends statement.OCTEImpl
 
-case class Values[+CT, +CV](
-  values: NonEmptySeq[NonEmptySeq[Expr[CT, CV]]]
-) extends Statement[Nothing, CT, CV] with statement.ValuesImpl[CT, CV] {
+case class Values[MT <: MetaTypes](
+  labels: OrderedSet[AutoColumnLabel],
+  values: NonEmptySeq[NonEmptySeq[Expr[MT]]]
+) extends Statement[MT] with statement.ValuesImpl[MT] {
+  require(labels.size == values.head.length)
   require(values.tail.forall(_.length == values.head.length))
   require(values.tail.forall(_.iterator.zip(values.head.iterator).forall { case (a, b) => a.typ == b.typ }))
 }
 object Values extends statement.OValuesImpl
 
-case class Select[+RNS, +CT, +CV](
-  distinctiveness: Distinctiveness[CT, CV],
-  selectList: OrderedMap[AutoColumnLabel, NamedExpr[CT, CV]],
-  from: From[RNS, CT, CV],
-  where: Option[Expr[CT, CV]],
-  groupBy: Seq[Expr[CT, CV]],
-  having: Option[Expr[CT, CV]],
-  orderBy: Seq[OrderBy[CT, CV]],
+case class Select[MT <: MetaTypes](
+  distinctiveness: Distinctiveness[MT],
+  selectList: OrderedMap[AutoColumnLabel, NamedExpr[MT]],
+  from: From[MT],
+  where: Option[Expr[MT]],
+  groupBy: Seq[Expr[MT]],
+  having: Option[Expr[MT]],
+  orderBy: Seq[OrderBy[MT]],
   limit: Option[BigInt],
   offset: Option[BigInt],
   search: Option[String],
   hint: Set[SelectHint]
-) extends Statement[RNS, CT, CV] with statement.SelectImpl[RNS, CT, CV]
+) extends Statement[MT] with statement.SelectImpl[MT]
 
 object Select extends statement.OSelectImpl

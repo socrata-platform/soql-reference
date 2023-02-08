@@ -10,28 +10,18 @@ import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.{BinaryTree, Leaf, Compound}
 
-trait TableFinder {
+trait TableFinder[MT <: MetaTypes] {
   // These are the things that need to be implemented by subclasses.
   // The "TableMap" representation will have to become more complex if
   // we support source-level CTEs, as a CTE will introduce the concept
   // of a _nested_ name scope.
 
-  type ColumnType
+  type ColumnType = MT#ColumnType
+  type ResourceNameScope = MT#ResourceNameScope
 
   /** The way in which `parse` can fail.
     */
   type ParseError = ParserError[ResourceNameScope]
-
-  /** The way in which saved queries are scoped.  This is nearly opaque
-    * as far as TableFinder is concerned, requiring only that a tuple
-    * of it and ResourceName make a valid hash table key.  Looking up
-    * a name will include the scope in which further transitively
-    * referenced names can be looked up.
-    *
-    * It can just be "()" if we have a flat namespace, or for example a
-    * domain + user for federation...
-    */
-  type ResourceNameScope
 
   /** Look up the given `name` in the given `scope` */
   protected def lookup(name: ScopedResourceName): Either[LookupError, FinderTableDescription]
@@ -45,34 +35,33 @@ trait TableFinder {
     * representation of Datasets' schemas. */
   sealed trait FinderTableDescription
 
-  case class Ordering(column: ColumnName, ascending: Boolean)
+  case class Ordering(column: types.DatabaseColumnName[MT], ascending: Boolean)
 
-  case class DatasetColumnInfo(typ: ColumnType, hidden: Boolean)
+  case class DatasetColumnInfo(name: ColumnName, typ: ColumnType, hidden: Boolean)
 
   /** A base dataset, or a saved query which is being analyzed opaquely. */
   case class Dataset(
-    databaseName: DatabaseTableName,
+    databaseName: types.DatabaseTableName[MT],
     canonicalName: CanonicalName,
-    schema: OrderedMap[ColumnName, DatasetColumnInfo],
-    ordering: Seq[Ordering]
+    schema: OrderedMap[types.DatabaseColumnName[MT], DatasetColumnInfo],
+    ordering: Seq[Ordering],
+    primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]]
   ) extends FinderTableDescription {
+    require(schema.valuesIterator.map(_.name).toSet.size == schema.size)
     require(ordering.forall { ordering => schema.contains(ordering.column) })
+    require(primaryKeys.forall { pk => pk.forall { pkCol => schema.contains(pkCol) } })
 
     private[analyzer2] def toParsed =
-      TableDescription.Dataset(
+      TableDescription.Dataset[MT](
         databaseName,
         canonicalName,
-        schema.map { case (cn, DatasetColumnInfo(ct, hidden)) =>
-          // This is a little icky...?  But at this point we're in
-          // the user-provided names world, so this is at least a
-          // _predictable_ key to use as a "database column name"
-          // before we get to the point of moving over to the
-          // actual-database-names world.
-          DatabaseColumnName(cn.caseFolded) -> TableDescription.DatasetColumnInfo(cn, ct, hidden)
+        schema.map { case (cl, DatasetColumnInfo(cn, ct, hidden)) =>
+          cl -> TableDescription.DatasetColumnInfo(cn, ct, hidden)
         },
         ordering.map { case Ordering(column, ascending) =>
-          TableDescription.Ordering(DatabaseColumnName(column.caseFolded), ascending)
-        }
+          TableDescription.Ordering(column, ascending)
+        },
+        primaryKeys
       )
   }
   /** A saved query, with any parameters it (non-transitively!) defines. */
@@ -104,17 +93,17 @@ trait TableFinder {
 
   type Result[T] = Either[TableFinderError[ResourceNameScope], T]
 
-  type TableMap = com.socrata.soql.analyzer2.TableMap[ResourceNameScope, ColumnType]
+  type TableMap = com.socrata.soql.analyzer2.TableMap[MT]
 
   /** Find all tables referenced from the given SoQL.  No implicit context is assumed. */
-  final def findTables(scope: ResourceNameScope, text: String, parameters: Map[HoleName, ColumnType]): Result[FoundTables[ResourceNameScope, ColumnType]] = {
-    walkSoQL(scope, FoundTables.Standalone(_, _, parameters), text, TableMap.empty, Nil)
+  final def findTables(scope: ResourceNameScope, text: String, parameters: Map[HoleName, ColumnType]): Result[FoundTables[MT]] = {
+    walkSoQL(scope, FoundTables.Standalone[MT](_, _, parameters), text, TableMap.empty, Nil)
   }
 
   /** Find all tables referenced from the given SoQL on name that provides an implicit context. */
-  final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String, parameters: Map[HoleName, ColumnType]): Result[FoundTables[ResourceNameScope, ColumnType]] = {
+  final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String, parameters: Map[HoleName, ColumnType]): Result[FoundTables[MT]] = {
     walkFromName(ScopedResourceName(scope, resourceName), NoPosition, TableMap.empty, Nil).flatMap { acc =>
-      walkSoQL(scope, FoundTables.InContext(resourceName, _, _, parameters), text, acc, Nil)
+      walkSoQL(scope, FoundTables.InContext[MT](resourceName, _, _, parameters), text, acc, Nil)
     }
   }
 
@@ -124,28 +113,28 @@ trait TableFinder {
     * we want qualified parameter references in the edited SoQL
     * to be found, and we want that parameter map to be editable.
     */
-  final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String, parameters: Map[HoleName, ColumnType], impersonating: CanonicalName): Result[FoundTables[ResourceNameScope, ColumnType]] = {
+  final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String, parameters: Map[HoleName, ColumnType], impersonating: CanonicalName): Result[FoundTables[MT]] = {
     walkFromName(ScopedResourceName(scope, resourceName), NoPosition, TableMap.empty, List(impersonating)).flatMap { acc =>
-      walkSoQL(scope, FoundTables.InContextImpersonatingSaved(resourceName, _, _, parameters, impersonating), text, acc, List(impersonating))
+      walkSoQL(scope, FoundTables.InContextImpersonatingSaved[MT](resourceName, _, _, parameters, impersonating), text, acc, List(impersonating))
     }
   }
 
   /** Find all tables referenced from the given name. */
-  final def findTables(scope: ResourceNameScope, resourceName: ResourceName): Result[FoundTables[ResourceNameScope, ColumnType]] = {
+  final def findTables(scope: ResourceNameScope, resourceName: ResourceName): Result[FoundTables[MT]] = {
     walkFromName(ScopedResourceName(scope, resourceName), NoPosition, TableMap.empty, Nil).map { acc =>
-      FoundTables(acc, scope, FoundTables.Saved(resourceName), parserParameters)
+      FoundTables[MT](acc, scope, FoundTables.Saved(resourceName), parserParameters)
     }
   }
 
   // A pair of helpers that lift the abstract functions into the Result world
-  private def doLookup(scopedName: ScopedResourceName, caller: Option[CanonicalName], pos: Position): Result[TableDescription[ResourceNameScope, ColumnType]] = {
+  private def doLookup(scopedName: ScopedResourceName, caller: Option[CanonicalName], pos: Position): Result[TableDescription[MT]] = {
     lookup(scopedName) match {
       case Right(ds: Dataset) =>
         Right(ds.toParsed)
       case Right(Query(scope, canonicalName, basedOn, text, params, hiddenColumns)) =>
-        parse(scopedName.scope, Some(canonicalName), text, false).map(TableDescription.Query(scope, canonicalName, basedOn, _, text, params, hiddenColumns))
+        parse(scopedName.scope, Some(canonicalName), text, false).map(TableDescription.Query[MT](scope, canonicalName, basedOn, _, text, params, hiddenColumns))
       case Right(TableFunction(scope, canonicalName, text, params, hiddenColumns)) =>
-        parse(scopedName.scope, Some(canonicalName), text, true).map(TableDescription.TableFunction(scope, canonicalName, _, text, params, hiddenColumns))
+        parse(scopedName.scope, Some(canonicalName), text, true).map(TableDescription.TableFunction[MT](scope, canonicalName, _, text, params, hiddenColumns))
       case Left(LookupError.NotFound) =>
         Left(SoQLAnalyzerError.TextualError(scopedName.scope, caller, pos, SoQLAnalyzerError.TableFinderError.NotFound(scopedName.name)))
       case Left(LookupError.PermissionDenied) =>
@@ -183,12 +172,12 @@ trait TableFinder {
     TableName.reservedNames.contains(prefixedName)
   }
 
-  def walkDesc(scopedName: ScopedResourceName, pos: Position, desc: TableDescription[ResourceNameScope, ColumnType], acc: TableMap, stack: List[CanonicalName]): Result[TableMap] = {
+  def walkDesc(scopedName: ScopedResourceName, pos: Position, desc: TableDescription[MT], acc: TableMap, stack: List[CanonicalName]): Result[TableMap] = {
     if(stack.contains(desc.canonicalName)) {
       return Left(SoQLAnalyzerError.TextualError(scopedName.scope, stack.headOption, pos, SoQLAnalyzerError.TableFinderError.RecursiveQuery(desc.canonicalName :: stack)))
     }
     desc match {
-      case TableDescription.Dataset(_, _, _, _) => Right(acc)
+      case TableDescription.Dataset(_, _, _, _, _) => Right(acc)
       case TableDescription.Query(scope, canonicalName, basedOn, tree, _unparsed, _params, _hiddenColumns) =>
         for {
           acc <- walkFromName(ScopedResourceName(scope, basedOn), NoPosition, acc, canonicalName :: stack)
@@ -200,12 +189,12 @@ trait TableFinder {
   }
 
   // This walks anonymous in a context soql.  Named soql gets parsed in doLookup
-  private def walkSoQL(scope: ResourceNameScope, context: (BinaryTree[ast.Select], String) => FoundTables.Query[ColumnType], text: String, acc: TableMap, stack: List[CanonicalName]): Result[FoundTables[ResourceNameScope, ColumnType]] = {
+  private def walkSoQL(scope: ResourceNameScope, context: (BinaryTree[ast.Select], String) => FoundTables.Query[MT], text: String, acc: TableMap, stack: List[CanonicalName]): Result[FoundTables[MT]] = {
     for {
       tree <- parse(scope, None, text, udfParamsAllowed = false)
       acc <- walkTree(scope, tree, acc, stack)
     } yield {
-      FoundTables(acc, scope, context(tree, text), parserParameters)
+      FoundTables[MT](acc, scope, context(tree, text), parserParameters)
     }
   }
 

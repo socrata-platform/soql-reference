@@ -134,6 +134,17 @@ object Writable {
     }
   }
 
+  implicit def orderedSet[T : Writable] = new Writable[OrderedSet[T]] {
+    def writeTo(buffer: WriteBuffer, m: OrderedSet[T]): Unit = {
+      // Guarantee: this will produce the same serialization as a Map
+      // with the same contents (up to ordering)
+      buffer.data.writeUInt32NoTag(m.size)
+      for(k <- m) {
+        buffer.write(k)
+      }
+    }
+  }
+
   implicit def option[T : Writable] = new Writable[Option[T]] {
     def writeTo(buffer: WriteBuffer, m: Option[T]): Unit = {
       // Guarantee: this will produce the same serialization as a Seq

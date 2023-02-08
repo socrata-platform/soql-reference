@@ -809,23 +809,6 @@ object SoQLFunctions {
     """
   )
 
-  private def getParameter(t: SoQLType): Function[SoQLType] =
-    f(s"${t.name.name}_parameter", FunctionName(s"${t.name.name}_parameter"),
-      Map.empty,
-      Seq(FixedType(SoQLText)),
-      Seq.empty,
-      FixedType(t))(
-      """
-      Return the value of the named context variable, or NULL if no such variable exists.
-      """
-    )
-
-  val GetParameterText = getParameter(SoQLText)
-  val GetParameterBoolean = getParameter(SoQLBoolean)
-  val GetParameterNumber = getParameter(SoQLNumber)
-  val GetParameterFixedTimestamp = getParameter(SoQLFixedTimestamp)
-  val GetParameterFloatingTimestamp = getParameter(SoQLFloatingTimestamp)
-
   def potentialAccessors = for {
     method <- getClass.getMethods
     if Modifier.isPublic(method.getModifiers) && method.getParameterTypes.length == 0

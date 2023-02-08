@@ -329,67 +329,329 @@ select count(*), 1 as x |> select x
     analysis.removeUnusedColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("preserve system columns - simple") {
+  test("remove unused order by - preserve top-level ordering") {
     val tf = tableFinder(
-      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val analysis = analyze(tf, "twocol", "select text + text, num * 2")
+    val analysis = analyze(tf, "twocol", "select text, num order by text")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num order by text")
 
-    val expectedAnalysis = analyze(tf, "twocol", "select text + text, num * 2, :id")
-
-    analysis.preserveSystemColumns(_ => None).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("preserve system columns - partially selected") {
+  test("remove unused order by - remove trivially unused intermediate ordering") {
     val tf = tableFinder(
-      (0, "twocol") -> D(":id" -> TestNumber, ":version" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val analysis = analyze(tf, "twocol", "select :id, text + text, num * 2")
+    val analysis = analyze(tf, "twocol", "select text, num order by text |> select text, num order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num |> select text, num order by num")
 
-    val expectedAnalysis = analyze(tf, "twocol", "select :id, text + text, num * 2, :version")
-
-    analysis.preserveSystemColumns(_ => None).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("preserve system columns - distinct blocks") {
+  test("remove unused order by - keep ordering when there's a window function involved") {
     val tf = tableFinder(
-      (0, "twocol") -> D(":id" -> TestNumber, ":version" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val analysis = analyze(tf, "twocol", "select distinct text + text, num * 2")
+    val analysis = analyze(tf, "twocol", "select text, num, window_function() over () order by text |> select text, num order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num, window_function() over () order by text |> select text, num order by num")
 
-    val expectedAnalysis = analyze(tf, "twocol", "select distinct text + text, num * 2")
-
-    analysis.preserveSystemColumns(_ => None).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("preserve system columns - aggregating") {
+  test("remove unused order by - keep ordering when there's a limit involved") {
     val tf = tableFinder(
-      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val analysis = analyze(tf, "twocol", "select text, count(*) group by text")
+    val analysis = analyze(tf, "twocol", "select text, num order by text limit 5 |> select text, num order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num order by text limit 5 |> select text, num order by num")
 
-    val expectedAnalysis = analyze(tf, "twocol", "select text, count(*), max(:id) group by text")
+    analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
 
-    def numberMerge(e: Expr[TestType, TestValue]) =
-      e.typ match {
-        case TestNumber =>
-          Some(
-            AggregateFunctionCall(
-              TestFunctions.Max.monomorphic.get,
-              Seq(e),
-              false,
-              None
-            )(FuncallPositionInfo.None)
-          )
-        case _ => None
-      }
+  test("remove unused order by - keep ordering when there's an offset involved") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
 
-    analysis.preserveSystemColumns(numberMerge).statement must be (isomorphicTo(expectedAnalysis.statement))
-    analysis.preserveSystemColumns(numberMerge).statement.schema.find(_._2.name == cn(":id")) must not be empty
+    val analysis = analyze(tf, "twocol", "select text, num order by text offset 5 |> select text, num order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num order by text offset 5 |> select text, num order by num")
+
+    analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("preserve ordering + remove unused order by - keep ordering only at the top level") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num order by text |> select text, num order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num |> select text, num order by num, text")
+
+    analysis.preserveOrdering.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - primary key") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withPrimaryKey(":id")
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num order by :id")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - group by") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withPrimaryKey(":id")
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, sum(num) as sum group by text order by sum desc")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, sum(num) group by text order by sum(num) desc, text")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - group by + inherited PK") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber, "unorderable" -> TestUnorderable).withPrimaryKey(":id")
+    )
+
+    val analysis = analyze(tf, "twocol", "select unorderable, :id, sum(num) as sum group by unorderable, :id order by sum desc")
+    val expectedAnalysis = analyze(tf, "twocol", "select unorderable, :id, sum(num) group by unorderable, :id order by sum(num) desc, :id")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - partial distinct on") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select distinct on (text, num*2) text, num order by text desc")
+    val expectedAnalysis = analyze(tf, "twocol", "select distinct on (text, num*2) text, num order by text desc, num*2, num")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - partial distinct on & second stage") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select distinct on (text, num*2) text, num order by num*2 desc |> select *")
+    // Yes, "order by text, num" on the end there.  We didn't ask it
+    // to _preserve_ an ordering, we asked it to impose an arbitrary
+    // one.  Since the final select doesn't claim to care, we'll
+    // happily destroy the previous ordering.
+    val expectedAnalysis = analyze(tf, "twocol", "select distinct on (text, num*2) text, num order by num*2 desc |> select text, num order by text, num")
+
+    // But, if we make the final select care by telling asking the
+    // analysis to preserve ordering before imposing one, we're good.
+    val expectedAnalysisWithPreservation = analyze(tf, "twocol", "select distinct on (text, num*2) text, num, num*2 as num_2 order by num_2 desc |> select text, num order by num_2 desc, text, num")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.preserveOrdering.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysisWithPreservation.statement))
+  }
+
+  test("impose ordering - partial distinct on & second stage with PK") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withPrimaryKey(":id")
+    )
+
+    val analysis = analyze(tf, "twocol", "select distinct on (text, num*2) text, num order by num*2 desc |> select *")
+    // Again, without being asked to preserve the ordering we'll
+    // destroy it when we impose one.
+    val expectedAnalysis = analyze(tf, "twocol", "select distinct on (text, num*2) text, num, :id order by num*2 desc |> select text, num order by :id")
+
+    // But if we do ask, we'll automatically plumb the primary key
+    // through and use it to disambiguate the order by.
+    val expectedAnalysisWithPreservation = analyze(tf, "twocol", "select distinct on (text, num*2) text, num, num*2 as num_2, :id order by num_2 desc |> select text, num order by num_2 desc, :id")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.preserveOrdering.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysisWithPreservation.statement))
+  }
+
+  test("impose ordering - non-distinct order by") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select distinct on (text) text, num order by text, num*3 desc")
+    val expectedAnalysis = analyze(tf, "twocol", "select distinct on (text) text, num order by text, num*3 desc, num")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - indistinct") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num*2 order by text, num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num*2 order by text, num, num*2")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - join") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withPrimaryKey(":id"),
+      (0, "threecol") -> D(":id" -> TestNumber, "a" -> TestText, "b" -> TestText, "c" -> TestText).withPrimaryKey(":id")
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num*2 join @threecol on true order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num*2 join @threecol on true order by num, :id, @threecol.:id")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - union") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "altcol") -> D("words" -> TestText, "digits" -> TestNumber),
+      // Can't put a subselect in initial-FROM position in soql
+      // directly, so we need a saved query to use for that
+      (0, "union") -> Q(0, "twocol", "select * union select * from @altcol")
+    )
+
+    val analysis = analyze(tf, "twocol", "select * union select * from @altcol")
+    val expectedAnalysis = analyze(tf, "union", "select * order by text, num")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - unorderable") {
+    val tf = tableFinder(
+      (0, "threecol") -> D("text" -> TestText, "num" -> TestNumber, "another_text" -> TestUnorderable)
+    )
+
+    val analysis = analyze(tf, "threecol", "select *")
+    val expectedAnalysis = analyze(tf, "threecol", "select * order by text, num")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - across stages") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withPrimaryKey(":id")
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num, num + num as num2 |> select text, num2 order by num2")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num, num+num, :id |> select text, num_num order by num_num, :id")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - join and follow-up stage") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withPrimaryKey(":id"),
+      (0, "threecol") -> D(":id" -> TestNumber, "a" -> TestText, "b" -> TestText, "c" -> TestText).withPrimaryKey(":id")
+    )
+
+    val analysis = analyze(tf, "twocol", "select *, @threecol.* join @threecol on true |> select text, b order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select *, @threecol.*, :id, @threecol.:id as tcid join @threecol on true |> select text, b order by num, :id, tcid")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - multiple primary keys") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withPrimaryKey(":id").withPrimaryKey("text")
+    )
+
+    val analysis = analyze(tf, "twocol", "select num |> select 1")
+    val expectedAnalysis = analyze(tf, "twocol", "select num, :id, text |> select 1 order by :id")
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - already selected") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withPrimaryKey(":id").withPrimaryKey("text")
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num |> select 1")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num, :id |> select 1 order by :id") // it'll choose :id to order by just because it comes first
+
+    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("addLimitOffset - combined tables") {
+    val tf = tableFinder(
+      (0, "a") -> D("a1" -> TestText, "a2" -> TestNumber),
+      (0, "b") -> D("b1" -> TestText, "b2" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "(select * from @a) union (select * from @b)")
+    val expectedAnalysis = analyze(tf, "((select * from @a) union (select * from @b)) |> select * limit 25 offset 50")
+    analysis.addLimitOffset(limit = Some(25), offset = Some(50)).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("addLimitOffset - no limit/offset initially") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num*num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 25 offset 50")
+    analysis.addLimitOffset(limit = Some(25), offset = Some(50)).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+
+  test("addLimitOFfset - fits within initial limit/offset") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num*num limit 100 offset 100")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 25 offset 150")
+    analysis.addLimitOffset(limit = Some(25), offset = Some(50)).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("addLimitOffset - overlaps the end of initial limit/offset") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num*num limit 100 offset 100")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 50 offset 150")
+    analysis.addLimitOffset(limit = Some(500), offset = Some(50)).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("addLimitOffset - overlaps the end of initial limit/offset with no new limit provided") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num*num limit 100 offset 100")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 50 offset 150")
+    analysis.addLimitOffset(limit = None, offset = Some(50)).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("addLimitOffset - passes the end of initial limit/offset") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num*num limit 100 offset 100")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 0 offset 200") // Note the offset will not pass the end of the original chunk
+    analysis.addLimitOffset(limit = Some(500), offset = Some(500)).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("addLimitOffset - passes the end of initial limit/offset with no new limit provided") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num*num limit 100 offset 100")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 0 offset 200") // Note the offset will not pass the end of the original chunk
+    analysis.addLimitOffset(limit = None, offset = Some(500)).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("simple (de)serialization") {
@@ -404,7 +666,7 @@ select * where first = 'Tom'
 """)
 
     implicit val mfDeser = com.socrata.soql.functions.MonomorphicFunction.deserialize(TestFunctionInfo)
-    val deser = serialization.ReadBuffer.read[SoQLAnalysis[Int, TestType, TestValue]](serialization.WriteBuffer.asBytes(analysis))
+    val deser = serialization.ReadBuffer.read[SoQLAnalysis[TestMT]](serialization.WriteBuffer.asBytes(analysis))
     deser.statement must equal (analysis.statement)
   }
 }

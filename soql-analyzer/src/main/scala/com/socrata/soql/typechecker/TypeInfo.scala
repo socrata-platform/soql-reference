@@ -34,11 +34,29 @@ trait TypeInfo[Type, Value] extends TypeInfoCommon[Type, Value] {
 }
 
 trait TypeInfo2[Type, Value] extends TypeInfoCommon[Type, Value] {
-  val hasType: HasType[Value, Type]
+  def metaProject[MT <: analyzer2.MetaTypes](
+    implicit typeEv: Type =:= MT#ColumnType,
+    typeEvRev: MT#ColumnType =:= Type,
+    valueEv: Value =:= MT#ColumnValue,
+    valueEvRev: MT#ColumnValue =:= Value
+  ): TypeInfoMetaProjection[MT]
+}
 
-  def typeParameterUniverse: OrderedSet[Type]
-  def potentialExprs(l: Literal): Seq[analyzer2.Expr[Type, Value]]
-  def literalBoolean(b: Boolean, position: Position): analyzer2.Expr[Type, Value]
+abstract class TypeInfoMetaProjection[MT <: analyzer2.MetaTypes] extends analyzer2.MetaTypeHelper[MT] with TypeInfoCommon[MT#ColumnType, MT#ColumnValue] {
+  val unproject: TypeInfo2[CT, CV]
 
-  def boolType: Type
+  val hasType: analyzer2.HasType[CV, CT]
+
+  def potentialExprs(l: Literal): Seq[analyzer2.Expr[MT]]
+  def literalBoolean(b: Boolean, position: Position): analyzer2.Expr[MT]
+
+  def boolType: CT
+
+  final override def typeParameterUniverse: OrderedSet[CT] = unproject.typeParameterUniverse
+  final override def typeOf(value: CV): CT = unproject.typeOf(value)
+  final override def typeNameFor(typ: CT): TypeName = unproject.typeNameFor(typ)
+  final override def typeFor(name: TypeName): Option[CT] = unproject.typeFor(name)
+  final override def isOrdered(typ: CT): Boolean = unproject.isOrdered(typ)
+  final override def isBoolean(typ: CT): Boolean = unproject.isBoolean(typ)
+  final override def isGroupable(typ: CT): Boolean = unproject.isGroupable(typ)
 }

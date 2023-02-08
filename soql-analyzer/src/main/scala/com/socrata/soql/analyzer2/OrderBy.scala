@@ -2,24 +2,24 @@ package com.socrata.soql.analyzer2
 
 import com.socrata.prettyprint.prelude._
 
-import com.socrata.soql.typechecker.{FunctionInfo, HasType, HasDoc}
+import com.socrata.soql.typechecker.FunctionInfo
 import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
 
-case class OrderBy[+CT, +CV](expr: Expr[CT, CV], ascending: Boolean, nullLast: Boolean) {
-  private[analyzer2] def doRewriteDatabaseNames(state: RewriteDatabaseNamesState) =
+case class OrderBy[MT <: MetaTypes](expr: Expr[MT], ascending: Boolean, nullLast: Boolean) extends LabelUniverse[MT] {
+  private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]): OrderBy[MT2] =
     this.copy(expr = expr.doRewriteDatabaseNames(state))
 
   private[analyzer2] def doRelabel(state: RelabelState) =
     copy(expr = expr.doRelabel(state))
 
-  private[analyzer2] def findIsomorphism[CT2 >: CT, CV2 >: CV](state: IsomorphismState, that: OrderBy[CT2, CV2]): Boolean =
+  private[analyzer2] def findIsomorphism(state: IsomorphismState, that: OrderBy[MT]): Boolean =
     this.ascending == that.ascending &&
       this.nullLast == that.nullLast &&
       this.expr.findIsomorphism(state, that.expr)
 
-  def debugDoc(implicit ev: HasDoc[CV]) =
+  private[analyzer2] def debugDoc(implicit ev: ExprDocProvider[MT]) =
     Seq(
-      expr.debugDoc,
+      expr.debugDoc(ev),
       Seq(
         if(ascending) d"ASC" else d"DESC",
         if(nullLast) d"NULLS LAST" else d"NULLS FIRST"
@@ -28,18 +28,18 @@ case class OrderBy[+CT, +CV](expr: Expr[CT, CV], ascending: Boolean, nullLast: B
 }
 
 object OrderBy {
-  implicit def serializeWrite[CT, CV](implicit ev: Writable[Expr[CT, CV]]) = new Writable[OrderBy[CT, CV]] {
-    def writeTo(buffer: WriteBuffer, ob: OrderBy[CT, CV]): Unit = {
+  implicit def serializeWrite[MT <: MetaTypes](implicit ev: Writable[Expr[MT]]) = new Writable[OrderBy[MT]] {
+    def writeTo(buffer: WriteBuffer, ob: OrderBy[MT]): Unit = {
       buffer.write(ob.expr)
       buffer.write(ob.ascending)
       buffer.write(ob.nullLast)
     }
   }
 
-  implicit def deserializeRead[CT, CV](implicit ev: Readable[Expr[CT, CV]]) = new Readable[OrderBy[CT, CV]] {
-    def readFrom(buffer: ReadBuffer): OrderBy[CT, CV] = {
+  implicit def deserializeRead[MT <: MetaTypes](implicit ev: Readable[Expr[MT]]) = new Readable[OrderBy[MT]] {
+    def readFrom(buffer: ReadBuffer): OrderBy[MT] = {
       OrderBy(
-        buffer.read[Expr[CT, CV]](),
+        buffer.read[Expr[MT]](),
         ascending = buffer.read[Boolean](),
         nullLast = buffer.read[Boolean]()
       )

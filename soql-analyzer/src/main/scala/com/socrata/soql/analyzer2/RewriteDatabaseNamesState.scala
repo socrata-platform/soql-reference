@@ -1,14 +1,23 @@
 package com.socrata.soql.analyzer2
 
-private[analyzer2] case class RewriteDatabaseNamesState(
-  realTables: Map[AutoTableLabel, DatabaseTableName],
-  tableName: DatabaseTableName => DatabaseTableName,
-  columnName: (DatabaseTableName, DatabaseColumnName) => DatabaseColumnName
+private[analyzer2] case class RewriteDatabaseNamesState[MT1 <: MetaTypes, MT2 <: MetaTypes](
+  tableName: types.DatabaseTableName[MT1] => types.DatabaseTableName[MT2],
+  columnName: (types.DatabaseTableName[MT1], types.DatabaseColumnName[MT1]) => types.DatabaseColumnName[MT2],
+  val realTables: Map[AutoTableLabel, types.DatabaseTableName[MT1]],
+  val changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT1, MT2]
 ) {
-  private val tableNames = new scala.collection.mutable.HashMap[DatabaseTableName, DatabaseTableName]
-  private val columnNames = new scala.collection.mutable.HashMap[(DatabaseTableName, DatabaseColumnName), DatabaseColumnName]
+  type DatabaseTableName1 = types.DatabaseTableName[MT1]
+  type DatabaseTableName2 = types.DatabaseTableName[MT2]
 
-  def convert(name: DatabaseTableName): DatabaseTableName = {
+  type ColumnLabel1 = types.ColumnLabel[MT1]
+  type ColumnLabel2 = types.ColumnLabel[MT2]
+  type DatabaseColumnName1 = types.DatabaseColumnName[MT1]
+  type DatabaseColumnName2 = types.DatabaseColumnName[MT2]
+
+  private val tableNames = new scala.collection.mutable.HashMap[DatabaseTableName1, DatabaseTableName2]
+  private val columnNames = new scala.collection.mutable.HashMap[(DatabaseTableName1, DatabaseColumnName1), DatabaseColumnName2]
+
+  def convert(name: DatabaseTableName1): DatabaseTableName2 = {
     tableNames.get(name) match {
       case Some(n) => n
       case None =>
@@ -18,27 +27,20 @@ private[analyzer2] case class RewriteDatabaseNamesState(
     }
   }
 
-  def convert(label: TableLabel, cName: DatabaseColumnName): DatabaseColumnName = {
-    label match {
-      case tName: DatabaseTableName =>
-        doConvert(tName, cName)
-      case auto: AutoTableLabel =>
-        realTables.get(auto) match {
-          case Some(tName) =>
-            doConvert(tName, cName)
-          case None =>
-            cName
-        }
-    }
-  }
-
-  private def doConvert(tName: DatabaseTableName, cName: DatabaseColumnName): DatabaseColumnName = {
+  def convert(tName: DatabaseTableName1, cName: DatabaseColumnName1): DatabaseColumnName2 = {
     columnNames.get((tName, cName)) match {
       case Some(n) => n
       case None =>
         val fresh = columnName(tName, cName)
         columnNames += (tName, cName) -> fresh
         fresh
+    }
+  }
+
+  def convert(tLabel: AutoTableLabel, cName: DatabaseColumnName1): DatabaseColumnName2 = {
+    realTables.get(tLabel) match {
+      case Some(tName) => convert(tName, cName)
+      case None => throw new Exception("realTables doesn't contain an AutoTableLabel that was found???")
     }
   }
 }

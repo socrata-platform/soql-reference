@@ -5,6 +5,8 @@ import scala.util.parsing.input.{NoPosition, Position}
 import scala.runtime.ScalaRunTime
 import scala.collection.immutable.VectorBuilder
 
+import com.rojoma.json.v3.ast.JString
+
 import com.socrata.soql.environment.{ColumnName, FunctionName, HoleName, TableName, TypeName}
 import com.socrata.prettyprint.prelude._
 import com.socrata.soql.parsing.RecursiveDescentParser
@@ -34,7 +36,7 @@ sealed abstract class Expression extends Product {
 object Expression {
   val pretty = AST.pretty
 
-  def escapeString(s: String): String = "'" + s.replaceAll("'", "''") + "'"
+  def escapeString(s: String): String = JString(s).toString
 
   private def foldDashes(s: String) = s.replaceAll("-","_")
 
@@ -193,7 +195,7 @@ case class NumberLiteral(value: BigDecimal)(val position: Position) extends Lite
   def doc = Doc(value.toString)
 }
 case class StringLiteral(value: String)(val position: Position) extends Literal {
-  def doc = Doc("'" + value.replaceAll("'", "''") + "'")
+  def doc = Doc(Expression.escapeString(value))
 }
 case class BooleanLiteral(value: Boolean)(val position: Position) extends Literal {
   def doc = Doc(value.toString.toUpperCase)

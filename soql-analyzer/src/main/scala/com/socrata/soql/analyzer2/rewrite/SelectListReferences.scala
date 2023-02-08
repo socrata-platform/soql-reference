@@ -3,15 +3,7 @@ package com.socrata.soql.analyzer2.rewrite
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 
-class SelectListReferences[RNS, CT, CV] private () {
-  type Statement = analyzer2.Statement[RNS, CT, CV]
-  type Select = analyzer2.Select[RNS, CT, CV]
-  type From = analyzer2.From[RNS, CT, CV]
-  type Join = analyzer2.Join[RNS, CT, CV]
-  type AtomicFrom = analyzer2.AtomicFrom[RNS, CT, CV]
-  type FromTable = analyzer2.FromTable[RNS, CT]
-  type FromSingleRow = analyzer2.FromSingleRow[RNS]
-
+class SelectListReferences[MT <: MetaTypes] private () extends StatementUniverse[MT] {
   abstract class Transform {
     def rewriteSelect(select: Select): Select
 
@@ -23,7 +15,7 @@ class SelectListReferences[RNS, CT, CV] private () {
         case CTE(defLabel, defAlias, defQuery, materializedHint, useQuery) =>
           CTE(defLabel, defAlias, rewriteStatement(defQuery), materializedHint, rewriteStatement(useQuery))
 
-        case v@Values(_) =>
+        case v@Values(_, _) =>
           v
 
         case select: Select =>
@@ -32,7 +24,7 @@ class SelectListReferences[RNS, CT, CV] private () {
     }
 
     def rewriteFrom(from: From): From = {
-      from.map[RNS, CT, CV](
+      from.map[MT](
         rewriteAtomicFrom(_),
         { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, rewriteAtomicFrom(right), on) }
       )
@@ -54,9 +46,9 @@ class SelectListReferences[RNS, CT, CV] private () {
 
       val selectListIndices = selectList.valuesIterator.map(_.expr).toVector.zipWithIndex.reverseIterator.toMap
 
-      def numericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
+      def numericateExpr(e: Expr): Expr = {
         e match {
-          case c: Column[CT] =>
+          case c: Column =>
             c // don't bother rewriting column references
           case e =>
             selectListIndices.get(e) match {
@@ -68,8 +60,8 @@ class SelectListReferences[RNS, CT, CV] private () {
 
       select.copy(
         distinctiveness = distinctiveness match {
-          case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
           case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(numericateExpr))
+          case x@(Distinctiveness.Indistinct() | Distinctiveness.FullyDistinct()) => x
         },
         from = rewriteFrom(from),
         groupBy = groupBy.map(numericateExpr),
@@ -84,7 +76,7 @@ class SelectListReferences[RNS, CT, CV] private () {
 
       val selectListIndices = selectList.valuesIterator.map(_.expr).toVector
 
-      def unnumericateExpr(e: Expr[CT, CV]): Expr[CT, CV] = {
+      def unnumericateExpr(e: Expr): Expr = {
         e match {
           case r@SelectListReference(idxPlusOne, _, _, _) =>
             selectListIndices(idxPlusOne - 1).reposition(r.position.logicalPosition)
@@ -95,8 +87,8 @@ class SelectListReferences[RNS, CT, CV] private () {
 
       select.copy(
         distinctiveness = distinctiveness match {
-          case Distinctiveness.Indistinct | Distinctiveness.FullyDistinct => distinctiveness
           case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(unnumericateExpr))
+          case x@(Distinctiveness.Indistinct() | Distinctiveness.FullyDistinct()) => x
         },
         from = rewriteFrom(from),
         groupBy = groupBy.map(unnumericateExpr),
@@ -115,11 +107,11 @@ class SelectListReferences[RNS, CT, CV] private () {
   * corresponds to "select x+1, count(*) group by 1 order by 2"
   */
 object SelectListReferences {
-  def use[RNS, CT, CV](stmt: Statement[RNS, CT, CV]): Statement[RNS, CT, CV] = {
-    new SelectListReferences[RNS, CT, CV]().Use.rewriteStatement(stmt)
+  def use[MT <: MetaTypes](stmt: Statement[MT]): Statement[MT] = {
+    new SelectListReferences[MT]().Use.rewriteStatement(stmt)
   }
 
-  def unuse[RNS, CT, CV](stmt: Statement[RNS, CT, CV]): Statement[RNS, CT, CV] = {
-    new SelectListReferences[RNS, CT, CV]().Unuse.rewriteStatement(stmt)
+  def unuse[MT <: MetaTypes](stmt: Statement[MT]): Statement[MT] = {
+    new SelectListReferences[MT]().Unuse.rewriteStatement(stmt)
   }
 }
