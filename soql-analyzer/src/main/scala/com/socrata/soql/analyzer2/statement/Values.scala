@@ -56,6 +56,9 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
 
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]) = this
 
+  private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName] =
+    set
+
   private[analyzer2] def realTables = Map.empty[AutoTableLabel, DatabaseTableName]
 
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =

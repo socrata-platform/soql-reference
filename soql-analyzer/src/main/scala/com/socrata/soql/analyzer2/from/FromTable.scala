@@ -61,6 +61,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
         false
     }
 
+  private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName] = set + tableName
   private[analyzer2] def realTables = Map(label -> tableName)
 
   private[analyzer2] def reAlias(newAlias: Option[ResourceName]): Self[MT] =

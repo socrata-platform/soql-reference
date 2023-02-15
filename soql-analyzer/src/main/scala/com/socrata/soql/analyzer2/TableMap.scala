@@ -50,6 +50,17 @@ class TableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[
 
   def size = underlying.valuesIterator.map(_.size).sum
 
+  def allTables: Set[DatabaseTableName] =
+    underlying.valuesIterator.foldLeft(Set.empty[DatabaseTableName]) { (acc, tablesInScope) =>
+      tablesInScope.valuesIterator.foldLeft(acc) { (acc, tableDescription) =>
+        tableDescription match {
+          case ds: TableDescription.Dataset[MT] => acc + ds.name
+          case _ : TableDescription.Query[MT] => acc
+          case _ : TableDescription.TableFunction[MT] => acc
+        }
+      }
+    }
+
   def +(kv: (ScopedResourceName, TableDescription[MT])): TableMap[MT] = {
     val (ScopedResourceName(rns, rn), desc) = kv
     underlying.get(rns) match {
