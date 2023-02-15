@@ -24,6 +24,9 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
   def contains(e: Expr[MT]): Boolean =
     definitionQuery.contains(e) || useQuery.contains(e)
 
+  private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName] =
+    useQuery.doAllTables(definitionQuery.doAllTables(set))
+
   private[analyzer2] def realTables =
     definitionQuery.realTables ++ useQuery.realTables
 

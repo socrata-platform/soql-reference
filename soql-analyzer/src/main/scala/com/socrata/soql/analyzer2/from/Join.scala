@@ -87,6 +87,12 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
       (acc, join) => acc.mergeWith(join.right.columnReferences)(_ ++ _).mergeWith(join.on.columnReferences)(_ ++ _)
     )
 
+  private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName] =
+    reduce[Set[DatabaseTableName]](
+      _.doAllTables(set),
+      (acc, j) => j.right.doAllTables(acc)
+    )
+
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName] = {
     reduce[Map[AutoTableLabel, DatabaseTableName]] (
       { other => other.realTables },

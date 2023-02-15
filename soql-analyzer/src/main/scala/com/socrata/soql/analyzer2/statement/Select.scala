@@ -155,6 +155,9 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
 
   private[analyzer2] def realTables = from.realTables
 
+  private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName] =
+    from.doAllTables(set)
+
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) = {
     Select(
       distinctiveness = distinctiveness.doRewriteDatabaseNames(state),

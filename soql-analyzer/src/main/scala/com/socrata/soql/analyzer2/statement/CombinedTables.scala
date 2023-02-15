@@ -27,6 +27,9 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
   def contains(e: Expr[MT]): Boolean =
     left.contains(e) || right.contains(e)
 
+  private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName] =
+    right.doAllTables(left.doAllTables(set))
+
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName] =
     left.realTables ++ right.realTables
 

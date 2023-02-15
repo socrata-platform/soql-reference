@@ -27,6 +27,9 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
   // information to produce a full Column.
   def unique: LazyList[Seq[AutoColumnLabel]]
 
+  final def allTables: Set[DatabaseTableName] = doAllTables(Set.empty)
+  private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName]
+
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
   final def rewriteDatabaseNames[MT2 <: MetaTypes](

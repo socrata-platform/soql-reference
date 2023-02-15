@@ -55,6 +55,9 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =
     copy(statement = statement.mapAlias(f), alias = f(alias))
 
+  private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName] =
+    statement.doAllTables(set)
+
   private[analyzer2] def realTables = statement.realTables
 
   private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
