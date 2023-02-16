@@ -4,7 +4,7 @@ import com.rojoma.json.v3.ast.JString
 import com.rojoma.json.v3.codec.JsonEncode
 import com.socrata.prettyprint.prelude._
 
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.environment.TypeName
 
 sealed abstract class TestType(val name: TypeName, val isOrdered: Boolean) {

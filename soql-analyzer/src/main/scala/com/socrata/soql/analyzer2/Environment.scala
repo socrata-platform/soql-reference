@@ -7,7 +7,7 @@ import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, AutomaticJsonDecodeB
 
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName}
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 case class LabelEntry[MT <: MetaTypes](label: types.ColumnLabel[MT], @JsonKey("type") typ: types.ColumnType[MT])
 object LabelEntry {

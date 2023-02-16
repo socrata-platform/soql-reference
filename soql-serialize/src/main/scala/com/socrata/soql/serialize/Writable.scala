@@ -1,4 +1,4 @@
-package com.socrata.soql.analyzer2.serialization
+package com.socrata.soql.serialize
 
 import scala.util.parsing.input.{Position, NoPosition}
 
@@ -80,6 +80,13 @@ object Writable extends `-impl`.WritableTuples {
           val line = if(newlinePos == -1) "" else ls.substring(0, newlinePos)
           buffer.write(line)
       }
+    }
+  }
+
+  implicit def bytes = new Writable[Array[Byte]] {
+    def writeTo(buffer: WriteBuffer, bs: Array[Byte]): Unit = {
+      buffer.data.writeUInt32NoTag(bs.length)
+      buffer.data.writeRawBytes(bs)
     }
   }
 

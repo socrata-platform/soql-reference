@@ -5,6 +5,7 @@ import scala.util.parsing.input.NoPosition
 import org.scalatest.{FunSuite, MustMatchers}
 
 import com.socrata.soql.collection._
+import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer}
 
 import mocktablefinder._
 
@@ -666,7 +667,7 @@ select * where first = 'Tom'
 """)
 
     implicit val mfDeser = com.socrata.soql.functions.MonomorphicFunction.deserialize(TestFunctionInfo)
-    val deser = serialization.ReadBuffer.read[SoQLAnalysis[TestMT]](serialization.WriteBuffer.asBytes(analysis))
+    val deser = ReadBuffer.read[SoQLAnalysis[TestMT]](WriteBuffer.asBytes(analysis))
     deser.statement must equal (analysis.statement)
   }
 }

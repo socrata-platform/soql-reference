@@ -5,7 +5,7 @@ import scala.util.parsing.input.Position
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 trait NullLiteralImpl[MT <: MetaTypes] { this: NullLiteral[MT] =>
   type Self[MT <: MetaTypes] = NullLiteral[MT]

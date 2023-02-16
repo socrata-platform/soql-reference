@@ -1,7 +1,7 @@
 package com.socrata.soql.analyzer2
 
 import com.socrata.soql.environment.ColumnName
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 case class NamedExpr[MT <: MetaTypes](expr: Expr[MT], name: ColumnName) extends LabelUniverse[MT] {
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =

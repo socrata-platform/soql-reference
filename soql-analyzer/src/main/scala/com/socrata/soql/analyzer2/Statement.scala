@@ -11,7 +11,7 @@ import com.socrata.prettyprint.prelude._
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName}
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.analyzer2
 
 import DocUtils._

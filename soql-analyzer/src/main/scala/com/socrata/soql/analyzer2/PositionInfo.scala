@@ -2,7 +2,7 @@ package com.socrata.soql.analyzer2
 
 import scala.util.parsing.input.{Position, NoPosition}
 
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 sealed abstract class PositionInfo {
   // The difference between logicalPosition and physicalPosition is

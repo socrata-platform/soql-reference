@@ -34,7 +34,7 @@ object TuplesBuilder {
   def buildWrite: String = {
     val sb = new StringBuilder
 
-    sb.append("package com.socrata.soql.analyzer2.serialization\n")
+    sb.append("package com.socrata.soql.serialize\n")
     sb.append("package `-impl`\n")
     sb.append("\n")
 
@@ -60,7 +60,7 @@ object TuplesBuilder {
   def buildRead: String = {
     val sb = new StringBuilder
 
-    sb.append("package com.socrata.soql.analyzer2.serialization\n")
+    sb.append("package com.socrata.soql.serialize\n")
     sb.append("package `-impl`\n")
     sb.append("\n")
 

@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.collection._
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 sealed trait Distinctiveness[MT <: MetaTypes] extends LabelUniverse[MT] {
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]): Distinctiveness[MT2]

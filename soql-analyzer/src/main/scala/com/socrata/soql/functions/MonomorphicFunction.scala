@@ -4,7 +4,7 @@ import scala.collection.compat.immutable.LazyList
 
 import com.rojoma.json.v3.ast.JString
 
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.environment.FunctionName
 import com.socrata.soql.typechecker.FunctionInfo
 

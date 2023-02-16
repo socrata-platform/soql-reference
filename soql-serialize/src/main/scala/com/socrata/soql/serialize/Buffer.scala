@@ -1,4 +1,4 @@
-package com.socrata.soql.analyzer2.serialization
+package com.socrata.soql.serialize
 
 import java.io.{IOException, ByteArrayInputStream, ByteArrayOutputStream, InputStream, OutputStream}
 
@@ -17,9 +17,9 @@ object Version {
 }
 
 class WriteBuffer private (val version: Version) {
-  private[serialization] val strings = new StringDictionary
+  private[serialize] val strings = new StringDictionary
   private val rawData = new VisibleByteArrayOutputStream
-  private[serialization] val data = CodedOutputStream.newInstance(rawData)
+  private[serialize] val data = CodedOutputStream.newInstance(rawData)
 
   def write[T](t: T)(implicit ev: Writable[T]): this.type = {
     ev.writeTo(this, t)
@@ -67,8 +67,8 @@ class ReadBuffer private (stream: CodedInputStream) {
         throw new IOException("Invalid version: {}")
     }
 
-  private[serialization] val strings = StringDictionary.readFrom(stream)
-  private[serialization] val data = stream
+  private[serialize] val strings = StringDictionary.readFrom(stream)
+  private[serialize] val data = stream
 
   def read[T]()(implicit ev: Readable[T]) = ev.readFrom(this)
 }

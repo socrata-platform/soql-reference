@@ -1,4 +1,4 @@
-package com.socrata.soql.analyzer2.serialization
+package com.socrata.soql.serialize
 
 import scala.util.parsing.input.{Position, NoPosition}
 
@@ -94,6 +94,13 @@ object Readable extends `-impl`.ReadableTuples {
         case other =>
           fail("Unknown position type " + other)
       }
+    }
+  }
+
+  implicit def bytes = new Readable[Array[Byte]] {
+    def readFrom(buffer: ReadBuffer): Array[Byte] = {
+      var n = buffer.data.readUInt32()
+      buffer.data.readRawBytes(n)
     }
   }
 

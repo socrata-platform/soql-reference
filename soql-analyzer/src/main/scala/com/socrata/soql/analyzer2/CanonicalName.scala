@@ -2,7 +2,7 @@ package com.socrata.soql.analyzer2
 
 import com.rojoma.json.v3.util.{WrapperJsonCodec, WrapperFieldCodec}
 
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 case class CanonicalName(name: String)
 
