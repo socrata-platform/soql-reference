@@ -11,7 +11,12 @@ import com.socrata.soql.parsing.SoQLPosition
 trait Writable[T] {
   def writeTo(buffer: WriteBuffer, t: T): Unit
 }
-object Writable {
+object Writable extends `-impl`.WritableTuples {
+  implicit object unit extends Writable[Unit] {
+    def writeTo(buffer: WriteBuffer, u: Unit): Unit = {
+    }
+  }
+
   implicit object boolean extends Writable[Boolean] {
     def writeTo(buffer: WriteBuffer, b: Boolean): Unit =
       buffer.data.writeBoolNoTag(b)
