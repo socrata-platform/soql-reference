@@ -2,7 +2,7 @@ package com.socrata.soql.analyzer2
 
 import com.socrata.soql.functions.MonomorphicFunction
 
-import com.socrata.soql.analyzer2.serialization.{ReadBuffer, WriteBuffer, Readable, Writable}
+import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer, Readable, Writable}
 
 class SoQLAnalysis[MT <: MetaTypes] private (
   val labelProvider: LabelProvider,

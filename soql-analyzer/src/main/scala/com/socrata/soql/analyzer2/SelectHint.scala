@@ -1,6 +1,6 @@
 package com.socrata.soql.analyzer2
 
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 sealed trait SelectHint
 object SelectHint {
