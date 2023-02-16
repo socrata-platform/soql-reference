@@ -14,8 +14,13 @@ trait Readable[T] {
   protected def fail(msg: String): Nothing = throw new IOException(msg)
 }
 
-object Readable {
+object Readable extends `-impl`.ReadableTuples {
   private case class SimplePosition(line: Int, column: Int, lineContents: String) extends Position
+
+  implicit object unit extends Readable[Unit] {
+    def readFrom(buffer: ReadBuffer): Unit = {
+    }
+  }
 
   implicit object bool extends Readable[Boolean] {
     def readFrom(buffer: ReadBuffer): Boolean = {
