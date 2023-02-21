@@ -109,15 +109,15 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     select.selectList must equal (
       OrderedMap(
         c(1) -> NamedExpr(
-          PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None),
+          PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.None),
           cn("t")
         ),
         c(2) -> NamedExpr(
           FunctionCall[TestMT](
             TestFunctions.Times.monomorphic.get,
             Seq(
-              PhysicalColumn[TestMT](t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None),
-              PhysicalColumn[TestMT](t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None)
+              PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("num"), TestNumber)(AtomicPositionInfo.None),
+              PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("num"), TestNumber)(AtomicPositionInfo.None)
             )
           )(FuncallPositionInfo.None),
           cn("num_num")
@@ -128,6 +128,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     select.from must equal (
       FromTable[TestMT](
         dtn("aaaa-aaaa"),
+        canon("aaaa-aaaa"),
         ScopedResourceName(0, rn("aaaa-aaaa")),
         None,
         t(1),
@@ -242,11 +243,12 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       Select[TestMT](
         Distinctiveness.Indistinct(),
         OrderedMap(
-          c(1) -> NamedExpr(PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None), cn("text")),
-          c(2) -> NamedExpr(PhysicalColumn[TestMT](t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None), cn("num"))
+          c(1) -> NamedExpr(PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.None), cn("text")),
+          c(2) -> NamedExpr(PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("num"), TestNumber)(AtomicPositionInfo.None), cn("num"))
         ),
         FromTable[TestMT](
           dtn("aaaa-aaaa"),
+          canon("aaaa-aaaa"),
           ScopedResourceName(0, rn("aaaa-aaaa")),
           None,
           t(1),
@@ -258,7 +260,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         ),
         None, Nil, None,
         List(
-          OrderBy(PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None),true,true)
+          OrderBy(PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.None),true,true)
         ),
         None,None,None,Set.empty
       )
@@ -289,11 +291,12 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           Select[TestMT](
             Distinctiveness.Indistinct(),
             OrderedMap(
-              c(1) -> NamedExpr(PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None), cn("text")),
-              c(2) -> NamedExpr(PhysicalColumn[TestMT](t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None), cn("num"))
+              c(1) -> NamedExpr(PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.None), cn("text")),
+              c(2) -> NamedExpr(PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("num"), TestNumber)(AtomicPositionInfo.None), cn("num"))
             ),
             FromTable[TestMT](
               dtn("aaaa-aaaa"),
+              canon("aaaa-aaaa"),
               ScopedResourceName(0, rn("aaaa-aaaa")),
               None,
               t(1),
@@ -305,7 +308,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             ),
             None, Nil, None,
             List(
-              OrderBy(PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None),true,true)
+              OrderBy(PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.None),true,true)
             ),
             None,None,None,Set.empty
           ),
@@ -370,11 +373,11 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     select.selectList must equal (
       OrderedMap(
         c(4) -> NamedExpr(
-          PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None),
+          PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.None),
           cn("text")
         ),
         c(5) -> NamedExpr(
-          PhysicalColumn[TestMT](t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None),
+          PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("num"), TestNumber)(AtomicPositionInfo.None),
           cn("num")
         )
       )
@@ -385,7 +388,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         JoinType.Inner,
         true,
         FromTable[TestMT](
-          dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
+          dtn("aaaa-aaaa"), canon("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
@@ -412,7 +415,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     c(2) -> NamedExpr(LiteralValue[TestMT](TestNumber(1))(AtomicPositionInfo.None),cn("_1"))
                   ),
                   FromTable[TestMT](
-                    dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")),Some(rn("bbbb-bbbb")),
+                    dtn("bbbb-bbbb"), canon("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")),Some(rn("bbbb-bbbb")),
                     t(3),
                     OrderedMap(
                       dcn("user") -> NameEntry(cn("user"),TestText),
@@ -427,11 +430,11 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                         FunctionCall[TestMT](
                           MonomorphicFunction(TestFunctions.Eq, Map("a" -> TestText)),
                           Seq(
-                            PhysicalColumn[TestMT](t(3),dcn("user"),TestText)(AtomicPositionInfo.None),
+                            PhysicalColumn[TestMT](t(3),canon("bbbb-bbbb"),dcn("user"),TestText)(AtomicPositionInfo.None),
                             VirtualColumn[TestMT](t(2),c(1),TestText)(AtomicPositionInfo.None)
                           )
                         )(FuncallPositionInfo.None),
-                        PhysicalColumn[TestMT](t(3),dcn("allowed"),TestBoolean)(AtomicPositionInfo.None)
+                        PhysicalColumn[TestMT](t(3),canon("bbbb-bbbb"),dcn("allowed"),TestBoolean)(AtomicPositionInfo.None)
                       )
                     )(FuncallPositionInfo.None)
                   ),
@@ -468,11 +471,11 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     select.selectList must equal (
       OrderedMap(
         c(4) -> NamedExpr(
-          PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None),
+          PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.None),
           cn("text")
         ),
         c(5) -> NamedExpr(
-          PhysicalColumn[TestMT](t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None),
+          PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("num"), TestNumber)(AtomicPositionInfo.None),
           cn("num")
         )
       )
@@ -483,7 +486,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         JoinType.Inner,
         true,
         FromTable[TestMT](
-          dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
+          dtn("aaaa-aaaa"), canon("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
@@ -500,7 +503,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
               JoinType.Inner,
               true,
               FromStatement(
-                Values[TestMT](OrderedSet(c(1)), NonEmptySeq(NonEmptySeq(PhysicalColumn[TestMT](t(1),dcn("text"),TestText)(AtomicPositionInfo.None),Nil),Nil)),
+                Values[TestMT](OrderedSet(c(1)), NonEmptySeq(NonEmptySeq(PhysicalColumn[TestMT](t(1),canon("aaaa-aaaa"),dcn("text"),TestText)(AtomicPositionInfo.None),Nil),Nil)),
                 t(2), None, None
               ),
               FromStatement[TestMT](
@@ -510,7 +513,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     c(2) -> NamedExpr(LiteralValue[TestMT](TestNumber(1))(AtomicPositionInfo.None),cn("_1"))
                   ),
                   FromTable[TestMT](
-                    dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")),Some(rn("bbbb-bbbb")),
+                    dtn("bbbb-bbbb"), canon("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")),Some(rn("bbbb-bbbb")),
                     t(3),
                     OrderedMap(
                       dcn("user") -> NameEntry(cn("user"),TestText),
@@ -525,11 +528,11 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                         FunctionCall[TestMT](
                           MonomorphicFunction(TestFunctions.Eq, Map("a" -> TestText)),
                           Seq(
-                            PhysicalColumn[TestMT](t(3),dcn("user"),TestText)(AtomicPositionInfo.None),
+                            PhysicalColumn[TestMT](t(3),canon("bbbb-bbbb"),dcn("user"),TestText)(AtomicPositionInfo.None),
                             VirtualColumn[TestMT](t(2),c(1),TestText)(AtomicPositionInfo.None)
                           )
                         )(FuncallPositionInfo.None),
-                        PhysicalColumn[TestMT](t(3),dcn("allowed"),TestBoolean)(AtomicPositionInfo.None)
+                        PhysicalColumn[TestMT](t(3),canon("bbbb-bbbb"),dcn("allowed"),TestBoolean)(AtomicPositionInfo.None)
                       )
                     )(FuncallPositionInfo.None)
                   ),
@@ -565,11 +568,11 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     select.selectList must equal (
       OrderedMap(
         c(13) -> NamedExpr(
-          PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None),
+          PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.None),
           cn("text")
         ),
         c(14) -> NamedExpr(
-          PhysicalColumn[TestMT](t(1), dcn("num"), TestNumber)(AtomicPositionInfo.None),
+          PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("num"), TestNumber)(AtomicPositionInfo.None),
           cn("num")
         )
       )
@@ -580,7 +583,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         JoinType.Inner,
         true,
         FromTable[TestMT](
-          dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
+          dtn("aaaa-aaaa"), canon("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(
             dcn("text") -> NameEntry(cn("text"), TestText),
             dcn("num") -> NameEntry(cn("num"), TestNumber)
@@ -614,7 +617,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                           TestFunctions.castIdentitiesByType(TestBoolean).monomorphic.get,
                           Seq(LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.None))
                         )(FuncallPositionInfo.None),
-                        PhysicalColumn[TestMT](t(1), dcn("text"), TestText)(AtomicPositionInfo.None)
+                        PhysicalColumn[TestMT](t(1), canon("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.None)
                       )
                     )
                   )
