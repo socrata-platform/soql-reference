@@ -83,7 +83,7 @@ object Writable extends `-impl`.WritableTuples {
     }
   }
 
-  implicit def bytes = new Writable[Array[Byte]] {
+  implicit object bytes extends Writable[Array[Byte]] {
     def writeTo(buffer: WriteBuffer, bs: Array[Byte]): Unit = {
       buffer.data.writeUInt32NoTag(bs.length)
       buffer.data.writeRawBytes(bs)
@@ -168,13 +168,6 @@ object Writable extends `-impl`.WritableTuples {
           buffer.data.writeUInt32NoTag(1)
           buffer.write(v)
       }
-    }
-  }
-
-  implicit def pair[T: Writable, U: Writable] = new Writable[(T, U)] {
-    def writeTo(buffer: WriteBuffer, pair: (T, U)): Unit = {
-      buffer.write(pair._1)
-      buffer.write(pair._2)
     }
   }
 }
