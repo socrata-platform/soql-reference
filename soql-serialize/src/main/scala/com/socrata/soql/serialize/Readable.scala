@@ -97,7 +97,7 @@ object Readable extends `-impl`.ReadableTuples {
     }
   }
 
-  implicit def bytes = new Readable[Array[Byte]] {
+  implicit object bytes extends Readable[Array[Byte]] {
     def readFrom(buffer: ReadBuffer): Array[Byte] = {
       var n = buffer.data.readUInt32()
       buffer.data.readRawBytes(n)
@@ -185,12 +185,6 @@ object Readable extends `-impl`.ReadableTuples {
         case 1 => Some(buffer.read[T]())
         case other => fail("Invalid tag for option: " + other)
       }
-    }
-  }
-
-  implicit def pair[T: Readable, U: Readable] = new Readable[(T, U)] {
-    def readFrom(buffer: ReadBuffer): (T, U) = {
-      (buffer.read[T](), buffer.read[U]())
     }
   }
 }
