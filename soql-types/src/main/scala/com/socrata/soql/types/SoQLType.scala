@@ -11,7 +11,7 @@ import com.rojoma.json.v3.io.{JsonReaderException, JsonReader}
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, JsonKey, JsonUtil}
 import com.socrata.soql.environment.TypeName
-import com.socrata.soql.types.obfuscation.{CryptProvider, Obfuscator}
+import com.socrata.soql.types.obfuscation.{CryptProvider, Obfuscator, LongFormatter}
 import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.vividsolutions.jts.geom.{LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon}
 import org.joda.time.{DateTime, LocalDate, LocalDateTime, LocalTime, Period}
@@ -129,6 +129,8 @@ object SoQLValue {
 }
 
 case class SoQLID(value: Long) extends SoQLValue {
+  var provenance: Option[String] = None // Later, this should become a parameter
+
   def typ = SoQLID
 
   def doc(cryptProvider: CryptProvider) =
@@ -136,6 +138,7 @@ case class SoQLID(value: Long) extends SoQLValue {
 
   override def writeContentsTo(buffer: WriteBuffer) = {
     buffer.write(value)
+    buffer.write(provenance)
   }
 }
 case object SoQLID extends SoQLType("row_identifier") {
@@ -160,6 +163,21 @@ case object SoQLID extends SoQLType("row_identifier") {
       obfuscator.obfuscate(soqlId)
   }
 
+  object FormattedButUnobfuscatedStringRep {
+    def unapply(text: String): Option[SoQLID] =
+      if(text.startsWith(prefix)) {
+        LongFormatter.deformat(text, prefix.length).map(new SoQLID(_))
+      } else {
+        None
+      }
+
+    def unapply(text: CaseInsensitiveString): Option[SoQLID] =
+      unapply(text.getString)
+
+    def apply(soqlId: SoQLID) =
+      prefix + LongFormatter.format(soqlId.value)
+  }
+
   /**
    * This exists for OBE compatibility reason.
    * @param unused
@@ -182,11 +200,16 @@ case object SoQLID extends SoQLType("row_identifier") {
   def isPossibleId(s: String): Boolean = Obfuscator.isPossibleObfuscatedValue(s, prefix = prefix)
   def isPossibleId(s: CaseInsensitiveString): Boolean = isPossibleId(s.getString)
 
-  override def readContentsFrom(buffer: ReadBuffer) =
-    SoQLID(buffer.read[Long]())
+  override def readContentsFrom(buffer: ReadBuffer) = {
+    val result = SoQLID(buffer.read[Long]())
+    result.provenance = buffer.read[Option[String]]()
+    result
+  }
 }
 
 case class SoQLVersion(value: Long) extends SoQLValue {
+  var provenance: Option[String] = None // Later, this should become a parameter
+
   def typ = SoQLVersion
 
   def doc(cryptProvider: CryptProvider) =
@@ -194,6 +217,7 @@ case class SoQLVersion(value: Long) extends SoQLValue {
 
   override def writeContentsTo(buffer: WriteBuffer) = {
     buffer.write(value)
+    buffer.write(provenance)
   }
 }
 case object SoQLVersion extends SoQLType("row_version") {
@@ -219,8 +243,26 @@ case object SoQLVersion extends SoQLType("row_version") {
   def isPossibleVersion(s: String): Boolean = Obfuscator.isPossibleObfuscatedValue(s, prefix = prefix)
   def isPossibleVersion(s: CaseInsensitiveString): Boolean = isPossibleVersion(s.getString)
 
-  override def readContentsFrom(buffer: ReadBuffer) =
-    SoQLVersion(buffer.read[Long]())
+  object FormattedButUnobfuscatedStringRep {
+    def unapply(text: String): Option[SoQLVersion] =
+      if(text.startsWith(prefix)) {
+        LongFormatter.deformat(text, prefix.length).map(new SoQLVersion(_))
+      } else {
+        None
+      }
+
+    def unapply(text: CaseInsensitiveString): Option[SoQLVersion] =
+      unapply(text.getString)
+
+    def apply(soqlVersion: SoQLVersion) =
+      prefix + LongFormatter.format(soqlVersion.value)
+  }
+
+  override def readContentsFrom(buffer: ReadBuffer) = {
+    val result = SoQLVersion(buffer.read[Long]())
+    result.provenance = buffer.read[Option[String]]()
+    result
+  }
 }
 
 case class SoQLText(value: String) extends SoQLValue {

@@ -11,6 +11,7 @@ import com.socrata.soql.typechecker.{TypeInfoMetaProjection, FunctionInfo, Funct
 class Typechecker[MT <: MetaTypes](
   scope: MT#ResourceNameScope,
   canonicalName: Option[CanonicalName],
+  primaryTable: Option[CanonicalName],
   env: Environment[MT],
   namedExprs: Map[ColumnName, Expr[MT]],
   udfParams: Map[HoleName, Position => Expr[MT]],
@@ -141,7 +142,7 @@ class Typechecker[MT <: MetaTypes](
             Right(Seq(PhysicalColumn[MT](tableLabel, tableCanonicalName, column, typ)(new AtomicPositionInfo(col.position))))
         }
       case l: ast.Literal =>
-        squash(typeInfo.potentialExprs(l), l.position)
+        squash(typeInfo.potentialExprs(l, primaryTable), l.position)
       case hole@ast.Hole.UDF(name) =>
         udfParams.get(name) match {
           case Some(expr) => Right(Seq(expr(hole.position)))
