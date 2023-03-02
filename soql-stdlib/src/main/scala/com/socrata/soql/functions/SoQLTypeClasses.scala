@@ -19,7 +19,11 @@ object SoQLTypeClasses {
     SoQLUrl
   )
 
-  val GeospatialLike = CovariantSet[SoQLType](SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine, SoQLPolygon, SoQLMultiPolygon)
+  val PointLike = CovariantSet[SoQLType](SoQLPoint, SoQLMultiPoint)
+  val LineLike = CovariantSet[SoQLType](SoQLLine, SoQLMultiLine)
+  val PolygonLike = CovariantSet[SoQLType](SoQLPolygon, SoQLMultiPolygon)
+
+  val GeospatialLike = PointLike ++ LineLike ++ PolygonLike
 
   val Equatable = Ordered ++ GeospatialLike ++ Set[SoQLType](
     SoQLBlob,
