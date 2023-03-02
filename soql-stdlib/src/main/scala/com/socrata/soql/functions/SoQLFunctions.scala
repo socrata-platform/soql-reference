@@ -14,7 +14,7 @@ sealed abstract class SoQLFunctions
 object SoQLFunctions {
   private val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLFunctions])
 
-  import SoQLTypeClasses.{Ordered, Equatable, NumLike, RealNumLike, GeospatialLike, TimestampLike}
+  import SoQLTypeClasses.{Ordered, Equatable, NumLike, RealNumLike, GeospatialLike, TimestampLike, PointLike, LineLike, PolygonLike}
   private val AllTypes = CovariantSet.from(SoQLType.typesByName.values.toSet)
 
   val NoDocs = "No documentation available"
@@ -135,9 +135,35 @@ object SoQLFunctions {
   val WithinPolygon = f("within_polygon", FunctionName("within_polygon"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
     "Return the rows that have locations within the specified box, defined by latitude, longitude corners")
+
+  // "spatial_union" because "union" is a reserved word
+  val Union2Pt = f("union2pt", FunctionName("spatial_union"), Map("a" -> PointLike, "b" -> PointLike),
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPoint))(
+    "Merge two (multi)points into a single multipoint")
+  val Union2Line = f("union2line", FunctionName("spatial_union"), Map("a" -> LineLike, "b" -> LineLike),
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiLine))(
+    "Merge two (multi)lines into a single multiline")
+  val Union2Poly = f("union2poly", FunctionName("spatial_union"), Map("a" -> PolygonLike, "b" -> PolygonLike),
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon))(
+    "Merge two (multi)polygons into a single multipolygon")
+
+  val UnionAggPt = f("unionAggPt", FunctionName("spatial_union"), Map("a" -> PointLike),
+                     Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiPoint),
+                     isAggregate = true)(
+    "Merge groups of (multi)points into single multipoints")
+  val UnionAggLine = f("unionAggLine", FunctionName("spatial_union"), Map("a" -> LineLike),
+                       Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiLine),
+                       isAggregate = true)(
+    "Merge groups of (multi)lines into single multilines")
+  val UnionAggPoly = f("unionAggPoly", FunctionName("spatial_union"), Map("a" -> PolygonLike),
+                       Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiPolygon),
+                       isAggregate = true)(
+    "Merge groups of (multi)polygons into a single multipolygon")
+
   val Extent = f("extent", FunctionName("extent"), Map("a" -> GeospatialLike),
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiPolygon), isAggregate = true)(
     "Return a bounding box that encloses a set of geometries")
+
   val ConcaveHull = f("concave_hull", FunctionName("concave_hull"), Map("a" -> GeospatialLike, "b" -> RealNumLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon), isAggregate = true)(NoDocs)
   val ConvexHull = Function(
