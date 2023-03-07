@@ -26,7 +26,7 @@ object TestTypeInfo extends TypeInfo2[TestType, TestValue] {
       def literalBoolean(b: Boolean, position: Position): Expr[MT] =
         LiteralValue[MT](TestBoolean(b))(new AtomicPositionInfo(position))
 
-      def potentialExprs(l: ast.Literal): Seq[Expr[MT]] =
+      def potentialExprs(l: ast.Literal, currentPrimaryTable: Option[CanonicalName]): Seq[Expr[MT]] =
         l match {
           case ast.StringLiteral(s) =>
             val asInt =

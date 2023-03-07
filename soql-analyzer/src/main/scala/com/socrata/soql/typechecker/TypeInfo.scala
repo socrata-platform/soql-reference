@@ -47,7 +47,7 @@ abstract class TypeInfoMetaProjection[MT <: analyzer2.MetaTypes] extends analyze
 
   val hasType: analyzer2.HasType[CV, CT]
 
-  def potentialExprs(l: Literal): Seq[analyzer2.Expr[MT]]
+  def potentialExprs(l: Literal, currentPrimaryTable: Option[analyzer2.CanonicalName]): Seq[analyzer2.Expr[MT]]
   def literalBoolean(b: Boolean, position: Position): analyzer2.Expr[MT]
 
   def boolType: CT

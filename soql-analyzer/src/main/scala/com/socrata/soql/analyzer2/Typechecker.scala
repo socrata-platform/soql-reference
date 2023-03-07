@@ -11,6 +11,7 @@ import com.socrata.soql.typechecker.{TypeInfoMetaProjection, FunctionInfo, Funct
 class Typechecker[MT <: MetaTypes](
   scope: MT#ResourceNameScope,
   canonicalName: Option[CanonicalName],
+  primaryTable: Option[CanonicalName],
   env: Environment[MT],
   namedExprs: Map[ColumnName, Expr[MT]],
   udfParams: Map[HoleName, Position => Expr[MT]],
@@ -141,7 +142,7 @@ class Typechecker[MT <: MetaTypes](
             Right(Seq(PhysicalColumn[MT](tableLabel, tableCanonicalName, column, typ)(new AtomicPositionInfo(col.position))))
         }
       case l: ast.Literal =>
-        squash(typeInfo.potentialExprs(l), l.position)
+        squash(typeInfo.potentialExprs(l, primaryTable), l.position)
       case hole@ast.Hole.UDF(name) =>
         udfParams.get(name) match {
           case Some(expr) => Right(Seq(expr(hole.position)))
@@ -180,7 +181,13 @@ class Typechecker[MT <: MetaTypes](
 
     val typedWindow: Option[(Seq[Expr], Seq[OrderBy], Seq[ast.Expression])] = window.map { w =>
       val typedPartitions = w.partitions.map(finalCheck(_, None))
-      val typedOrderings = w.orderings.map(ob => OrderBy(finalCheck(ob.expression, Some(typeInfo.boolType)), ob.ascending, ob.nullLast))
+      val typedOrderings = w.orderings.map { ob =>
+        val typedExpr = finalCheck(ob.expression, None)
+        if(!typeInfo.isOrdered(typedExpr.typ)) {
+          return Left(error(UnorderedOrderBy(typeInfo.typeNameFor(typedExpr.typ)), ob.expression.position))
+        }
+        OrderBy(typedExpr, ob.ascending, ob.nullLast)
+      }
       (typedPartitions, typedOrderings, w.frames)
     }
 
