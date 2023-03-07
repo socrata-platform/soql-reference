@@ -215,7 +215,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         for(TableDescription.Ordering(col, _ascending) <- desc.ordering) {
           val typ = desc.schema(col).typ
           if(!typeInfo.isOrdered(typ)) {
-            throw Bail(SoQLAnalyzerError.TextualError(srn.scope, Some(desc.canonicalName), NoPosition, SoQLAnalyzerError.AnalysisError.UnorderedOrderBy(typeInfo.typeNameFor(typ))))
+            throw Bail(SoQLAnalyzerError.TextualError(srn.scope, Some(desc.canonicalName), NoPosition, SoQLAnalyzerError.AnalysisError.TypecheckError.UnorderedOrderBy(typeInfo.typeNameFor(typ))))
           }
         }
 
@@ -327,7 +327,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       def invalidGroupBy(typ: CT, position: Position): Nothing =
         error(Error.InvalidGroupBy(typeInfo.typeNameFor(typ)), position)
       def unorderedOrderBy(typ: CT, position: Position): Nothing =
-        error(Error.UnorderedOrderBy(typeInfo.typeNameFor(typ)), position)
+        error(Error.TypecheckError.UnorderedOrderBy(typeInfo.typeNameFor(typ)), position)
       def parametersForNonUdf(name: ResourceName, position: Position): Nothing =
         error(Error.ParametersForNonUDF(name), position)
       def addScopeError(e: AddScopeError, position: Position): Nothing =

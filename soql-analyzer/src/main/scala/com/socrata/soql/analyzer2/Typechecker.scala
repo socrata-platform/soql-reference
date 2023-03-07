@@ -181,7 +181,13 @@ class Typechecker[MT <: MetaTypes](
 
     val typedWindow: Option[(Seq[Expr], Seq[OrderBy], Seq[ast.Expression])] = window.map { w =>
       val typedPartitions = w.partitions.map(finalCheck(_, None))
-      val typedOrderings = w.orderings.map(ob => OrderBy(finalCheck(ob.expression, Some(typeInfo.boolType)), ob.ascending, ob.nullLast))
+      val typedOrderings = w.orderings.map { ob =>
+        val typedExpr = finalCheck(ob.expression, None)
+        if(!typeInfo.isOrdered(typedExpr.typ)) {
+          return Left(error(UnorderedOrderBy(typeInfo.typeNameFor(typedExpr.typ)), ob.expression.position))
+        }
+        OrderBy(typedExpr, ob.ascending, ob.nullLast)
+      }
       (typedPartitions, typedOrderings, w.frames)
     }
 

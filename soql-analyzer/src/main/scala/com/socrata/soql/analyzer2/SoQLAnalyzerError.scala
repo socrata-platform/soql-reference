@@ -176,7 +176,6 @@ object SoQLAnalyzerError {
             and("distinct-not-prefix-of-order-by", singletonCodec(DistinctNotPrefixOfOrderBy)).
             and("order-by-must-be-selected-when-distinct", singletonCodec(OrderByMustBeSelectedWhenDistinct)).
             and("invalid-group-by", AutomaticJsonCodecBuilder[InvalidGroupBy]).
-            and("unordered-order-by", AutomaticJsonCodecBuilder[UnorderedOrderBy]).
             and("parameters-for-non-udf", AutomaticJsonCodecBuilder[ParametersForNonUDF]).
             and("table-alias-already-exists", AutomaticJsonCodecBuilder[TableAliasAlreadyExists]).
             and("from-required", singletonCodec(FromRequired)).
@@ -212,7 +211,6 @@ object SoQLAnalyzerError {
     case object DistinctNotPrefixOfOrderBy extends AnalysisError("When both DISTINCT ON and ORDER BY are present, the DISTINCT BY's expression list must be a prefix of the ORDER BY") with Singleton
     case object OrderByMustBeSelectedWhenDistinct extends AnalysisError("When both DISTINCT and ORDER BY are present, all columns in ORDER BY must also be selected") with Singleton
     case class InvalidGroupBy(typ: TypeName) extends AnalysisError(s"Cannot GROUP BY an expression of type ${typ}")
-    case class UnorderedOrderBy(typ: TypeName) extends AnalysisError(s"Cannot ORDER BY or DISTINCT ON an expression of type ${typ}")
     case class ParametersForNonUDF(nonUdf: ResourceName) extends AnalysisError("Cannot provide parameters to a non-UDF")
     case class TableAliasAlreadyExists(alias: ResourceName) extends AnalysisError(s"Table alias ${alias} already exists")
     case object FromRequired extends AnalysisError("FROM required in a query without an implicit context") with Singleton
@@ -242,12 +240,17 @@ object SoQLAnalyzerError {
           and("requires-window", AutomaticJsonCodecBuilder[RequiresWindow]).
           and("non-aggregate", AutomaticJsonCodecBuilder[NonAggregate]).
           and("non-window-function", AutomaticJsonCodecBuilder[NonWindowFunction]).
-          and("groups-requires-order-by", singletonCodec(GroupsRequiresOrderBy))
+          and("groups-requires-order-by", singletonCodec(GroupsRequiresOrderBy)).
+          and("unordered-order-by", AutomaticJsonCodecBuilder[UnorderedOrderBy])
 
 
       implicit val dataCodec = new DataCodec[TypecheckError] {
         private[SoQLAnalyzerError] val exactlyCodec = augment(baseDataCodec).build
       }
+
+      case class UnorderedOrderBy(
+        typ: TypeName
+      ) extends AnalysisError(s"Cannot ORDER BY or DISTINCT ON an expression of type ${typ}") with TypecheckError
 
       case class NoSuchColumn(
         qualifier: Option[ResourceName],
