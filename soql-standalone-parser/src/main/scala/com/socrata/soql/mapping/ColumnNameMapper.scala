@@ -22,9 +22,14 @@ class ColumnNameMapper(rootSchemas: Map[String, Map[ColumnName, ColumnName]]) {
       case PipeQuery(l, r) =>
         val nl = mapSelects(l, true)
         // there is no root past the pipe, so removing "_" mapping from schemas
-        val mapper = new ColumnNameMapper(rootSchemas - "_")
-        val nr = mapper.mapSelects(r, true)
-        PipeQuery(nl, nr)
+        val pipeRootSchemas = rootSchemas - "_"
+        if (pipeRootSchemas.nonEmpty) {
+          val mapper = new ColumnNameMapper(rootSchemas - "_")
+          val nr = mapper.mapSelects(r, true)
+          PipeQuery(nl, nr)
+        } else {
+          PipeQuery(nl, r)
+        }
       case Compound(op, l, r) =>
         val nl = mapSelects(l, generateAliases)
         val nr = mapSelects(r, generateAliases)
