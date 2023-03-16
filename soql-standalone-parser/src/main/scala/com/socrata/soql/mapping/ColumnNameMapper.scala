@@ -24,7 +24,7 @@ class ColumnNameMapper(rootSchemas: Map[String, Map[ColumnName, ColumnName]]) {
         // there is no root past the pipe, so removing "_" mapping from schemas
         val pipeRootSchemas = rootSchemas - "_"
         if (pipeRootSchemas.nonEmpty) {
-          val mapper = new ColumnNameMapper(rootSchemas - "_")
+          val mapper = new ColumnNameMapper(pipeRootSchemas)
           val nr = mapper.mapSelects(r, true)
           PipeQuery(nl, nr)
         } else {
