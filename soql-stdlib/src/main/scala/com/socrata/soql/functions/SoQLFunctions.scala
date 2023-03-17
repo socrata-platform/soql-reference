@@ -165,7 +165,7 @@ object SoQLFunctions {
     "Return a bounding box that encloses a set of geometries")
 
   val ConcaveHull = f("concave_hull", FunctionName("concave_hull"), Map("a" -> GeospatialLike, "b" -> RealNumLike),
-    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon), isAggregate = true)(NoDocs)
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon))(NoDocs)
   val ConvexHull = Function(
     "convex_hull",
     FunctionName("convex_hull"),
@@ -173,15 +173,15 @@ object SoQLFunctions {
     Seq(VariableType("a")),
     Seq.empty,
     FixedType(SoQLMultiPolygon),
-    isAggregate = true,
+    isAggregate = false,
     needsWindow = false,
     """
     Return the minimum convex geometry that encloses all of the geometries within a set
 
     The convex_hull(...) generates a polygon that represents the minimum convex geometry that
-    can encompass a set of points or geometries. All of the points in the set will either
-    represent vertexes of that polygon, or will be enclosed within it, much like if you were
-    to take a rubber band and snap it around the set of points.
+    can encompass a geometry. All of the points in the geometry will either represent vertexes
+    of that polygon, or will be enclosed within it, much like if you were to take a rubber
+    band and snap it around the geometry's points.
     """,
     Seq()
   )
