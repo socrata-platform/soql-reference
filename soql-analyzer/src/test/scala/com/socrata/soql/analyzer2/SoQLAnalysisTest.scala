@@ -655,6 +655,58 @@ select count(*), 1 as x |> select x
     analysis.addLimitOffset(limit = None, offset = Some(500)).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("inline parameters - all complex") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "udf") -> U(0, "select 1 from @single_row where ?name is null and ?count = 5", "name" -> TestText, "count" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select * join @udf(text + 'gnu', num + 2) on true")
+    val simplified = analysis.inlineTrivialParameters(isLiteralTrue)
+    simplified.statement must be (isomorphicTo(analysis.statement))
+  }
+
+  test("inline parameters - one complex") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "udf") -> U(0, "select 1 from @single_row where ?name is null and ?count = 5", "name" -> TestText, "count" -> TestNumber)
+    )
+
+    val tf2 = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "udf") -> U(0, "select 1 from @single_row where 'gnu' is null and ?count = 5", "count" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select * join @udf('gnu', num + 2) on true").inlineTrivialParameters(isLiteralTrue)
+    val expected = analyze(tf2, "twocol", "select * join @udf(num + 2) on true")
+
+    analysis.statement must be (isomorphicTo(expected.statement))
+  }
+
+  test("inline parameters - no complex") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "udf") -> U(0, "select 1 as one from @single_row where ?name is null and ?count = 5", "name" -> TestText, "count" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select *, @udf.one join @udf('gnu', num) on true").inlineTrivialParameters(isLiteralTrue)
+    val expected = analyze(tf, "twocol", "select *, @udf.one join lateral (select 1 as one from @single_row where 'gnu' is null and num = 5) as @udf on true")
+
+    analysis.statement must be (isomorphicTo(expected.statement))
+  }
+
+  test("inline parameters - no complex and interior union") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "udf") -> U(0, "(select 1 as one from @single_row where ?name is null and ?count = 5) union (select 2 as two from @single_row where ?name = 'haha' and ?count = 6)", "name" -> TestText, "count" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select *, @udf.one join @udf('gnu', num) on true").inlineTrivialParameters(isLiteralTrue)
+    val expected = analyze(tf, "twocol", "select *, @udf.one join lateral ((select 1 as one from @single_row where 'gnu' is null and num = 5) union (select 2 as two from @single_row where 'gnu' = 'haha' and num = 6)) as @udf on true")
+
+    analysis.statement must be (isomorphicTo(expected.statement))
+  }
+
   test("simple (de)serialization") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
