@@ -30,6 +30,8 @@ object TestFunctions {
 
   val And = mf("and", SpecialFunctions.Operator("and"), Seq(TestBoolean, TestBoolean), Seq.empty, TestBoolean)
 
+  val IsNull = f("is null", SpecialFunctions.IsNull, Map(), Seq(VariableType("a")), Seq.empty, FixedType(TestBoolean))
+
   val Eq = f("=", SpecialFunctions.Operator("="), Map("a" -> Equatable), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
 
   val RowNumber = mf("row_number", FunctionName("row_number"), Nil, Nil, TestNumber, needsWindow = true)

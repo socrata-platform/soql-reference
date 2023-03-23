@@ -36,6 +36,12 @@ trait TestHelper { this: Assertions =>
 
   def tableFinder(items: ((Int, String), Thing[Int, TestType])*) = new MockTableFinder[TestMT](items.toMap)
 
+  def isLiteralTrue(e: Expr[TestMT]) =
+    e match {
+      case LiteralValue(TestBoolean(true)) => true
+      case _ => false
+    }
+
   val analyzer = new SoQLAnalyzer[TestMT](TestTypeInfo, TestFunctionInfo)
   val systemColumnPreservingAnalyzer = analyzer.preserveSystemColumns { (_, expr) =>
     expr.typ match {

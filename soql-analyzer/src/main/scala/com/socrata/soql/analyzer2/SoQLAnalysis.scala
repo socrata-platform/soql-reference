@@ -12,6 +12,25 @@ class SoQLAnalysis[MT <: MetaTypes] private (
   private[analyzer2] def this(labelProvider: LabelProvider, statement: Statement[MT]) =
     this(labelProvider, statement, false)
 
+  /** For rewrite trivial table parameters ("trivial" means "column
+    * references and literals") so that they're inlined into the table
+    * query rather than being held out-of-line in a temporary VALUES
+    * form.  If all such table parameters are eliminated, this also
+    * removes an intermediate LATERAL JOIN.
+    *
+    * Technically, this does this inlining for anything that has the
+    * same shape as an expanded table-function, but that's still a
+    * valid transformation. */
+  def inlineTrivialParameters(isLiteralTrue: Expr[MT] => Boolean): SoQLAnalysis[MT] = {
+    withoutSelectListReferences { self =>
+      val nlp = self.labelProvider.clone()
+      self.copy(
+        labelProvider = nlp,
+        statement = rewrite.InlineTrivialParameters(isLiteralTrue, self.statement)
+      )
+    }
+  }
+
   /** Rewrite the analysis plumbing through enough information to
     * preserve table-ordering (except across joins and aggregates,
     * which of course destroy ordering). */
