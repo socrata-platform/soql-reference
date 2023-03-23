@@ -19,7 +19,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
 
   type ExprReplaces = Map[(AutoTableLabel, AutoColumnLabel), Expr]
 
-  private def matchingSelects(outerSelectList: OrderedMap[AutoColumnLabel, NamedExpr], innerSelectList: OrderedMap[AutoColumnLabel, NamedExpr], innerLabel: AutoTableLabel): Boolean = {
+  private def matchingSelects(outerSelectList: OrderedMap[AutoColumnLabel, NamedExpr], innerSelectList: OrderedMap[AutoColumnLabel, NameEntry[CT]], innerLabel: AutoTableLabel): Boolean = {
     if(outerSelectList.size != innerSelectList.size) {
       return false
     }
@@ -27,7 +27,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
     outerSelectList.iterator.zip(innerSelectList.iterator).forall { case ((_, e), (c, cExpr)) =>
       e.expr match {
         case VirtualColumn(tbl, col, typ) if tbl == innerLabel && col == c =>
-          assert(typ == cExpr.expr.typ)
+          assert(typ == cExpr.typ)
           true
         case _ =>
           false
@@ -40,7 +40,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
     val valuesColumnLabels: OrderedSet[AutoColumnLabel],
     val valuesExprs: NonEmptySeq[Expr],
     val valuesLabel: AutoTableLabel,
-    val subselect: Select,
+    val subselect: Statement,
     val subselectLabel: AutoTableLabel,
     val trueExpr: Expr
   )
@@ -61,7 +61,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
               None
             ),
             FromStatement(
-              subselect: Select,
+              subselect,
               subselectLabel,
               None,
               None
@@ -76,7 +76,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
           None,
           None,
           hint
-        ) if hint.isEmpty && isLiteralTrue(on) && matchingSelects(selectList, subselect.selectList, subselectLabel) && values.values.tail.isEmpty =>
+        ) if hint.isEmpty && isLiteralTrue(on) && matchingSelects(selectList, subselect.schema, subselectLabel) && values.values.tail.isEmpty =>
           Some(new Candidate(selectList, values.labels, values.values.head, valuesLabel, subselect, subselectLabel, on))
         case _ =>
           None
@@ -104,7 +104,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
     }
   }
 
-  def rewriteSelect(select: Select, exprReplaces: ExprReplaces): Select = {
+  def rewriteSelect(select: Select, exprReplaces: ExprReplaces): Statement = {
     select match {
       case Candidate(c) =>
         // Ok, it's shaped right for this optimization.
@@ -125,8 +125,8 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
         }
 
         // ..and use that to rewrite the subselect.
-        val newSubselect = rewriteSelect(subselect, newExprReplaces)
-        assert(newSubselect.selectList.size == selectList.size)
+        val newSubselect = rewriteStatement(subselect, newExprReplaces)
+        assert(newSubselect.schema.size == selectList.size)
 
         // We'll only be keeping columns in the `values` form which
         // weren't trivial.
@@ -140,10 +140,11 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
             // we'll want to do some relabelling - specifically, we'll
             // be relabelling the inner subselect's columns to use the
             // outer select's labels.
-            val newSelectList = OrderedMap() ++ newSubselect.selectList.iterator.zip(selectList.iterator).map { case ((_label, expr), (correctedLabel, _expr)) =>
-              correctedLabel -> expr
+            val newLabels = OrderedMap() ++ newSubselect.schema.iterator.zip(selectList.iterator).map { case ((oldLabel, ent), (correctedLabel, expr)) =>
+              assert(expr.expr.typ == ent.typ)
+              oldLabel -> correctedLabel
             }
-            newSubselect.copy(selectList = newSelectList)
+            rewriteOutputSchemaLabels(newSubselect, newLabels)
           case Some(newValuesExprs) =>
             Select(
               Distinctiveness.Indistinct(),
@@ -201,6 +202,19 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
           search,
           hint
         )
+    }
+  }
+
+  def rewriteOutputSchemaLabels(statement: Statement, map: Map[AutoColumnLabel, AutoColumnLabel]): Statement = {
+    statement match {
+      case s: Select =>
+        s.copy(selectList = OrderedMap() ++ s.selectList.iterator.map { case (oldLabel, expr) => map(oldLabel) -> expr })
+      case v: Values =>
+        v.copy(labels = OrderedSet() ++ v.labels.iterator.map { oldLabel => map(oldLabel) })
+      case cte: CTE =>
+        cte.copy(useQuery = rewriteOutputSchemaLabels(cte.useQuery, map))
+      case ct: CombinedTables =>
+        ct.copy(left = rewriteOutputSchemaLabels(ct.left, map))
     }
   }
 

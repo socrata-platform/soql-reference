@@ -695,6 +695,18 @@ select count(*), 1 as x |> select x
     analysis.statement must be (isomorphicTo(expected.statement))
   }
 
+  test("inline parameters - no complex and interior union") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "udf") -> U(0, "(select 1 as one from @single_row where ?name is null and ?count = 5) union (select 2 as two from @single_row where ?name = 'haha' and ?count = 6)", "name" -> TestText, "count" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select *, @udf.one join @udf('gnu', num) on true").inlineTrivialParameters(isLiteralTrue)
+    val expected = analyze(tf, "twocol", "select *, @udf.one join lateral ((select 1 as one from @single_row where 'gnu' is null and num = 5) union (select 2 as two from @single_row where 'gnu' = 'haha' and num = 6)) as @udf on true")
+
+    analysis.statement must be (isomorphicTo(expected.statement))
+  }
+
   test("simple (de)serialization") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
