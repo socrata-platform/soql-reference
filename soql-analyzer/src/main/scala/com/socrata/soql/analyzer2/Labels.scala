@@ -6,7 +6,7 @@ import com.rojoma.json.v3.util.{SimpleHierarchyEncodeBuilder, SimpleHierarchyDec
 
 import com.socrata.prettyprint.prelude._
 
-import com.socrata.soql.analyzer2.serialization.{ReadBuffer, WriteBuffer, Readable, Writable}
+import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer, Readable, Writable}
 
 class LabelProvider extends Cloneable {
   private var tables = 0
@@ -65,7 +65,7 @@ object LabelProvider {
   }
 }
 
-final class AutoTableLabel private[analyzer2] (private val name: Int) {
+final class AutoTableLabel private[analyzer2] (val name: Int) {
   override def toString = s"t${LabelProvider.subscript(name)}"
 
   override def hashCode = name.hashCode
@@ -110,7 +110,7 @@ sealed abstract class ColumnLabel[+T] {
   def debugDoc(implicit ev: HasDoc[T]): Doc[Nothing]
 }
 
-final class AutoColumnLabel private[analyzer2] (private val name: Int) extends ColumnLabel[Nothing] {
+final class AutoColumnLabel private[analyzer2] (val name: Int) extends ColumnLabel[Nothing] {
   override def toString = s"c${LabelProvider.subscript(name)}"
 
   def debugDoc(implicit ev: HasDoc[Nothing]): Doc[Nothing] = Doc(toString)

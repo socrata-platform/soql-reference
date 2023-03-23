@@ -5,7 +5,7 @@ import scala.collection.compat.immutable.LazyList
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName}
 import com.socrata.soql.functions.MonomorphicFunction
@@ -55,6 +55,9 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
     values.exists(_.exists(_.contains(e)))
 
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]) = this
+
+  private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName] =
+    set
 
   private[analyzer2] def realTables = Map.empty[AutoTableLabel, DatabaseTableName]
 

@@ -5,7 +5,7 @@ import scala.util.parsing.input.Position
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: PhysicalColumn[MT] =>
   type Self[MT <: MetaTypes] = PhysicalColumn[MT]
@@ -18,8 +18,9 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
 
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean = {
     that match {
-      case PhysicalColumn(thatTable, thatColumn, thatTyp) =>
+      case PhysicalColumn(thatTable, thatTableCanonicalName, thatColumn, thatTyp) =>
         this.typ == that.typ &&
+          this.tableCanonicalName == thatTableCanonicalName &&
           state.physicalTableLeft(this.table) == state.physicalTableRight(thatTable) &&
           state.tryAssociate(Some(this.table), this.column, Some(thatTable), thatColumn)
       case _ =>
@@ -30,6 +31,7 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     PhysicalColumn(
       table = table,
+      tableCanonicalName = tableCanonicalName,
       column = state.convert(table, column),
       typ = state.changesOnlyLabels.convertCT(typ)
     )(position)
@@ -52,6 +54,7 @@ trait OPhysicalColumnImpl { this: PhysicalColumn.type =>
   implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#ColumnType], writableDTN : Writable[MT#DatabaseTableNameImpl], writableDCN : Writable[MT#DatabaseColumnNameImpl]): Writable[PhysicalColumn[MT]] = new Writable[PhysicalColumn[MT]] {
     def writeTo(buffer: WriteBuffer, c: PhysicalColumn[MT]): Unit = {
       buffer.write(c.table)
+      buffer.write(c.tableCanonicalName)
       buffer.write(c.column)
       buffer.write(c.typ)
       buffer.write(c.position)
@@ -62,6 +65,7 @@ trait OPhysicalColumnImpl { this: PhysicalColumn.type =>
     def readFrom(buffer: ReadBuffer): PhysicalColumn[MT] = {
       PhysicalColumn(
         table = buffer.read[AutoTableLabel](),
+        tableCanonicalName = buffer.read[CanonicalName](),
         column = buffer.read[DatabaseColumnName](),
         typ = buffer.read[CT]()
       )(

@@ -30,6 +30,7 @@ trait TestHelper { this: Assertions =>
   def hn(n: String) = HoleName(n)
   def dcn(n: String) = DatabaseColumnName(n)
   def dtn(n: String) = DatabaseTableName(n)
+  def canon(n: String) = CanonicalName(n)
 
   def xtest(s: String)(f: => Any): Unit = {}
 

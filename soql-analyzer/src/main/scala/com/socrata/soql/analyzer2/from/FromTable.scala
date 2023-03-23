@@ -6,7 +6,7 @@ import scala.collection.compat.immutable.LazyList
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
@@ -18,13 +18,13 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   def find(predicate: Expr[MT] => Boolean) = None
   def contains(e: Expr[MT]): Boolean = false
 
-  def unique = primaryKeys.to(LazyList).map(_.map { dcn => PhysicalColumn[MT](label, dcn, columns(dcn).typ)(AtomicPositionInfo.None) })
+  def unique = primaryKeys.to(LazyList).map(_.map { dcn => PhysicalColumn[MT](label, canonicalName, dcn, columns(dcn).typ)(AtomicPositionInfo.None) })
 
   lazy val resourceName = Some(definiteResourceName)
 
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = Map.empty
 
-  private[analyzer2] override final val scope: Scope[MT] = new Scope.Physical[MT](tableName, label, columns)
+  private[analyzer2] override final val scope: Scope[MT] = new Scope.Physical[MT](tableName, canonicalName, label, columns)
 
   private[analyzer2] def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
     (tableName.debugDoc(ev.tableNameImpl) ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
@@ -46,8 +46,9 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   private[analyzer2] final def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
-      case FromTable(thatTableName, thatResourceName, thatAlias, thatLabel, thatColumns, thatPrimaryKeys) =>
+      case FromTable(thatTableName, thatCanonicalName, thatResourceName, thatAlias, thatLabel, thatColumns, thatPrimaryKeys) =>
         this.tableName == thatTableName &&
+          this.canonicalName == thatCanonicalName &&
           // don't care about aliases
           state.tryAssociate(this.label, thatLabel) &&
           this.columns.size == thatColumns.size &&
@@ -61,6 +62,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
         false
     }
 
+  private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName] = set + tableName
   private[analyzer2] def realTables = Map(label -> tableName)
 
   private[analyzer2] def reAlias(newAlias: Option[ResourceName]): Self[MT] =
@@ -82,6 +84,7 @@ trait OFromTableImpl { this: FromTable.type =>
   implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#ResourceNameScope], ctWritable: Writable[MT#ColumnType], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[FromTable[MT]] = new Writable[FromTable[MT]] {
     def writeTo(buffer: WriteBuffer, from: FromTable[MT]): Unit = {
       buffer.write(from.tableName)
+      buffer.write(from.canonicalName)
       buffer.write(from.definiteResourceName)
       buffer.write(from.alias)
       buffer.write(from.label)
@@ -94,6 +97,7 @@ trait OFromTableImpl { this: FromTable.type =>
     def readFrom(buffer: ReadBuffer): FromTable[MT] = {
       FromTable(
         tableName = buffer.read[DatabaseTableName](),
+        canonicalName = buffer.read[CanonicalName](),
         definiteResourceName = buffer.read[ScopedResourceName[RNS]](),
         alias = buffer.read[Option[ResourceName]](),
         label = buffer.read[AutoTableLabel](),

@@ -9,7 +9,7 @@ import com.socrata.prettyprint.prelude._
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.analyzer2
 
 import DocUtils._
@@ -38,6 +38,7 @@ sealed abstract class From[MT <: MetaTypes] extends LabelUniverse[MT] {
 
   private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit
 
+  private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName]
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean
@@ -134,6 +135,7 @@ object AtomicFrom extends from.OAtomicFromImpl
 
 case class FromTable[MT <: MetaTypes](
   tableName: types.DatabaseTableName[MT],
+  canonicalName: CanonicalName,
   definiteResourceName: types.ScopedResourceName[MT],
   alias: Option[ResourceName],
   label: AutoTableLabel,

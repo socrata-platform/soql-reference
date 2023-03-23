@@ -6,7 +6,7 @@ import scala.collection.compat.immutable.LazyList
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
@@ -85,6 +85,12 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
     reduce[Map[AutoTableLabel, Set[ColumnLabel]]](
       _.columnReferences,
       (acc, join) => acc.mergeWith(join.right.columnReferences)(_ ++ _).mergeWith(join.on.columnReferences)(_ ++ _)
+    )
+
+  private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName] =
+    reduce[Set[DatabaseTableName]](
+      _.doAllTables(set),
+      (acc, j) => j.right.doAllTables(acc)
     )
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName] = {

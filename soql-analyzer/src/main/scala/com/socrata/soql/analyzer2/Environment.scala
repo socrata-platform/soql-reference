@@ -7,7 +7,7 @@ import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, AutomaticJsonDecodeB
 
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName}
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 case class LabelEntry[MT <: MetaTypes](label: types.ColumnLabel[MT], @JsonKey("type") typ: types.ColumnType[MT])
 object LabelEntry {
@@ -91,6 +91,7 @@ object Scope {
 
   final class Physical[MT <: MetaTypes] (
     val tableName: types.DatabaseTableName[MT],
+    val tableCanonicalName: CanonicalName,
     val label: AutoTableLabel,
     schema: OrderedMap[types.DatabaseColumnName[MT], types.NameEntry[MT]]
   ) extends Scope[MT] {
@@ -154,7 +155,7 @@ object Environment {
   sealed abstract class LookupResult[MT <: MetaTypes]
   object LookupResult {
     case class Virtual[MT <: MetaTypes](table: AutoTableLabel, column: AutoColumnLabel, typ: MT#ColumnType) extends LookupResult[MT]
-    case class Physical[MT <: MetaTypes](tableName: types.DatabaseTableName[MT], table: AutoTableLabel, column: types.DatabaseColumnName[MT], typ: types.ColumnType[MT]) extends LookupResult[MT]
+    case class Physical[MT <: MetaTypes](tableName: types.DatabaseTableName[MT], tableCanonicalName: CanonicalName, table: AutoTableLabel, column: types.DatabaseColumnName[MT], typ: types.ColumnType[MT]) extends LookupResult[MT]
   }
 
   private class EmptyEnvironment[MT <: MetaTypes](parent: Option[Environment[MT]]) extends Environment(parent) with MetaTypeHelper[MT] {
@@ -186,7 +187,7 @@ object Environment {
           }
         case physical: Scope.Physical[MT] =>
           physical.schemaByName.get(name).map { entry =>
-            LookupResult.Physical[MT](physical.tableName, physical.label, entry.label, entry.typ)
+            LookupResult.Physical[MT](physical.tableName, physical.tableCanonicalName, physical.label, entry.label, entry.typ)
           }
       }
 
@@ -212,7 +213,7 @@ object Environment {
             }
           case physical: Scope.Physical[MT] =>
             physical.schemaByName.get(name).map { entry =>
-              LookupResult.Physical[MT](physical.tableName, physical.label, entry.label, entry.typ)
+              LookupResult.Physical[MT](physical.tableName, physical.tableCanonicalName, physical.label, entry.label, entry.typ)
             }
         }
       }

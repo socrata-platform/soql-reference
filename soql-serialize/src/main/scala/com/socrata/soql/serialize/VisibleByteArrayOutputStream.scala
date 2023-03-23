@@ -1,4 +1,4 @@
-package com.socrata.soql.analyzer2.serialization
+package com.socrata.soql.serialize
 
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer

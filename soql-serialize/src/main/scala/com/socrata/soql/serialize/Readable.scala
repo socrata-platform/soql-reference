@@ -1,4 +1,4 @@
-package com.socrata.soql.analyzer2.serialization
+package com.socrata.soql.serialize
 
 import scala.util.parsing.input.{Position, NoPosition}
 
@@ -14,8 +14,13 @@ trait Readable[T] {
   protected def fail(msg: String): Nothing = throw new IOException(msg)
 }
 
-object Readable {
+object Readable extends `-impl`.ReadableTuples {
   private case class SimplePosition(line: Int, column: Int, lineContents: String) extends Position
+
+  implicit object unit extends Readable[Unit] {
+    def readFrom(buffer: ReadBuffer): Unit = {
+    }
+  }
 
   implicit object bool extends Readable[Boolean] {
     def readFrom(buffer: ReadBuffer): Boolean = {
@@ -89,6 +94,13 @@ object Readable {
         case other =>
           fail("Unknown position type " + other)
       }
+    }
+  }
+
+  implicit object bytes extends Readable[Array[Byte]] {
+    def readFrom(buffer: ReadBuffer): Array[Byte] = {
+      var n = buffer.data.readUInt32()
+      buffer.data.readRawBytes(n)
     }
   }
 
@@ -173,12 +185,6 @@ object Readable {
         case 1 => Some(buffer.read[T]())
         case other => fail("Invalid tag for option: " + other)
       }
-    }
-  }
-
-  implicit def pair[T: Readable, U: Readable] = new Readable[(T, U)] {
-    def readFrom(buffer: ReadBuffer): (T, U) = {
-      (buffer.read[T](), buffer.read[U]())
     }
   }
 }

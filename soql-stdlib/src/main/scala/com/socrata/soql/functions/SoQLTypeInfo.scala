@@ -33,7 +33,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
         def typeOf(cv: CV): CT = cv.typ
       }
 
-      def potentialExprs(l: ast.Literal) =
+      def potentialExprs(l: ast.Literal, primaryTable: Option[analyzer2.CanonicalName]) =
         l match {
           case ast.NullLiteral() => typeParameterUniverse.iterator.map(analyzer2.NullLiteral(_)(new analyzer2.AtomicPositionInfo(l.position))).toVector
           case ast.BooleanLiteral(b) => Seq(analyzer2.LiteralValue[MT](SoQLBoolean(b))(new analyzer2.AtomicPositionInfo(l.position)))
@@ -53,7 +53,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
               v <- conversion.test(s)
               expr <- conversion.exprs
             } {
-              results += expr(v, l.position).asInstanceOf[analyzer2.Expr[MT]] // SAFETY: CT and CV are the same, and that's all this cares about
+              results += expr(v, l.position, primaryTable).asInstanceOf[analyzer2.Expr[MT]] // SAFETY: CT and CV are the same, and that's all this cares about
             }
             results += analyzer2.FunctionCall[MT](textToBlobFunc, Seq(baseString))(new analyzer2.FuncallPositionInfo(l.position, NoPosition, NoPosition))
             results += analyzer2.FunctionCall[MT](textToPhotoFunc, Seq(baseString))(new analyzer2.FuncallPositionInfo(l.position, NoPosition, NoPosition))
@@ -112,6 +112,14 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
     analyzer2.LiteralValue[FakeMT](SoQLPolygon(p))(new analyzer2.AtomicPositionInfo(pos))
   private def textToMultiPolygonExpr(mp: MultiPolygon, pos: Position) =
     analyzer2.LiteralValue[FakeMT](SoQLMultiPolygon(mp))(new analyzer2.AtomicPositionInfo(pos))
+  private def textToRowIdExpr(rid: SoQLID, pos: Position, primaryTable: Option[analyzer2.CanonicalName]) = {
+    rid.provenance = primaryTable.map(_.name)
+    analyzer2.LiteralValue[FakeMT](rid)(new analyzer2.AtomicPositionInfo(pos))
+  }
+  private def textToRowVersionExpr(rv: SoQLVersion, pos: Position, primaryTable: Option[analyzer2.CanonicalName]) = {
+    rv.provenance = primaryTable.map(_.name)
+    analyzer2.LiteralValue[FakeMT](rv)(new analyzer2.AtomicPositionInfo(pos))
+  }
 
   private val textToFixedTimestampFunc = getMonomorphically(SoQLFunctions.TextToFixedTimestamp)
   private val textToFloatingTimestampFunc = getMonomorphically(SoQLFunctions.TextToFloatingTimestamp)
@@ -168,20 +176,26 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
     type TestResult
     def test(s: String): Option[TestResult]
     val functions: Seq[MonomorphicFunction[SoQLType]]
-    val exprs: Seq[(TestResult, Position) => analyzer2.Expr[FakeMT]]
+    val exprs: Seq[(TestResult, Position, Option[analyzer2.CanonicalName]) => analyzer2.Expr[FakeMT]]
   }
   private object Conversions {
     def apply[T](tst: String => Option[T], fs: Seq[MonomorphicFunction[SoQLType]], es: Seq[(T, Position) => analyzer2.Expr[FakeMT]]) = new Conversions {
       type TestResult = T
       def test(s: String) = tst(s)
       val functions = fs
-      val exprs = es
+      val exprs = es.map { ef => (t: T, pos: Position, cn: Option[analyzer2.CanonicalName]) => ef(t, pos) }
     }
     def simple(tst: String => Boolean, fs: Seq[MonomorphicFunction[SoQLType]], es: Seq[(SoQLText, Position) => analyzer2.Expr[FakeMT]]) = new Conversions {
       type TestResult = String
       def test(s: String) = if(tst(s)) Some(s) else None
       val functions = fs
-      val exprs = es.map { ef => (s: String, pos: Position) => ef(SoQLText(s), pos) }
+      val exprs = es.map { ef => (s: String, pos: Position, cn: Option[analyzer2.CanonicalName]) => ef(SoQLText(s), pos) }
+    }
+    def provenanced[T](tst: String => Option[T], fs: Seq[MonomorphicFunction[SoQLType]], es: Seq[(T, Position, Option[analyzer2.CanonicalName]) => analyzer2.Expr[FakeMT]]) = new Conversions {
+      type TestResult = T
+      def test(s: String) = tst(s)
+      val functions = fs
+      val exprs = es.map { ef => (t: T, pos: Position, cn: Option[analyzer2.CanonicalName]) => ef(t, pos, cn) }
     }
   }
 
@@ -191,8 +205,8 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
     Conversions(SoQLDate.StringRep.unapply(_), Seq(textToDateFunc), Seq(textToDateExpr _)),
     Conversions(SoQLTime.StringRep.unapply(_), Seq(textToTimeFunc), Seq(textToTimeExpr _)),
     Conversions(SoQLInterval.StringRep.unapply(_), Seq(textToIntervalFunc), Seq(textToIntervalExpr _)),
-    Conversions.simple(SoQLID.isPossibleId, Seq(textToRowIdFunc), Seq(funcExpr(textToRowIdFunc))),
-    Conversions.simple(SoQLVersion.isPossibleVersion, Seq(textToRowVersionFunc), Seq(funcExpr(textToRowVersionFunc))),
+    Conversions.provenanced(SoQLID.FormattedButUnobfuscatedStringRep.unapply(_), Seq(textToRowIdFunc), Seq(textToRowIdExpr _)),
+    Conversions.provenanced(SoQLVersion.FormattedButUnobfuscatedStringRep.unapply(_), Seq(textToRowVersionFunc), Seq(textToRowVersionExpr _)),
     Conversions.simple(isNumberLiteral, Seq(textToNumberFunc, textToMoneyFunc), Seq(textToNumberExpr, textToMoneyExpr)),
     Conversions(SoQLPoint.WktRep.unapply(_), Seq(textToPointFunc), Seq(textToPointExpr _)),
     Conversions(SoQLMultiPoint.WktRep.unapply(_), Seq(textToMultiPointFunc), Seq(textToMultiPointExpr _)),

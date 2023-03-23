@@ -11,7 +11,7 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ResourceName, ColumnName}
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 import DocUtils._
 
@@ -108,8 +108,8 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
 
   lazy val unique: LazyList[Seq[AutoColumnLabel]] = {
     val selectedColumns = selectList.iterator.collect {
-      case (columnLabel, NamedExpr(PhysicalColumn(table, col, typ), _name)) =>
-        PhysicalColumn(table, col, typ)(AtomicPositionInfo.None) -> columnLabel
+      case (columnLabel, NamedExpr(PhysicalColumn(table, tableCanonicalName, col, typ), _name)) =>
+        PhysicalColumn(table, tableCanonicalName, col, typ)(AtomicPositionInfo.None) -> columnLabel
       case (columnLabel, NamedExpr(VirtualColumn(table, col, typ), _name)) =>
         VirtualColumn(table, col, typ)(AtomicPositionInfo.None) -> columnLabel
     }.toMap[Column[MT], AutoColumnLabel]
@@ -154,6 +154,9 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
   }
 
   private[analyzer2] def realTables = from.realTables
+
+  private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName] =
+    from.doAllTables(set)
 
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) = {
     Select(

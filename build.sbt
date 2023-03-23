@@ -1,6 +1,6 @@
 lazy val root = (project in file(".")).
   settings(BuildSettings.buildSettings ++ Seq(publishArtifact := false)).
-  aggregate (soqlEnvironment, soqlParser, soqlAnalyzer, soqlTypes, soqlStdlib, soqlToy, soqlPack, soqlExplore)
+  aggregate (soqlEnvironment, soqlParser, soqlSerialize, soqlAnalyzer, soqlTypes, soqlStdlib, soqlToy, soqlPack)
 
 lazy val soqlEnvironment = (project in file("soql-environment")).
   settings(SoqlEnvironment.settings)
@@ -9,13 +9,17 @@ lazy val soqlParser = (project in file("soql-standalone-parser")).
   settings(SoqlParser.settings).
   dependsOn(soqlEnvironment, soqlTypes % "test")
 
+lazy val soqlSerialize = (project in file("soql-serialize")).
+  settings(SoqlSerialize.settings).
+  dependsOn(soqlEnvironment)
+
 lazy val soqlAnalyzer = (project in file("soql-analyzer")).
   settings(SoqlAnalyzer.settings).
-  dependsOn(soqlParser, soqlTypes % "test")
+  dependsOn(soqlParser, soqlSerialize, soqlTypes % "test")
 
 lazy val soqlTypes = (project in file("soql-types")).
   settings(SoqlTypes.settings).
-  dependsOn(soqlEnvironment)
+  dependsOn(soqlEnvironment, soqlSerialize)
 
 lazy val soqlStdlib = (project in file("soql-stdlib")).
   settings(SoqlStdlib.settings).

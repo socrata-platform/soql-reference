@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode}
 import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder}
 
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.environment.ResourceName
 
 case class ScopedResourceName[+RNS](scope: RNS, name: ResourceName)

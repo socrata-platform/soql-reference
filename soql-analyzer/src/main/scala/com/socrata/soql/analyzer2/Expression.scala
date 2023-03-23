@@ -9,7 +9,7 @@ import com.socrata.prettyprint.Pretty
 import com.socrata.soql.collection._
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.typechecker.FunctionInfo
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 import DocUtils._
 
@@ -119,6 +119,7 @@ sealed abstract class Column[MT <: MetaTypes] extends AtomicExpr[MT] { this: Has
 
 final case class PhysicalColumn[MT <: MetaTypes](
   table: AutoTableLabel,
+  tableCanonicalName: CanonicalName,
   column: types.DatabaseColumnName[MT],
   typ: MT#ColumnType
 )(

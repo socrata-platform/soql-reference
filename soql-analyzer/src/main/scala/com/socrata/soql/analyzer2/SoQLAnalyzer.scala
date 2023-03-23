@@ -10,7 +10,7 @@ import scala.util.parsing.input.{Position, NoPosition}
 import scala.collection.compat._
 import scala.collection.compat.immutable.LazyList
 
-import com.socrata.soql.{BinaryTree, Leaf, TrueOp, PipeQuery, UnionQuery, UnionAllQuery, IntersectQuery, IntersectAllQuery, MinusQuery, MinusAllQuery}
+import com.socrata.soql.{BinaryTree, Leaf, TrueOp, Compound, PipeQuery, UnionQuery, UnionAllQuery, IntersectQuery, IntersectAllQuery, MinusQuery, MinusAllQuery}
 import com.socrata.soql.parsing.SoQLPosition
 import com.socrata.soql.ast
 import com.socrata.soql.collection._
@@ -109,11 +109,11 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     }
   }
 
-  private class State(tableMap: TableMap, userParameters: UserParameters) {
+  private final class State(tableMap: TableMap, userParameters: UserParameters) {
     val labelProvider = new LabelProvider
 
     def analyze(scope: RNS, query: FoundTables.Query[MT]): Statement = {
-      val ctx = Ctx(scope, None, None, Environment.empty, Map.empty, Set.empty, true)
+      val ctx = Ctx(scope, None, None, primaryTableName(scope, query), Environment.empty, Map.empty, Set.empty, true)
       val from =
         query match {
           case FoundTables.Saved(rn) =>
@@ -130,12 +130,46 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       intoStatement(from)
     }
 
+    def primaryTableName(scope: RNS, query: FoundTables.Query[MT]): Option[CanonicalName] =
+      query match {
+        case FoundTables.Saved(rn) =>
+          primaryTableName(ScopedResourceName(scope, rn))
+        case FoundTables.InContext(rn, q, _, parameters) =>
+          primaryTableName(ScopedResourceName(scope, rn))
+        case FoundTables.InContextImpersonatingSaved(rn, q, _, parameters, impersonating) =>
+          primaryTableName(ScopedResourceName(scope, rn))
+        case FoundTables.Standalone(q, _, parameters) =>
+          primaryTableName(scope, q)
+      }
+
+    def primaryTableName(name: ScopedResourceName): Option[CanonicalName] =
+      tableMap.get(name).flatMap { desc =>
+        desc match {
+          case ds: TableDescription.Dataset[MT] => Some(ds.canonicalName)
+          case q: TableDescription.Query[MT] => primaryTableName(ScopedResourceName(q.scope, q.basedOn))
+          case f: TableDescription.TableFunction[MT] => primaryTableName(f.scope, f.parsed)
+        }
+      }
+
+    @tailrec
+    def primaryTableName(scope: RNS, tree: BinaryTree[ast.Select]): Option[CanonicalName] =
+      tree match {
+        case Leaf(select) => primaryTableName(scope, select)
+        case compound : Compound[ast.Select] => primaryTableName(scope, compound.left)
+      }
+
+    def primaryTableName(scope: RNS, select: ast.Select): Option[CanonicalName] =
+      select.from.flatMap { tn: TableName =>
+        val rn = ResourceName(tn.nameWithoutPrefix)
+        primaryTableName(ScopedResourceName(scope, rn))
+      }
+
     def intoStatement(from: AtomicFrom): Statement = {
       from match {
         case from: FromTable =>
           selectFromFrom(
             from.columns.map { case (label, NameEntry(name, typ)) =>
-              labelProvider.columnLabel() -> NamedExpr(PhysicalColumn[MT](from.label, label, typ)(AtomicPositionInfo.None), name)
+              labelProvider.columnLabel() -> NamedExpr(PhysicalColumn[MT](from.label, from.canonicalName, label, typ)(AtomicPositionInfo.None), name)
             },
             from
           )
@@ -170,6 +204,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       if(desc.ordering.isEmpty) {
         FromTable(
           desc.name,
+          desc.canonicalName,
           srn,
           None,
           labelProvider.tableLabel(),
@@ -180,12 +215,13 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         for(TableDescription.Ordering(col, _ascending) <- desc.ordering) {
           val typ = desc.schema(col).typ
           if(!typeInfo.isOrdered(typ)) {
-            throw Bail(SoQLAnalyzerError.TextualError(srn.scope, Some(desc.canonicalName), NoPosition, SoQLAnalyzerError.AnalysisError.UnorderedOrderBy(typeInfo.typeNameFor(typ))))
+            throw Bail(SoQLAnalyzerError.TextualError(srn.scope, Some(desc.canonicalName), NoPosition, SoQLAnalyzerError.AnalysisError.TypecheckError.UnorderedOrderBy(typeInfo.typeNameFor(typ))))
           }
         }
 
         val from = FromTable(
           desc.name,
+          desc.canonicalName,
           srn,
           None,
           labelProvider.tableLabel(),
@@ -202,7 +238,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               if(desc.hiddenColumns(name)) {
                 None
               } else {
-                Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, dcn, typ)(AtomicPositionInfo.None), name))
+                Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, from.canonicalName, dcn, typ)(AtomicPositionInfo.None), name))
               }
             },
             from,
@@ -211,7 +247,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             None,
             desc.ordering.map { case TableDescription.Ordering(dcn, ascending) =>
               val NameEntry(_, typ) = from.columns(dcn)
-              OrderBy(PhysicalColumn[MT](from.label, dcn, typ)(AtomicPositionInfo.None), ascending = ascending, nullLast = ascending)
+              OrderBy(PhysicalColumn[MT](from.label, from.canonicalName, dcn, typ)(AtomicPositionInfo.None), ascending = ascending, nullLast = ascending)
             },
             None,
             None,
@@ -240,7 +276,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             // so this is basedOn |> parsed
             // so we want to use "basedOn" as the implicit "from" for "parsed"
             val from = analyzeForFrom(ScopedResourceName(scope, basedOn), None, NoPosition /* Yes, actually NoPosition here */)
-            analyzeStatement(Ctx(scope, Some(name), Some(canonicalName), Environment.empty, Map.empty, hiddenColumns, true), parsed, Some(from))
+            analyzeStatement(Ctx(scope, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, true), parsed, Some(from))
           case TableDescription.TableFunction(_, _, _, _, _, _) =>
             parameterlessTableFunction(name.scope, canonicalName, name.name, position)
         }
@@ -262,6 +298,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       // analyzed.  This is used to look up unqualified user
       // parameters' values.
       canonicalName: Option[CanonicalName],
+      // The canonical name of the source of the primary underlying
+      // table being analyzed
+      primaryTableName: Option[CanonicalName],
       // The current environment in which possibly-qualified
       // column-names can be matched to input columns.
       enclosingEnv: Environment[MT],
@@ -288,7 +327,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       def invalidGroupBy(typ: CT, position: Position): Nothing =
         error(Error.InvalidGroupBy(typeInfo.typeNameFor(typ)), position)
       def unorderedOrderBy(typ: CT, position: Position): Nothing =
-        error(Error.UnorderedOrderBy(typeInfo.typeNameFor(typ)), position)
+        error(Error.TypecheckError.UnorderedOrderBy(typeInfo.typeNameFor(typ)), position)
       def parametersForNonUdf(name: ResourceName, position: Position): Nothing =
         error(Error.ParametersForNonUDF(name), position)
       def addScopeError(e: AddScopeError, position: Position): Nothing =
@@ -352,6 +391,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 scope = ctx.scope,
                 scopedResourceName = None,
                 canonicalName = None,
+                primaryTableName = ctx.primaryTableName,
                 enclosingEnv = ctx.enclosingEnv,
                 udfParams = ctx.udfParams,
                 hiddenColumns = Set.empty,
@@ -366,13 +406,14 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               scope = ctx.scope,
               scopedResourceName = None,
               canonicalName = None,
+              primaryTableName = ctx.primaryTableName,
               enclosingEnv = ctx.enclosingEnv,
               udfParams = ctx.udfParams,
               hiddenColumns = ctx.hiddenColumns,
               attemptToPreserveSystemColumns = false
             )
           val lhs = intoStatement(analyzeStatement(subCtx, other.left, from0))
-          val rhs = intoStatement(analyzeStatement(subCtx, other.right, None))
+          val rhs = intoStatement(analyzeStatement(subCtx.copy(primaryTableName = primaryTableName(ctx.scope, other.right)), other.right, None))
 
           if(lhs.schema.values.map(_.typ) != rhs.schema.values.map(_.typ)) {
             ctx.tableOpTypeMismatch(
@@ -403,9 +444,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     final def findSystemColumns(from: From): Iterable[(ColumnName, Column)] =
       from match {
         case j: Join => findSystemColumns(j.left)
-        case FromTable(tableName, _, _, tableLabel, columns, _) =>
+        case FromTable(tableName, tableCanonicalName, _, _, tableLabel, columns, _) =>
           columns.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>
-            name -> PhysicalColumn[MT](tableLabel, colLabel, typ)(AtomicPositionInfo.None)
+            name -> PhysicalColumn[MT](tableLabel, tableCanonicalName, colLabel, typ)(AtomicPositionInfo.None)
           }
         case FromStatement(stmt, tableLabel, _, _) =>
           stmt.schema.iterator.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>
@@ -786,6 +827,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             scope = ctx.scope,
             scopedResourceName = None,
             canonicalName = ctx.canonicalName,
+            primaryTableName = primaryTableName(ctx.scope, select),
             enclosingEnv = ctx.enclosingEnv,
             udfParams = ctx.udfParams,
             hiddenColumns = Set.empty,
@@ -841,6 +883,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 scope = udfScope,
                 scopedResourceName = None,
                 canonicalName = Some(udfCanonicalName),
+                primaryTableName = primaryTableName(udfScope, parsed),
                 enclosingEnv = Environment.empty,
                 udfParams = innerUdfParams,
                 hiddenColumns = hiddenColumns,
@@ -884,6 +927,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 scope = udfScope,
                 scopedResourceName = Some(srn),
                 canonicalName = Some(udfCanonicalName),
+                primaryTableName = primaryTableName(udfScope, parsed),
                 enclosingEnv = Environment.empty,
                 udfParams = Map.empty,
                 hiddenColumns = hiddenColumns,
@@ -902,9 +946,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       ctx: Ctx,
       expr: ast.Expression,
       namedExprs: Map[ColumnName, Expr],
-      expectedType: Option[CT],
-      ): Expr = {
-      val tc = new Typechecker(ctx.scope, ctx.canonicalName, ctx.enclosingEnv, namedExprs, ctx.udfParams, userParameters, typeInfo, functionInfo)
+      expectedType: Option[CT]
+    ): Expr = {
+      val tc = new Typechecker(ctx.scope, ctx.canonicalName, ctx.primaryTableName, ctx.enclosingEnv, namedExprs, ctx.udfParams, userParameters, typeInfo, functionInfo)
       tc(expr, expectedType) match {
         case Right(e) => e
         case Left(err) => augmentTypecheckException(err)

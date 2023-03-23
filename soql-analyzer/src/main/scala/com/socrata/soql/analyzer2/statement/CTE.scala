@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2.statement
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
@@ -23,6 +23,9 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
 
   def contains(e: Expr[MT]): Boolean =
     definitionQuery.contains(e) || useQuery.contains(e)
+
+  private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName] =
+    useQuery.doAllTables(definitionQuery.doAllTables(set))
 
   private[analyzer2] def realTables =
     definitionQuery.realTables ++ useQuery.realTables

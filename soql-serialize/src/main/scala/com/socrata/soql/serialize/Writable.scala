@@ -1,4 +1,4 @@
-package com.socrata.soql.analyzer2.serialization
+package com.socrata.soql.serialize
 
 import scala.util.parsing.input.{Position, NoPosition}
 
@@ -11,7 +11,12 @@ import com.socrata.soql.parsing.SoQLPosition
 trait Writable[T] {
   def writeTo(buffer: WriteBuffer, t: T): Unit
 }
-object Writable {
+object Writable extends `-impl`.WritableTuples {
+  implicit object unit extends Writable[Unit] {
+    def writeTo(buffer: WriteBuffer, u: Unit): Unit = {
+    }
+  }
+
   implicit object boolean extends Writable[Boolean] {
     def writeTo(buffer: WriteBuffer, b: Boolean): Unit =
       buffer.data.writeBoolNoTag(b)
@@ -75,6 +80,13 @@ object Writable {
           val line = if(newlinePos == -1) "" else ls.substring(0, newlinePos)
           buffer.write(line)
       }
+    }
+  }
+
+  implicit object bytes extends Writable[Array[Byte]] {
+    def writeTo(buffer: WriteBuffer, bs: Array[Byte]): Unit = {
+      buffer.data.writeUInt32NoTag(bs.length)
+      buffer.data.writeRawBytes(bs)
     }
   }
 
@@ -156,13 +168,6 @@ object Writable {
           buffer.data.writeUInt32NoTag(1)
           buffer.write(v)
       }
-    }
-  }
-
-  implicit def pair[T: Writable, U: Writable] = new Writable[(T, U)] {
-    def writeTo(buffer: WriteBuffer, pair: (T, U)): Unit = {
-      buffer.write(pair._1)
-      buffer.write(pair._2)
     }
   }
 }

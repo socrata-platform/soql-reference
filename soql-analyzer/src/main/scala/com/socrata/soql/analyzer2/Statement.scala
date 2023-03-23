@@ -11,7 +11,7 @@ import com.socrata.prettyprint.prelude._
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, ResourceName, TableName}
 import com.socrata.soql.functions.MonomorphicFunction
-import com.socrata.soql.analyzer2.serialization.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.analyzer2
 
 import DocUtils._
@@ -26,6 +26,9 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
   // labels here because, as a Statement, we don't have enough
   // information to produce a full Column.
   def unique: LazyList[Seq[AutoColumnLabel]]
+
+  final def allTables: Set[DatabaseTableName] = doAllTables(Set.empty)
+  private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName]
 
   private[analyzer2] def realTables: Map[AutoTableLabel, DatabaseTableName]
 
