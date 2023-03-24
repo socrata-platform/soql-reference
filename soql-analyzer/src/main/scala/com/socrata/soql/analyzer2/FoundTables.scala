@@ -89,6 +89,47 @@ final case class FoundTables[MT <: MetaTypes] private[analyzer2] (
 
     (newFT, newToOld)
   }
+
+  def queryGraph: QueryGraph[MT] =
+    initialQuery match {
+      case FoundTables.Saved(rn) =>
+        val initialName = ScopedResourceName(initialScope, rn)
+        val seed = Map(Option(initialName) -> tableMap.find(initialName).directlyReferencedTables)
+        new QueryGraph[MT](Some(initialName), buildGraph(Some(initialName), seed))
+      case FoundTables.InContext(parent, soql, _, _) =>
+        parentedGraph(parent, soql)
+      case FoundTables.InContextImpersonatingSaved(parent, soql, _, _, _) =>
+        parentedGraph(parent, soql)
+      case FoundTables.Standalone(soql, _, _) =>
+        val seed = Map(Option.empty[types.ScopedResourceName[MT]] -> Util.walkParsed[MT](Set.empty[types.ScopedResourceName[MT]], initialScope, soql))
+        new QueryGraph[MT](None, buildGraph(None, seed))
+    }
+
+  private def parentedGraph(parent: ResourceName, soql: BinaryTree[ast.Select]): QueryGraph[MT] = {
+    val scopedParent = ScopedResourceName(initialScope, parent)
+    val seed = Map(
+      Option.empty[types.ScopedResourceName[MT]] -> Util.walkParsed[MT](Set(scopedParent), initialScope, soql)
+    )
+    new QueryGraph[MT](None, buildGraph(Some(scopedParent), buildGraph(None, seed)))
+  }
+
+  private def buildGraph(lookingAt: Option[types.ScopedResourceName[MT]], from: Map[Option[types.ScopedResourceName[MT]], Set[types.ScopedResourceName[MT]]]): Map[Option[types.ScopedResourceName[MT]], Set[types.ScopedResourceName[MT]]] = {
+    from(lookingAt).foldLeft(from) { (acc, name) =>
+      val someName = Some(name)
+      if(acc.contains(someName)) {
+        acc
+      } else {
+        buildGraph(someName, acc + (someName -> tableMap.find(name).directlyReferencedTables))
+      }
+    }
+  }
+}
+
+final class QueryGraph[MT <: MetaTypes] private[analyzer2] (
+  val root: Option[types.ScopedResourceName[MT]],
+  val graph: Map[Option[types.ScopedResourceName[MT]], Set[types.ScopedResourceName[MT]]]
+) {
+  override def toString = s"QueryGraph($root, $graph)"
 }
 
 final class Intified[MT <: MetaTypes] extends MetaTypes {
