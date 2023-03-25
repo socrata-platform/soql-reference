@@ -26,6 +26,8 @@ sealed trait TableDescription[MT <: MetaTypes] extends TableDescriptionLike with
     columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
   )(implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]): TableDescription[MT2]
 
+  def directlyReferencedTables: Set[types.ScopedResourceName[MT]]
+
   def asUnparsedTableDescription: UnparsedTableDescription[MT]
 }
 
@@ -112,6 +114,9 @@ object TableDescription {
 
     def asUnparsedTableDescription =
       UnparsedTableDescription.Dataset(name, canonicalName, columns, ordering, primaryKeys)
+
+    def directlyReferencedTables: Set[types.ScopedResourceName[MT]] =
+      Set.empty
   }
 
   case class Query[MT <: MetaTypes](
@@ -137,6 +142,9 @@ object TableDescription {
 
     def asUnparsedTableDescription =
       UnparsedTableDescription.Query(scope, canonicalName, basedOn, unparsed, parameters, hiddenColumns)
+
+    def directlyReferencedTables: Set[types.ScopedResourceName[MT]] =
+      Util.walkParsed[MT](Set(ScopedResourceName(scope, basedOn)), scope, parsed)
   }
 
   case class TableFunction[MT <: MetaTypes](
@@ -161,6 +169,10 @@ object TableDescription {
 
     def asUnparsedTableDescription =
       UnparsedTableDescription.TableFunction(scope, canonicalName, unparsed, parameters, hiddenColumns)
+
+    def directlyReferencedTables: Set[types.ScopedResourceName[MT]] =
+      Util.walkParsed[MT](Set.empty[types.ScopedResourceName[MT]], scope, parsed)
   }
+
 }
 

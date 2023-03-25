@@ -43,7 +43,16 @@ class TableFinderTest extends FunSuite with MustMatchers {
       (0, "bad_four") -> Q(0, "t1", "select * join @bad_three on true"),
       (0, "bad_five") -> Q(0, "t1", "select * join @bad_six on true"),
       (0, "bad_six") -> Q(0, "bad_five", "select *"),
-      (1, "t1") -> D()
+      (1, "t1") -> D(),
+
+      (0, "graph_root") -> Q(0, "graph_parent_1", "select * join @graph_parent_2 on true"),
+      (0, "graph_parent_1") -> Q(0, "graph_dataset_1", "select *"),
+      (0, "graph_parent_2") -> Q(0, "graph_dataset_2", "select * join @graph_grandparent(1) on true"),
+      (0, "graph_grandparent") -> U(0, "select * from @graph_dataset_3 join @graph_dataset_4 on true"),
+      (0, "graph_dataset_1") -> D(),
+      (0, "graph_dataset_2") -> D(),
+      (0, "graph_dataset_3") -> D(),
+      (0, "graph_dataset_4") -> D()
     )
   )
 
@@ -121,6 +130,51 @@ class TableFinderTest extends FunSuite with MustMatchers {
 
   test("can fail to find a query in a different scope") {
     tables.findTables(0, ResourceName("t1"), "select key, value join @t6 on @t6.key = key", Map.empty).map(_.tableMap) must be (notFound(1, "t2"))
+  }
+
+  test("Can produce a graph from looking up a saved query") {
+    def rn(s: String) = ResourceName(s)
+    def srn(s: String) = ScopedResourceName(0, rn(s))
+
+    val Right(foundTables) = tables.findTables(0, rn("graph_root"))
+    val graph = foundTables.queryGraph
+
+    graph.root must equal (Some(srn("graph_root")))
+    graph.graph must equal (
+      Map(
+        Some(srn("graph_root")) -> Set(srn("graph_parent_1"), srn("graph_parent_2")),
+        Some(srn("graph_parent_1")) -> Set(srn("graph_dataset_1")),
+        Some(srn("graph_parent_2")) -> Set(srn("graph_dataset_2"), srn("graph_grandparent")),
+        Some(srn("graph_grandparent")) -> Set(srn("graph_dataset_3"), srn("graph_dataset_4")),
+        Some(srn("graph_dataset_1")) -> Set(),
+        Some(srn("graph_dataset_2")) -> Set(),
+        Some(srn("graph_dataset_3")) -> Set(),
+        Some(srn("graph_dataset_4")) -> Set(),
+      )
+    )
+  }
+
+  test("Can produce a graph from an ad-hoc query") {
+    def rn(s: String) = ResourceName(s)
+    def srn(s: String) = ScopedResourceName(0, rn(s))
+
+    val Right(foundTables) = tables.findTables(0, rn("graph_root"), "select * join @graph_dataset_4 on true", Map.empty)
+    val graph = foundTables.queryGraph
+
+    graph.root must equal (None)
+    graph.graph must equal (
+      Map(
+        None -> Set(srn("graph_root"), srn("graph_dataset_4")),
+        Some(srn("graph_root")) -> Set(srn("graph_parent_1"), srn("graph_parent_2")),
+        Some(srn("graph_parent_1")) -> Set(srn("graph_dataset_1")),
+        Some(srn("graph_parent_2")) -> Set(srn("graph_dataset_2"), srn("graph_grandparent")),
+        Some(srn("graph_grandparent")) -> Set(srn("graph_dataset_3"), srn("graph_dataset_4")),
+        Some(srn("graph_dataset_1")) -> Set(),
+        Some(srn("graph_dataset_2")) -> Set(),
+        Some(srn("graph_dataset_3")) -> Set(),
+        Some(srn("graph_dataset_4")) -> Set(),
+      )
+    )
   }
 
   test("can rountdtrip a FoundTables through JSON") {
