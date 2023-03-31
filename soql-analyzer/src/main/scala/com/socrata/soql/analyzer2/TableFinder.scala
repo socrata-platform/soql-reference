@@ -155,7 +155,7 @@ trait TableFinder[MT <: MetaTypes] {
           Right(acc)
         }
       case None =>
-        if(isSpecialTableName(scopedName)) {
+        if(Util.isSpecialTableName(scopedName)) {
           Right(acc)
         } else {
           for {
@@ -164,12 +164,6 @@ trait TableFinder[MT <: MetaTypes] {
           } yield acc
         }
     }
-  }
-
-  private def isSpecialTableName(scopedName: ScopedResourceName): Boolean = {
-    val ScopedResourceName(_, name) = scopedName
-    val prefixedName = TableName.SodaFountainPrefix + name.caseFolded
-    TableName.reservedNames.contains(prefixedName)
   }
 
   def walkDesc(scopedName: ScopedResourceName, pos: Position, desc: TableDescription[MT], acc: TableMap, stack: List[CanonicalName]): Result[TableMap] = {
