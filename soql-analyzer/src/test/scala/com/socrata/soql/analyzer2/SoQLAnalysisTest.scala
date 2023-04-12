@@ -707,6 +707,48 @@ select count(*), 1 as x |> select x
     analysis.statement must be (isomorphicTo(expected.statement))
   }
 
+  test("remove trivial selects") {
+    val tf = tableFinder(
+      (0, "threecol") -> D("text" -> TestText, "num" -> TestNumber, "num2" -> TestNumber)
+    )
+    val analysis = analyze(tf, "threecol", "select text, num |> select text").removeTrivialSelects
+    val expected = analyze(tf, "threecol", "select text")
+
+    analysis.statement must be (isomorphicTo(expected.statement))
+  }
+
+  test("remove trivial selects - chained") {
+    val tf = tableFinder(
+      (0, "threecol") -> D("text" -> TestText, "num" -> TestNumber, "num2" -> TestNumber)
+    )
+    val analysis = analyze(tf, "threecol", "select text, num |> select text, num |> select text, num |> select text").removeTrivialSelects
+    val expected = analyze(tf, "threecol", "select text")
+
+    analysis.statement must be (isomorphicTo(expected.statement))
+  }
+
+  test("remove trivial selects - after a union") {
+    val tf = tableFinder(
+      (0, "threecol") -> D("text" -> TestText, "num" -> TestNumber, "num2" -> TestNumber),
+      (0, "threemorecol") -> D("t" -> TestText, "n1" -> TestNumber, "n2" -> TestNumber)
+    )
+    val analysis = analyze(tf, "threecol", "(select * union select * from @threemorecol) |> select text, num |> select text").removeTrivialSelects
+    val expected = analyze(tf, "threecol", "(select * union select * from @threemorecol) |> select text")
+
+    analysis.statement must be (isomorphicTo(expected.statement))
+  }
+
+  test("remove trivial selects - in a subquery") {
+    val tf = tableFinder(
+      (0, "threecol") -> D("text" -> TestText, "num" -> TestNumber, "num2" -> TestNumber),
+      (0, "threemorecol") -> D("t" -> TestText, "n1" -> TestNumber, "n2" -> TestNumber)
+    )
+    val analysis = analyze(tf, "threecol", "select * join (select t as text, n1 from @threemorecol |> select text) as @x on true").removeTrivialSelects
+    val expected = analyze(tf, "threecol", "select * join (select t from @threemorecol) as @x on true")
+
+    analysis.statement must be (isomorphicTo(expected.statement))
+  }
+
   test("simple (de)serialization") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
