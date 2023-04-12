@@ -44,6 +44,18 @@ class SoQLAnalysis[MT <: MetaTypes] private (
     }
   }
 
+  /** Eliminate simple passthrough selects that don't have any logic
+    * associated with them. */
+  def removeTrivialSelects: SoQLAnalysis[MT] = {
+    // No need to remove select list references here because the
+    // things we're removing don't have the parts that would include
+    // them
+    copy(
+      labelProvider = labelProvider.clone(),
+      statement = rewrite.RemoveTrivialSelects(statement)
+    )
+  }
+
   /** Attempt to impose an arbitrary total order on this query.  Will
     * preserve any ordering that exists, but also use the statement's
     * `unique` columns to impose an ordering if possible, or add
