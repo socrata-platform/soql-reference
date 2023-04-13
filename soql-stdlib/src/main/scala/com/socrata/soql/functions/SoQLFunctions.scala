@@ -240,12 +240,18 @@ object SoQLFunctions {
   val GeoCollectionExtractMultiPointFromPoint = mf("geo_multi_collection_mpt_mpt", FunctionName("geo_collection_extract"), Seq(SoQLMultiPoint), Seq.empty, SoQLMultiPoint)(
     NoDocs
   )
-
-  val ReducePrecision = f("reduce_precision", FunctionName("reduce_precision"), Map("a" -> GeospatialLike, "b" -> NumLike),
+  // Reducing precision _can_ return multipolygons from polygons, so we have to split out the polygon type
+  val ReducePrecision = f("reducePrecision", FunctionName("reduce_precision"), Map("a" -> (GeospatialLike - SoQLPolygon), "b" -> NumLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a")) (
       "Reduce the precision of a given geometry, for example reduce_precision(to_point('POINT (1.234 10.675)'), 0.1) => POINT (1.2 10.6)",
       Example("Reduce to tens place", "SELECT reduce_precision(to_point('POINT (1.234 10.675)'), 0.1)", "")
     )
+  val ReducePolyPrecision = f("reducePolyPrecision", FunctionName("reduce_precision"), Map("b" -> NumLike),
+    Seq(FixedType(SoQLPolygon), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon)) (
+      "Reduce the precision of a given geometry, for example reduce_precision(to_point('POINT (1.234 10.675)'), 0.1) => POINT (1.2 10.6)",
+      Example("Reduce to tens place", "SELECT reduce_precision(to_point('POINT (1.234 10.675)'), 0.1)", "")
+    )
+
   val NumberOfPoints = f("num_points", FunctionName("num_points"), Map("a" -> GeospatialLike),
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber))(
     "Return the number of vertices in a geospatial data record")
