@@ -516,10 +516,6 @@ object SoQLFunctions {
   val Ntile = f("ntile", FunctionName("ntile"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), needsWindow=true)(
     NoDocs
   )
-  val WidthBucket = mf("width_bucket", FunctionName("width_bucket"), Seq(SoQLNumber, SoQLNumber, SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber, needsWindow=true)(
-    "The Width Bucket function returns the index value based on the lower and upper bounds and number of buckets. E.g. width_bucket(x, 0, 100, 4) will return 0 if the value of x " +
-    "is less than 0, 1 if the value of x is 0 - 24, 2 if x is 25 - 49, 3 if x is 50 - 74, 4 if x is 75 - 99 and 5 if x is 100 or greater"
-  )
 
   val FloatingTimeStampTruncYmd = mf("floating timestamp trunc day", FunctionName("date_trunc_ymd"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)(
     "Truncate a date at the year/month/day threshold"
@@ -590,9 +586,6 @@ object SoQLFunctions {
 
   val TimeStampDiffD = f("timestamp diff in days", FunctionName("date_diff_d"), Map("a" -> TimestampLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLNumber))(
     NoDocs
-  )
-  val TimeStampDiffS = f("timestamp diff in seconds", FunctionName("date_diff_s"), Map("a" -> TimestampLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLNumber))(
-    "Compute the difference in seconds between two timestamps"
   )
 
   val TimeStampAdd = f("timestamp add", FunctionName("date_add"), Map("a" -> TimestampLike, "b" -> Set(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
