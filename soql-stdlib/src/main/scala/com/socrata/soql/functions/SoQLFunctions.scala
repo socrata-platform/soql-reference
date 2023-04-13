@@ -215,6 +215,11 @@ object SoQLFunctions {
     NoDocs
   )
 
+  val ReducePrecision = f("reduce_precision", FunctionName("reduce_precision"), Map("a" -> GeospatialLike, "b" -> NumLike),
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a")) (
+      "Reduce the precision of a given geometry, for example reduce_precision(to_point('POINT (1.234 10.675)'), 0.1) => POINT (1.2 10.6)",
+      Example("Reduce to tens place", "SELECT reduce_precision(to_point('POINT (1.234 10.675)'), 0.1)", "")
+    )
   val NumberOfPoints = f("num_points", FunctionName("num_points"), Map("a" -> GeospatialLike),
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber))(
     "Return the number of vertices in a geospatial data record")
@@ -505,11 +510,15 @@ object SoQLFunctions {
   val Lead = f("lead", FunctionName("lead"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
     NoDocs
   )
-  val Lag = f("lag", FunctionName("lag"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
-    NoDocs
+  val Lag = f("lag", FunctionName("lag"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber)), Seq.empty, VariableType("a"), needsWindow = true)(
+    "Get the previous value at the specified index following a provided order, e.g. lag(amount, 2) OVER (ORDER BY year) will get the amount value from 2 years ago"
   )
   val Ntile = f("ntile", FunctionName("ntile"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), needsWindow=true)(
     NoDocs
+  )
+  val WidthBucket = mf("width_bucket", FunctionName("width_bucket"), Seq(SoQLNumber, SoQLNumber, SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber, needsWindow=true)(
+    "The Width Bucket function returns the index value based on the lower and upper bounds and number of buckets. E.g. width_bucket(x, 0, 100, 4) will return 0 if the value of x " +
+    "is less than 0, 1 if the value of x is 0 - 24, 2 if x is 25 - 49, 3 if x is 50 - 74, 4 if x is 75 - 99 and 5 if x is 100 or greater"
   )
 
   val FloatingTimeStampTruncYmd = mf("floating timestamp trunc day", FunctionName("date_trunc_ymd"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)(
@@ -581,6 +590,9 @@ object SoQLFunctions {
 
   val TimeStampDiffD = f("timestamp diff in days", FunctionName("date_diff_d"), Map("a" -> TimestampLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLNumber))(
     NoDocs
+  )
+  val TimeStampDiffS = f("timestamp diff in seconds", FunctionName("date_diff_s"), Map("a" -> TimestampLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLNumber))(
+    "Compute the difference in seconds between two timestamps"
   )
 
   val TimeStampAdd = f("timestamp add", FunctionName("date_add"), Map("a" -> TimestampLike, "b" -> Set(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
