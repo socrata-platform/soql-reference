@@ -20,10 +20,16 @@ class ColumnNameMapper(rootSchemas: Map[String, Map[ColumnName, ColumnName]]) {
   def mapSelects(selects: BinaryTree[Select], generateAliases: Boolean = false): BinaryTree[Select] = {
     selects match {
       case PipeQuery(l, r) =>
-        // previously when pipe query is in seq form,
-        // mapSelect only operates on the first element
         val nl = mapSelects(l, true)
-        PipeQuery(nl, r)
+        // there is no root past the pipe, so removing "_" mapping from schemas
+        val pipeRootSchemas = rootSchemas - "_"
+        if (pipeRootSchemas.nonEmpty) {
+          val mapper = new ColumnNameMapper(pipeRootSchemas)
+          val nr = mapper.mapSelects(r, true)
+          PipeQuery(nl, nr)
+        } else {
+          PipeQuery(nl, r)
+        }
       case Compound(op, l, r) =>
         val nl = mapSelects(l, generateAliases)
         val nr = mapSelects(r, generateAliases)

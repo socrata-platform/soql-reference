@@ -110,6 +110,7 @@ object SoQLException {
       and("unorderable-order-by", AutomaticJsonCodecBuilder[UnorderableOrderBy]).
       and("unknown-parameter", AutomaticJsonCodecBuilder[UnknownParameter]).
       and("unrepresentable-parameter", AutomaticJsonCodecBuilder[UnrepresentableParameter]).
+      and("distinct-on-order-by", AutomaticJsonCodecBuilder[DistinctOnNotPrefixOfOrderBy]).
       // QueryOperationException
       and("right-side-of-chain-query-must-be-leaf", AutomaticJsonCodecBuilder[RightSideOfChainQueryMustBeLeaf]).
       build
@@ -189,7 +190,16 @@ sealed trait AliasAnalysisException extends SoQLException
 case class RepeatedException(name: ColumnName, position: Position) extends SoQLException("Column `" + name + "' has already been excluded", position) with AliasAnalysisException // this should be called RepeatedExclusion
 case class DuplicateAlias(name: ColumnName, position: Position) extends SoQLException("There is already a column named `" + name + "' selected", position) with AliasAnalysisException
 case class NoSuchColumn(name: ColumnName, position: Position) extends SoQLException("No such column `" + name + "'", position) with AliasAnalysisException with TypecheckException
+object NoSuchColumn {
+  // bit of a hack; the new analyzer wants the qualifier for its
+  // error, but I don't want to change NoSuchColumn's defintion, so
+  // we'll extend it and add it as a normal field.
+  class RealNoSuchColumn(val qualifier: Option[String], name: ColumnName, position: Position) extends NoSuchColumn(name, position)
+}
 case class NoSuchTable(qualifier: String, position: Position) extends SoQLException("No such table `" + qualifier + "'", position) with AliasAnalysisException with TypecheckException
+object NoSuchTable {
+  class RealNoSuchTable(qualifier: String, val name: ColumnName, position: Position) extends NoSuchTable(qualifier, position)
+}
 case class CircularAliasDefinition(name: ColumnName, position: Position) extends SoQLException("Circular reference while defining alias `" + name + "'", position) with AliasAnalysisException
 
 sealed trait LexerException extends SoQLException
@@ -214,6 +224,7 @@ case class NonBooleanHaving(typ: TypeName, position: Position) extends SoQLExcep
 case class UnorderableOrderBy(typ: TypeName, position: Position) extends SoQLException("Cannot order by an expression of type `" + typ + "'", position) with TypecheckException
 case class UnknownParameter(view: String, hole: String, position: Position) extends SoQLException("Unknown parameter " + JString(hole), position) with TypecheckException
 case class UnrepresentableParameter(typ: TypeName, position: Position) extends SoQLException("Unrepresentable parameter of type `" + typ + "'", position) with TypecheckException
+case class DistinctOnNotPrefixOfOrderBy(position: Position) extends SoQLException("DISTINCT ON expressions must match initial ORDER BY expressions", position) with TypecheckException
 
 sealed trait QueryOperationException extends SoQLException
 case class RightSideOfChainQueryMustBeLeaf(position: Position) extends SoQLException("Right side of a chain query must be a leaf query.", position) with QueryOperationException

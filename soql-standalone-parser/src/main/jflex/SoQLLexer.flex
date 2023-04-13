@@ -7,6 +7,7 @@ import com.socrata.soql.tokens.*;
 %%
 
 %class AbstractLexer
+%public
 %abstract
 %type Token
 %unicode
@@ -203,6 +204,7 @@ TableIdentifier = "@" ("-" | [:jletterdigit:])+
 <DOUBLEQUOTESTRING> {
   \"           { yybegin(YYINITIAL); return finishString(); }
   [^\n\"\\]+   { string.append(yytext()); }
+  \\[/]        { string.append('/'); }
   \\[n]        { string.append('\n'); }
   \\[t]        { string.append('\t'); }
   \\[b]        { string.append('\b'); }

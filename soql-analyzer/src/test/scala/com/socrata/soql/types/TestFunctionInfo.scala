@@ -5,6 +5,8 @@ import com.socrata.soql.environment.FunctionName
 import com.socrata.soql.functions.Function
 
 object TestFunctionInfo extends FunctionInfo[TestType] {
+  val functionsByIdentity = TestFunctions.functionsByIdentity
+
   def functionsWithArity(name: FunctionName, n: Int) =
     TestFunctions.nAdicFunctionsByNameThenArity.get(name) match {
       case Some(funcsByArity) =>

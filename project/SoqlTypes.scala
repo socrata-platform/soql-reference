@@ -16,6 +16,7 @@ object SoqlTypes {
         "joda-time"           % "joda-time"                % "2.1",
         "org.bouncycastle"    % "bcprov-jdk15on"           % "1.48",
         "org.joda"            % "joda-convert"             % "1.2",
+        "com.socrata"        %% "prettyprinter"            % "0.1.1",
         "org.scalacheck"     %% "scalacheck"               % "1.14.0" % "test"
       )
   )

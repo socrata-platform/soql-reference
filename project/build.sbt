@@ -14,5 +14,6 @@ addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.6.1")
 
 libraryDependencies ++= Seq(
   "de.jflex" % "jflex" % "1.4.3",
-  "org.apache.ant" % "ant" % "1.8.4"
+  "org.apache.ant" % "ant" % "1.8.4",
+  "com.rojoma" %% "simple-arm-v2" % "2.3.2"
 )

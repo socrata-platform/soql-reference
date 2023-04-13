@@ -9,7 +9,7 @@ case class TypeMismatchFailure[Type](expected: Set[Type], found: Set[Type], idx:
 }
 case class Passed[Type](function: MonomorphicFunction[Type]) extends CandidateEvaluation[Type]
 
-class FunctionCallTypechecker[Type, Value](typeInfo: TypeInfo[Type, Value], functionInfo: FunctionInfo[Type]) {
+class FunctionCallTypechecker[Type, Value](typeInfo: TypeInfoCommon[Type, Value], functionInfo: FunctionInfo[Type]) {
   val log = org.slf4j.LoggerFactory.getLogger(classOf[FunctionCallTypechecker[_, _]])
 
   type Func = Function[Type]
@@ -47,9 +47,15 @@ class FunctionCallTypechecker[Type, Value](typeInfo: TypeInfo[Type, Value], func
     def loop(remaining: List[String], bindings: Map[String, Type]): Iterator[CandidateEvaluation[Type]] = {
       remaining match {
         case hd :: tl =>
-          typeParameterUniverse.iterator.filter(candidate.constraints.getOrElse(hd, typeParameterUniverse)).flatMap { typ =>
-            loop(tl, bindings + (hd -> typ))
-          }
+          typeParameterUniverse.iterator.
+            filter { t =>
+              candidate.constraints.get(hd) match {
+                case Some(constraints) => constraints(t)
+                case None => true
+              }
+            }.flatMap { typ =>
+              loop(tl, bindings + (hd -> typ))
+            }
         case Nil =>
           Iterator(evaluateMonomorphicCandidate(MonomorphicFunction(candidate, bindings), parameters))
       }

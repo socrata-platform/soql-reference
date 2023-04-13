@@ -2,8 +2,10 @@ package com.socrata.soql
 
 import scala.collection.immutable.{ListMap, ListSet}
 
-package object collection {
-  type OrderedMap[K, V] = ListMap[K, V]
+package object collection extends collection.CommonCollection {
+  type TraversableOnceLike[+A] = IterableOnce[A]
+
+  type OrderedMap[K, +V] = ListMap[K, V]
   val OrderedMap: ListMap.type = ListMap
 
   type OrderedSet[A] = ListSet[A]
