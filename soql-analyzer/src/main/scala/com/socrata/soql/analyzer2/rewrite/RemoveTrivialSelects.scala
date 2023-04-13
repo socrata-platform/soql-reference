@@ -1,5 +1,7 @@
 package com.socrata.soql.analyzer2.rewrite
 
+import scala.collection.compat._
+
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection._
@@ -11,70 +13,84 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
   // into the atomicfrom.
 
   object TrivialSelect {
-    def unapply(stmt: Statement): Option[(OrderedMap[AutoColumnLabel, Column], AtomicFrom)] = {
-      rewriteStatement(stmt) match {
+    def unapply(stmt: Statement): Option[(OrderedMap[AutoColumnLabel, Column], AtomicFrom, Boolean)] = {
+      stmt match {
         case Select(Distinctiveness.Indistinct(), selectList, from: AtomicFrom, None, Nil, None, Nil, None, None, None, hints) if hints.isEmpty =>
           var exprs = OrderedMap[AutoColumnLabel, Column]()
+
           for((label, namedExpr) <- selectList) {
             namedExpr.expr match {
               case c: Column if c.table == from.label => exprs += label -> c
               case _ => return None
             }
           }
-          Some((exprs, from))
+          assert(exprs.size == selectList.size)
+
+          // first a trivial check to see if we're producing a
+          // different number of columns than were in our FROM.
+          val fromSchema = from.schema
+          var schemaChanged = exprs.size != fromSchema.size
+          if(!schemaChanged) {
+            // now a less-trivial check to see if we've changed the
+            // input schema more subtly.
+            schemaChanged = exprs.values.lazyZip(fromSchema).exists { case (columnExpr, (sourceTable, sourceColumn, _typ)) =>
+              columnExpr.table != sourceTable || columnExpr.column != sourceColumn
+            }
+          }
+
+          Some((exprs, from, schemaChanged))
         case _ =>
           None
       }
     }
   }
 
-  def rewriteStatement(stmt: Statement): Statement = {
+  type ColumnMap = Map[VirtualColumn, Expr]
+
+  def rewriteStatement(stmt: Statement, cm: ColumnMap): Statement = {
     stmt match {
       case CombinedTables(op, left, right) =>
-        CombinedTables(op, rewriteStatement(left), rewriteStatement(right))
+        CombinedTables(op, rewriteStatement(left, cm), rewriteStatement(right, cm))
 
       case CTE(defLabel, defAlias, defQuery, materializedHint, useQuery) =>
-        val newDefQuery = rewriteStatement(defQuery)
-        val newUseQuery = rewriteStatement(useQuery)
+        val newDefQuery = rewriteStatement(defQuery, cm)
+        val newUseQuery = rewriteStatement(useQuery, cm)
         CTE(defLabel, defAlias, newDefQuery, materializedHint, newUseQuery)
 
       case v@Values(_, _) =>
         v
 
-      case Select(distinctiveness, selectList, from@FromStatement(TrivialSelect(subSelectList, subFrom), fromLabel, _resourceName, _alias), where, groupBy, having, orderBy, limit, offset, None /* search is weird, so we'll only do this if it doesn't exist */, hint) =>
-        val columnMap: Map[VirtualColumn, Expr] = subSelectList.iterator.map { case (columnLabel, column) =>
-          VirtualColumn(fromLabel, columnLabel, column.typ)(AtomicPositionInfo.None) -> column
-        }.toMap
+      case Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
+        val (newFrom, columnMap) = rewriteFrom(from, cm, search.isEmpty)
 
-        Select(
+        val result = Select(
           rewriteDistinctiveness(distinctiveness, columnMap),
           OrderedMap() ++ selectList.iterator.map { case (label, NamedExpr(expr, name)) =>
             (label, NamedExpr(rewriteExpr(expr, columnMap), name))
           },
-          subFrom,
+          newFrom,
           where.map(rewriteExpr(_, columnMap)),
           groupBy.map(rewriteExpr(_, columnMap)),
           having.map(rewriteExpr(_, columnMap)),
           orderBy.map(rewriteOrderBy(_, columnMap)),
           limit,
           offset,
-          None,
+          search,
           hint
         )
 
-      case select: Select =>
-        select.copy(from = rewriteFrom(select.from))
+        result
     }
   }
 
-  def rewriteDistinctiveness(d: Distinctiveness, cm: Map[VirtualColumn, Expr]): Distinctiveness = {
+  def rewriteDistinctiveness(d: Distinctiveness, cm: ColumnMap): Distinctiveness = {
     d match {
       case noSubExprs@(Distinctiveness.Indistinct() | Distinctiveness.FullyDistinct()) => noSubExprs
       case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(rewriteExpr(_, cm)))
     }
   }
 
-  def rewriteExpr(e: Expr, cm: Map[VirtualColumn, Expr]): Expr = {
+  def rewriteExpr(e: Expr, cm: ColumnMap): Expr = {
     e match {
       case vc: VirtualColumn => cm.getOrElse(vc, vc)
       case otherAtomic: AtomicExpr => otherAtomic
@@ -94,25 +110,39 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
     }
   }
 
-  def rewriteOrderBy(ob: OrderBy, cm: Map[VirtualColumn, Expr]): OrderBy = {
+  def rewriteOrderBy(ob: OrderBy, cm: ColumnMap): OrderBy = {
     ob.copy(expr = rewriteExpr(ob.expr, cm))
   }
 
-  def rewriteFrom(from: From): From = {
-    from.map[MT](
-      rewriteAtomicFrom(_),
-      { (joinType, lateral, left, right, on) =>
-        val newRight = rewriteAtomicFrom(right)
-        Join(joinType, lateral, left, newRight, on)
+  def rewriteFrom(from: From, cm: ColumnMap, permitSchemaChange: Boolean): (From, ColumnMap) = {
+    from.reduceMap[ColumnMap, MT](
+      rewriteAtomicFrom(_, cm, permitSchemaChange).swap,
+      { (cm, joinType, lateral, left, right, on) =>
+        // need to thread the incrementally-built columnmap through to
+        // support lateral joins (if the join is lateral, "right"
+        // might refer to output columns from "left" and hence need
+        // rewriting)
+        val (newRight, newCm) = rewriteAtomicFrom(right, cm, permitSchemaChange)
+        (newCm, Join(joinType, lateral, left, newRight, rewriteExpr(on, newCm)))
       }
-    )
+    ).swap
   }
 
-  def rewriteAtomicFrom(from: AtomicFrom): AtomicFrom = {
+  def rewriteAtomicFrom(from: AtomicFrom, cm: ColumnMap, permitSchemaChange: Boolean): (AtomicFrom, ColumnMap) = {
     from match {
-      case ft: FromTable => ft
-      case fsr: FromSingleRow => fsr
-      case fs: FromStatement => fs.copy(statement = rewriteStatement(fs.statement))
+      case ft: FromTable => (ft, cm)
+      case fsr: FromSingleRow => (fsr, cm)
+      case fs@FromStatement(stmt, fromLabel, _resourceName, _alias) =>
+        rewriteStatement(stmt, cm) match {
+          case TrivialSelect(selectList, subFrom, schemaChanges) if permitSchemaChange || !schemaChanges =>
+            val newColumnMap =
+              cm ++ selectList.iterator.map { case (columnLabel, column) =>
+                VirtualColumn(fromLabel, columnLabel, column.typ)(AtomicPositionInfo.None) -> column
+              }
+            (subFrom, newColumnMap)
+          case other =>
+            (fs.copy(statement = other), cm)
+        }
     }
   }
 }
@@ -121,6 +151,6 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
   * columns from some atomic from, with no other action". */
 object RemoveTrivialSelects {
   def apply[MT <: MetaTypes](stmt: Statement[MT]): Statement[MT] = {
-    new RemoveTrivialSelects[MT]().rewriteStatement(stmt)
+    new RemoveTrivialSelects[MT]().rewriteStatement(stmt, Map.empty)
   }
 }

@@ -29,6 +29,8 @@ sealed abstract class From[MT <: MetaTypes] extends LabelUniverse[MT] {
   // into a corner?
   def unique: LazyList[Seq[Column[MT]]]
 
+  def schema: Seq[(AutoTableLabel, ColumnLabel, CT)]
+
   // extend the given environment with names introduced by this FROM clause
   private[analyzer2] def extendEnvironment(base: Environment[MT]): Either[AddScopeError, Environment[MT]]
 
