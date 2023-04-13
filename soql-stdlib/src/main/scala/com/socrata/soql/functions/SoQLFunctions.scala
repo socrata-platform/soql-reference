@@ -240,15 +240,14 @@ object SoQLFunctions {
   val GeoCollectionExtractMultiPointFromPoint = mf("geo_multi_collection_mpt_mpt", FunctionName("geo_collection_extract"), Seq(SoQLMultiPoint), Seq.empty, SoQLMultiPoint)(
     NoDocs
   )
-  // Reducing precision _can_ return multi types, so we are going to ensure they always return multitypes
-  // similar to spatial_union
+  // Reducing precision _can_ return multipolygons from polygons, so we have to split out the polygon type
   val ReducePointPrecision = f("reducePointPrecision", FunctionName("reduce_precision"), Map("a" -> PointLike, "b" -> NumLike),
-    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPoint)) (
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a")) (
       "Reduce the precision of a given geometry, for example reduce_precision(to_point('POINT (1.234 10.675)'), 0.1) => POINT (1.2 10.6)",
       Example("Reduce to tens place", "SELECT reduce_precision(to_point('POINT (1.234 10.675)'), 0.1)", "")
     )
   val ReduceLinePrecision = f("reduceLinePrecision", FunctionName("reduce_precision"), Map("a" -> LineLike, "b" -> NumLike),
-    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiLine)) (
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a")) (
       "Reduce the precision of a given geometry, for example reduce_precision(to_point('POINT (1.234 10.675)'), 0.1) => POINT (1.2 10.6)",
       Example("Reduce to tens place", "SELECT reduce_precision(to_point('POINT (1.234 10.675)'), 0.1)", "")
     )
@@ -257,21 +256,7 @@ object SoQLFunctions {
       "Reduce the precision of a given geometry, for example reduce_precision(to_point('POINT (1.234 10.675)'), 0.1) => POINT (1.2 10.6)",
       Example("Reduce to tens place", "SELECT reduce_precision(to_point('POINT (1.234 10.675)'), 0.1)", "")
     )
-  val ReduceMPointPrecision = f("reduceMPointPrecision", FunctionName("reduce_precision"), Map("a" -> PointLike, "b" -> NumLike),
-    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPoint)) (
-      "Reduce the precision of a given geometry, for example reduce_precision(to_point('POINT (1.234 10.675)'), 0.1) => POINT (1.2 10.6)",
-      Example("Reduce to tens place", "SELECT reduce_precision(to_point('POINT (1.234 10.675)'), 0.1)", "")
-    )
-  val ReduceMLinePrecision = f("reduceMLinePrecision", FunctionName("reduce_precision"), Map("a" -> LineLike, "b" -> NumLike),
-    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiLine)) (
-      "Reduce the precision of a given geometry, for example reduce_precision(to_point('POINT (1.234 10.675)'), 0.1) => POINT (1.2 10.6)",
-      Example("Reduce to tens place", "SELECT reduce_precision(to_point('POINT (1.234 10.675)'), 0.1)", "")
-    )
-  val ReduceMPolyPrecision = f("reduceMPolyPrecision", FunctionName("reduce_precision"), Map("a" -> PolygonLike, "b" -> NumLike),
-    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon)) (
-      "Reduce the precision of a given geometry, for example reduce_precision(to_point('POINT (1.234 10.675)'), 0.1) => POINT (1.2 10.6)",
-      Example("Reduce to tens place", "SELECT reduce_precision(to_point('POINT (1.234 10.675)'), 0.1)", "")
-    )
+
   val NumberOfPoints = f("num_points", FunctionName("num_points"), Map("a" -> GeospatialLike),
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber))(
     "Return the number of vertices in a geospatial data record")
