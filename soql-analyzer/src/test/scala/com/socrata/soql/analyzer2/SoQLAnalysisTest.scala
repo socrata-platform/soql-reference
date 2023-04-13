@@ -733,18 +733,40 @@ select count(*), 1 as x |> select x
       (0, "threemorecol") -> D("t" -> TestText, "n1" -> TestNumber, "n2" -> TestNumber)
     )
     val analysis = analyze(tf, "threecol", "(select * union select * from @threemorecol) |> select text, num |> select text").removeTrivialSelects
-    val expected = analyze(tf, "threecol", "(select * union select * from @threemorecol) |> select text")
+    val expected = analyze(tf, "threecol", "(select text, num, num2 union select t, n1, n2 from @threemorecol) |> select text")
 
     analysis.statement must be (isomorphicTo(expected.statement))
   }
 
-  test("remove trivial selects - in a subquery") {
+  test("remove trivial selects - in a subquery, completely removable") {
     val tf = tableFinder(
       (0, "threecol") -> D("text" -> TestText, "num" -> TestNumber, "num2" -> TestNumber),
       (0, "threemorecol") -> D("t" -> TestText, "n1" -> TestNumber, "n2" -> TestNumber)
     )
     val analysis = analyze(tf, "threecol", "select * join (select t as text, n1 from @threemorecol |> select text) as @x on true").removeTrivialSelects
-    val expected = analyze(tf, "threecol", "select * join (select t from @threemorecol) as @x on true")
+    val expected = analyze(tf, "threecol", "select text, num, num2 join @threemorecol as @x on true")
+
+    analysis.statement must be (isomorphicTo(expected.statement))
+  }
+
+  test("remove trivial selects - in a subquery, incompletely removable") {
+    val tf = tableFinder(
+      (0, "threecol") -> D("text" -> TestText, "num" -> TestNumber, "num2" -> TestNumber),
+      (0, "threemorecol") -> D("t" -> TestText, "n1" -> TestNumber, "n2" -> TestNumber)
+    )
+    val analysis = analyze(tf, "threecol", "select * join (select t as text, n1 from @threemorecol |> select text+text) as @x on true").removeTrivialSelects
+    val expected = analyze(tf, "threecol", "select text, num, num2 join (select t+t from @threemorecol) as @x on true")
+
+    analysis.statement must be (isomorphicTo(expected.statement))
+  }
+
+  test("remove trivial selects - rewrite across lateral joins") {
+    val tf = tableFinder(
+      (0, "threecol") -> D("text" -> TestText, "num" -> TestNumber, "num2" -> TestNumber),
+      (0, "threemorecol") -> D("t" -> TestText, "n1" -> TestNumber, "n2" -> TestNumber)
+    )
+    val analysis = analyze(tf, "threecol", "select * |> select text, num join lateral (select t as text, n1 from @threemorecol |> select text, num2) as @x on true").removeTrivialSelects
+    val expected = analyze(tf, "threecol", "select text, num join lateral (select t, num2 from @threemorecol) as @x on true")
 
     analysis.statement must be (isomorphicTo(expected.statement))
   }
