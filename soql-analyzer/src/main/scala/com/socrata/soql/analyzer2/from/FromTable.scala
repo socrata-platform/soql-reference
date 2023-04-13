@@ -18,6 +18,10 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   def find(predicate: Expr[MT] => Boolean) = None
   def contains(e: Expr[MT]): Boolean = false
 
+  def schema = columns.iterator.map { case (dcn, NameEntry(_, typ)) =>
+    (label, dcn, typ)
+  }.toVector
+
   def unique = primaryKeys.to(LazyList).map(_.map { dcn => PhysicalColumn[MT](label, canonicalName, dcn, columns(dcn).typ)(AtomicPositionInfo.None) })
 
   lazy val resourceName = Some(definiteResourceName)

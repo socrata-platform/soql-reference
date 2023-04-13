@@ -20,6 +20,8 @@ trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
   // We have a unique ordering and no columns are required to achieve it
   def unique = LazyList(Nil)
 
+  def schema = Nil
+
   private[analyzer2] val scope: Scope[MT] =
     new Scope.Virtual(label, OrderedMap.empty)
 
