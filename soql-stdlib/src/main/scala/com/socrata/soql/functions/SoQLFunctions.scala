@@ -14,8 +14,8 @@ sealed abstract class SoQLFunctions
 object SoQLFunctions {
   private val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLFunctions])
 
-  import SoQLTypeClasses.{Ordered, Equatable, NumLike, RealNumLike, GeospatialLike, TimestampLike}
-  private val AllTypes = SoQLType.typesByName.values.toSet
+  import SoQLTypeClasses.{Ordered, Equatable, NumLike, RealNumLike, GeospatialLike, TimestampLike, PointLike, LineLike, PolygonLike}
+  private val AllTypes = CovariantSet.from(SoQLType.typesByName.values.toSet)
 
   val NoDocs = "No documentation available"
 
@@ -34,7 +34,7 @@ object SoQLFunctions {
   private def f(
     identity: String,
     name: FunctionName,
-    constraints: Map[String, Set[SoQLType]],
+    constraints: Map[String, CovariantSet[SoQLType]],
     params: Seq[TypeLike[SoQLType]],
     varargs: Seq[TypeLike[SoQLType]],
     result: TypeLike[SoQLType],
@@ -135,11 +135,37 @@ object SoQLFunctions {
   val WithinPolygon = f("within_polygon", FunctionName("within_polygon"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
     "Return the rows that have locations within the specified box, defined by latitude, longitude corners")
+
+  // "spatial_union" because "union" is a reserved word
+  val Union2Pt = f("union2pt", FunctionName("spatial_union"), Map("a" -> PointLike, "b" -> PointLike),
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPoint))(
+    "Merge two (multi)points into a single multipoint")
+  val Union2Line = f("union2line", FunctionName("spatial_union"), Map("a" -> LineLike, "b" -> LineLike),
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiLine))(
+    "Merge two (multi)lines into a single multiline")
+  val Union2Poly = f("union2poly", FunctionName("spatial_union"), Map("a" -> PolygonLike, "b" -> PolygonLike),
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon))(
+    "Merge two (multi)polygons into a single multipolygon")
+
+  val UnionAggPt = f("unionAggPt", FunctionName("spatial_union"), Map("a" -> PointLike),
+                     Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiPoint),
+                     isAggregate = true)(
+    "Merge groups of (multi)points into single multipoints")
+  val UnionAggLine = f("unionAggLine", FunctionName("spatial_union"), Map("a" -> LineLike),
+                       Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiLine),
+                       isAggregate = true)(
+    "Merge groups of (multi)lines into single multilines")
+  val UnionAggPoly = f("unionAggPoly", FunctionName("spatial_union"), Map("a" -> PolygonLike),
+                       Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiPolygon),
+                       isAggregate = true)(
+    "Merge groups of (multi)polygons into a single multipolygon")
+
   val Extent = f("extent", FunctionName("extent"), Map("a" -> GeospatialLike),
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiPolygon), isAggregate = true)(
     "Return a bounding box that encloses a set of geometries")
+
   val ConcaveHull = f("concave_hull", FunctionName("concave_hull"), Map("a" -> GeospatialLike, "b" -> RealNumLike),
-    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon), isAggregate = true)(NoDocs)
+    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon))(NoDocs)
   val ConvexHull = Function(
     "convex_hull",
     FunctionName("convex_hull"),
@@ -147,15 +173,15 @@ object SoQLFunctions {
     Seq(VariableType("a")),
     Seq.empty,
     FixedType(SoQLMultiPolygon),
-    isAggregate = true,
+    isAggregate = false,
     needsWindow = false,
     """
     Return the minimum convex geometry that encloses all of the geometries within a set
 
     The convex_hull(...) generates a polygon that represents the minimum convex geometry that
-    can encompass a set of points or geometries. All of the points in the set will either
-    represent vertexes of that polygon, or will be enclosed within it, much like if you were
-    to take a rubber band and snap it around the set of points.
+    can encompass a geometry. All of the points in the geometry will either represent vertexes
+    of that polygon, or will be enclosed within it, much like if you were to take a rubber
+    band and snap it around the geometry's points.
     """,
     Seq()
   )
@@ -169,11 +195,11 @@ object SoQLFunctions {
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
     "Return the rows that where the locations 'spatially overlap', meaning they intersect, but one does not completely contain another and they share interior points")
   
-  val Intersection = f("polygon_intersection", FunctionName("polygon_intersection"), Map("a" -> Set(SoQLMultiPolygon, SoQLPolygon), "b" -> Set(SoQLMultiPolygon, SoQLPolygon)),
+  val Intersection = f("polygon_intersection", FunctionName("polygon_intersection"), Map("a" -> CovariantSet(SoQLMultiPolygon, SoQLPolygon), "b" -> CovariantSet(SoQLMultiPolygon, SoQLPolygon)),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon))(
     "Returns the geometry of the overlapping multipolygon intersection between two polygon or multipolygon geometries")
   
-  val Area = f("area", FunctionName("area"), Map("a" -> Set(SoQLMultiPolygon, SoQLPolygon)),
+  val Area = f("area", FunctionName("area"), Map("a" -> CovariantSet(SoQLMultiPolygon, SoQLPolygon)),
     Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber))(
     "Returns the area of a polygon or multipolygon geometry")
 
@@ -510,8 +536,20 @@ object SoQLFunctions {
   val Lead = f("lead", FunctionName("lead"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
     NoDocs
   )
-  val Lag = f("lag", FunctionName("lag"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber)), Seq.empty, VariableType("a"), needsWindow = true)(
-    "Get the previous value at the specified index following a provided order, e.g. lag(amount, 2) OVER (ORDER BY year) will get the amount value from 2 years ago"
+  val LeadOffset = f("lead_offset", FunctionName("lead"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber)), Seq.empty, VariableType("a"), needsWindow = true)(
+    NoDocs
+  )
+  val LeadOffsetDefault = f("lead_offset_default", FunctionName("lead"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber), VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
+    NoDocs
+  )
+  val Lag = f("lag", FunctionName("lag"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
+    NoDocs
+  )
+  val LagOffset = f("lag_offset", FunctionName("lag"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber)), Seq.empty, VariableType("a"), needsWindow = true)(
+    NoDocs
+  )
+  val LagOffsetDefault = f("lag_offset_default", FunctionName("lag"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber), VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
+    NoDocs
   )
   val Ntile = f("ntile", FunctionName("ntile"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), needsWindow=true)(
     NoDocs
@@ -588,15 +626,19 @@ object SoQLFunctions {
     NoDocs
   )
 
-  val TimeStampAdd = f("timestamp add", FunctionName("date_add"), Map("a" -> TimestampLike, "b" -> Set(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
+  val EpochSeconds = mf("epoch_seconds", FunctionName("epoch_seconds"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLNumber)(
+    "Returns the number of seconds since the start of 1 January 1970 GMT.  Note that this includes millisecond precision"
+  )
+
+  val TimeStampAdd = f("timestamp add", FunctionName("date_add"), Map("a" -> TimestampLike, "b" -> CovariantSet(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
     "Add interval (ISO period format) to timestamp"
   )
 
-  val TimeStampPlus = f("timestamp +", SpecialFunctions.Operator("+"), Map("a" -> TimestampLike, "b" -> Set(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
+  val TimeStampPlus = f("timestamp +", SpecialFunctions.Operator("+"), Map("a" -> TimestampLike, "b" -> CovariantSet(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
     "Add interval (ISO period format) to timestamp"
   )
 
-  val TimeStampMinus = f("timestamp -", SpecialFunctions.Operator("-"), Map("a" -> TimestampLike, "b" -> Set(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
+  val TimeStampMinus = f("timestamp -", SpecialFunctions.Operator("-"), Map("a" -> TimestampLike, "b" -> CovariantSet(SoQLInterval)), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))(
     "Subtract interval (ISO period format) from timestamp"
   )
 
@@ -611,11 +653,12 @@ object SoQLFunctions {
     Example("Get records of last month converted into US/Pacific time", "floating_date_column between date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'P1M' and date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'PT1S'", "")
   )
 
-  val castIdentities = for ((n, t) <- SoQLType.typesByName.toSeq) yield {
-    f(n.caseFolded + "::" + n.caseFolded, SpecialFunctions.Cast(n), Map.empty, Seq(FixedType(t)), Seq.empty, FixedType(t))(
+  val castIdentitiesByType = OrderedMap() ++ SoQLType.typesByName.iterator.map { case (n, t) =>
+    t -> mf(n.caseFolded + "::" + n.caseFolded, SpecialFunctions.Cast(n), Seq(t), Seq.empty, t)(
       NoDocs
     )
   }
+  val castIdentities = castIdentitiesByType.valuesIterator.toVector
 
   val NumberToText = mf("number to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLNumber), Seq.empty, SoQLText)(
     NoDocs
@@ -796,23 +839,6 @@ object SoQLFunctions {
     Return the value of the named context variable, or NULL if no such variable exists.
     """
   )
-
-  private def getParameter(t: SoQLType): Function[SoQLType] =
-    f(s"${t.name.name}_parameter", FunctionName(s"${t.name.name}_parameter"),
-      Map.empty,
-      Seq(FixedType(SoQLText)),
-      Seq.empty,
-      FixedType(t))(
-      """
-      Return the value of the named context variable, or NULL if no such variable exists.
-      """
-    )
-
-  val GetParameterText = getParameter(SoQLText)
-  val GetParameterBoolean = getParameter(SoQLBoolean)
-  val GetParameterNumber = getParameter(SoQLNumber)
-  val GetParameterFixedTimestamp = getParameter(SoQLFixedTimestamp)
-  val GetParameterFloatingTimestamp = getParameter(SoQLFloatingTimestamp)
 
   def potentialAccessors = for {
     method <- getClass.getMethods

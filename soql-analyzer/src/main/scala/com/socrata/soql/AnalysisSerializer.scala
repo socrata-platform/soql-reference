@@ -6,8 +6,7 @@ import java.io.{ByteArrayOutputStream, OutputStream}
 import gnu.trove.impl.Constants
 import gnu.trove.map.hash.TObjectIntHashMap
 import com.google.protobuf.CodedOutputStream
-import com.socrata.NonEmptySeq
-import com.socrata.soql.collection.OrderedMap
+import com.socrata.soql.collection.{OrderedMap, NonEmptySeq}
 import com.socrata.soql.environment.{ColumnName, TableName}
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.parsing.SoQLPosition

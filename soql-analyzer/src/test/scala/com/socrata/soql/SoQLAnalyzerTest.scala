@@ -248,6 +248,18 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
     a [NonGroupableGroupBy] must be thrownBy analyzer.analyzeFullQueryBinary("select array group by array")
   }
 
+  test("reject distinct on not in order by") {
+    a [DistinctOnNotPrefixOfOrderBy] must be thrownBy analyzer.analyzeFullQuery("SELECT DISTINCT ON(visits) name_first ORDER BY name_last")
+  }
+
+  test("accept order-by-less distinct") {
+    analyzer.analyzeFullQuery("SELECT DISTINCT ON(visits) name_first")
+  }
+
+  test("accept ordered distinct on") {
+    analyzer.analyzeFullQuery("SELECT DISTINCT ON(visits) name_first order by visits desc, name_first")
+  }
+
   test("Merging two simple filter queries is the same as querying one") {
     val analysis1 = analyzer.analyzeFullQueryBinary("select 2*visits as twice_visits where twice_visits > 10 |> select * where twice_visits > 20")
     val analysis2 = analyzer.analyzeFullQueryBinary("select 2*visits as twice_visits where twice_visits > 10 and twice_visits > 20")
@@ -766,13 +778,6 @@ SELECT visits, @x2.zx
     }
   }
 
-  test("indistinct, distinct is merged") {
-    val analysis1 = analyzer.analyzeFullQueryBinary("SELECT name_first, name_last |> SELECT distinct name_first")
-    val analysis2 = analyzer.analyzeFullQueryBinary("SELECT distinct name_first")
-    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1)
-    merged must equal (analysis2)
-  }
-
   test("distinct, indistinct should be mergeable but the merger does not support this yet") {
     val analysis = analyzer.analyzeFullQueryBinary("SELECT distinct name_first |> SELECT name_first")
     val notMerged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
@@ -788,8 +793,8 @@ SELECT visits, @x2.zx
   test("join is merged") {
     val analysis1 = analyzer.analyzeFullQueryBinary(
       """SELECT name_first,name_last |>
-           SELECT name_last JOIN (SELECT name_last FROM @aaaa-aaaa |> select distinct name_last) as a1 ON name_last = @a1.name_last""")
-    val analysis2 = analyzer.analyzeFullQueryBinary("""SELECT name_last JOIN (SELECT distinct name_last FROM @aaaa-aaaa) as a1 ON name_last = @a1.name_last""")
+           SELECT name_last JOIN (SELECT name_last FROM @aaaa-aaaa |> select name_last) as a1 ON name_last = @a1.name_last""")
+    val analysis2 = analyzer.analyzeFullQueryBinary("""SELECT name_last JOIN (SELECT name_last FROM @aaaa-aaaa) as a1 ON name_last = @a1.name_last""")
     val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1)
     merged must equal (analysis2)
   }
@@ -797,9 +802,9 @@ SELECT visits, @x2.zx
   test("join of right side of chain is merged") {
     val analysis1 = analyzer.analyzeFullQueryBinary(
       """SELECT name_first,name_last |>
-           SELECT hint(no_chain_merge) name_last JOIN (SELECT name_last FROM @aaaa-aaaa |> select distinct name_last) as a1 ON name_last = @a1.name_last""")
+           SELECT hint(no_chain_merge) name_last JOIN (SELECT name_last FROM @aaaa-aaaa |> select name_last) as a1 ON name_last = @a1.name_last""")
     val analysis2 = analyzer.analyzeFullQueryBinary("""SELECT name_first,name_last |>
-           SELECT name_last JOIN (SELECT distinct name_last FROM @aaaa-aaaa) as a1 ON name_last = @a1.name_last""")
+           SELECT name_last JOIN (SELECT name_last FROM @aaaa-aaaa) as a1 ON name_last = @a1.name_last""")
     val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1).map(deHints)
     merged must equal (analysis2)
   }

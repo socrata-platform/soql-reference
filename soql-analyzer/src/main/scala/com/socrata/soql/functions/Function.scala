@@ -1,6 +1,7 @@
 package com.socrata.soql.functions
 
 import com.socrata.soql.environment.FunctionName
+import com.socrata.soql.collection.CovariantSet
 
 sealed trait TypeLike[+Type]
 case class FixedType[Type](typ: Type) extends TypeLike[Type]
@@ -21,16 +22,16 @@ case class Example(explanation: String, query: String, tryit: String)
  * @param identity A _unique_ name for this function that can be used to identify it when
  *                 serializing things that refer to it.
  */
-case class Function[Type](identity: String,
-                          name: FunctionName,
-                          constraints: Map[String, Set[Type]],
-                          parameters: Seq[TypeLike[Type]],
-                          repeated: Seq[TypeLike[Type]],
-                          result: TypeLike[Type],
-                          isAggregate: Boolean,
-                          needsWindow: Boolean,
-                          doc: String,
-                          examples: Seq[Example])  {
+case class Function[+Type](identity: String,
+                           name: FunctionName,
+                           constraints: Map[String, CovariantSet[Type]],
+                           parameters: Seq[TypeLike[Type]],
+                           repeated: Seq[TypeLike[Type]],
+                           result: TypeLike[Type],
+                           isAggregate: Boolean,
+                           needsWindow: Boolean,
+                           doc: String,
+                           examples: Seq[Example])  {
 
   val minArity = parameters.length
   def isVariadic = repeated.nonEmpty

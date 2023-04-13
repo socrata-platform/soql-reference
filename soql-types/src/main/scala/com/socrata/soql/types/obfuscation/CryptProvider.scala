@@ -29,5 +29,7 @@ object CryptProvider {
     rng.nextBytes(bs)
     bs
   }
+
+  val zeros: CryptProvider = new CryptProvider(new Array[Byte](72))
 }
 

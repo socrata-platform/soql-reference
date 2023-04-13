@@ -144,27 +144,29 @@ case class PipeQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compo
   val op = Compound.QueryPipe
 }
 
-case class UnionQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
+sealed trait TrueOp[T] extends Compound[T]
+
+case class UnionQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends TrueOp[T]() {
   val op = Compound.Union
 }
 
-case class UnionAllQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
+case class UnionAllQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends TrueOp[T]() {
   val op = Compound.UnionAll
 }
 
-case class IntersectQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
+case class IntersectQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends TrueOp[T]() {
   val op = Compound.Intersect
 }
 
-case class IntersectAllQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
+case class IntersectAllQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends TrueOp[T]() {
   val op = Compound.IntersectAll
 }
 
-case class MinusQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
+case class MinusQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends TrueOp[T]() {
   val op = Compound.Minus
 }
 
-case class MinusAllQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends Compound[T]() {
+case class MinusAllQuery[T](left: BinaryTree[T], right: BinaryTree[T]) extends TrueOp[T]() {
   val op = Compound.MinusAll
 }
 

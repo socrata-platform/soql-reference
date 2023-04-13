@@ -13,17 +13,17 @@ object TestFunctions {
   private val log = org.slf4j.LoggerFactory.getLogger(classOf[TestFunctions])
 
   // TODO: might want to narrow this down
-  private val Ordered = TestTypeInfo.typeParameterUniverse.toSet
-  private val NumLike = Set[TestType](TestNumber, TestDouble, TestMoney)
-  private val RealNumLike = Set[TestType](TestNumber, TestDouble)
-  private val GeospatialLike = Set[TestType](TestPoint, TestMultiPoint, TestLine, TestMultiLine, TestPolygon, TestMultiPolygon)
-  private val Equatable = Ordered ++ GeospatialLike ++ Set[TestType](TestText, TestNumber)
-  private val AllTypes = TestType.typesByName.values.toSet
+  private val Ordered = CovariantSet.from(TestTypeInfo.typeParameterUniverse.toSet)
+  private val NumLike = CovariantSet[TestType](TestNumber, TestDouble, TestMoney)
+  private val RealNumLike = CovariantSet[TestType](TestNumber, TestDouble)
+  private val GeospatialLike = CovariantSet[TestType](TestPoint, TestMultiPoint, TestLine, TestMultiLine, TestPolygon, TestMultiPolygon)
+  private val Equatable = Ordered ++ GeospatialLike ++ CovariantSet[TestType](TestText, TestNumber)
+  private val AllTypes = CovariantSet.from(TestType.typesByName.values.toSet)
 
   // helpers to guide type inference (specifically forces TestType to be inferred)
   private def mf(identity: String, name: FunctionName, params: Seq[TestType], varargs: Seq[TestType], result: TestType, isAggregate: Boolean = false, needsWindow: Boolean = false) =
     new MonomorphicFunction(identity, name, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow)("").function
-  private def f(identity: String, name: FunctionName, constraints: Map[String, Set[TestType]], params: Seq[TypeLike[TestType]], varargs: Seq[TypeLike[TestType]], result: TypeLike[TestType], isAggregate: Boolean = false, needsWindow: Boolean = false) =
+  private def f(identity: String, name: FunctionName, constraints: Map[String, CovariantSet[TestType]], params: Seq[TypeLike[TestType]], varargs: Seq[TypeLike[TestType]], result: TypeLike[TestType], isAggregate: Boolean = false, needsWindow: Boolean = false) =
     Function(identity, name, constraints, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow, "", Seq())
 
   val TextToLocation = mf("text to location", SpecialFunctions.Cast(TestLocation.name), Seq(TestText), Seq.empty, TestLocation)

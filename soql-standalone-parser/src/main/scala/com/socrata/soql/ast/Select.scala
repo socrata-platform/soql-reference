@@ -430,20 +430,6 @@ case class Select(
   def toStringWithFrom(fromTable: TableName): String = {
     docWithFrom(Some(fromTable)).layoutSmart(LayoutOptions(pageWidth = PageWidth.Unbounded)).toString
   }
-
-  def validate(): Select = {
-    distinct match {
-      case DistinctOn(exprs) if orderBys.nonEmpty =>
-        val orderBySet = orderBys.take(exprs.size).map(_.expression).toSet
-        val distinctNotInOrderBy = (exprs.toSet -- orderBySet)
-        if (distinctNotInOrderBy.nonEmpty) {
-          throw new BadParse("SELECT DISTINCT ON expressions must match initial ORDER BY expressions", distinctNotInOrderBy.head.position)
-        } else {
-          this
-        }
-      case _ => this
-    }
-  }
 }
 
 // represents the columns being selected. examples:
@@ -561,6 +547,8 @@ case class OrderBy(expression: Expression, ascending: Boolean, nullLast: Boolean
     val nullPlacement = if(nullLast) d"NULL LAST" else d"NULL FIRST"
     expression.doc +#+ direction +#+ nullPlacement
   }
+
+  def removeSyntacticParens = copy(expression = expression.removeSyntacticParens)
 }
 
 object SimpleSelect {

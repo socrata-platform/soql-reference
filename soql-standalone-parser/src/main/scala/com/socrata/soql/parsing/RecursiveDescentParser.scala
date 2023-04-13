@@ -1,11 +1,12 @@
 package com.socrata.soql.parsing
 
-import scala.collection.immutable.ListSet
+import scala.collection.immutable.{ListSet, ListMap}
+import scala.collection.compat._
 import scala.collection.compat.immutable.LazyList
 import scala.util.parsing.input.Position
 import scala.annotation.tailrec
 
-import com.socrata.NonEmptySeq
+import com.socrata.soql.collection.NonEmptySeq
 import com.socrata.soql.ast._
 import com.socrata.soql.tokens._
 import com.socrata.soql.{BinaryTree, Compound, Leaf, PipeQuery, ast, tokens}
@@ -98,11 +99,11 @@ object RecursiveDescentParser {
 
   implicit def tokenAsTokenLike(t: Token): Expectation = ActualToken(t)
 
-  def expectationsToEnglish(expectation: Iterable[Expectation], got: Token): String = {
+  def expectationStringsToEnglish(expectation: Iterable[String], got: String): String = {
     val sb = new StringBuilder
     sb.append("Expected")
 
-    def loop(expectations: LazyList[RecursiveDescentParser.Expectation], n: Int): Unit = {
+    def loop(expectations: LazyList[String], n: Int): Unit = {
       expectations match {
         case LazyList() =>
           // Uhhh... this shouldn't happen
@@ -111,20 +112,23 @@ object RecursiveDescentParser {
           if(n == 1) sb.append(" or ")
           else if(n > 1) sb.append(", or ") // oxford comma 4eva
           else sb.append(' ')
-          sb.append(hd.printable)
+          sb.append(hd)
         case LazyList.cons(hd, tl) =>
           if(n == 0) sb.append(" one of ")
           else sb.append(", ")
-          sb.append(hd.printable)
+          sb.append(hd)
           loop(tl, n+1)
       }
     }
     loop(expectation.to(LazyList), 0)
 
     sb.append(", but got ").
-      append(got.quotedPrintable).
+      append(got).
       toString
   }
+
+  def expectationsToEnglish(expectation: Iterable[Expectation], got: Token): String =
+    expectationStringsToEnglish(expectation.to(LazyList).map(_.printable), got.quotedPrintable)
 
   val CASE = new Keyword("CASE")
   val WHEN = new Keyword("WHEN")
@@ -139,12 +143,17 @@ object RecursiveDescentParser {
   val LAST = new Keyword("LAST")
   val RANGE = new Keyword("RANGE")
   val ROWS = new Keyword("ROWS")
+  val GROUPS = new Keyword("GROUPS")
   val UNBOUNDED = new Keyword("UNBOUNDED")
   val PRECEDING = new Keyword("PRECEDING")
   val CURRENT = new Keyword("CURRENT")
   val ROW = new Keyword("ROW")
   val FOLLOWING = new Keyword("FOLLOWING")
   val FILTER = new Keyword("FILTER")
+  val EXCLUDE = new Keyword("EXCLUDE")
+  val TIES = new Keyword("TIES")
+  val NO = new Keyword("NO")
+  val OTHERS = new Keyword("OTHERS")
 
   // Hints
   val HINT = new Keyword("HINT")
@@ -176,7 +185,6 @@ object RecursiveDescentParser {
   // and recreating these sets on-site has a fairly hefty runtime
   // cost.
   private[this] def s(xs: Expectation*) = ListSet(xs : _*)
-  private val AND_SET = s(AND())
   private val LIMIT_OFFSET_SET = s(LIMIT(), OFFSET())
   private val LIMIT_SET = s(LIMIT())
   private val OFFSET_SET = s(OFFSET())
@@ -202,13 +210,13 @@ object RecursiveDescentParser {
   private val PARTITIONBY_SET = s(APartitionBy)
   private val ASC_DESC_SET = s(ASC(), DESC())
   private val NULL_NULLS_SET = s(NULL(), NULLS())
-  private val RANGE_ROWS_SET = s(RANGE(), ROWS())
+  private val RANGE_ROWS_GROUPS_SET = s(RANGE(), ROWS(), GROUPS())
   private val OVER_SET = s(OVER())
+  private val EXCLUDE_SET = s(EXCLUDE())
   private val FILTER_SET = s(FILTER())
   private val DOT_LBRACKET_SET = s(DOT(), LBRACKET())
 
   private val COLONCOLON_SET = s(COLONCOLON())
-  private val MINUS_PLUS_SET = s(MINUS(), PLUS())
 
   // These are all collapsed into "an operator" for ease of
   // interpretation by an end-user instead of getting a bunch of
@@ -222,8 +230,143 @@ object RecursiveDescentParser {
   private val OPERATOR_SET = s(AnOperator)
 
   private val LIKE_BETWEEN_IN_SET = s(IS(), AnIsNot, LIKE(), ANotLike, BETWEEN(), ANotBetween, IN(), ANotIn)
-  private val NOT_SET = s(NOT())
-  private val OR_SET = s(OR())
+
+  type ExprParser = Reader => ParseResult[Expression]
+
+  sealed abstract class Associativity
+  object Associativity {
+    case object Left extends Associativity
+    case object Right extends Associativity
+  }
+
+  sealed abstract class OperatorClass {
+    def parse(parser: RecursiveDescentParser, reader: Reader, nextParser: ExprParser): ParseResult[Expression]
+  }
+  object OperatorClass {
+    sealed abstract class Simple extends OperatorClass
+
+    case class Binary(ops: Seq[Token], associativity: Associativity)(val expectation: ListSet[Expectation] = ops.map(ActualToken(_) : Expectation).to(ListSet)) extends Simple {
+      val opNames = ListMap() ++ ops.iterator.map { token => token -> SpecialFunctions.Operator(token.printable) }
+      val functions = opNames.values.toSet
+
+      def parse(parser: RecursiveDescentParser, reader: Reader, nextParser: ExprParser): ParseResult[Expression] =
+        parser.parseBinOp(this, reader, nextParser)
+    }
+    case class Prefix(ops: Seq[Token])(val expectation: ListSet[Expectation] = ops.map(ActualToken(_) : Expectation).to(ListSet)) extends Simple {
+      val opNames = ListMap() ++ ops.iterator.map { t => t -> SpecialFunctions.Operator(t.printable) }
+      val functions = opNames.values.toSet
+
+      def parse(parser: RecursiveDescentParser, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+        parser.parsePrefixOp(this, reader, nextParser)
+      }
+    }
+
+    sealed abstract class Special extends OperatorClass {
+      def matches(node: FunctionCall): Boolean
+    }
+
+    case object Cast extends Special {
+      def matches(node: FunctionCall) =
+        node.parameters.lengthCompare(1) == 0 &&
+          node.filter.isEmpty &&
+          node.window.isEmpty &&
+          SpecialFunctions.Cast.unapply(node.functionName).isDefined
+
+      def parse(parser: RecursiveDescentParser, reader: Reader, nextParser: ExprParser): ParseResult[Expression] =
+        parser.cast(reader, nextParser)
+    }
+
+    case object SqlishMultitoken extends Special {
+      private val functions = Map( // negative means "at least as many as the absolute value"
+        SpecialFunctions.IsNull -> 1,
+        SpecialFunctions.Between -> 3,
+        SpecialFunctions.Like -> 2,
+        SpecialFunctions.In -> -2,
+        SpecialFunctions.IsNotNull -> 1,
+        SpecialFunctions.NotBetween -> 3,
+        SpecialFunctions.NotLike -> 2,
+        SpecialFunctions.NotIn -> -2
+      )
+
+      def matches(node: FunctionCall) =
+        node.filter.isEmpty && node.window.isEmpty && (
+          functions.get(node.functionName) match {
+            case Some(n) if n >= 0 => node.parameters.lengthCompare(n) == 0
+            case Some(n) => node.parameters.lengthCompare(-n) >= 0
+            case None =>
+              false
+          }
+        )
+
+      def parse(parser: RecursiveDescentParser, reader: Reader, nextParser: ExprParser): ParseResult[Expression] =
+        parser.likeBetweenIn(reader, nextParser)
+    }
+
+    case object Subscript extends Special {
+      def matches(node: FunctionCall) =
+        node.filter.isEmpty && node.window.isEmpty && node.parameters.lengthCompare(2) == 0 && node.functionName == SpecialFunctions.Subscript
+      def parse(parser: RecursiveDescentParser, reader: Reader, nextParser: ExprParser): ParseResult[Expression] =
+        parser.dereference(reader, nextParser)
+    }
+  }
+
+  // higher index == binds more tightly
+  private val precedenceTable = Array(
+    OperatorClass.Binary(Seq(OR()), Associativity.Left)(),
+    OperatorClass.Binary(Seq(AND()), Associativity.Left)(),
+    OperatorClass.Prefix(Seq(NOT()))(),
+    OperatorClass.SqlishMultitoken,
+
+    // These all have an expectation of just "an operator" because
+    // it makes nicer error messages than listing out all the
+    // possibilities.
+    OperatorClass.Binary(Seq(EQUALS(), LESSGREATER(), LESSTHAN(), LESSTHANOREQUALS(), GREATERTHAN(), GREATERTHANOREQUALS(), EQUALSEQUALS(), BANGEQUALS()), Associativity.Left)(OPERATOR_SET),
+    OperatorClass.Binary(Seq(PLUS(), MINUS(), PIPEPIPE()), Associativity.Left)(OPERATOR_SET),
+    OperatorClass.Binary(Seq(STAR(), SLASH(), PERCENT()), Associativity.Left)(OPERATOR_SET),
+    OperatorClass.Binary(Seq(CARET()), Associativity.Right)(OPERATOR_SET),
+
+    OperatorClass.Prefix(Seq(PLUS(), MINUS()))(),
+    OperatorClass.Cast,
+    OperatorClass.Subscript
+  )
+
+  // (functionName, arity) => precedence map
+  private val simplePrecedences =
+    precedenceTable.iterator.zipWithIndex.foldLeft(Map.empty[(FunctionName, Int), Int]) { case (acc, (opClass, precLevel)) =>
+      opClass match {
+        case bin: OperatorClass.Binary =>
+          acc ++ bin.functions.iterator.map { fn => (fn, 2) -> precLevel }
+        case pfx: OperatorClass.Prefix =>
+          acc ++ pfx.functions.iterator.map { fn => (fn, 1) -> precLevel }
+        case _ : OperatorClass.Special =>
+          acc
+      }
+    }
+
+  private val simpleAssociativities =
+    precedenceTable.iterator.foldLeft(Map.empty[(FunctionName, Int), Associativity]) { (acc, opClass) =>
+      opClass match {
+        case bin: OperatorClass.Binary =>
+          acc ++ bin.functions.iterator.map { fn => (fn, 2) -> bin.associativity }
+        case _ =>
+          acc
+      }
+    }
+
+  private val complexPrecedences: Array[(OperatorClass.Special, Int)] =
+    precedenceTable.iterator.zipWithIndex.collect { case (special: OperatorClass.Special, precLevel) =>
+      special -> precLevel
+    }.toArray
+
+  def precedenceOf(node: FunctionCall): Option[Int] = {
+    simplePrecedences.get((node.functionName, node.parameters.length)).orElse {
+      complexPrecedences.find { case (cls, _) => cls.matches(node) }.map(_._2)
+    }
+  }
+
+  def associativityOf(node: FunctionCall): Option[Associativity] = {
+    simpleAssociativities.get((node.functionName, node.parameters.length))
+  }
 }
 
 abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = AbstractParser.defaultParameters) extends AbstractParser with RecursiveDescentHintParser {
@@ -302,7 +445,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         val ParseResult(r8, havingClause) = having(r7)
         val ParseResult(r9, (orderByClause, searchClause)) = orderByAndSearch(r8)
         val ParseResult(r10, (limitClause, offsetClause)) = limitOffset(r9)
-        ParseResult(r10, Select(distinct, selected, fromClause, joinClause, whereClause, groupByClause, havingClause, orderByClause, limitClause, offsetClause, searchClause, h).validate())
+        ParseResult(r10, Select(distinct, selected, fromClause, joinClause, whereClause, groupByClause, havingClause, orderByClause, limitClause, offsetClause, searchClause, h))
       case _ =>
         fail(reader, SELECT())
     }
@@ -676,7 +819,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
           r2.first match {
             case AS() =>
               // now we must see an identifier...
-              val ParseResult(r3, identPos) = alias(r2.rest)
+              val ParseResult(r3, identPos) = alias(r2.rest, e)
               result += SelectedExpression(e, Some(identPos))
               loop(r3, commaFirst = true)
             case _ =>
@@ -694,11 +837,13 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     ParseResult(finalReader, result.result())
   }
 
-  private def alias(reader: Reader): ParseResult[(ColumnName, Position)] = {
-    reader.first match {
-      case i: Identifier =>
+  private def alias(reader: Reader, forExpr: Expression): ParseResult[(ColumnName, Position)] = {
+    (reader.first, forExpr) match {
+      case (i: Identifier, _) =>
         ParseResult(reader.rest, (ColumnName(i.value), i.position))
-      case si: SystemIdentifier =>
+      case (si: SystemIdentifier, ColumnOrAliasRef(_, cn)) if ColumnName(si.value) == cn =>
+        ParseResult(reader.rest, (ColumnName(si.value), si.position))
+      case (si: SystemIdentifier, _) =>
         val cn = ColumnName(si.value)
         if(parameters.systemColumnAliasesAllowed.contains(cn)) {
           ParseResult(reader.rest, (cn, si.position))
@@ -1110,31 +1255,65 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
 
   private def windowFrameClause(reader: Reader): ParseResult[Seq[Expression]] = {
     reader.first match {
-      case r@(RANGE() | ROWS()) =>
+      case r@(RANGE() | ROWS() | GROUPS()) =>
         reader.rest.first match {
           case b@BETWEEN() =>
             val ParseResult(r2, fa) = frameStartEnd(reader.rest.rest)
             r2.first match {
               case a@AND() =>
-                frameStartEnd(r2.rest).map { fb =>
-                  Seq(tokenToLiteral(r), tokenToLiteral(b)) ++ fa ++ Seq(tokenToLiteral(a)) ++ fb
+                val ParseResult(r3, clauseStart) = frameStartEnd(r2.rest)
+                frameExclusion(r3).map { excl =>
+                  Seq(tokenToLiteral(r), tokenToLiteral(b)) ++ fa ++ Seq(tokenToLiteral(a)) ++ clauseStart ++ excl
                 }
               case _ =>
                 fail(r2, AND())
             }
           case UNBOUNDED() | CURRENT() =>
-            frameStartEnd(reader.rest).map { fb =>
-              tokenToLiteral(r) +: fb
+            val ParseResult(r2, clauseStart) = frameStartEnd(reader.rest)
+            frameExclusion(r2).map { excl =>
+              tokenToLiteral(r) +: (clauseStart ++ excl)
             }
           case _: IntegerLiteral =>
-            frameStartEnd(reader.rest).map { fb =>
-              tokenToLiteral(r) +: fb
+            val ParseResult(r2, clauseStart) = frameStartEnd(reader.rest)
+            frameExclusion(r2).map { excl =>
+              tokenToLiteral(r) +: (clauseStart ++ excl)
             }
           case _ =>
             fail(reader.rest, BETWEEN(), UNBOUNDED(), CURRENT(), AnIntegerLiteral)
         }
       case _ =>
-        reader.addAlternates(RANGE_ROWS_SET)
+        reader.addAlternates(RANGE_ROWS_GROUPS_SET)
+        ParseResult(reader, Nil)
+    }
+  }
+
+  private def frameExclusion(reader: Reader): ParseResult[Seq[Expression]] = {
+    reader.first match {
+      case r@EXCLUDE() =>
+        reader.rest.first match {
+          case r2@CURRENT() =>
+            reader.rest.rest.first match {
+              case r3@ROW() =>
+                ParseResult(reader.rest.rest.rest, Seq(tokenToLiteral(r), tokenToLiteral(r2), tokenToLiteral(r3)))
+              case _ =>
+                fail(reader.rest.rest, ROW())
+            }
+          case r2@GROUP() =>
+            ParseResult(reader.rest.rest, Seq(tokenToLiteral(r), tokenToLiteral(r2)))
+          case r2@TIES() =>
+            ParseResult(reader.rest.rest, Seq(tokenToLiteral(r), tokenToLiteral(r2)))
+          case r2@NO() =>
+            reader.rest.rest.first match {
+              case r3@OTHERS() =>
+                ParseResult(reader.rest.rest.rest, Seq(tokenToLiteral(r), tokenToLiteral(r2), tokenToLiteral(r3)))
+              case _ =>
+                fail(reader.rest.rest, OTHERS())
+            }
+          case _ =>
+            fail(reader.rest, CURRENT(), GROUP(), TIES(), NO())
+        }
+      case _ =>
+        reader.addAlternates(EXCLUDE_SET)
         ParseResult(reader, Nil)
     }
   }
@@ -1344,8 +1523,8 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def dereference(reader: Reader): ParseResult[Expression] = {
-    val ParseResult(r2, e) = atom(reader)
+  private def dereference(reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+    val ParseResult(r2, e) = nextParser(reader)
     dereference_!(r2, e)
   }
 
@@ -1370,8 +1549,8 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def cast(reader: Reader): ParseResult[Expression] = {
-    val ParseResult(r2, arg) = dereference(reader)
+  private def cast(reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+    val ParseResult(r2, arg) = nextParser(reader)
     cast_!(r2, arg)
   }
 
@@ -1387,89 +1566,16 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def unary(reader: Reader): ParseResult[Expression] = {
-    reader.first match {
-      case op@(MINUS() | PLUS()) =>
-        unary(reader.rest).map { arg =>
-          FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg), None)(op.position, op.position)
+  private def parsePrefixOp(opCls: OperatorClass.Prefix, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+    val opToken = reader.first
+    opCls.opNames.get(opToken) match {
+      case Some(funcName) =>
+        parsePrefixOp(opCls, reader.rest, nextParser).map { arg =>
+          FunctionCall(funcName, Seq(arg), None)(opToken.position, opToken.position)
         }
-      case _ =>
-        reader.addAlternates(MINUS_PLUS_SET)
-        cast(reader)
-    }
-  }
-
-  private def exp(reader: Reader): ParseResult[Expression] = {
-    val ParseResult(r2, arg) = unary(reader)
-    r2.first match {
-      case op@CARET() =>
-        exp(r2.rest).map { arg2 =>
-          FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg, arg2), None)(arg.position, op.position)
-        }
-      case _ =>
-        reader.addAlternates(OPERATOR_SET) // CARETSET - See note in order_!()
-        ParseResult(r2, arg)
-    }
-  }
-
-  private def factor(reader: Reader): ParseResult[Expression] = {
-    val ParseResult(r2, e) = exp(reader)
-    factor_!(r2, e)
-  }
-
-  @tailrec
-  private def factor_!(reader: Reader, arg: Expression): ParseResult[Expression] = {
-    reader.first match {
-      case op@(STAR() | SLASH() | PERCENT()) =>
-        val ParseResult(r2, arg2) = exp(reader.rest)
-        factor_!(r2, FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg, arg2), None)(arg.position, op.position))
-      case _ =>
-        reader.addAlternates(OPERATOR_SET) // FACTORSET - See note in order_!()
-        ParseResult(reader, arg)
-    }
-  }
-
-  private def term(reader: Reader): ParseResult[Expression] = {
-    val ParseResult(r2, e) = factor(reader)
-    term_!(r2, e)
-  }
-
-  @tailrec
-  private def term_!(reader: Reader, arg: Expression): ParseResult[Expression] = {
-    reader.first match {
-      case op@(PLUS() | MINUS() | PIPEPIPE()) =>
-        val ParseResult(r2, arg2) = factor(reader.rest)
-        term_!(r2, FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg, arg2), None)(arg.position, op.position))
-      case _ =>
-        reader.addAlternates(OPERATOR_SET) // TERMSET - See note in order_!()
-        ParseResult(reader, arg)
-    }
-  }
-
-  private def order(reader: Reader): ParseResult[Expression] = {
-    val ParseResult(r2, e) = term(reader)
-    order_!(r2, e)
-  }
-
-  @tailrec
-  private def order_!(reader: Reader, arg: Expression): ParseResult[Expression] = {
-    reader.first match {
-      case op@(EQUALS() | LESSGREATER() | LESSTHAN() | LESSTHANOREQUALS() | GREATERTHAN() | GREATERTHANOREQUALS() | EQUALSEQUALS() | BANGEQUALS()) =>
-        val ParseResult(r2, arg2) = term(reader.rest)
-        order_!(r2, FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg, arg2), None)(arg.position, op.position))
-      case _ =>
-        // So a bunch this adds an expectation of just "an operator"
-        // rather than specifying the operators it expects, and the
-        // functions above up through `exp` do not.  This only works
-        // because these handful of functions are a unique chain of
-        // parser functions - everything that enters enter order()
-        // (and _only_ those things) will be able to pass through
-        // those, and they pass through them without any intervening
-        // parsing steps.  As a result, we can just collapse _all_ of
-        // their expectations into just "we want some operator here".
-
-        reader.addAlternates(OPERATOR_SET) // COMPARISONSET
-        ParseResult(reader, arg)
+      case None =>
+        reader.addAlternates(opCls.expectation)
+        nextParser(reader)
     }
   }
 
@@ -1512,17 +1618,17 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def parseLike(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader): ParseResult[Expression] = {
-    likeBetweenIn(reader).map { pattern =>
+  private def parseLike(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+    likeBetweenIn(reader, nextParser).map { pattern =>
       FunctionCall(name, Seq(scrutinee, pattern), None)(scrutinee.position, op.position)
     }
   }
 
-  private def parseBetween(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader): ParseResult[Expression] = {
-    val ParseResult(r2, lowerBound) = likeBetweenIn(reader)
+  private def parseBetween(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+    val ParseResult(r2, lowerBound) = likeBetweenIn(reader, nextParser)
     r2.first match {
       case AND() =>
-        likeBetweenIn(r2.rest).map { upperBound =>
+        likeBetweenIn(r2.rest, nextParser).map { upperBound =>
           FunctionCall(name, Seq(scrutinee, lowerBound, upperBound), None)(scrutinee.position, op.position)
         }
       case _ =>
@@ -1537,13 +1643,13 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   // Again, it becomes
   //    lBI = order lBI'
   //    lBI' = [the various cases] lBI' | ε
-  private def likeBetweenIn(reader: Reader): ParseResult[Expression] = {
-    val ParseResult(r2, arg) = order(reader)
-    likeBetweenIn_!(r2, arg)
+  private def likeBetweenIn(reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+    val ParseResult(r2, arg) = nextParser(reader)
+    likeBetweenIn_!(r2, nextParser, arg)
   }
 
   @tailrec
-  private def likeBetweenIn_!(reader: Reader, arg: Expression): ParseResult[Expression] = {
+  private def likeBetweenIn_!(reader: Reader, nextParser: ExprParser, arg: Expression): ParseResult[Expression] = {
     reader.first match {
       case is: IS =>
         // This is either IS NULL or IS NOT NULL
@@ -1561,97 +1667,98 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             case _ =>
               fail(reader.rest, NULL(), NOT())
           }
-        likeBetweenIn_!(r2, arg2)
+        likeBetweenIn_!(r2, nextParser, arg2)
       case like: LIKE =>
         // woo only one possibility!
-        val ParseResult(r2, arg2) = parseLike(SpecialFunctions.Like, arg, like, reader.rest)
-        likeBetweenIn_!(r2, arg2)
+        val ParseResult(r2, arg2) = parseLike(SpecialFunctions.Like, arg, like, reader.rest, nextParser)
+        likeBetweenIn_!(r2, nextParser, arg2)
       case between: BETWEEN =>
-        val ParseResult(r2, arg2) = parseBetween(SpecialFunctions.Between, arg, between, reader.rest)
-        likeBetweenIn_!(r2, arg2)
+        val ParseResult(r2, arg2) = parseBetween(SpecialFunctions.Between, arg, between, reader.rest, nextParser)
+        likeBetweenIn_!(r2, nextParser, arg2)
       case not: NOT =>
         // could be NOT BETWEEN, NOT IN, or NOT LIKE
         reader.rest.first match {
           case between: BETWEEN =>
-            val ParseResult(r2, arg2) = parseBetween(SpecialFunctions.NotBetween, arg, not, reader.rest.rest)
-            likeBetweenIn_!(r2, arg2)
+            val ParseResult(r2, arg2) = parseBetween(SpecialFunctions.NotBetween, arg, not, reader.rest.rest, nextParser)
+            likeBetweenIn_!(r2, nextParser, arg2)
           case in: IN =>
             val ParseResult(r2, arg2) = parseIn(SpecialFunctions.NotIn, arg, not, reader.rest.rest)
-            likeBetweenIn_!(r2, arg2)
+            likeBetweenIn_!(r2, nextParser, arg2)
           case like: LIKE =>
-            val ParseResult(r2, arg2) = parseLike(SpecialFunctions.NotLike, arg, not, reader.rest.rest)
-            likeBetweenIn_!(r2, arg2)
+            val ParseResult(r2, arg2) = parseLike(SpecialFunctions.NotLike, arg, not, reader.rest.rest, nextParser)
+            likeBetweenIn_!(r2, nextParser, arg2)
           case other =>
             fail(reader.rest, BETWEEN(), IN(), LIKE())
         }
       case in: IN =>
         // Again only one possibility!
         val ParseResult(r2, arg2) = parseIn(SpecialFunctions.In, arg, in, reader.rest)
-        likeBetweenIn_!(r2, arg2)
+        likeBetweenIn_!(r2, nextParser, arg2)
       case _ =>
         reader.addAlternates(LIKE_BETWEEN_IN_SET)
         ParseResult(reader, arg)
     }
   }
 
-  private def negation(reader: Reader): ParseResult[Expression] = {
-    reader.first match {
-      case op: NOT =>
-        negation(reader.rest).map { arg =>
-          FunctionCall(SpecialFunctions.Operator(op.printable), Seq(arg), None)(op.position, op.position)
+  private def parseBinOp(opCls: OperatorClass.Binary, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+    opCls.associativity match {
+      case Associativity.Left =>
+        // This is a pattern which uses a standard trick to eliminate
+        // left-recursion (which is tricky for a recursive-descent parser
+        // to handle).  The grammar we want to parse is
+        //    thisParser = (thisParser OP nextParser) | nextParser
+        // but instead we're parsing
+        //    thisParser = nextParser thisParser'
+        //    thisParser' = (OP nextParser thisParser') | ε
+        // which is right-recursive.
+        val ParseResult(r2, e) = nextParser(reader)
+        parseBinOpLeft(opCls, r2, nextParser, e)
+      case Associativity.Right =>
+        parseBinOpRight(opCls, reader, nextParser)
+    }
+  }
+
+  @tailrec
+  private def parseBinOpLeft(opCls: OperatorClass.Binary, reader: Reader, nextParser: ExprParser, arg1: Expression): ParseResult[Expression] = {
+    val opToken = reader.first
+    opCls.opNames.get(opToken) match {
+      case Some(funcName) =>
+        val ParseResult(r2, arg2) = nextParser(reader.rest)
+        parseBinOpLeft(opCls, r2, nextParser, FunctionCall(funcName, Seq(arg1, arg2), None)(arg1.position, opToken.position))
+      case None =>
+        reader.addAlternates(opCls.expectation)
+        ParseResult(reader, arg1)
+    }
+  }
+
+  private def parseBinOpRight(opCls: OperatorClass.Binary, reader: Reader, nextParser: ExprParser): ParseResult[Expression] = {
+    val ParseResult(r2, arg1) = nextParser(reader)
+    val opToken = r2.first
+    opCls.opNames.get(opToken) match {
+      case Some(funcName) =>
+        parseBinOpRight(opCls, r2.rest, nextParser).map { arg2 =>
+          FunctionCall(funcName, Seq(arg1, arg2), None)(arg1.position, opToken.position)
         }
-      case _ =>
-        reader.addAlternates(NOT_SET)
-        likeBetweenIn(reader)
+      case None =>
+        reader.addAlternates(opCls.expectation)
+        ParseResult(r2, arg1)
     }
   }
 
-  private def conjunction(reader: Reader): ParseResult[Expression] = {
-    val ParseResult(r2, e) = negation(reader)
-    conjunction_!(r2, e)
-  }
-
-  @tailrec
-  private def conjunction_!(reader: Reader, arg: Expression): ParseResult[Expression] = {
-    reader.first match {
-      case and: AND =>
-        val ParseResult(r2, arg2) = negation(reader.rest)
-        conjunction_!(r2, FunctionCall(SpecialFunctions.Operator(and.printable), Seq(arg, arg2), None)(arg.position, and.pos))
-      case _ =>
-        reader.addAlternates(AND_SET)
-        ParseResult(reader, arg)
-    }
-  }
-
-  // This is a pattern that'll be used all over this parser.  The
-  // combinators approach was
-  //    disjunction = (disjunction `OR` conjunction) | conjunction;
-  // which is left-recursive.  We can eliminate that by instead doing
-  //    disjunction = conjunction disjunction'
-  //    disjunction' = `OR` conjunction disjunction' | ε
-  private def disjunction(reader: Reader): ParseResult[Expression] = {
-    val ParseResult(r2, e) = conjunction(reader)
-    disjunction_!(r2, e)
-  }
-
-  @tailrec
-  private def disjunction_!(reader: Reader, arg: Expression): ParseResult[Expression] = {
-    reader.first match {
-      case or: OR =>
-        val ParseResult(r2, arg2) = conjunction(reader.rest)
-        disjunction_!(r2, FunctionCall(SpecialFunctions.Operator(or.printable), Seq(arg, arg2), None)(arg.position, or.pos))
-      case _ =>
-        reader.addAlternates(OR_SET)
-        ParseResult(reader, arg)
+  private def precedented(reader: Reader, at: Int): ParseResult[Expression] = {
+    if(at == precedenceTable.length) {
+      atom(reader)
+    } else {
+      precedenceTable(at).parse(this, reader, precedented(_, at+1))
     }
   }
 
   protected final def nestedExpr(reader: Reader): ParseResult[Expression] = {
-    disjunction(reader)
+    precedented(reader, 0)
   }
 
   protected def topLevelExpr(reader: Reader): ParseResult[Expression] = {
-    val r = disjunction(reader)
+    val r = precedented(reader, 0)
     r.reader.resetAlternates()
     r
   }

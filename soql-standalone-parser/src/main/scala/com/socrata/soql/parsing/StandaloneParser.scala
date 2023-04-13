@@ -19,10 +19,3 @@ class StandaloneParser(parameters: AbstractParser.Parameters = AbstractParser.de
 
   protected def lexer(s: String): AbstractLexer = new StandaloneLexer(s)
 }
-
-class StandaloneCombinatorParser(parameters: AbstractParser.Parameters = AbstractParser.defaultParameters) extends AbstractCombinatorParser(parameters) {
-  protected def badParse(msg: String, nextPos: Position): Nothing =
-    throw BadParse(msg, nextPos)
-
-  protected def lexer(s: String): AbstractLexer = new StandaloneLexer(s)
-}

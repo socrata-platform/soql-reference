@@ -1,6 +1,6 @@
 package com.socrata.soql.parsing
 
-import com.socrata.NonEmptySeq
+import com.socrata.soql.collection.NonEmptySeq
 
 import com.socrata.soql.BinaryTree
 import com.socrata.soql.ast.{Expression, Join, JoinSelect, OrderBy, Select, Selection}

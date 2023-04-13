@@ -208,12 +208,12 @@ class ParserTest extends WordSpec with MustMatchers {
 
     "like round trip" in {
       val x = parseFull("select * where `a` like 'b'")
-      x.where.get.toString must be ("`a` LIKE 'b'")
+      x.where.get.toString must be ("`a` LIKE \"b\"")
     }
 
     "not like round trip" in {
       val x = parseFull("select * where `a` not like 'b'")
-      x.where.get.toString must be ("`a` NOT LIKE 'b'")
+      x.where.get.toString must be ("`a` NOT LIKE \"b\"")
     }
 
     "search round trip" in {
@@ -286,8 +286,8 @@ class ParserTest extends WordSpec with MustMatchers {
       x.selection.expressions.head.expression.toString must be ("avg(`x`) OVER (ORDER BY `m` ASC NULL LAST RANGE 123 PRECEDING)")
     }
 
-    "window frame clause should start with rows or range, not row" in {
-      expectFailure("Expected one of `)', `RANGE', `ROWS', `,', `NULL', `NULLS', `ASC', or `DESC', but got `row'", "avg(x) over(order by m row 123 PRECEDING)")
+    "window frame clause should start with rows or range or groups, not row" in {
+      expectFailure("Expected one of `)', `RANGE', `ROWS', `GROUPS', `,', `NULL', `NULLS', `ASC', or `DESC', but got `row'", "avg(x) over(order by m row 123 PRECEDING)")
     }
 
     "reject pipe query where right side is not a leaf." in {
@@ -326,10 +326,6 @@ class ParserTest extends WordSpec with MustMatchers {
       x.distinct must be (FullyDistinct)
       x.selection.expressions.map(_.expression) must be (Vector(ident("col1"), ident("col2")))
       x.toString must be ("SELECT DISTINCT `col1`, `col2`")
-    }
-
-    "reject distinct on not in order by." in {
-      expectParseFullFailure("SELECT DISTINCT ON expressions must match initial ORDER BY expressions", "SELECT DISTINCT ON(col1) col2 ORDER BY col2")
     }
 
     "select empty" in {
