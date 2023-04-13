@@ -241,13 +241,13 @@ object SoQLFunctions {
     NoDocs
   )
   // Reducing precision _can_ return multipolygons from polygons, so we have to split out the polygon type
-  val ReducePrecision = f("reducePrecision", FunctionName("reduce_precision"), Map("a" -> GeospatialLike - SoQLPolygon, "b" -> NumLike),
+  val ReducePrecision = f("reducePrecision", FunctionName("reduce_precision"), Map("a" -> (GeospatialLike - SoQLPolygon), "b" -> NumLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a")) (
       "Reduce the precision of a given geometry, for example reduce_precision(to_point('POINT (1.234 10.675)'), 0.1) => POINT (1.2 10.6)",
       Example("Reduce to tens place", "SELECT reduce_precision(to_point('POINT (1.234 10.675)'), 0.1)", "")
     )
-  val ReducePolyPrecision = f("reducePolyPrecision", FunctionName("reduce_precision"), Map("a" -> SoQLPolygon, "b" -> NumLike),
-    Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon)) (
+  val ReducePolyPrecision = f("reducePolyPrecision", FunctionName("reduce_precision"), Map("a" -> CovariantSet(SoQLPolygon), "b" -> NumLike),
+    Seq(FixedType(SoQLPolygon), VariableType("b")), Seq.empty, FixedType(SoQLMultiPolygon)) (
       "Reduce the precision of a given geometry, for example reduce_precision(to_point('POINT (1.234 10.675)'), 0.1) => POINT (1.2 10.6)",
       Example("Reduce to tens place", "SELECT reduce_precision(to_point('POINT (1.234 10.675)'), 0.1)", "")
     )
