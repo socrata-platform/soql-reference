@@ -76,6 +76,23 @@ class Typechecker[MT <: MetaTypes](
     expr match {
       case ast.FunctionCall(ast.SpecialFunctions.Parens, Seq(param), None, None) =>
         check(param)
+      case fc@ast.FunctionCall(ast.SpecialFunctions.Case, params, _, None) =>
+        // The parser will always produce a case form that ends with
+        // either (true, elseExpr) or (false, null) - it does this so
+        // that the AST can be pretty-printed back into the same shape
+        // as the user provided; specifically if what the user
+        // provided ended with `when true then whatever` then it
+        // _won't_ get pretty-printed back as `else whatever` because
+        // that won't be the last clause.  But now that we're
+        // typechecking, we can discard that last (false, null) if it
+        // exists.
+        val actualParams =
+          if(params.takeRight(2).headOption == Some(ast.BooleanLiteral(true)(fc.position))) {
+            params
+          } else {
+            params.dropRight(2)
+          }
+        check(fc.copy(functionName = ast.SpecialFunctions.CasePostTypecheck, parameters=actualParams)(position = fc.position, functionNamePosition = fc.functionNamePosition))
       case fc@ast.FunctionCall(ast.SpecialFunctions.Subscript, Seq(base, ast.StringLiteral(prop)), None, None) =>
         // experimental, currently disabled: allow expressions of the
         // form `a.b` to reference column b on table a.  Get rid of

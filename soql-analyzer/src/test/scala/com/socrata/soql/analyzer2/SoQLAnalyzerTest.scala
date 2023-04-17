@@ -939,4 +939,15 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement.schema.find(_._2.name == cn(":id")) must not be empty
   }
 
+  test("case expression gets rewritten to case function") {
+    val tf = tableFinder(
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withOrdering("text")
+    )
+
+    val analysis = analyze(tf, "aaaa-aaaa", "select case when text = 'hello' then num else -num end")
+    val analysis2 = analyze(tf, "aaaa-aaaa", "select case(text = 'hello', num, true, -num)")
+
+    analysis.statement must be (isomorphicTo(analysis2.statement))
+  }
+
 }
