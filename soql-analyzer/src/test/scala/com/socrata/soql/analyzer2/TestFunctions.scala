@@ -24,7 +24,16 @@ object TestFunctions {
   private def f(identity: String, name: FunctionName, constraints: Map[String, CovariantSet[TestType]], params: Seq[TypeLike[TestType]], varargs: Seq[TypeLike[TestType]], result: TypeLike[TestType], isAggregate: Boolean = false, needsWindow: Boolean = false) =
     Function(identity, name, constraints, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow, "", Seq())
 
+  val Case = f("case", FunctionName("case"),
+    Map("a" -> AllTypes),
+    Seq(FixedType(TestBoolean), VariableType("a")),
+    Seq(FixedType(TestBoolean), VariableType("a")),
+    VariableType("a")
+  )
+
   val BinaryPlus = f("+", SpecialFunctions.Operator("+"), Map("a" -> Concatable), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"))
+
+  val UnaryMinus = mf("-", SpecialFunctions.Operator("-"), Seq(TestNumber), Seq.empty, TestNumber)
 
   val Times = mf("*", SpecialFunctions.Operator("*"), Seq(TestNumber, TestNumber), Seq.empty, TestNumber)
 
