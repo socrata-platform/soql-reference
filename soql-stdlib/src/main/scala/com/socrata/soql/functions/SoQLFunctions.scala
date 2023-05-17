@@ -124,6 +124,25 @@ object SoQLFunctions {
   )
   val BangEq = Neq.copy(identity = "!=", name = SpecialFunctions.Operator("!="))
 
+  val CaselessEq = mf("caseless_eq", FunctionName("caseless_eq"), Seq(SoQLText, SoQLText), Nil, SoQLBoolean)(
+    "Return true if the first argument equals the second, ignoring case differences"
+  )
+  val CaselessNe = mf("caseless_ne", FunctionName("caseless_ne"), Seq(SoQLText, SoQLText), Nil, SoQLBoolean)(
+    "Return true if the first argument does not equal the second, ignoring case differences"
+  )
+  val CaselessStartsWith = mf("caseless_starts_with", FunctionName("caseless_starts_with"), Seq(SoQLText, SoQLText), Nil, SoQLBoolean)(
+    "Return true if the first argument starts with the second, ignoring case differences"
+  )
+  val CaselessContains = mf("caseless_contains", FunctionName("caseless_contains"), Seq(SoQLText, SoQLText), Nil, SoQLBoolean)(
+    "Return true if the first argument contains the second, ignoring case differences"
+  )
+  val CaselessOneOf = mf("caseless_one_of", FunctionName("caseless_one_of"), Seq(SoQLText, SoQLText), Seq(SoQLText), SoQLBoolean)(
+    "Return true if the first is equal to any of the others, ignoring case differences"
+  )
+  val CaselessNotOneOf = mf("caseless_not_one_of", FunctionName("caseless_not_one_of"), Seq(SoQLText, SoQLText), Seq(SoQLText), SoQLBoolean)(
+    "Return true if the first is not equal to any of the others, ignoring case differences"
+  )
+
   // arguments: lat, lon, distance in meter
   val WithinCircle = f("within_circle", FunctionName("within_circle"), Map("a" -> GeospatialLike, "b" -> RealNumLike),
     Seq(VariableType("a"), VariableType("b"), VariableType("b"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
