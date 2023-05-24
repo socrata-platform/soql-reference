@@ -11,7 +11,7 @@ class SoQLAnalysis[MT <: MetaTypes] private (
   val labelProvider: LabelProvider,
   val statement: Statement[MT],
   private val usesSelectListReferences: Boolean
-) extends MetaTypeHelper[MT] {
+) extends LabelUniverse[MT] {
   private[analyzer2] def this(labelProvider: LabelProvider, statement: Statement[MT]) =
     this(labelProvider, statement, false)
 
@@ -62,6 +62,17 @@ class SoQLAnalysis[MT <: MetaTypes] private (
     } else {
       result
     }
+  }
+
+  // This is not a rewrite pass in the sense that the other methods
+  // are; this is just a transformation from one metatype-space to
+  // another.
+  final def rewriteDatabaseNames[MT2 <: MetaTypes](
+    tableName: DatabaseTableName => types.DatabaseTableName[MT2],
+    // This is given the _original_ database table name
+    columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
+  )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): SoQLAnalysis[MT2] = {
+    copy(statement = statement.rewriteDatabaseNames(tableName, columnName))
   }
 
   /** For rewrite trivial table parameters ("trivial" means "column
