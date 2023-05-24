@@ -1,8 +1,11 @@
 package com.socrata.soql.analyzer2
 
+import com.socrata.soql.analyzer2.rewrite.Passes
 import com.socrata.soql.functions.MonomorphicFunction
-
 import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer, Readable, Writable}
+
+// When adding a pass here, remember to add it to the list in
+// rewrite/Passes.scala too!
 
 class SoQLAnalysis[MT <: MetaTypes] private (
   val labelProvider: LabelProvider,
@@ -11,6 +14,55 @@ class SoQLAnalysis[MT <: MetaTypes] private (
 ) extends MetaTypeHelper[MT] {
   private[analyzer2] def this(labelProvider: LabelProvider, statement: Statement[MT]) =
     this(labelProvider, statement, false)
+
+  def applyPasses(
+    passes: Seq[Passes],
+    isLiteralTrue: Expr[MT] => Boolean,
+    isOrderable: CT => Boolean,
+    and: MonomorphicFunction[CT]
+  ): SoQLAnalysis[MT] = {
+    if(passes.isEmpty) {
+      return this
+    }
+
+    var addSelectListReferences = false
+    val result = withoutSelectListReferences { self =>
+      var current = self
+      for(pass <- passes) {
+        current =
+          pass match {
+            case Passes.InlineTrivialParameters =>
+              current.inlineTrivialParameters(isLiteralTrue)
+            case Passes.PreserveOrdering =>
+              current.preserveOrdering
+            case Passes.RemoveTrivialSelects =>
+              current.removeTrivialSelects
+            case Passes.ImposeOrdering =>
+              current.imposeOrdering(isOrderable)
+            case Passes.Merge =>
+              current.merge(and)
+            case Passes.RemoveUnusedColumns =>
+              current.removeUnusedColumns
+            case Passes.RemoveUnusedOrderBy =>
+              current.removeUnusedOrderBy
+            case Passes.UseSelectListReferences =>
+              addSelectListReferences = true
+              current
+            case Passes.Page(size, offset) =>
+              current.page(size, offset)
+            case Passes.AddLimitOffset(limit, offset) =>
+              current.addLimitOffset(limit, offset)
+          }
+      }
+      current
+    }
+
+    if(addSelectListReferences) {
+      result.useSelectListReferences
+    } else {
+      result
+    }
+  }
 
   /** For rewrite trivial table parameters ("trivial" means "column
     * references and literals") so that they're inlined into the table
@@ -119,7 +171,7 @@ class SoQLAnalysis[MT <: MetaTypes] private (
 
   private def withoutSelectListReferences(f: SoQLAnalysis[MT] => SoQLAnalysis[MT]) =
     if(usesSelectListReferences) {
-      f(this.copy(statement = rewrite.SelectListReferences.unuse(statement))).useSelectListReferences
+      f(this.copy(statement = rewrite.SelectListReferences.unuse(statement), usesSelectListReferences = false)).useSelectListReferences
     } else {
       f(this)
     }
