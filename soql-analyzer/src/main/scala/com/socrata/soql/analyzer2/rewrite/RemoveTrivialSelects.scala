@@ -65,8 +65,8 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
 
         val result = Select(
           rewriteDistinctiveness(distinctiveness, columnMap),
-          OrderedMap() ++ selectList.iterator.map { case (label, NamedExpr(expr, name)) =>
-            (label, NamedExpr(rewriteExpr(expr, columnMap), name))
+          OrderedMap() ++ selectList.iterator.map { case (label, NamedExpr(expr, name, isSynthetic)) =>
+            (label, NamedExpr(rewriteExpr(expr, columnMap), name, isSynthetic = isSynthetic))
           },
           newFrom,
           where.map(rewriteExpr(_, columnMap)),

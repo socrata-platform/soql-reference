@@ -169,7 +169,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case from: FromTable =>
           selectFromFrom(
             from.columns.map { case (label, NameEntry(name, typ)) =>
-              labelProvider.columnLabel() -> NamedExpr(PhysicalColumn[MT](from.label, from.canonicalName, label, typ)(AtomicPositionInfo.None), name)
+              labelProvider.columnLabel() -> NamedExpr(PhysicalColumn[MT](from.label, from.canonicalName, label, typ)(AtomicPositionInfo.None), name, isSynthetic = false)
             },
             from
           )
@@ -238,7 +238,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               if(desc.hiddenColumns(name)) {
                 None
               } else {
-                Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, from.canonicalName, dcn, typ)(AtomicPositionInfo.None), name))
+                Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, from.canonicalName, dcn, typ)(AtomicPositionInfo.None), name, isSynthetic = false))
               }
             },
             from,
@@ -468,10 +468,10 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                   None
                 } else if(select.isAggregated) {
                   aggregateMerger(name, column).map { newExpr =>
-                    labelProvider.columnLabel() -> NamedExpr(newExpr, name)
+                    labelProvider.columnLabel() -> NamedExpr(newExpr, name, isSynthetic = true)
                   }
                 } else {
-                  Some(labelProvider.columnLabel() -> NamedExpr(column, name))
+                  Some(labelProvider.columnLabel() -> NamedExpr(column, name, isSynthetic = true))
                 }
               }
               select.copy(selectList = newSelectList)
@@ -604,7 +604,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         checkedDistinct,
         OrderedMap() ++ aliasAnalysis.expressions.keysIterator.map { cn =>
           val expr = finalState.namedExprs(cn)
-          labelProvider.columnLabel() -> NamedExpr(expr, cn)
+          labelProvider.columnLabel() -> NamedExpr(expr, cn, isSynthetic = false)
         },
         completeFrom,
         checkedWhere,
@@ -636,7 +636,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             // easy case - just filter the select-list
             val filteredStmt = stmt.copy(
               selectList = stmt.selectList.filter {
-                case (_, NamedExpr(_, cn)) => !ctx.hiddenColumns(cn)
+                case (_, NamedExpr(_, cn, _)) => !ctx.hiddenColumns(cn)
               }
             )
             FromStatement(filteredStmt, labelProvider.tableLabel(), ctx.scopedResourceName, None)
@@ -661,11 +661,11 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             val filteredStmt =
               Select(
                 Distinctiveness.Indistinct(),
-                stmt.selectList.flatMap { case (label, NamedExpr(expr, cn)) =>
+                stmt.selectList.flatMap { case (label, NamedExpr(expr, cn, isSynthetic)) =>
                   if(ctx.hiddenColumns(cn)) {
                     None
                   } else {
-                    Some(labelProvider.columnLabel() -> NamedExpr(VirtualColumn(unfilteredFrom.label, label, expr.typ)(AtomicPositionInfo.None), cn))
+                    Some(labelProvider.columnLabel() -> NamedExpr(VirtualColumn(unfilteredFrom.label, label, expr.typ)(AtomicPositionInfo.None), cn, isSynthetic = isSynthetic))
                   }
                 },
                 unfilteredFrom,
@@ -674,7 +674,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 None,
                 stmt.orderBy.map { ob =>
                   val (columnLabel, columnTyp) =
-                    stmt.selectList.iterator.collect { case (label, NamedExpr(expr, cn)) if expr == ob.expr =>
+                    stmt.selectList.iterator.collect { case (label, NamedExpr(expr, cn, isSynthetic)) if expr == ob.expr =>
                       (label, expr.typ)
                     }.nextOption().getOrElse {
                       throw new Exception("Internal error: found an order by whose expr is not in the select list??")
@@ -895,8 +895,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               FromStatement(
                 Select(
                   Distinctiveness.Indistinct(),
-                  OrderedMap() ++ useQuery.statement.schema.iterator.map { case (label, Statement.SchemaEntry(name, typ, _isSynthetic)) =>
-                    labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](useQuery.label, label, typ)(AtomicPositionInfo.None), name)
+                  OrderedMap() ++ useQuery.statement.schema.iterator.map { case (label, Statement.SchemaEntry(name, typ, isSynthetic)) =>
+                    labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](useQuery.label, label, typ)(AtomicPositionInfo.None), name, isSynthetic = isSynthetic)
                   },
                   Join(
                     JoinType.Inner,

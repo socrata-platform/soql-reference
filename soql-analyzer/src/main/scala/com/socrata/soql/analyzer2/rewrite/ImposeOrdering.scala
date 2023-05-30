@@ -17,8 +17,8 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
 
         Select(
           Distinctiveness.Indistinct(),
-          OrderedMap() ++ ct.schema.iterator.map { case (columnLabel, Statement.SchemaEntry(name, typ, _isSynthetic)) =>
-            labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newTableLabel, columnLabel, typ)(AtomicPositionInfo.None), name)
+          OrderedMap() ++ ct.schema.iterator.map { case (columnLabel, Statement.SchemaEntry(name, typ, isSynthetic)) =>
+            labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newTableLabel, columnLabel, typ)(AtomicPositionInfo.None), name, isSynthetic = isSynthetic)
           },
           FromStatement(ct, newTableLabel, None, None),
           None,
@@ -57,7 +57,7 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
         val existingOrderBy = orderBy.map(_.expr).to(Set)
 
         def allOrderableSelectedCols(except: Expr => Boolean): Iterator[OrderBy] =
-          selectList.valuesIterator.collect { case NamedExpr(expr, name) if isOrderable(expr.typ) && !except(expr) =>
+          selectList.valuesIterator.collect { case NamedExpr(expr, name, _isSynthetic) if isOrderable(expr.typ) && !except(expr) =>
             OrderBy(expr, true, true)
           }
 
