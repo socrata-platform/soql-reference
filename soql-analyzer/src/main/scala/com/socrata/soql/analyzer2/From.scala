@@ -29,7 +29,7 @@ sealed abstract class From[MT <: MetaTypes] extends LabelUniverse[MT] {
   // into a corner?
   def unique: LazyList[Seq[Column[MT]]]
 
-  def schema: Seq[(AutoTableLabel, ColumnLabel, CT)]
+  def schema: Seq[From.SchemaEntry[MT]]
 
   // extend the given environment with names introduced by this FROM clause
   private[analyzer2] def extendEnvironment(base: Environment[MT]): Either[AddScopeError, Environment[MT]]
@@ -89,6 +89,12 @@ sealed abstract class From[MT <: MetaTypes] extends LabelUniverse[MT] {
 }
 
 object From {
+  case class SchemaEntry[MT <: MetaTypes](
+    table: AutoTableLabel,
+    column: types.ColumnLabel[MT],
+    typ: types.ColumnType[MT]
+  )
+
   implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#ResourceNameScope], ctWritable: Writable[MT#ColumnType], ev: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[From[MT]] = new Writable[From[MT]] {
     def writeTo(buffer: WriteBuffer, from: From[MT]): Unit = {
       from match {

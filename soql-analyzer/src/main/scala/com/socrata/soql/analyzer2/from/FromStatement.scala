@@ -18,7 +18,7 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
   def asSelf = this
 
   def schema = statement.schema.map { case (acl, NameEntry(_, typ)) =>
-    (label, acl, typ)
+    From.SchemaEntry(label, acl, typ)
   }.toVector
 
   private[analyzer2] val scope: Scope[MT] = new Scope.Virtual[MT](label, statement.schema)
