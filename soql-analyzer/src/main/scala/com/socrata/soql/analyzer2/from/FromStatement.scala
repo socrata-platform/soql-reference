@@ -17,11 +17,11 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
   type Self[MT <: MetaTypes] = FromStatement[MT]
   def asSelf = this
 
-  def schema = statement.schema.map { case (acl, NameEntry(_, typ)) =>
+  def schema = statement.schema.map { case (acl, Statement.SchemaEntry(_, typ)) =>
     From.SchemaEntry(label, acl, typ)
   }.toVector
 
-  private[analyzer2] val scope: Scope[MT] = new Scope.Virtual[MT](label, statement.schema)
+  private[analyzer2] val scope: Scope[MT] = new Scope.Virtual[MT](label, statement.schema.withValuesMapped(_.asNameEntry))
 
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = statement.columnReferences
 
@@ -29,7 +29,7 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
   def contains(e: Expr[MT]): Boolean =
     statement.contains(e)
 
-  def unique = statement.unique.map(_.map { cn => VirtualColumn(label, cn, statement.schema(cn).typ)(AtomicPositionInfo.None) })
+  def unique = statement.unique.map(_.map { cn => VirtualColumn[MT](label, cn, statement.schema(cn).typ)(AtomicPositionInfo.None) })
 
   private[analyzer2] final def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
@@ -68,7 +68,7 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
     statement.doLabelMap(state)
     val tr = LabelMap.TableReference(resourceName, alias)
     state.tableMap += label -> tr
-    for((columnLabel, NameEntry(columnName, _typ)) <- statement.schema) {
+    for((columnLabel, Statement.SchemaEntry(columnName, _typ)) <- statement.schema) {
       state.columnMap += (label, columnLabel) -> (tr, columnName)
     }
   }

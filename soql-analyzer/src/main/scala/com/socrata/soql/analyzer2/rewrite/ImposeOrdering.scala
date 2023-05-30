@@ -17,15 +17,15 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
 
         Select(
           Distinctiveness.Indistinct(),
-          OrderedMap() ++ ct.schema.iterator.map { case (columnLabel, NameEntry(name, typ)) =>
-            labelProvider.columnLabel() -> NamedExpr(VirtualColumn(newTableLabel, columnLabel, typ)(AtomicPositionInfo.None), name)
+          OrderedMap() ++ ct.schema.iterator.map { case (columnLabel, Statement.SchemaEntry(name, typ)) =>
+            labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newTableLabel, columnLabel, typ)(AtomicPositionInfo.None), name)
           },
           FromStatement(ct, newTableLabel, None, None),
           None,
           Nil,
           None,
-          ct.schema.iterator.collect { case (columnLabel, NameEntry(_, typ)) if isOrderable(typ) =>
-            OrderBy(VirtualColumn(newTableLabel, columnLabel, typ)(AtomicPositionInfo.None), true, true)
+          ct.schema.iterator.collect { case (columnLabel, Statement.SchemaEntry(_, typ)) if isOrderable(typ) =>
+            OrderBy(VirtualColumn[MT](newTableLabel, columnLabel, typ)(AtomicPositionInfo.None), true, true)
           }.to(Vector),
           None,
           None,

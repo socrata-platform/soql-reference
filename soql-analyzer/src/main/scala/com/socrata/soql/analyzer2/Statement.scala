@@ -20,7 +20,7 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
   type Self[MT <: MetaTypes] <: Statement[MT]
   def asSelf: Self[MT]
 
-  val schema: OrderedMap[AutoColumnLabel, NameEntry[CT]]
+  val schema: OrderedMap[AutoColumnLabel, Statement.SchemaEntry[MT]]
 
   // See the comment in From for an explanation of this.  It's just
   // labels here because, as a Statement, we don't have enough
@@ -84,6 +84,13 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
 }
 
 object Statement {
+  case class SchemaEntry[MT <: MetaTypes](
+    name: ColumnName,
+    typ: types.ColumnType[MT]
+  ) extends MetaTypeHelper[MT] {
+    def asNameEntry: NameEntry[CT] = NameEntry(name, typ)
+  }
+
   implicit def serialize[MT <: MetaTypes](implicit writableRNS: Writable[MT#ResourceNameScope], writableCT: Writable[MT#ColumnType], writeableExpr: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[Statement[MT]] = new Writable[Statement[MT]] {
     def writeTo(buffer: WriteBuffer, stmt: Statement[MT]): Unit = {
       stmt match {

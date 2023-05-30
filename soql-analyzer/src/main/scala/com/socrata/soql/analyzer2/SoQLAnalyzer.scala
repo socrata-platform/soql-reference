@@ -417,8 +417,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
 
           if(lhs.schema.values.map(_.typ) != rhs.schema.values.map(_.typ)) {
             ctx.tableOpTypeMismatch(
-              OrderedMap() ++ lhs.schema.valuesIterator.map { case NameEntry(name, typ) => name -> typ },
-              OrderedMap() ++ rhs.schema.valuesIterator.map { case NameEntry(name, typ) => name -> typ },
+              OrderedMap() ++ lhs.schema.valuesIterator.map { case Statement.SchemaEntry(name, typ) => name -> typ },
+              OrderedMap() ++ rhs.schema.valuesIterator.map { case Statement.SchemaEntry(name, typ) => name -> typ },
               NoPosition /* TODO: NEED POS INFO FROM AST */
             )
           }
@@ -449,8 +449,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             name -> PhysicalColumn[MT](tableLabel, tableCanonicalName, colLabel, typ)(AtomicPositionInfo.None)
           }
         case FromStatement(stmt, tableLabel, _, _) =>
-          stmt.schema.iterator.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>
-            name -> VirtualColumn(tableLabel, colLabel, typ)(AtomicPositionInfo.None)
+          stmt.schema.iterator.collect { case (colLabel, Statement.SchemaEntry(name, typ)) if isSystemColumn(name) =>
+            name -> VirtualColumn[MT](tableLabel, colLabel, typ)(AtomicPositionInfo.None)
           }.toSeq
         case FromSingleRow(_, _) =>
           Nil
@@ -895,8 +895,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               FromStatement(
                 Select(
                   Distinctiveness.Indistinct(),
-                  OrderedMap() ++ useQuery.statement.schema.iterator.map { case (label, NameEntry(name, typ)) =>
-                    labelProvider.columnLabel() -> NamedExpr(VirtualColumn(useQuery.label, label, typ)(AtomicPositionInfo.None), name)
+                  OrderedMap() ++ useQuery.statement.schema.iterator.map { case (label, Statement.SchemaEntry(name, typ)) =>
+                    labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](useQuery.label, label, typ)(AtomicPositionInfo.None), name)
                   },
                   Join(
                     JoinType.Inner,
