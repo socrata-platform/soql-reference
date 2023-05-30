@@ -19,7 +19,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
 
   type ExprReplaces = Map[(AutoTableLabel, AutoColumnLabel), Expr]
 
-  private def matchingSelects(outerSelectList: OrderedMap[AutoColumnLabel, NamedExpr], innerSelectList: OrderedMap[AutoColumnLabel, NameEntry[CT]], innerLabel: AutoTableLabel): Boolean = {
+  private def matchingSelects(outerSelectList: OrderedMap[AutoColumnLabel, NamedExpr], innerSelectList: OrderedMap[AutoColumnLabel, Statement.SchemaEntry[MT]], innerLabel: AutoTableLabel): Boolean = {
     if(outerSelectList.size != innerSelectList.size) {
       return false
     }

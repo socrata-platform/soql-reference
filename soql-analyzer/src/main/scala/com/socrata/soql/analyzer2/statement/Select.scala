@@ -83,7 +83,10 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
   def contains(e: Expr[MT]): Boolean =
     find(_ == e).isDefined
 
-  val schema = selectList.withValuesMapped { case NamedExpr(expr, name) => NameEntry(name, expr.typ) }
+  val schema = selectList.withValuesMapped { case NamedExpr(expr, name, isSynthetic) =>
+    Statement.SchemaEntry[MT](name, expr.typ, isSynthetic = isSynthetic)
+  }
+
   def getColumn(cl: ColumnLabel) = cl match {
     case acl: AutoColumnLabel => schema.get(acl)
     case _ => None
@@ -108,16 +111,16 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
 
   lazy val unique: LazyList[Seq[AutoColumnLabel]] = {
     val selectedColumns = selectList.iterator.collect {
-      case (columnLabel, NamedExpr(PhysicalColumn(table, tableCanonicalName, col, typ), _name)) =>
+      case (columnLabel, NamedExpr(PhysicalColumn(table, tableCanonicalName, col, typ), _name, _isSynthetic)) =>
         PhysicalColumn(table, tableCanonicalName, col, typ)(AtomicPositionInfo.None) -> columnLabel
-      case (columnLabel, NamedExpr(VirtualColumn(table, col, typ), _name)) =>
+      case (columnLabel, NamedExpr(VirtualColumn(table, col, typ), _name, _isSynthetic)) =>
         VirtualColumn(table, col, typ)(AtomicPositionInfo.None) -> columnLabel
     }.toMap[Column[MT], AutoColumnLabel]
 
     if(isAggregated) {
       // if we've selected all our grouping-exprs, then those columns
       // effectively represent a primary key.
-      val selectedColumns = selectList.iterator.map { case (columnLabel, NamedExpr(expr, _name)) =>
+      val selectedColumns = selectList.iterator.map { case (columnLabel, NamedExpr(expr, _name, _isSynthetic)) =>
         expr -> columnLabel
       }.toMap
       val synthetic =
@@ -221,7 +224,7 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
           this.selectList.iterator.zip(thatSelectList.iterator).forall { case ((thisColLabel, thisNamedExpr), (thatColLabel, thatNamedExpr)) =>
             state.tryAssociate(thisCurrentTableLabel, thisColLabel, thatCurrentTableLabel, thatColLabel) &&
               thisNamedExpr.expr.findIsomorphism(state, thatNamedExpr.expr)
-            // do we care about the name?
+            // do we care about the name or syntheticness?
           } &&
           this.from.findIsomorphism(state, thatFrom) &&
           this.where.isDefined == thatWhere.isDefined &&
@@ -244,7 +247,7 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
     Seq[Option[Doc[Annotation[MT]]]](
       Some(
         (Seq(Some(d"SELECT"), distinctiveness.debugDoc(ev)).flatten.hsep +:
-          selectList.toSeq.zipWithIndex.map { case ((columnLabel, NamedExpr(expr, columnName)), idx) =>
+          selectList.toSeq.zipWithIndex.map { case ((columnLabel, NamedExpr(expr, columnName, _isSynthetic)), idx) =>
             expr.debugDoc(ev).annotate(Annotation.SelectListDefinition[MT](idx+1)) ++ Doc.softlineSep ++ d"AS" +#+ columnLabel.debugDoc.annotate(Annotation.ColumnAliasDefinition[MT](columnName, columnLabel))
           }.punctuate(d",")).sep.nest(2)
       ),

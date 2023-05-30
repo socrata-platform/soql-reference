@@ -42,14 +42,21 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
     analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("unordered-on-ordered pipes generates an ordering column if necessary") {
+  test("unordered-on-ordered pipes generates a synthetic ordering column if necessary") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val analysis = analyze(tf, "twocol", "select * order by num+1 |> select *")
+    val analysis = analyze(tf, "twocol", "select * order by num+1 |> select *").preserveOrdering
     val expectedAnalysis = analyze(tf, "twocol", "select *, num+1 as ordering order by num+1 |> select * (except ordering) order by ordering")
-    analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+
+    analysis.statement match {
+      case s: Select[TestMT] =>
+        s.from.schema.last.isSynthetic must be (true)
+      case _ =>
+        fail("Somehow not from a select??")
+    }
   }
 
   test("ordered-on-ordered pipes does not generate an ordering column if unnecessary") {

@@ -18,9 +18,9 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
 
   def unique = if(values.tail.isEmpty) LazyList(Nil) else LazyList.empty
 
-  val schema: OrderedMap[AutoColumnLabel, NameEntry[CT]] =
+  val schema: OrderedMap[AutoColumnLabel, Statement.SchemaEntry[MT]] =
     OrderedMap() ++ values.head.iterator.zip(labels.iterator).zipWithIndex.map { case ((expr, label), idx) =>
-      label -> NameEntry(ColumnName(s"column_${idx+1}"), expr.typ)
+      label -> Statement.SchemaEntry(ColumnName(s"column_${idx+1}"), expr.typ, isSynthetic = false)
     }
 
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] =

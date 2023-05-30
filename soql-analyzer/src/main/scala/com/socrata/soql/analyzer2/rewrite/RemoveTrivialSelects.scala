@@ -33,7 +33,7 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
           if(!schemaChanged) {
             // now a less-trivial check to see if we've changed the
             // input schema more subtly.
-            schemaChanged = exprs.values.lazyZip(fromSchema).exists { case (columnExpr, (sourceTable, sourceColumn, _typ)) =>
+            schemaChanged = exprs.values.lazyZip(fromSchema).exists { case (columnExpr, From.SchemaEntry(sourceTable, sourceColumn, _typ, _isSynthetic)) =>
               columnExpr.table != sourceTable || columnExpr.column != sourceColumn
             }
           }
@@ -65,8 +65,8 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
 
         val result = Select(
           rewriteDistinctiveness(distinctiveness, columnMap),
-          OrderedMap() ++ selectList.iterator.map { case (label, NamedExpr(expr, name)) =>
-            (label, NamedExpr(rewriteExpr(expr, columnMap), name))
+          OrderedMap() ++ selectList.iterator.map { case (label, NamedExpr(expr, name, isSynthetic)) =>
+            (label, NamedExpr(rewriteExpr(expr, columnMap), name, isSynthetic = isSynthetic))
           },
           newFrom,
           where.map(rewriteExpr(_, columnMap)),

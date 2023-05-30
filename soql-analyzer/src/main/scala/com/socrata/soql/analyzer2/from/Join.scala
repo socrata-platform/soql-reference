@@ -184,7 +184,7 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
       }
     ).map(_.reverse.flatten)
 
-  def schema = reduce[List[Seq[(AutoTableLabel, ColumnLabel, CT)]]](
+  def schema = reduce[List[Seq[From.SchemaEntry[MT]]]](
     { leftmost => List(leftmost.schema) },
     { (schemaSoFar, join) => join.right.schema :: schemaSoFar }
   ).reverse.flatten
