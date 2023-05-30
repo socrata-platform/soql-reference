@@ -12,10 +12,13 @@ class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends 
   def rewriteStatement(stmt: Statement, wantColumns: Boolean): Statement = {
     stmt match {
       case ct@CombinedTables(op, left, right) =>
-        // table ops never preserve ordering
+        // combined tables cannot guarantee unique columns exist
         ct
 
       case cte@CTE(defLabel, defAlias, defQuery, matHint, useQuery) =>
+        // This needs a little more thought when/if CTEs become a real
+        // thing, because we'll likely want to preserve unique columns
+        // through the definitions.
         val newUseQuery = rewriteStatement(useQuery, wantColumns)
 
         cte.copy(
@@ -23,11 +26,7 @@ class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends 
         )
 
       case v@Values(_, _) =>
-        // TODO, should this rewrite into a SELECT ... FROM
-        // (values...) ORDER BY synthetic_column ?  If so, we'll need
-        // a way to generate synthetic_column (== have a way to turn
-        // an integer into a CV).  See also similar comment over in
-        // ImposeOrdering.
+        // valueses don't have unique columns
         v
 
       case select@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
