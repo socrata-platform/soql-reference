@@ -417,8 +417,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
 
           if(lhs.schema.values.map(_.typ) != rhs.schema.values.map(_.typ)) {
             ctx.tableOpTypeMismatch(
-              OrderedMap() ++ lhs.schema.valuesIterator.map { case Statement.SchemaEntry(name, typ) => name -> typ },
-              OrderedMap() ++ rhs.schema.valuesIterator.map { case Statement.SchemaEntry(name, typ) => name -> typ },
+              OrderedMap() ++ lhs.schema.valuesIterator.map { case Statement.SchemaEntry(name, typ, _isSynthetic) => name -> typ },
+              OrderedMap() ++ rhs.schema.valuesIterator.map { case Statement.SchemaEntry(name, typ, _isSynthetic) => name -> typ },
               NoPosition /* TODO: NEED POS INFO FROM AST */
             )
           }
@@ -449,7 +449,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             name -> PhysicalColumn[MT](tableLabel, tableCanonicalName, colLabel, typ)(AtomicPositionInfo.None)
           }
         case FromStatement(stmt, tableLabel, _, _) =>
-          stmt.schema.iterator.collect { case (colLabel, Statement.SchemaEntry(name, typ)) if isSystemColumn(name) =>
+          stmt.schema.iterator.collect { case (colLabel, Statement.SchemaEntry(name, typ, _isSynthetic)) if isSystemColumn(name) =>
             name -> VirtualColumn[MT](tableLabel, colLabel, typ)(AtomicPositionInfo.None)
           }.toSeq
         case FromSingleRow(_, _) =>
@@ -895,7 +895,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               FromStatement(
                 Select(
                   Distinctiveness.Indistinct(),
-                  OrderedMap() ++ useQuery.statement.schema.iterator.map { case (label, Statement.SchemaEntry(name, typ)) =>
+                  OrderedMap() ++ useQuery.statement.schema.iterator.map { case (label, Statement.SchemaEntry(name, typ, _isSynthetic)) =>
                     labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](useQuery.label, label, typ)(AtomicPositionInfo.None), name)
                   },
                   Join(

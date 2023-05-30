@@ -19,7 +19,10 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   def contains(e: Expr[MT]): Boolean = false
 
   def schema = columns.iterator.map { case (dcn, NameEntry(_, typ)) =>
-    From.SchemaEntry(label, dcn, typ)
+    From.SchemaEntry(
+      label, dcn, typ,
+      isSynthetic = false // table columns are never synthetic
+    )
   }.toVector
 
   def unique = primaryKeys.to(LazyList).map(_.map { dcn => PhysicalColumn[MT](label, canonicalName, dcn, columns(dcn).typ)(AtomicPositionInfo.None) })

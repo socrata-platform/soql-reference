@@ -83,7 +83,7 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
   def contains(e: Expr[MT]): Boolean =
     find(_ == e).isDefined
 
-  val schema = selectList.withValuesMapped { case NamedExpr(expr, name) => Statement.SchemaEntry[MT](name, expr.typ) }
+  val schema = selectList.withValuesMapped { case NamedExpr(expr, name) => Statement.SchemaEntry[MT](name, expr.typ, isSynthetic = false) }
   def getColumn(cl: ColumnLabel) = cl match {
     case acl: AutoColumnLabel => schema.get(acl)
     case _ => None

@@ -92,7 +92,8 @@ object From {
   case class SchemaEntry[MT <: MetaTypes](
     table: AutoTableLabel,
     column: types.ColumnLabel[MT],
-    typ: types.ColumnType[MT]
+    typ: types.ColumnType[MT],
+    isSynthetic: Boolean
   )
 
   implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#ResourceNameScope], ctWritable: Writable[MT#ColumnType], ev: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[From[MT]] = new Writable[From[MT]] {

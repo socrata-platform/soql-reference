@@ -17,8 +17,8 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
   type Self[MT <: MetaTypes] = FromStatement[MT]
   def asSelf = this
 
-  def schema = statement.schema.map { case (acl, Statement.SchemaEntry(_, typ)) =>
-    From.SchemaEntry(label, acl, typ)
+  def schema = statement.schema.map { case (acl, Statement.SchemaEntry(_, typ, isSynthetic)) =>
+    From.SchemaEntry(label, acl, typ, isSynthetic = isSynthetic)
   }.toVector
 
   private[analyzer2] val scope: Scope[MT] = new Scope.Virtual[MT](label, statement.schema.withValuesMapped(_.asNameEntry))
@@ -68,7 +68,7 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
     statement.doLabelMap(state)
     val tr = LabelMap.TableReference(resourceName, alias)
     state.tableMap += label -> tr
-    for((columnLabel, Statement.SchemaEntry(columnName, _typ)) <- statement.schema) {
+    for((columnLabel, Statement.SchemaEntry(columnName, _typ, _isSynthetic)) <- statement.schema) {
       state.columnMap += (label, columnLabel) -> (tr, columnName)
     }
   }

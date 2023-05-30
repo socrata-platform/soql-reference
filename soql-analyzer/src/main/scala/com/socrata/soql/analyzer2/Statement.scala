@@ -86,7 +86,8 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
 object Statement {
   case class SchemaEntry[MT <: MetaTypes](
     name: ColumnName,
-    typ: types.ColumnType[MT]
+    typ: types.ColumnType[MT],
+    isSynthetic: Boolean
   ) extends MetaTypeHelper[MT] {
     def asNameEntry: NameEntry[CT] = NameEntry(name, typ)
   }

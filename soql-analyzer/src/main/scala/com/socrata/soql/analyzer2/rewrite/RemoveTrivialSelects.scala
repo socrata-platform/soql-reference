@@ -33,7 +33,7 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
           if(!schemaChanged) {
             // now a less-trivial check to see if we've changed the
             // input schema more subtly.
-            schemaChanged = exprs.values.lazyZip(fromSchema).exists { case (columnExpr, From.SchemaEntry(sourceTable, sourceColumn, _typ)) =>
+            schemaChanged = exprs.values.lazyZip(fromSchema).exists { case (columnExpr, From.SchemaEntry(sourceTable, sourceColumn, _typ, _isSynthetic)) =>
               columnExpr.table != sourceTable || columnExpr.column != sourceColumn
             }
           }
