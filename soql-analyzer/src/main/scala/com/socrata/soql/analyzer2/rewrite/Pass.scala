@@ -8,19 +8,19 @@ import com.rojoma.json.v3.util.{SimpleHierarchyCodecBuilder, InternalTag, Automa
 
 import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer, Readable, Writable}
 
-sealed abstract class Passes
+sealed abstract class Pass
 
-object Passes {
-  case object InlineTrivialParameters extends Passes
-  case object PreserveOrdering extends Passes
-  case object RemoveTrivialSelects extends Passes
-  case object ImposeOrdering extends Passes
-  case object Merge extends Passes
-  case object RemoveUnusedColumns extends Passes
-  case object RemoveUnusedOrderBy extends Passes
-  case object UseSelectListReferences extends Passes
-  case class Page(size: BigInt, offset: BigInt) extends Passes
-  case class AddLimitOffset(limit: Option[BigInt], offset: Option[BigInt]) extends Passes
+object Pass {
+  case object InlineTrivialParameters extends Pass
+  case object PreserveOrdering extends Pass
+  case object RemoveTrivialSelects extends Pass
+  case object ImposeOrdering extends Pass
+  case object Merge extends Pass
+  case object RemoveUnusedColumns extends Pass
+  case object RemoveUnusedOrderBy extends Pass
+  case object UseSelectListReferences extends Pass
+  case class Page(size: BigInt, offset: BigInt) extends Pass
+  case class AddLimitOffset(limit: Option[BigInt], offset: Option[BigInt]) extends Pass
 
   private class SingletonCodec[T](value: T) extends JsonEncode[T] with JsonDecode[T] {
     def encode(t: T) = JObject.canonicalEmpty
@@ -37,7 +37,7 @@ object Passes {
     }
   }
 
-  implicit val jCodec = SimpleHierarchyCodecBuilder[Passes](InternalTag("pass"))
+  implicit val jCodec = SimpleHierarchyCodecBuilder[Pass](InternalTag("pass"))
     .singleton("inline_trivial_parameters", InlineTrivialParameters)
     .singleton("preserve_ordering", PreserveOrdering)
     .singleton("remove_trivial_selects", RemoveTrivialSelects)
@@ -50,8 +50,8 @@ object Passes {
     .branch[AddLimitOffset]("add_limit_offset")(AutomaticJsonEncodeBuilder[AddLimitOffset], AutomaticJsonDecodeBuilder[AddLimitOffset], implicitly)
     .build
 
-  implicit object serialize extends Readable[Passes] with Writable[Passes] {
-    def readFrom(buffer: ReadBuffer): Passes =
+  implicit object serialize extends Readable[Pass] with Writable[Pass] {
+    def readFrom(buffer: ReadBuffer): Pass =
       buffer.read[Int]() match {
         case 0 => InlineTrivialParameters
         case 1 => PreserveOrdering
@@ -66,7 +66,7 @@ object Passes {
         case other => fail(s"Unknown rewrite pass type $other")
       }
 
-    def writeTo(buffer: WriteBuffer, rp: Passes): Unit = {
+    def writeTo(buffer: WriteBuffer, rp: Pass): Unit = {
       rp match {
         case InlineTrivialParameters => buffer.write(0)
         case PreserveOrdering => buffer.write(1)
