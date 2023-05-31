@@ -1,11 +1,11 @@
 package com.socrata.soql.analyzer2
 
-import com.socrata.soql.analyzer2.rewrite.Passes
+import com.socrata.soql.analyzer2.rewrite.Pass
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer, Readable, Writable}
 
 // When adding a pass here, remember to add it to the list in
-// rewrite/Passes.scala too!
+// rewrite/Pass.scala too!
 
 class SoQLAnalysis[MT <: MetaTypes] private (
   val labelProvider: LabelProvider,
@@ -16,7 +16,7 @@ class SoQLAnalysis[MT <: MetaTypes] private (
     this(labelProvider, statement, false)
 
   def applyPasses(
-    passes: Seq[Passes],
+    passes: Seq[Pass],
     isLiteralTrue: Expr[MT] => Boolean,
     isOrderable: CT => Boolean,
     and: MonomorphicFunction[CT]
@@ -31,26 +31,26 @@ class SoQLAnalysis[MT <: MetaTypes] private (
       for(pass <- passes) {
         current =
           pass match {
-            case Passes.InlineTrivialParameters =>
+            case Pass.InlineTrivialParameters =>
               current.inlineTrivialParameters(isLiteralTrue)
-            case Passes.PreserveOrdering =>
+            case Pass.PreserveOrdering =>
               current.preserveOrdering
-            case Passes.RemoveTrivialSelects =>
+            case Pass.RemoveTrivialSelects =>
               current.removeTrivialSelects
-            case Passes.ImposeOrdering =>
+            case Pass.ImposeOrdering =>
               current.imposeOrdering(isOrderable)
-            case Passes.Merge =>
+            case Pass.Merge =>
               current.merge(and)
-            case Passes.RemoveUnusedColumns =>
+            case Pass.RemoveUnusedColumns =>
               current.removeUnusedColumns
-            case Passes.RemoveUnusedOrderBy =>
+            case Pass.RemoveUnusedOrderBy =>
               current.removeUnusedOrderBy
-            case Passes.UseSelectListReferences =>
+            case Pass.UseSelectListReferences =>
               addSelectListReferences = true
               current
-            case Passes.Page(size, offset) =>
+            case Pass.Page(size, offset) =>
               current.page(size, offset)
-            case Passes.AddLimitOffset(limit, offset) =>
+            case Pass.AddLimitOffset(limit, offset) =>
               current.addLimitOffset(limit, offset)
           }
       }
