@@ -97,7 +97,6 @@ trait OAggregateFunctionCallImpl { this: AggregateFunctionCall.type =>
       val distinct = buffer.read[Boolean]()
       val filter = buffer.read[Option[Expr]]()
       val position = buffer.read[FuncallPositionInfo]()
-      val functionNamePosition = buffer.read[Position]()
       AggregateFunctionCall(
         function,
         args,
