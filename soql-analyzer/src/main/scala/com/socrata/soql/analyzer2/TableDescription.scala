@@ -19,6 +19,16 @@ trait TableDescriptionLike {
   val hiddenColumns: Set[ColumnName]
 }
 
+object TableDescriptionLike {
+  trait Dataset[MT <: MetaTypes] {
+    val name: types.DatabaseTableName[MT]
+    val canonicalName: CanonicalName
+    val columns: OrderedMap[types.DatabaseColumnName[MT], TableDescription.DatasetColumnInfo[MT#ColumnType]]
+    val ordering: Seq[TableDescription.Ordering[MT]]
+    val primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]]
+  }
+}
+
 sealed trait TableDescription[MT <: MetaTypes] extends TableDescriptionLike with LabelUniverse[MT] {
   private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): TableDescription[MT2]
   private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
@@ -69,7 +79,7 @@ object TableDescription {
     columns: OrderedMap[types.DatabaseColumnName[MT], DatasetColumnInfo[MT#ColumnType]],
     ordering: Seq[Ordering[MT]],
     primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]]
-  ) extends TableDescription[MT] {
+  ) extends TableDescription[MT] with TableDescriptionLike.Dataset[MT] {
     for(o <- ordering) {
       require(columns.contains(o.column), "Ordering not in dataset")
     }
