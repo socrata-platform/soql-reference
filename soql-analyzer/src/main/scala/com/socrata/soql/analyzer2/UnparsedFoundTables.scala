@@ -26,6 +26,8 @@ class UnparsedFoundTables[MT <: MetaTypes] private[analyzer2] (
       initialQuery.changeLabels[MT2],
       parserParameters
     )
+
+  def allTableDescriptions = tableMap.allTableDescriptions
 }
 
 object UnparsedFoundTables {

@@ -18,6 +18,8 @@ trait TableMapLike[MT <: MetaTypes] extends LabelUniverse[MT] {
     tableName: DatabaseTableName => types.DatabaseTableName[MT2],
     columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
   )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): Self[MT2]
+
+  def allTableDescriptions: Iterator[TableDescriptionLike.Dataset[MT]]
 }
 
 class TableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[MT#ResourceNameScope, Map[ResourceName, TableDescription[MT]]]) extends TableMapLike[MT] {
@@ -98,6 +100,12 @@ class TableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[
       }.toMap
     }.toMap)
   }
+
+  def allTableDescriptions =
+    for {
+      tablesForScope <- underlying.valuesIterator
+      d@TableDescription.Dataset(_, _, _, _, _) <- tablesForScope.valuesIterator
+    } yield d
 
   override def toString = "TableMap(" + underlying + ")"
 }

@@ -44,6 +44,12 @@ class UnparsedTableMap[MT <: MetaTypes] private[analyzer2] (private val underlyi
       }.toMap
     }.toMap)
   }
+
+  def allTableDescriptions =
+    for {
+      tablesForScope <- underlying.valuesIterator
+      d@UnparsedTableDescription.Dataset(_, _, _, _, _) <- tablesForScope.valuesIterator
+    } yield d
 }
 
 object UnparsedTableMap {

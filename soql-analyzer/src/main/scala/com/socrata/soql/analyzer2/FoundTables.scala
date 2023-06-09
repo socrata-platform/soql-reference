@@ -20,6 +20,8 @@ trait FoundTablesLike[MT <: MetaTypes] extends LabelUniverse[MT] {
     tableName: DatabaseTableName => types.DatabaseTableName[MT2],
     columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
   )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): Self[MT2]
+
+  def allTableDescriptions: Iterator[TableDescriptionLike.Dataset[MT]]
 }
 
 case class UserParameterSpecs[+ColumnType](
@@ -34,6 +36,8 @@ final case class FoundTables[MT <: MetaTypes] private[analyzer2] (
   parserParameters: AbstractParser.Parameters
 ) extends FoundTablesLike[MT] {
   type Self[MT <: MetaTypes] = FoundTables[MT]
+
+  def allTableDescriptions = tableMap.allTableDescriptions
 
   def asUnparsedFoundTables =
     new UnparsedFoundTables[MT](

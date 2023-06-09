@@ -47,8 +47,8 @@ object UnparsedTableDescription {
     canonicalName: CanonicalName,
     columns: OrderedMap[types.DatabaseColumnName[MT], types.TableDescription.DatasetColumnInfo[MT]],
     ordering: Seq[TableDescription.Ordering[MT]],
-    primaryKey: Seq[Seq[types.DatabaseColumnName[MT]]]
-  ) extends UnparsedTableDescription[MT] {
+    primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]]
+  ) extends UnparsedTableDescription[MT] with TableDescriptionLike.Dataset[MT] {
     val hiddenColumns = columns.values.flatMap { case TableDescription.DatasetColumnInfo(name, _, hidden) =>
       if(hidden) Some(name) else None
     }.to(Set)
@@ -74,7 +74,7 @@ object UnparsedTableDescription {
         ordering.map { case TableDescription.Ordering(dcn, ascending) =>
           TableDescription.Ordering(columnName(name, dcn), ascending)
         },
-        primaryKey.map(_.map(columnName(name, _)))
+        primaryKeys.map(_.map(columnName(name, _)))
       )
     }
   }
