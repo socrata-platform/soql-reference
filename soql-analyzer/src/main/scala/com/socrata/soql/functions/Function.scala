@@ -30,8 +30,7 @@ case class Function[+Type](identity: String,
                            result: TypeLike[Type],
                            isAggregate: Boolean,
                            needsWindow: Boolean,
-                           doc: String,
-                           examples: Seq[Example])  {
+                           doc: Function.Doc)  {
 
   val minArity = parameters.length
   def isVariadic = repeated.nonEmpty
@@ -83,4 +82,20 @@ case class Function[+Type](identity: String,
 
   override final def hashCode = System.identityHashCode(this)
   override final def equals(that: Any) = this eq that.asInstanceOf[AnyRef]
+}
+
+object Function {
+  case class Doc(
+    description: String,
+    examples: Seq[Example],
+    status: Doc.Status = Doc.Normal
+  )
+  object Doc {
+    sealed abstract class Status
+    case object Normal extends Status
+    case object Deprecated extends Status
+    case object Hidden extends Status
+
+    val empty = Doc("", Nil, Hidden)
+  }
 }

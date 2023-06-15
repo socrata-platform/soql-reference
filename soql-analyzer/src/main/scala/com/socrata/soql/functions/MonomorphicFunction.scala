@@ -9,7 +9,7 @@ import com.socrata.soql.environment.FunctionName
 import com.socrata.soql.typechecker.FunctionInfo
 
 case class MonomorphicFunction[+Type](function: Function[Type], bindings: Map[String, Type]) {
-  def this(identity: String, name: FunctionName, parameters: Seq[Type], repeated: Seq[Type], result: Type, isAggregate: Boolean = false, needsWindow: Boolean = false)(documentation: String, examples: Example*) =
+  def this(identity: String, name: FunctionName, parameters: Seq[Type], repeated: Seq[Type], result: Type, isAggregate: Boolean = false, needsWindow: Boolean = false)(doc: Function.Doc) =
     this(Function(
       identity,
       name,
@@ -19,8 +19,7 @@ case class MonomorphicFunction[+Type](function: Function[Type], bindings: Map[St
       FixedType(result),
       isAggregate,
       needsWindow,
-      documentation,
-      examples
+      doc
     ), Map.empty)
 
   val bindingsLessWildcards = bindings.keySet.diff(function.wildcards)
