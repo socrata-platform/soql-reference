@@ -1,5 +1,8 @@
 package com.socrata.soql.docs
 
+import scala.collection.compat.immutable.LazyList
+import scala.collection.compat._
+
 import java.io.File
 
 import com.socrata.soql.types._
@@ -10,11 +13,13 @@ import com.rojoma.simplearm.v2._
 import com.rojoma.json.v3.ast.JString
 
 object Docs {
-    def generate(outPath: File) {
-        SoQLFunctions.allFunctions.filter(x => x.name match { 
-            case SpecialFunctions.Subscript => false
-            case _ => true
-        }).groupBy(_.name).foreach { case(name, functions) => 
+    def generate(outPath: File): Unit = {
+        SoQLFunctions.allFunctions
+          .to(LazyList)
+          .filter(_.doc.status == Function.Doc.Normal)
+          .filter(_.name != SpecialFunctions.Subscript)
+          .groupBy(_.name)
+          .foreach { case(name, functions) =>
             val doc = makeFuncDoc(name, functions)
             val cleanedName = cleanName(name.toString)
             val file_path = new File(outPath, s"$cleanedName.md")
@@ -64,15 +69,15 @@ function: ${
 }
 description: ${
     // It doesn't matter which one we use if there are multiple overloads
-    if(functions.head.doc.length > 55) JString(functions.head.doc.slice(0, 55)+"...")
-    else JString(functions.head.doc)
+    if(functions.head.doc.description.length > 55) JString(functions.head.doc.description.slice(0, 55)+"...")
+    else JString(functions.head.doc.description)
 }
 versions:
 - 2.1
 datatypes:
 ${functions.map{ function => function.parameters.headOption match {
         case Some(FixedType(typ)) => s"- ${JString(typ.toString)}"
-        case Some(VariableType(name)) => function.constraints.getOrElse(name, SoQLTypeClasses.Ordered ++ SoQLTypeClasses.GeospatialLike).map { t => s"- ${JString(t.toString)}"}.mkString("\n")
+        case Some(VariableType(name)) => function.constraints.getOrElse(name, SoQLTypeClasses.Ordered ++ SoQLTypeClasses.GeospatialLike).iterator.map { t => s"- ${JString(t.toString)}"}.mkString("\n")
         case None => ""
     }
 }.toSet.mkString("\n")
@@ -80,7 +85,7 @@ ${functions.map{ function => function.parameters.headOption match {
 returns: 
 ${functions.head.result match {
     case FixedType(typ) => s"- ${JString(typ.toString)}"
-    case VariableType(name) => functions.head.constraints.getOrElse(name, SoQLTypeClasses.Ordered ++ SoQLTypeClasses.GeospatialLike).map { t => s"- ${JString(t.toString)}"}.mkString("\n")
+    case VariableType(name) => functions.head.constraints.getOrElse(name, SoQLTypeClasses.Ordered ++ SoQLTypeClasses.GeospatialLike).iterator.map { t => s"- ${JString(t.toString)}"}.mkString("\n")
     }
 }
 parent_paths: 
@@ -94,7 +99,7 @@ parents:
 ${functions.head.doc}
 
 ## Examples
-${functions.head.examples.zipWithIndex.map { case (exp, i) => 
+${functions.head.doc.examples.zipWithIndex.map { case (exp, i) => 
     s"**${i + 1}. " + exp.explanation + "**\n\n" +
     "**Query**\n\n`" + exp.query + "`\n\n" +
     "**Try it**\n\n" + exp.tryit

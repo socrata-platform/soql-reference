@@ -30,7 +30,7 @@ object SoQLFunctions {
     result: SoQLType,
     isAggregate: Boolean = false,
     needsWindow: Boolean = false)(doc: String, examples: Example*) =
-    new MonomorphicFunction(identity, name, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow)(doc, examples:_*).function
+    new MonomorphicFunction(identity, name, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow)(Function.Doc(doc, examples, Function.Doc.Normal)).function
   private def f(
     identity: String,
     name: FunctionName,
@@ -41,7 +41,7 @@ object SoQLFunctions {
     isAggregate: Boolean = false,
     needsWindow: Boolean = false
   )(doc: String, examples: Example*) =
-    Function(identity, name, constraints, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow, doc, examples)
+    Function(identity, name, constraints, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow, Function.Doc(doc, examples, Function.Doc.Normal))
   private def field(source: SoQLType, field: String, result: SoQLType) =
     mf(
       source.name.name + "_" + field,
@@ -194,15 +194,18 @@ object SoQLFunctions {
     FixedType(SoQLMultiPolygon),
     isAggregate = false,
     needsWindow = false,
-    """
-    Return the minimum convex geometry that encloses all of the geometries within a set
+    Function.Doc(
+      """
+      Return the minimum convex geometry that encloses all of the geometries within a set
 
-    The convex_hull(...) generates a polygon that represents the minimum convex geometry that
-    can encompass a geometry. All of the points in the geometry will either represent vertexes
-    of that polygon, or will be enclosed within it, much like if you were to take a rubber
-    band and snap it around the geometry's points.
-    """,
-    Seq()
+      The convex_hull(...) generates a polygon that represents the minimum convex geometry that
+      can encompass a geometry. All of the points in the geometry will either represent vertexes
+      of that polygon, or will be enclosed within it, much like if you were to take a rubber
+      band and snap it around the geometry's points.
+      """,
+      Nil,
+      Function.Doc.Normal
+    )
   )
   val Intersects = f("intersects", FunctionName("intersects"), Map("a" -> GeospatialLike, "b" -> GeospatialLike),
     Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLBoolean))(
