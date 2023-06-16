@@ -584,7 +584,7 @@ object SoQLFunctions {
   )
   val WidthBucket = mf("width_bucket", FunctionName("width_bucket"), Seq(SoQLNumber, SoQLNumber, SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber)(
     // https://database.guide/how-width_bucket-works-in-postgresql/
-    "Calculate N buckets of equal length from the min value to the max value: width_bucket(`number_column`, min, max, # of desired buckets - 1). Note, the number of buckets is inclusive, so if you want 10 buckets, you would put 9 in the last parameter"
+    "Calculate N buckets of equal length from the min value to the max value: width_bucket(`number_column`, min, max, # of desired buckets)."
   )
 
   val FloatingTimeStampTruncYmd = mf("floating timestamp trunc day", FunctionName("date_trunc_ymd"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)(
