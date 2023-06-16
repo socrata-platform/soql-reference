@@ -582,6 +582,10 @@ object SoQLFunctions {
   val Ntile = f("ntile", FunctionName("ntile"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), needsWindow=true)(
     NoDocs
   )
+  val WidthBucket = mf("width_bucket", FunctionName("width_bucket"), Seq(SoQLNumber, SoQLNumber, SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber)(
+    // https://database.guide/how-width_bucket-works-in-postgresql/
+    "Calculate N buckets of equal length from the min value to the max value: width_bucket(`number_column`, min, max, # of desired buckets)."
+  )
 
   val FloatingTimeStampTruncYmd = mf("floating timestamp trunc day", FunctionName("date_trunc_ymd"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)(
     "Truncate a date at the year/month/day threshold"
