@@ -512,9 +512,23 @@ object SoQLFunctions {
     "Split a string of text on delimiter and return the given field (1 base)"
   )
 
-  val Substring = mf("substring", FunctionName("substring"), Seq(SoQLText, SoQLNumber), Seq(SoQLNumber), SoQLText)(
-    "Get a substring of a specified length of a text from a start index (1 base). If length is not supplied, it returns the rest of the string.",
+  // This entry only exists for deployment purposes.  When the deploy
+  // happens, since soql-pg-adapter is released before
+  // query-coordinator, QC will potentially generate calls to this
+  // function based on the old "substring" name, so s-pg-a will need
+  // to be prepared to receive calls with the function identifier
+  // "substring" for one deploy cycle.
+  val Substring = mf("substring", FunctionName("legacy substring"), Seq(SoQLText, SoQLNumber), Seq(SoQLNumber), SoQLText)(
+    NoDocs
+  ).copy(doc = Function.Doc.empty.copy(status = Function.Doc.Hidden))
+
+  val Substr2 = mf("substr2", FunctionName("substring"), Seq(SoQLText, SoQLNumber), Nil, SoQLText)(
+    "Get a substring of a text from a start index (1 base).",
     Example("Get a substring from the second character to the rest of the string", "substring('world', 2) => 'orld'", ""),
+  )
+
+  val Substr3 = mf("substr3", FunctionName("substring"), Seq(SoQLText, SoQLNumber, SoQLNumber), Nil, SoQLText)(
+    "Get a substring of a specified length of a text from a start index (1 base)",
     Example("Get a substring from the second character with a length of one", "substring('world', 2, 1) => 'o'", "")
   )
 
