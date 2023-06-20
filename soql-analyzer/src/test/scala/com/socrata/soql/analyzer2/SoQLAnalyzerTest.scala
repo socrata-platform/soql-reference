@@ -964,4 +964,18 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement must be (isomorphicTo(analysis2.statement))
   }
 
+  test("cannot use OVER with count(distinct)") {
+    val tf = tableFinder(
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withOrdering("text")
+    )
+
+    val Right(start) = tf.findTables(0, rn("aaaa-aaaa"), "select count(distinct text) over (partition by num)", Map.empty)
+    analyzer(start, UserParameters.empty) match {
+      case Right(_) => fail("Expected an error")
+      case Left(SoQLAnalyzerError.TextualError(_, _, _, SoQLAnalyzerError.AnalysisError.TypecheckError.DistinctWithOver())) =>
+        // yay
+      case Left(err) =>
+        fail(s"Wrong error: ${err}")
+    }
+  }
 }
