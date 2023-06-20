@@ -261,6 +261,10 @@ class Typechecker[MT <: MetaTypes](
               return Left(error(NonWindowFunction(fc.functionName), fc.functionNamePosition))
             }
 
+            if(fc.distinct) {
+              return Left(error(DistinctWithOver(), fc.functionNamePosition))
+            }
+
             // blearghhh ok so the parser does in fact parse this
             // (i.e., we know this is well-formed, assuming the input
             // came out of the parser) but it gives it to use as text

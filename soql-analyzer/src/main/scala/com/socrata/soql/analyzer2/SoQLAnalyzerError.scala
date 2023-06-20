@@ -240,6 +240,7 @@ object SoQLAnalyzerError {
           and("requires-window", AutomaticJsonCodecBuilder[RequiresWindow]).
           and("non-aggregate", AutomaticJsonCodecBuilder[NonAggregate]).
           and("non-window-function", AutomaticJsonCodecBuilder[NonWindowFunction]).
+          and("distinct-with-over", AutomaticJsonCodecBuilder[DistinctWithOver]).
           and("groups-requires-order-by", singletonCodec(GroupsRequiresOrderBy)).
           and("unordered-order-by", AutomaticJsonCodecBuilder[UnorderedOrderBy])
 
@@ -287,6 +288,9 @@ object SoQLAnalyzerError {
       case class NonWindowFunction(
         name: FunctionName
       ) extends AnalysisError(s"${name} is not a window function") with TypecheckError
+
+      case class DistinctWithOver(
+      ) extends AnalysisError(s"Cannot use DISTINCT with OVER") with TypecheckError
 
       case object GroupsRequiresOrderBy extends AnalysisError(s"GROUPS mode requires and ORDER BY in the window definition") with TypecheckError with Singleton
     }

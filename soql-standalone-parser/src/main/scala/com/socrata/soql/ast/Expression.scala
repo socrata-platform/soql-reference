@@ -216,6 +216,11 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
       )(position, functionNamePosition)
     }
 
+  // Uggh!  Once analyzer2 is everywhere and we're free to rework the
+  // AST, make this a parameter to the case class instead of this
+  // magic value.
+  def distinct = functionName.name.toLowerCase.endsWith("_distinct")
+
   private[ast] def variadizeAssociative(builder: VectorBuilder[Expression]): Unit = {
     require(parameters.length == 2)
     require(window.isEmpty)
