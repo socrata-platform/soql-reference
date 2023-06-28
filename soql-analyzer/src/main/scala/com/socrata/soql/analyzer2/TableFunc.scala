@@ -24,7 +24,7 @@ object TableFunc {
           case Minus => 4
           case MinusAll => 5
         }
-      buffer.write(tf)
+      buffer.write(tag)
     }
 
     def readFrom(buffer: ReadBuffer) =
