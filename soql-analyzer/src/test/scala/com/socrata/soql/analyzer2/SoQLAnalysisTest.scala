@@ -337,6 +337,26 @@ select count(*), 1 as x |> select x
     analysis.removeUnusedColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("remove unused columns - udf") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("b" -> TestBoolean, "n" -> TestNumber, "t" -> TestText),
+      (0, "udf") -> U(0, "select from @single_row where ?x", "x" -> TestBoolean)
+    )
+
+    // Force @twocol into the subselect so there's a query for columns
+    // to be removed from, then pass one of its columns which is
+    // otherwise not used into a UDF.
+    val analysis = analyze(tf, "twocol", """
+select * |> select n join @udf(b) as @udf on true
+""")
+
+    val expectedAnalysis = analyze(tf, "twocol", """
+select b, n |> select n join @udf(b) as @udf on true
+""")
+
+    analysis.removeUnusedColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
   test("remove unused order by - preserve top-level ordering") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)

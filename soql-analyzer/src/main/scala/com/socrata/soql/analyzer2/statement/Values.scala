@@ -24,7 +24,12 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
     }
 
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] =
-    Map.empty
+    // This _can_ have column references because of lateral joins...
+    values.iterator.foldLeft(Map.empty[AutoTableLabel, Set[ColumnLabel]]) { (acc, row) =>
+      row.iterator.foldLeft(acc) { (acc, expr) =>
+        acc.mergeWith(expr.columnReferences)(_ ++ _)
+      }
+    }
 
   private[analyzer2] def findIsomorphism(
     state: IsomorphismState,

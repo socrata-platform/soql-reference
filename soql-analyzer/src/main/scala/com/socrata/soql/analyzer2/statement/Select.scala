@@ -37,6 +37,14 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
     for(o <- orderBy) {
       refs = refs.mergeWith(o.expr.columnReferences)(_ ++ _)
     }
+    for(s <- search) {
+      // Add all our input columns
+      val allInputColumns = from.schema.
+        foldLeft(Map.empty[AutoTableLabel, Set[ColumnLabel]]) { (acc, schemaEnt) =>
+          acc + (schemaEnt.table -> (acc.getOrElse(schemaEnt.table, Set.empty) + schemaEnt.column))
+        }
+      refs = refs.mergeWith(allInputColumns)(_ ++ _)
+    }
     refs
   }
 
