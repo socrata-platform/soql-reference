@@ -26,11 +26,11 @@ class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.
         (v, false)
 
       case stmt@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
-        val newSelectList = (myLabel, distinctiveness) match {
-          case (_, Distinctiveness.FullyDistinct()) | (None, _) =>
+        val newSelectList = (myLabel, distinctiveness, search) match {
+          case (None, _, _) | (_, Distinctiveness.FullyDistinct(), _) | (_, _, Some(_)) =>
             // need to keep all my columns
             selectList
-          case (Some(tl), _) =>
+          case (Some(tl), _, _) =>
             val wantedColumns = columnReferences.getOrElse(tl, Set.empty)
             selectList.filter { case (cl, _) => wantedColumns(cl) }
         }
