@@ -785,18 +785,19 @@ case object SoQLPhone extends SoQLType("phone") {
   // Phone number can take almost anything.  But it does not take :, {, } to avoid confusion with phone type and json
   val phoneRx = "((?i)Home|Cell|Work|Fax|Other)?(: ?)?([^:{}]+)?".r
 
-  def isPossible(s: String): Boolean = {
+  def parsePhone(s: String): Option[SoQLPhone] =
     s match {
-      case phoneRx(pt, sep, pn) =>
-        Option(pt).nonEmpty || Option(pn).nonEmpty
+      case phoneRx(pt, sep, pn) if Option(pt).nonEmpty || Option(pn).nonEmpty =>
+        Some(SoQLPhone(Option(pt).map(_.toLowerCase.capitalize), Option(pn)))
       case _ =>
         try {
-          JsonUtil.parseJson[SoQLPhone](s).isRight
+          JsonUtil.parseJson[SoQLPhone](s).toOption
         } catch {
-          case ex: JsonReaderException => false
+          case ex: JsonReaderException => None
         }
     }
-  }
+
+  def isPossible(s: String): Boolean = parsePhone(s).isDefined
 
   def isPossible(s: CaseInsensitiveString): Boolean = isPossible(s.getString)
 
