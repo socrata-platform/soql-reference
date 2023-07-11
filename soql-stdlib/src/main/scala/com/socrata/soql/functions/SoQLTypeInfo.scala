@@ -100,6 +100,10 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
     analyzer2.LiteralValue[FakeMT](SoQLNumber(new java.math.BigDecimal(s.value)))(new analyzer2.AtomicPositionInfo(pos))
   private def textToMoneyExpr(s: SoQLText, pos: Position) =
     analyzer2.LiteralValue[FakeMT](SoQLMoney(new java.math.BigDecimal(s.value)))(new analyzer2.AtomicPositionInfo(pos))
+  private def textToPhoneExpr(phone: SoQLPhone, pos: Position) =
+    analyzer2.LiteralValue[FakeMT](phone)(new analyzer2.AtomicPositionInfo(pos))
+  private def textToUrlExpr(url: SoQLUrl, pos: Position) =
+    analyzer2.LiteralValue[FakeMT](url)(new analyzer2.AtomicPositionInfo(pos))
   private def textToPointExpr(p: Point, pos: Position) =
     analyzer2.LiteralValue[FakeMT](SoQLPoint(p))(new analyzer2.AtomicPositionInfo(pos))
   private def textToMultiPointExpr(mp: MultiPoint, pos: Position) =
@@ -159,6 +163,11 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
   }
 
   private val booleanRx = "(?i)(true|false|1|0)".r
+  private def textToBooleanExpr(s: SoQLText, pos: Position) =
+    s.value.toLowerCase match {
+      case "true"|"1" => analyzer2.LiteralValue[FakeMT](SoQLBoolean(true))(new analyzer2.AtomicPositionInfo(pos))
+      case "false"|"0" => analyzer2.LiteralValue[FakeMT](SoQLBoolean(false))(new analyzer2.AtomicPositionInfo(pos))
+    }
   private def isBooleanLiteral(s: String) = try {
     s match {
       case booleanRx(_) =>
@@ -214,10 +223,10 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
     Conversions(SoQLMultiLine.WktRep.unapply(_), Seq(textToMultiLineFunc), Seq(textToMultiLineExpr _)),
     Conversions(SoQLPolygon.WktRep.unapply(_), Seq(textToPolygonFunc), Seq(textToPolygonExpr _)),
     Conversions(SoQLMultiPolygon.WktRep.unapply(_), Seq(textToMultiPolygonFunc), Seq(textToMultiPolygonExpr _)),
-    Conversions.simple(SoQLPhone.isPossible, Seq(textToPhoneFunc), Seq(funcExpr(textToPhoneFunc))),
-    Conversions.simple(SoQLUrl.isPossible, Seq(textToUrlFunc), Seq(funcExpr(textToUrlFunc))),
+    Conversions(SoQLPhone.parsePhone _, Seq(textToPhoneFunc), Seq(textToPhoneExpr _)),
+    Conversions(SoQLUrl.parseUrl _, Seq(textToUrlFunc), Seq(textToUrlExpr _)),
     Conversions.simple(SoQLLocation.isPossibleLocation, Seq(textToLocationFunc), Seq(funcExpr(textToLocationFunc))),
-    Conversions.simple(isBooleanLiteral, Seq(textToBooleanFunc), Seq(funcExpr(textToBooleanFunc)))
+    Conversions.simple(isBooleanLiteral, Seq(textToBooleanFunc), Seq(textToBooleanExpr _))
   )
 
   def stringLiteralExpr(s: String, pos: Position) = {
