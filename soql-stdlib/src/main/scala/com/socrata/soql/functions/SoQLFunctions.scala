@@ -50,6 +50,12 @@ object SoQLFunctions {
       Seq.empty,
       result
     )(s"Get the field named ${field} with type ${result}")
+  private implicit class AugmentFunction(private val f: Function[SoQLType]) extends AnyVal {
+    def deprecated =
+      f.copy(doc = f.doc.copy(status = Function.Doc.Deprecated))
+    def hidden =
+      f.copy(doc = f.doc.copy(status = Function.Doc.Hidden))
+  }
 
   val TextToFixedTimestamp = mf("text to fixed timestamp", SpecialFunctions.Cast(SoQLFixedTimestamp.name), Seq(SoQLText), Seq.empty, SoQLFixedTimestamp)(
     NoDocs
@@ -59,10 +65,10 @@ object SoQLFunctions {
   )
   val TextToDate = mf("text to date", SpecialFunctions.Cast(SoQLDate.name), Seq(SoQLText), Seq.empty, SoQLDate)(
     NoDocs
-  )
+  ).hidden // date is not a type we truly support yet
   val TextToTime = mf("text to time", SpecialFunctions.Cast(SoQLTime.name), Seq(SoQLText), Seq.empty, SoQLTime)(
     NoDocs
-  )
+  ).hidden // time is not a type we truly support yet
   val TextToInterval = mf("text to interval", SpecialFunctions.Cast(SoQLInterval.name), Seq(SoQLText), Seq.empty, SoQLInterval)(
     NoDocs
   )
@@ -92,13 +98,13 @@ object SoQLFunctions {
   )
   val TextToLocation = mf("text to location", SpecialFunctions.Cast(SoQLLocation.name), Seq(SoQLText), Seq.empty, SoQLLocation)(
     NoDocs
-  )
+  ).hidden // Required by the old sqlizer (not a real function, requires a string literal); implemented fully in the new-sqlizer
   val TextToPhone = mf("text to phone", SpecialFunctions.Cast(SoQLPhone.name), Seq(SoQLText), Seq.empty, SoQLPhone)(
     NoDocs
-  )
+  ).hidden // Required by the old sqlizer (not a real function, requires a string literal); not necessary in the new-sqlizer
   val TextToUrl = mf("text to url", SpecialFunctions.Cast(SoQLUrl.name), Seq(SoQLText), Seq.empty, SoQLUrl)(
     NoDocs
-  )
+  ).hidden // Required by the old sqlizer (not a real function, requires a string literal); not necessary in the new-sqlizer
 
   val Concat = f("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))(
     "Concatenate two strings", Example("Concatenate two strings", "'first' || 'second' as concat", ""), Example("Concatenate with columns", "col_a || 'second' as concat", "")
@@ -406,10 +412,10 @@ object SoQLFunctions {
   )
   val TimesNumMoney = mf("*NM", SpecialFunctions.Operator("*"), Seq(SoQLNumber, SoQLMoney), Seq.empty, SoQLMoney)(
     "Multiply two numbers together"
-  )
+  ).deprecated // money is not a type we support
   val TimesMoneyNum = mf("*MN", SpecialFunctions.Operator("*"), Seq(SoQLMoney, SoQLNumber), Seq.empty, SoQLMoney)(
     "Multiply two numbers together"
-  )
+  ).deprecated // money is not a type we support
 
   val DivNumNum = mf("/NN", SpecialFunctions.Operator("/"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber)(
     "Divide a number by another"
@@ -419,10 +425,10 @@ object SoQLFunctions {
   )
   val DivMoneyNum = mf("/MN", SpecialFunctions.Operator("/"), Seq(SoQLMoney, SoQLNumber), Seq.empty, SoQLMoney)(
     "Divide a number by another"
-  )
+  ).deprecated // money is not a type we support
   val DivMoneyMoney = mf("/MM", SpecialFunctions.Operator("/"), Seq(SoQLMoney, SoQLMoney), Seq.empty, SoQLNumber)(
     "Divide a number by another"
-  )
+  ).deprecated // money is not a type we support
 
   val ExpNumNum = mf("^NN", SpecialFunctions.Operator("^"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber)(
     "Return the value of one number raised to the power of another number"
@@ -439,10 +445,10 @@ object SoQLFunctions {
   )
   val ModMoneyNum = mf("%MN", SpecialFunctions.Operator("%"), Seq(SoQLMoney, SoQLNumber), Seq.empty, SoQLMoney)(
     "Find the remainder(modulus) of one number divided by another"
-  )
+  ).deprecated // money is not a type we support
   val ModMoneyMoney = mf("%MM", SpecialFunctions.Operator("%"), Seq(SoQLMoney, SoQLMoney), Seq.empty, SoQLNumber)(
     "Find the remainder(modulus) of one number divided by another"
-  )
+  ).deprecated // money is not a type we support
 
   val NaturalLog = f("ln", FunctionName("ln"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))(
     "Return the natural log of a number"
@@ -462,7 +468,7 @@ object SoQLFunctions {
 
   val NumberToMoney = mf("number to money", SpecialFunctions.Cast(SoQLMoney.name), Seq(SoQLNumber), Seq.empty, SoQLMoney)(
     NoDocs
-  )
+  ).deprecated // money is not a type we support
   val NumberToDouble = mf("number to double", SpecialFunctions.Cast(SoQLDouble.name), Seq(SoQLNumber), Seq.empty, SoQLDouble)(
     NoDocs
   )
@@ -511,16 +517,6 @@ object SoQLFunctions {
   val SplitPart = mf("split_part", FunctionName("split_part"), Seq(SoQLText, SoQLText, SoQLNumber), Seq.empty, SoQLText)(
     "Split a string of text on delimiter and return the given field (1 base)"
   )
-
-  // This entry only exists for deployment purposes.  When the deploy
-  // happens, since soql-pg-adapter is released before
-  // query-coordinator, QC will potentially generate calls to this
-  // function based on the old "substring" name, so s-pg-a will need
-  // to be prepared to receive calls with the function identifier
-  // "substring" for one deploy cycle.
-  val Substring = mf("substring", FunctionName("legacy substring"), Seq(SoQLText, SoQLNumber), Seq(SoQLNumber), SoQLText)(
-    NoDocs
-  ).copy(doc = Function.Doc.empty.copy(status = Function.Doc.Hidden))
 
   val Substr2 = mf("substr2", FunctionName("substring"), Seq(SoQLText, SoQLNumber), Nil, SoQLText)(
     "Get a substring of a text from a start index (1 base).",
@@ -719,7 +715,7 @@ object SoQLFunctions {
 
   val TextToMoney = mf("text to money", SpecialFunctions.Cast(SoQLMoney.name), Seq(SoQLText), Seq.empty, SoQLMoney)(
     NoDocs
-  )
+  ).deprecated // money is not a type we support
 
   val TextToBool = mf("text to boolean", SpecialFunctions.Cast(SoQLBoolean.name), Seq(SoQLText), Seq.empty, SoQLBoolean)(
     NoDocs
@@ -817,23 +813,23 @@ object SoQLFunctions {
   )
   val JsonToNumber = mf("json to number", SpecialFunctions.Cast(SoQLNumber.name), Seq(SoQLJson), Seq.empty, SoQLNumber)(
     NoDocs
-  )
+  ).deprecated // not implemented; if implemented it would be fundamentally different from json to text
   val JsonToBool = mf("json to bool", SpecialFunctions.Cast(SoQLBoolean.name), Seq(SoQLJson), Seq.empty, SoQLBoolean)(
     NoDocs
-  )
+  ).deprecated // not implemented; if implemented it would be fundamentally different from json to text
   val JsonToObject = mf("json to obj", SpecialFunctions.Cast(SoQLObject.name), Seq(SoQLJson), Seq.empty, SoQLObject)(
     NoDocs
-  )
+  ).deprecated // not implemented; if implemented it would be fundamentally different from json to text
   val JsonToArray = mf("json to array", SpecialFunctions.Cast(SoQLArray.name), Seq(SoQLJson), Seq.empty, SoQLArray)(
     NoDocs
-  )
+  ).deprecated // not implemented; if implemented it would be fundamentally different from json to text
 
   val TextToRowIdentifier = mf("text to rid", SpecialFunctions.Cast(SoQLID.name), Seq(SoQLText), Seq.empty, SoQLID)(
     NoDocs
-  )
+  ).hidden // required by the old-sqlizer (not a real function, requires a string literal); not necessary in the new
   val TextToRowVersion = mf("text to rowver", SpecialFunctions.Cast(SoQLVersion.name), Seq(SoQLText), Seq.empty, SoQLVersion)(
     NoDocs
-  )
+  ).hidden // required by the old-sqlizer (not a real function, requires a string literal); not necessary in the new
 
   val Iif = f("iif", FunctionName("iif"), Map.empty,
     Seq(FixedType(SoQLBoolean), VariableType("a"), VariableType("a")),
