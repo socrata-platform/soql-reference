@@ -412,6 +412,17 @@ select b, n |> select n join @udf(b) as @udf on true
     analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("preserve ordering - simple") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber).withOrdering("text", ascending = false)
+    )
+
+    val analysis = analyze(tf, "twocol", "select *")
+    val expectedAnalysis = analyze(tf, "twocol", "select * order by text desc")
+
+    analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
   test("preserve ordering + remove unused order by - keep ordering only at the top level") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
@@ -421,6 +432,28 @@ select b, n |> select n join @udf(b) as @udf on true
     val expectedAnalysis = analyze(tf, "twocol", "select text, num |> select text, num order by num, text")
 
     analysis.preserveOrdering.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("preserve ordering - non-duplicate chained") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber).withOrdering("text", ascending = false),
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num order by num, text desc")
+
+    analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("preserve ordering - duplicate chained") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber).withOrdering("text", ascending = false),
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, num order by text")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num order by text")
+
+    analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("impose ordering - primary key") {

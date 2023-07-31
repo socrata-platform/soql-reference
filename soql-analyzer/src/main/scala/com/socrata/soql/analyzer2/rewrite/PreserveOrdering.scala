@@ -59,16 +59,28 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extend
 
         // We will at the very least want to add the ordering
         // columns from the subquery onto the end of our order-by...
-        val orderedSelf = select.copy(
-          from = newFrom,
+        val orderedSelf = locally {
           // If we didn't request that the subquery be ordered, then
           // we'll ignore any extra ordering info it returned to us.
           // It _shouldn't_ ever do so in that case, but we'll guard
           // it just in case, since it's required for correctness (in
           // the face of aggregates and DISTINCT ON) that we not have
           // the extra ordering.
-          orderBy = orderBy ++ (if(wantSubqueryOrdered) extraOrdering else Nil)
-        )
+          val orderByFromSubquery =
+            if(wantSubqueryOrdered) {
+              // if we've already ordered by this expr (asc/desc and
+              // null positioning don't matter) then don't re-order by
+              // it at a later stage.
+              val alreadyOrderedBy = orderBy.iterator.map(_.expr).toSet
+              extraOrdering.filterNot { ob => alreadyOrderedBy(ob.expr) }
+            } else {
+              Nil
+            }
+          select.copy(
+            from = newFrom,
+            orderBy = orderBy ++ orderByFromSubquery
+          )
+        }
         if(wantOrderingColumns) {
           // ..and our caller wants to know how we're ordered, so make
           // sure we've put the relevant expressions in our select
