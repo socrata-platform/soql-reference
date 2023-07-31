@@ -61,7 +61,7 @@ object TableDescription {
         }
     }
 
-  case class Ordering[MT <: MetaTypes](column: types.DatabaseColumnName[MT], ascending: Boolean)
+  case class Ordering[MT <: MetaTypes](column: types.DatabaseColumnName[MT], ascending: Boolean, nullLast: Boolean)
   object Ordering {
     private[analyzer2] implicit def encode[MT <: MetaTypes](implicit colEnc: JsonEncode[MT#DatabaseColumnNameImpl]) = AutomaticJsonEncodeBuilder[Ordering[MT]]
     private[analyzer2] implicit def decode[MT <: MetaTypes](implicit colDec: JsonDecode[MT#DatabaseColumnNameImpl]) = AutomaticJsonDecodeBuilder[Ordering[MT]]
@@ -115,8 +115,8 @@ object TableDescription {
             columnName(name, dcn) -> ev.convertCTOnly(ne)
           }.toSeq : _*
         ),
-        ordering.map { case TableDescription.Ordering(dcn, ascending) =>
-          TableDescription.Ordering(columnName(name, dcn), ascending)
+        ordering.map { case TableDescription.Ordering(dcn, ascending, nullLast) =>
+          TableDescription.Ordering(columnName(name, dcn), ascending, nullLast)
         },
         primaryKeys.map(_.map(columnName(name, _)))
       )

@@ -12,20 +12,32 @@ import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.StandaloneParser
 import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, DatabaseColumnName, TableDescription, CanonicalName, TableMap, ParserUtil, FoundTables, UnparsedFoundTables, UnparsedTableMap, ScopedResourceName, MetaTypes, MetaTypeHelper}
 
+sealed abstract class OptionalBoolean {
+  def orElse(b: Boolean): Boolean
+}
+object OptionalBoolean {
+  implicit class Provided(value: Boolean) extends OptionalBoolean {
+    def orElse(b: Boolean) = value
+  }
+  implicit object Unprovided extends OptionalBoolean {
+    def orElse(b: Boolean) = b
+  }
+}
+
 sealed abstract class Thing[+RNS, +CT]
 case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT] {
-  private var orderings_ : List[(String, Boolean)] = Nil
+  private var orderings_ : List[(String, Boolean, Boolean)] = Nil
   private var hiddenColumns_ : Set[String] = Set.empty
   private var primaryKeys_ : List[Seq[String]] = Nil
 
-  def withOrdering(column: String, ascending: Boolean = true): D[CT] = {
+  def withOrdering(column: String, ascending: Boolean = true, nullLast: OptionalBoolean = OptionalBoolean.Unprovided): D[CT] = {
     val result = D(schema : _*)
-    result.orderings_ = (column, ascending) :: orderings_
+    result.orderings_ = (column, ascending, nullLast.orElse(ascending)) :: orderings_
     result.hiddenColumns_ = hiddenColumns_
     result.primaryKeys_ = primaryKeys_
     result
   }
-  def orderings: Seq[(String, Boolean)] = orderings_.reverse
+  def orderings: Seq[(String, Boolean, Boolean)] = orderings_.reverse
 
   def withHiddenColumns(column: String*): D[CT] = {
     val result = D(schema : _*)
@@ -93,7 +105,7 @@ object MockTableFinder {
   def apply[MT <: MetaTypes](items: FoundTables[MT])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl): MockTableFinder[MT] = this(items.asUnparsedFoundTables)
 
   private sealed abstract class JThing[+RNS, +CT]
-  private case class JD[+CT](schema: Seq[(String, CT)], orderings: Option[Seq[(String, Boolean)]], hiddenColumns: Option[Seq[String]], primaryKeys: Option[Seq[Seq[String]]]) extends JThing[Nothing, CT]
+  private case class JD[+CT](schema: Seq[(String, CT)], orderings: Option[Seq[(String, Boolean, Boolean)]], hiddenColumns: Option[Seq[String]], primaryKeys: Option[Seq[Seq[String]]]) extends JThing[Nothing, CT]
   private case class JQ[+RNS,+CT](scope: Option[RNS], parent: String, soql: String, params: Map[String, CT], canonicalName: Option[String], hiddenColumns: Option[Seq[String]]) extends JThing[RNS, CT]
   private case class JU[+RNS,+CT](scope: Option[RNS], soql: String, params: Seq[(String, CT)], canonicalName: Option[String], hiddenColumns: Option[Seq[String]]) extends JThing[RNS, CT]
 
@@ -204,7 +216,7 @@ class MockTableFinder[MT <: MetaTypes](private val raw: Map[(MT#ResourceNameScop
             val cn = ColumnName(rawColumnName)
             DatabaseColumnName[MT#DatabaseColumnNameImpl](cn.caseFolded) -> DatasetColumnInfo(cn, ct, hidden = hiddenColumns(cn))
           },
-          d.orderings.map { case (col, asc) => Ordering(DatabaseColumnName(ColumnName(col).caseFolded), asc) },
+          d.orderings.map { case (col, asc, nullLast) => Ordering(DatabaseColumnName(ColumnName(col).caseFolded), asc, nullLast) },
           d.primaryKeys.map(_.map { col => DatabaseColumnName[MT#DatabaseColumnNameImpl](ColumnName(col).caseFolded) })
         )
       case q@Q(scope, parent, soql, params @ _*) =>

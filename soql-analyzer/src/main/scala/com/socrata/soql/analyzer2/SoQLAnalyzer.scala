@@ -212,7 +212,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           primaryKeys = desc.primaryKeys
         )
       } else {
-        for(TableDescription.Ordering(col, _ascending) <- desc.ordering) {
+        for(TableDescription.Ordering(col, _ascending, _nullLast) <- desc.ordering) {
           val typ = desc.schema(col).typ
           if(!typeInfo.isOrdered(typ)) {
             throw Bail(SoQLAnalyzerError.TextualError(srn.scope, Some(desc.canonicalName), NoPosition, SoQLAnalyzerError.AnalysisError.TypecheckError.UnorderedOrderBy(typeInfo.typeNameFor(typ))))
@@ -245,9 +245,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             None,
             Nil,
             None,
-            desc.ordering.map { case TableDescription.Ordering(dcn, ascending) =>
+            desc.ordering.map { case TableDescription.Ordering(dcn, ascending, nullLast) =>
               val NameEntry(_, typ) = from.columns(dcn)
-              OrderBy(PhysicalColumn[MT](from.label, from.canonicalName, dcn, typ)(AtomicPositionInfo.None), ascending = ascending, nullLast = ascending)
+              OrderBy(PhysicalColumn[MT](from.label, from.canonicalName, dcn, typ)(AtomicPositionInfo.None), ascending = ascending, nullLast = nullLast)
             },
             None,
             None,

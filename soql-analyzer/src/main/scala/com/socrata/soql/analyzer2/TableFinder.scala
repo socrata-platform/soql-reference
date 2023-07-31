@@ -35,7 +35,7 @@ trait TableFinder[MT <: MetaTypes] {
     * representation of Datasets' schemas. */
   sealed trait FinderTableDescription
 
-  case class Ordering(column: types.DatabaseColumnName[MT], ascending: Boolean)
+  case class Ordering(column: types.DatabaseColumnName[MT], ascending: Boolean, nullLast: Boolean)
 
   case class DatasetColumnInfo(name: ColumnName, typ: ColumnType, hidden: Boolean)
 
@@ -58,8 +58,8 @@ trait TableFinder[MT <: MetaTypes] {
         schema.map { case (cl, DatasetColumnInfo(cn, ct, hidden)) =>
           cl -> TableDescription.DatasetColumnInfo(cn, ct, hidden)
         },
-        ordering.map { case Ordering(column, ascending) =>
-          TableDescription.Ordering(column, ascending)
+        ordering.map { case Ordering(column, ascending, nullLast) =>
+          TableDescription.Ordering(column, ascending, nullLast)
         },
         primaryKeys
       )

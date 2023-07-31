@@ -71,8 +71,8 @@ object UnparsedTableDescription {
             columnName(name, dcn) -> TableDescription.DatasetColumnInfo(ne.name, ev.convertCT(ne.typ), ne.hidden)
           }.toSeq : _*
         ),
-        ordering.map { case TableDescription.Ordering(dcn, ascending) =>
-          TableDescription.Ordering(columnName(name, dcn), ascending)
+        ordering.map { case TableDescription.Ordering(dcn, ascending, nullLast) =>
+          TableDescription.Ordering(columnName(name, dcn), ascending, nullLast)
         },
         primaryKeys.map(_.map(columnName(name, _)))
       )
