@@ -52,6 +52,8 @@ class SoQLAnalysis[MT <: MetaTypes] private (
               current.page(size, offset)
             case Pass.AddLimitOffset(limit, offset) =>
               current.addLimitOffset(limit, offset)
+            case Pass.RemoveOrderBy =>
+              current.removeOrderBy
           }
       }
       current
@@ -145,8 +147,24 @@ class SoQLAnalysis[MT <: MetaTypes] private (
       self.copy(statement = rewrite.RemoveUnusedColumns(self.statement))
     }
 
+  /** Remove all non-top-level order bys that do not affect the set of rows returned.
+    *
+    * This will walk over the analysis, keeping orderings where
+    *   * the current (sub)query is the top-level query
+    *   * the current (sub)query uses window functions
+    *   * the current (sub)query has a limit/offset
+    */
   def removeUnusedOrderBy: SoQLAnalysis[MT] =
     copy(statement = rewrite.RemoveUnusedOrderBy(statement))
+
+  /** Remove all order bys that do not affect the set of rows returned.
+    *
+    * This will walk over the analysis. keeping orderings where
+    *   * the current (sub)query uses window functions
+    *   * the current (sub)query has a limit/offset
+    */
+  def removeOrderBy: SoQLAnalysis[MT] =
+    copy(statement = rewrite.RemoveUnusedOrderBy(statement, preserveTopLevelOrdering = false))
 
   /** Rewrite expressions in group/order/distinct clauses which are
     * identical to expressions in the select list to use select-list
