@@ -21,6 +21,7 @@ object Pass {
   case object UseSelectListReferences extends Pass
   case class Page(size: BigInt, offset: BigInt) extends Pass
   case class AddLimitOffset(limit: Option[BigInt], offset: Option[BigInt]) extends Pass
+  case object RemoveAllOrderBy extends Pass
 
   private class SingletonCodec[T](value: T) extends JsonEncode[T] with JsonDecode[T] {
     def encode(t: T) = JObject.canonicalEmpty
@@ -48,6 +49,7 @@ object Pass {
     .singleton("use_select_list_references", UseSelectListReferences)
     .branch[Page]("page")(AutomaticJsonEncodeBuilder[Page], AutomaticJsonDecodeBuilder[Page], implicitly)
     .branch[AddLimitOffset]("add_limit_offset")(AutomaticJsonEncodeBuilder[AddLimitOffset], AutomaticJsonDecodeBuilder[AddLimitOffset], implicitly)
+    .singleton("remove_all_order_by", RemoveAllOrderBy)
     .build
 
   implicit object serialize extends Readable[Pass] with Writable[Pass] {
@@ -63,6 +65,7 @@ object Pass {
         case 7 => UseSelectListReferences
         case 8 => Page(buffer.read[BigInt](), buffer.read[BigInt]())
         case 9 => AddLimitOffset(buffer.read[Option[BigInt]](), buffer.read[Option[BigInt]]())
+        case 10 => RemoveAllOrderBy
         case other => fail(s"Unknown rewrite pass type $other")
       }
 
@@ -84,6 +87,7 @@ object Pass {
           buffer.write(9)
           buffer.write(lim)
           buffer.write(off)
+        case RemoveAllOrderBy => buffer.write(10)
       }
     }
   }
