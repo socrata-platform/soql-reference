@@ -51,7 +51,7 @@ class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[
 /** Attempt to preserve ordering from inner queries to outer ones.
   * SelectListReferences must not be present (this is unchecked!!). */
 object RemoveUnusedOrderBy {
-  def apply[MT <: MetaTypes](stmt: Statement[MT]): Statement[MT] = {
-    new RemoveUnusedOrderBy[MT]().rewriteStatement(stmt, true)
+  def apply[MT <: MetaTypes](stmt: Statement[MT], preserveTopLevelOrdering: Boolean = true): Statement[MT] = {
+    new RemoveUnusedOrderBy[MT]().rewriteStatement(stmt, preserveTopLevelOrdering)
   }
 }
