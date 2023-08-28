@@ -15,6 +15,21 @@ class SoQLAnalysis[MT <: MetaTypes] private (
   private[analyzer2] def this(labelProvider: LabelProvider, statement: Statement[MT]) =
     this(labelProvider, statement, false)
 
+  def modify[MT2 <: MetaTypes](f: (LabelProvider, Statement[MT]) => Statement[MT2]): SoQLAnalysis[MT2] = {
+    withoutSelectListReferences { self =>
+      val lp = self.labelProvider.clone()
+      val result = f(lp, self.statement)
+      new SoQLAnalysis(lp, result, false)
+    }
+  }
+
+  def modifyOption[MT2 <: MetaTypes](f: (LabelProvider, Statement[MT]) => Option[Statement[MT2]]): Option[SoQLAnalysis[MT2]] = {
+    withoutSelectListReferencesOption { self =>
+      val lp = self.labelProvider.clone()
+      f(lp, self.statement).map(new SoQLAnalysis(lp, _, false))
+    }
+  }
+
   def applyPasses(
     passes: Seq[Pass],
     isLiteralTrue: Expr[MT] => Boolean,
@@ -198,9 +213,16 @@ class SoQLAnalysis[MT <: MetaTypes] private (
   ) =
     new SoQLAnalysis[MT2](labelProvider, statement, usesSelectListReferences)
 
-  private def withoutSelectListReferences(f: SoQLAnalysis[MT] => SoQLAnalysis[MT]) =
+  private def withoutSelectListReferences[MT2 <: MetaTypes](f: SoQLAnalysis[MT] => SoQLAnalysis[MT2]) =
     if(usesSelectListReferences) {
       f(this.copy(statement = rewrite.SelectListReferences.unuse(statement), usesSelectListReferences = false)).useSelectListReferences
+    } else {
+      f(this)
+    }
+
+  private def withoutSelectListReferencesOption[MT2 <: MetaTypes](f: SoQLAnalysis[MT] => Option[SoQLAnalysis[MT2]]) =
+    if(usesSelectListReferences) {
+      f(this.copy(statement = rewrite.SelectListReferences.unuse(statement), usesSelectListReferences = false)).map(_.useSelectListReferences)
     } else {
       f(this)
     }
