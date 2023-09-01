@@ -25,7 +25,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
     )
   }.toVector
 
-  def unique = primaryKeys.to(LazyList).map(_.map { dcn => PhysicalColumn[MT](label, canonicalName, dcn, columns(dcn).typ)(AtomicPositionInfo.None) })
+  def unique = primaryKeys.to(LazyList).map(_.map { dcn => PhysicalColumn[MT](label, tableName, canonicalName, dcn, columns(dcn).typ)(AtomicPositionInfo.None) })
 
   lazy val resourceName = Some(definiteResourceName)
 

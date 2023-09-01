@@ -119,6 +119,7 @@ sealed abstract class Column[MT <: MetaTypes] extends AtomicExpr[MT] { this: Has
 
 final case class PhysicalColumn[MT <: MetaTypes](
   table: AutoTableLabel,
+  tableName: types.DatabaseTableName[MT],
   tableCanonicalName: CanonicalName,
   column: types.DatabaseColumnName[MT],
   typ: MT#ColumnType

@@ -169,7 +169,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case from: FromTable =>
           selectFromFrom(
             from.columns.map { case (label, NameEntry(name, typ)) =>
-              labelProvider.columnLabel() -> NamedExpr(PhysicalColumn[MT](from.label, from.canonicalName, label, typ)(AtomicPositionInfo.None), name, isSynthetic = false)
+              labelProvider.columnLabel() -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, from.canonicalName, label, typ)(AtomicPositionInfo.None), name, isSynthetic = false)
             },
             from
           )
@@ -238,7 +238,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               if(desc.hiddenColumns(name)) {
                 None
               } else {
-                Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, from.canonicalName, dcn, typ)(AtomicPositionInfo.None), name, isSynthetic = false))
+                Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, from.canonicalName, dcn, typ)(AtomicPositionInfo.None), name, isSynthetic = false))
               }
             },
             from,
@@ -247,7 +247,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             None,
             desc.ordering.map { case TableDescription.Ordering(dcn, ascending, nullLast) =>
               val NameEntry(_, typ) = from.columns(dcn)
-              OrderBy(PhysicalColumn[MT](from.label, from.canonicalName, dcn, typ)(AtomicPositionInfo.None), ascending = ascending, nullLast = nullLast)
+              OrderBy(PhysicalColumn[MT](from.label, from.tableName, from.canonicalName, dcn, typ)(AtomicPositionInfo.None), ascending = ascending, nullLast = nullLast)
             },
             None,
             None,
@@ -446,7 +446,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case j: Join => findSystemColumns(j.left)
         case FromTable(tableName, tableCanonicalName, _, _, tableLabel, columns, _) =>
           columns.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>
-            name -> PhysicalColumn[MT](tableLabel, tableCanonicalName, colLabel, typ)(AtomicPositionInfo.None)
+            name -> PhysicalColumn[MT](tableLabel, tableName, tableCanonicalName, colLabel, typ)(AtomicPositionInfo.None)
           }
         case FromStatement(stmt, tableLabel, _, _) =>
           stmt.schema.iterator.collect { case (colLabel, Statement.SchemaEntry(name, typ, _isSynthetic)) if isSystemColumn(name) =>
