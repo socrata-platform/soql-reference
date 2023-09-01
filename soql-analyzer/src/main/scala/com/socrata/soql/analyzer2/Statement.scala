@@ -50,7 +50,7 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
 
   def isIsomorphic(that: Statement[MT]): Boolean =
-    findIsomorphism(new IsomorphismState(this.realTables, that.realTables), None, None, that)
+    findIsomorphism(new IsomorphismState, None, None, that)
 
   private[analyzer2] def findIsomorphism(
     state: IsomorphismState,

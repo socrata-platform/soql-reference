@@ -56,22 +56,14 @@ private[analyzer2] object IsomorphismState {
 }
 
 private[analyzer2] class IsomorphismState[MT <: MetaTypes] private (
-  tableMapLeft: Map[AutoTableLabel, types.DatabaseTableName[MT]],
-  tableMapRight: Map[AutoTableLabel, types.DatabaseTableName[MT]],
   forwardTables: scm.Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
   backwardTables: scm.Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
   forwardColumns: IsomorphismState.DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])],
   backwardColumns: IsomorphismState.DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])]
 ) extends LabelUniverse[MT] {
-  def this(
-    tableMapLeft: Map[AutoTableLabel, types.DatabaseTableName[MT]],
-    tableMapRight: Map[AutoTableLabel, types.DatabaseTableName[MT]]
-  ) = this(tableMapLeft, tableMapRight, new scm.HashMap, new scm.HashMap, new IsomorphismState.DMap, new IsomorphismState.DMap)
+  def this() = this(new scm.HashMap, new scm.HashMap, new IsomorphismState.DMap, new IsomorphismState.DMap)
 
   def finish = new IsomorphismState.View(forwardTables, backwardTables, forwardColumns, backwardColumns)
-
-  def physicalTableLeft(table: AutoTableLabel): DatabaseTableName = tableMapLeft(table)
-  def physicalTableRight(table: AutoTableLabel): DatabaseTableName = tableMapRight(table)
 
   def tryAssociate(tableA: AutoTableLabel, tableB: AutoTableLabel): Boolean = {
     (tableA, tableB) match {

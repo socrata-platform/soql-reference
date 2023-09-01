@@ -119,8 +119,8 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
 
   lazy val unique: LazyList[Seq[AutoColumnLabel]] = {
     val selectedColumns = selectList.iterator.collect {
-      case (columnLabel, NamedExpr(PhysicalColumn(table, tableCanonicalName, col, typ), _name, _isSynthetic)) =>
-        PhysicalColumn(table, tableCanonicalName, col, typ)(AtomicPositionInfo.None) -> columnLabel
+      case (columnLabel, NamedExpr(PhysicalColumn(table, tableName, tableCanonicalName, col, typ), _name, _isSynthetic)) =>
+        PhysicalColumn(table, tableName, tableCanonicalName, col, typ)(AtomicPositionInfo.None) -> columnLabel
       case (columnLabel, NamedExpr(VirtualColumn(table, col, typ), _name, _isSynthetic)) =>
         VirtualColumn(table, col, typ)(AtomicPositionInfo.None) -> columnLabel
     }.toMap[Column[MT], AutoColumnLabel]

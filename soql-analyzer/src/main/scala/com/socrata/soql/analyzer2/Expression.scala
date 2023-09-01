@@ -38,6 +38,7 @@ sealed abstract class Expr[MT <: MetaTypes] extends Product with LabelUniverse[M
 
   private[analyzer2] def reposition(p: Position): Self[MT]
 
+  final def isIsomorphic(that: Expr[MT]): Boolean = findIsomorphism(new IsomorphismState, that)
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
 
@@ -119,6 +120,7 @@ sealed abstract class Column[MT <: MetaTypes] extends AtomicExpr[MT] { this: Has
 
 final case class PhysicalColumn[MT <: MetaTypes](
   table: AutoTableLabel,
+  tableName: types.DatabaseTableName[MT],
   tableCanonicalName: CanonicalName,
   column: types.DatabaseColumnName[MT],
   typ: MT#ColumnType

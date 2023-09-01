@@ -18,10 +18,10 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
 
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean = {
     that match {
-      case PhysicalColumn(thatTable, thatTableCanonicalName, thatColumn, thatTyp) =>
+      case PhysicalColumn(thatTable, thatTableName, thatTableCanonicalName, thatColumn, thatTyp) =>
         this.typ == that.typ &&
           this.tableCanonicalName == thatTableCanonicalName &&
-          state.physicalTableLeft(this.table) == state.physicalTableRight(thatTable) &&
+          this.tableName == thatTableName &&
           state.tryAssociate(Some(this.table), this.column, Some(thatTable), thatColumn)
       case _ =>
         false
@@ -31,6 +31,7 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     PhysicalColumn(
       table = table,
+      tableName = state.convert(tableName),
       tableCanonicalName = tableCanonicalName,
       column = state.convert(table, column),
       typ = state.changesOnlyLabels.convertCT(typ)
@@ -54,6 +55,7 @@ trait OPhysicalColumnImpl { this: PhysicalColumn.type =>
   implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#ColumnType], writableDTN : Writable[MT#DatabaseTableNameImpl], writableDCN : Writable[MT#DatabaseColumnNameImpl]): Writable[PhysicalColumn[MT]] = new Writable[PhysicalColumn[MT]] {
     def writeTo(buffer: WriteBuffer, c: PhysicalColumn[MT]): Unit = {
       buffer.write(c.table)
+      buffer.write(c.tableName)
       buffer.write(c.tableCanonicalName)
       buffer.write(c.column)
       buffer.write(c.typ)
@@ -65,6 +67,7 @@ trait OPhysicalColumnImpl { this: PhysicalColumn.type =>
     def readFrom(buffer: ReadBuffer): PhysicalColumn[MT] = {
       PhysicalColumn(
         table = buffer.read[AutoTableLabel](),
+        tableName = buffer.read[DatabaseTableName](),
         tableCanonicalName = buffer.read[CanonicalName](),
         column = buffer.read[DatabaseColumnName](),
         typ = buffer.read[CT]()
