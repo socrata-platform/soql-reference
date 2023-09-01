@@ -44,8 +44,10 @@ trait AggregateFunctionCallImpl[MT <: MetaTypes] { this: AggregateFunctionCall[M
       case AggregateFunctionCall(thatFunction, thatArgs, thatDistinct, thatFilter) =>
         this.function == thatFunction &&
           this.args.length == thatArgs.length &&
+          this.args.zip(thatArgs).forall { case (a, b) => a.findIsomorphism(state, b) } &&
           this.distinct == thatDistinct &&
           this.filter.isDefined == thatFilter.isDefined &&
+          this.filter.zip(thatFilter).forall { case (a, b) => a.findIsomorphism(state, b) } &&
           this.filter.zip(thatFilter).forall { case (a, b) => a.findIsomorphism(state, b) }
       case _ =>
         false
