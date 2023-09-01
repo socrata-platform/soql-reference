@@ -49,8 +49,17 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
 
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
 
-  def isIsomorphic(that: Statement[MT]): Boolean =
-    findIsomorphism(new IsomorphismState, None, None, that)
+  def isIsomorphic(that: Statement[MT], under: IsomorphismState.View[MT] = IsomorphismState.View.empty): Boolean =
+    findIsomorphism(under.extend, None, None, that)
+
+  def isomorphicTo(that: Statement[MT], under: IsomorphismState.View[MT] = IsomorphismState.View.empty): Option[IsomorphismState.View[MT]] = {
+    val state = under.extend
+    if(findIsomorphism(state, None, None, that)) {
+      Some(state.finish)
+    } else {
+      None
+    }
+  }
 
   private[analyzer2] def findIsomorphism(
     state: IsomorphismState,
