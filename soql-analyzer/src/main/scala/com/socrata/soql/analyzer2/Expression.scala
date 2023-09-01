@@ -38,7 +38,18 @@ sealed abstract class Expr[MT <: MetaTypes] extends Product with LabelUniverse[M
 
   private[analyzer2] def reposition(p: Position): Self[MT]
 
-  final def isIsomorphic(that: Expr[MT]): Boolean = findIsomorphism(new IsomorphismState, that)
+  final def isIsomorphic(that: Expr[MT], under: IsomorphismState.View[MT] = IsomorphismState.View.empty): Boolean =
+    findIsomorphism(under.extend, that)
+
+  final def isomorphicTo(that: Expr[MT], under: IsomorphismState.View[MT] = IsomorphismState.View.empty): Option[IsomorphismState.View[MT]] = {
+    val state = under.extend
+    if(findIsomorphism(state, that)) {
+      Some(state.finish)
+    } else {
+      None
+    }
+  }
+
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
 

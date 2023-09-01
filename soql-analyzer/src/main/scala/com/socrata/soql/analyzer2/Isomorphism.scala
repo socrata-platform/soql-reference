@@ -1,13 +1,11 @@
 package com.socrata.soql.analyzer2
 
-import scala.collection.{mutable => scm}
-
 trait IsomorphismUpToAutoLabels[+T] {
   val leftAsRight: T
   val rightAsLeft: T
 }
 
-private[analyzer2] object IsomorphismState {
+object IsomorphismState {
   // This is not actually sound, which is why I'm not putting it in
   // the collections package.  In particular, you will get crashes if
   // you have:
@@ -22,8 +20,8 @@ private[analyzer2] object IsomorphismState {
   // however, this code verifies that all inserted pairs have the same
   // dynamic type (since the label hierarchy is completely sealed) so
   // that can't happen (at time of writing anyway).
-  class DMap[A] {
-    private val underlying = new scm.HashMap[A, A]
+  private class DMap[A] {
+    private var underlying = Map.empty[A, A]
 
     def +=[B <: A](that: (B, B)): Unit = {
       underlying += that
@@ -36,32 +34,44 @@ private[analyzer2] object IsomorphismState {
       underlying.get(k).asInstanceOf[Option[B]]
   }
 
-  private[analyzer2] class View[MT <: MetaTypes] private[IsomorphismState](
-    forwardTables: scm.Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
-    backwardTables: scm.Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
+  private object DMap {
+    def empty[A] = new DMap[A]
+  }
+
+  class View[MT <: MetaTypes] private[IsomorphismState](
+    forwardTables: Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
+    backwardTables: Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
     forwardColumns: DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])],
     backwardColumns: DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])]
   ) extends LabelUniverse[MT] {
     def reverse: View[MT] =
       new View(backwardTables, forwardTables, backwardColumns, forwardColumns)
 
-    def renameForward(t: AutoTableLabel): AutoTableLabel = forwardTables.getOrElse(t, t)
-    def renameBackward(t: AutoTableLabel): AutoTableLabel = backwardTables.getOrElse(t, t)
+    private[analyzer2] def renameForward(t: AutoTableLabel): AutoTableLabel = forwardTables.getOrElse(t, t)
+    private[analyzer2] def renameBackward(t: AutoTableLabel): AutoTableLabel = backwardTables.getOrElse(t, t)
 
-    def renameForward[T <: AutoTableLabel, C <: ColumnLabel](t: Option[T], c: C): (Option[T], C) =
+    private[analyzer2] def renameForward[T <: AutoTableLabel, C <: ColumnLabel](t: Option[T], c: C): (Option[T], C) =
       forwardColumns.getOrElse((t, c), (t, c))
-    def renameBackward[T <: AutoTableLabel, C <: ColumnLabel](t: Option[T], c: C): (Option[T], C) =
+    private[analyzer2] def renameBackward[T <: AutoTableLabel, C <: ColumnLabel](t: Option[T], c: C): (Option[T], C) =
       backwardColumns.getOrElse((t, c), (t, c))
+
+    private[analyzer2] def extend: IsomorphismState =
+      new IsomorphismState(forwardTables, backwardTables, forwardColumns, backwardColumns)
+  }
+
+  object View {
+    def empty[MT <: MetaTypes] =
+      new View[MT](Map.empty, Map.empty, DMap.empty, DMap.empty)
   }
 }
 
-private[analyzer2] class IsomorphismState[MT <: MetaTypes] private (
-  forwardTables: scm.Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
-  backwardTables: scm.Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
-  forwardColumns: IsomorphismState.DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])],
-  backwardColumns: IsomorphismState.DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])]
+class IsomorphismState[MT <: MetaTypes] private (
+  private var forwardTables: Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
+  private var backwardTables: Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
+  private var forwardColumns: IsomorphismState.DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])],
+  private var backwardColumns: IsomorphismState.DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])]
 ) extends LabelUniverse[MT] {
-  def this() = this(new scm.HashMap, new scm.HashMap, new IsomorphismState.DMap, new IsomorphismState.DMap)
+  private[analyzer2] def this() = this(Map.empty, Map.empty, new IsomorphismState.DMap, new IsomorphismState.DMap)
 
   def finish = new IsomorphismState.View(forwardTables, backwardTables, forwardColumns, backwardColumns)
 
