@@ -21,7 +21,7 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
       case PhysicalColumn(thatTable, thatTableName, thatTableCanonicalName, thatColumn, thatTyp) =>
         this.typ == that.typ &&
           this.tableCanonicalName == thatTableCanonicalName &&
-          state.physicalTableLeft(this.table) == state.physicalTableRight(thatTable) &&
+          this.tableName == thatTableName &&
           state.tryAssociate(Some(this.table), this.column, Some(thatTable), thatColumn)
       case _ =>
         false
