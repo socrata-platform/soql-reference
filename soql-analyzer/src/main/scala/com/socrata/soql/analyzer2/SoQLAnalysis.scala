@@ -24,7 +24,11 @@ class SoQLAnalysis[MT <: MetaTypes] private (
   }
 
   def modifyOption[MT2 <: MetaTypes](f: (LabelProvider, Statement[MT]) => Option[Statement[MT2]]): Option[SoQLAnalysis[MT2]] = {
-    withoutSelectListReferencesOption { self =>
+    modifySeq { (lp, stmt) => f(lp, stmt).toSeq }.headOption
+  }
+
+  def modifySeq[MT2 <: MetaTypes](f: (LabelProvider, Statement[MT]) => Seq[Statement[MT2]]): Seq[SoQLAnalysis[MT2]] = {
+    withoutSelectListReferencesSeq { self =>
       val lp = self.labelProvider.clone()
       f(lp, self.statement).map(new SoQLAnalysis(lp, _, false))
     }
@@ -220,7 +224,7 @@ class SoQLAnalysis[MT <: MetaTypes] private (
       f(this)
     }
 
-  private def withoutSelectListReferencesOption[MT2 <: MetaTypes](f: SoQLAnalysis[MT] => Option[SoQLAnalysis[MT2]]) =
+  private def withoutSelectListReferencesSeq[MT2 <: MetaTypes](f: SoQLAnalysis[MT] => Seq[SoQLAnalysis[MT2]]) =
     if(usesSelectListReferences) {
       f(this.copy(statement = rewrite.SelectListReferences.unuse(statement), usesSelectListReferences = false)).map(_.useSelectListReferences)
     } else {
