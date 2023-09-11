@@ -3,6 +3,7 @@ package com.socrata.soql.analyzer2
 import org.scalatest.Assertions
 import org.scalatest.matchers.{BeMatcher, MatchResult}
 
+import com.socrata.soql.ast
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName}
 
 import mocktablefinder._
@@ -201,6 +202,28 @@ trait TestHelper { this: Assertions =>
       case ExpectedFailure(`ident`) =>
         // yay
     }
+  }
+
+  implicit object TestSoQLApproximationMetaOps extends SoQLApproximation.MetaOps[TestMT] {
+    def databaseTableName(dtn: DatabaseTableName): String = {
+      dtn.name
+    }
+
+    def databaseColumnName(dcn: DatabaseColumnName): ColumnName = {
+      ColumnName(dcn.name)
+    }
+
+    def literalValue(value: LiteralValue): ast.Expression =
+      value.value match {
+        case TestText(s) => ast.StringLiteral(s)(value.position.logicalPosition)
+        case TestNumber(n) => ast.NumberLiteral(n)(value.position.logicalPosition)
+        case TestBoolean(b) => ast.BooleanLiteral(b)(value.position.logicalPosition)
+        case TestUnorderable(s) => ast.StringLiteral(s)(value.position.logicalPosition)
+        case TestNull => ast.NullLiteral()(value.position.logicalPosition)
+      }
+
+    override def auto_table_label_prefix = "t"
+    override def auto_column_label_prefix = "c"
   }
 }
 

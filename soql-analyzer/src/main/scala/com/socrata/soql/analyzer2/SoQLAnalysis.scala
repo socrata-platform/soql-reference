@@ -192,6 +192,10 @@ class SoQLAnalysis[MT <: MetaTypes] private (
     if(usesSelectListReferences) this
     else copy(statement = rewrite.SelectListReferences.use(statement), usesSelectListReferences = true)
 
+  def removeSelectListReferences =
+    if(usesSelectListReferences) copy(statement = rewrite.SelectListReferences.unuse(statement), usesSelectListReferences = false)
+    else this
+
   /** Update limit/offset for paging purposes.  You might want to
     * imposeOrdering before doing this to ensure the paging is
     * meaningful.  Pages are zero-based (i.e., they're an offset
