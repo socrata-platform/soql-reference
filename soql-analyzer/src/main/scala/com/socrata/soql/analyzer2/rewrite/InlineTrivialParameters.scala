@@ -1,9 +1,11 @@
 package com.socrata.soql.analyzer2.rewrite
 
+import scala.collection.compat._
+
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.ResourceName
+import com.socrata.soql.environment.{ResourceName, ColumnName}
 
 class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] => Boolean) extends StatementUniverse[MT] {
   // This pass inlines trivial parameters in subqueries shaped like
@@ -11,11 +13,20 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
   // that looks like
   //
   // SELECT t2.* FROM (VALUES ((...))) t1 JOIN LATERAL (select ... ) as t2 on true
+  // -or-
+  // SELECT t2.* FROM (SELECT ... FROM @single_row) t1 JOIN LATERAL (select ... ) as t2 on true
+  // where all the sub-selected values are "synthetic"
   //
   // then we'll walk the t2 tree substituting in references to t1
   // which are exactly columnref or literals, and if that's _all_ the
-  // values in the VALUES clause, we'll eliminate this outer select
-  // entirely in favor of the inner one.
+  // values in the VALUES/subselect clause, we'll eliminate this outer
+  // select entirely in favor of the inner one.
+  //
+  // Note: currently the analyzer will always produce the subselect
+  // form (formerly it would aways produce the VALUES) form, but until
+  // soql grows VALUES surface syntax that's changed.  It will
+  // hopefully go back the other way, someday, which is why this
+  // understand both.
 
   type ExprReplaces = Map[(AutoTableLabel, AutoColumnLabel), Expr]
 
@@ -37,13 +48,27 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
 
   private class Candidate(
     val selectList: OrderedMap[AutoColumnLabel, NamedExpr],
-    val valuesColumnLabels: OrderedSet[AutoColumnLabel],
-    val valuesExprs: NonEmptySeq[Expr],
+    val values: OrderedMap[AutoColumnLabel, (Expr, ColumnName)],
+    val singleRowFrom: Option[FromSingleRow],
     val valuesLabel: AutoTableLabel,
     val subselect: Statement,
     val subselectLabel: AutoTableLabel,
     val trueExpr: Expr
   )
+
+  private object SingleRowValuesLike {
+    def unapply(stmt: Statement): Option[(OrderedMap[AutoColumnLabel, (Expr, ColumnName)], Option[FromSingleRow])] =
+      stmt match {
+        case Values(labels, values) if values.tail.isEmpty =>
+          Some((OrderedMap() ++ labels.iterator.zip(values.head.iterator).map { case (label, value) => label -> (value, stmt.schema(label).name) }, None))
+
+        case Select(Distinctiveness.Indistinct(), selectList, from@FromSingleRow(_, _), None, Nil, None, Nil, None, None, None, hints) if hints.isEmpty && selectList.values.forall(_.isSynthetic) =>
+          Some((selectList.withValuesMapped { ne => (ne.expr, ne.name) }, Some(from)))
+
+        case _ =>
+          None
+      }
+  }
 
   private object Candidate {
     def unapply(s: Select): Option[Candidate] = {
@@ -55,7 +80,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
             JoinType.Inner,
             true,
             FromStatement(
-              values: Values,
+              SingleRowValuesLike(fields, singleRowFrom),
               valuesLabel,
               None,
               None
@@ -76,8 +101,8 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
           None,
           None,
           hint
-        ) if hint.isEmpty && isLiteralTrue(on) && matchingSelects(selectList, subselect.schema, subselectLabel) && values.values.tail.isEmpty =>
-          Some(new Candidate(selectList, values.labels, values.values.head, valuesLabel, subselect, subselectLabel, on))
+        ) if hint.isEmpty && isLiteralTrue(on) && matchingSelects(selectList, subselect.schema, subselectLabel) =>
+          Some(new Candidate(selectList, fields, singleRowFrom, valuesLabel, subselect, subselectLabel, on))
         case _ =>
           None
       }
@@ -111,16 +136,16 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
 
         def selectList = c.selectList
         def valuesLabel = c.valuesLabel
-        def valuesColumnLabels = c.valuesColumnLabels
         // The `values` forms exprs, have not been remapped, so do so now
-        val valuesExprs = c.valuesExprs.map(rewriteExpr(_, exprReplaces))
+        val values = c.values.withValuesMapped { case (e, name) => (rewriteExpr(e, exprReplaces), name) }
+        def singleRowFrom = c.singleRowFrom
         def subselect = c.subselect
         def subselectLabel = c.subselectLabel
         def trueExpr = c.trueExpr
 
         // Now we'll augment our replaces with the trivial ones from
         // the values...
-        val newExprReplaces = exprReplaces ++ valuesColumnLabels.iterator.zip(valuesExprs.iterator).collect { case (l, e) if isTrivial(e) =>
+        val newExprReplaces = exprReplaces ++ values.iterator.collect { case (l, (e, _)) if isTrivial(e) =>
           (valuesLabel, l) -> e
         }
 
@@ -130,7 +155,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
 
         // We'll only be keeping columns in the `values` form which
         // weren't trivial.
-        val (newValuesLabels, newValuesExprs) = valuesColumnLabels.iterator.zip(valuesExprs.iterator).filter { case (l, e) =>
+        val (newValuesLabels, newValuesExprs) = values.filter { case (l, (e, _)) =>
           !isTrivial(e)
         }.toSeq.unzip
 
@@ -153,7 +178,19 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
                 JoinType.Inner,
                 true,
                 FromStatement(
-                  Values(OrderedSet() ++ newValuesLabels, NonEmptySeq(newValuesExprs, Nil)),
+                  singleRowFrom match {
+                    case None =>
+                      Values(OrderedSet() ++ newValuesLabels, NonEmptySeq(newValuesExprs.map(_._1), Nil))
+                    case Some(from) =>
+                      Select(
+                        Distinctiveness.Indistinct(),
+                        OrderedMap() ++ newValuesLabels.lazyZip(newValuesExprs.toSeq).map { case (label, (expr, name)) =>
+                          (label, NamedExpr(expr, name, isSynthetic = true))
+                        },
+                        from,
+                        None, Nil, None, Nil, None, None, None, Set.empty
+                      )
+                  },
                   valuesLabel,
                   None,
                   None

@@ -867,11 +867,14 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               name -> typecheck(callerCtx, expr, Map.empty, Some(typ))
             }
 
-          NonEmptySeq.fromSeq(typecheckedParams.values.toVector) match {
-            case Some(typecheckedExprs) =>
-              val outOfLineParamsQuery = Values(
-                OrderedSet() ++ typecheckedExprs.iterator.map { _ => labelProvider.columnLabel() },
-                NonEmptySeq(typecheckedExprs)
+          NonEmptySeq.fromSeq(typecheckedParams.toVector) match {
+            case Some(typecheckedNamesAndExprs) =>
+              val outOfLineParamsQuery = Select(
+                Distinctiveness.Indistinct(),
+                OrderedMap() ++ typecheckedNamesAndExprs.iterator.map { case (holeName, expr) => labelProvider.columnLabel() -> NamedExpr(expr, ColumnName(holeName.name), isSynthetic = true) },
+                FromSingleRow(labelProvider.tableLabel(), None),
+                None, Nil, None, Nil, None, None, None,
+                Set.empty
               )
               val outOfLineParamsLabel = labelProvider.tableLabel()
               val innerUdfParams =
