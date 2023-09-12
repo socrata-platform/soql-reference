@@ -107,7 +107,7 @@ class SoQLApproximation[MT <: MetaTypes] private (ops: SoQLApproximation.MetaOps
         ops.literalValue(lv)
       case nl@NullLiteral(_typ) =>
         ast.NullLiteral()(nl.position.logicalPosition)
-      case pc@PhysicalColumn(table, _tableName, _tableCanonicalName, column, _typ) =>
+      case pc@PhysicalColumn(table, _tableName, column, _typ) =>
         ast.ColumnOrAliasRef(Some(convertAutoTableLabel(table)), ops.databaseColumnName(column))(pc.position.logicalPosition)
       case vc@VirtualColumn(table, column, _typ) =>
         ast.ColumnOrAliasRef(Some(convertAutoTableLabel(table)), convertAutoColumnLabel(column))(vc.position.logicalPosition)

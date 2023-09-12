@@ -17,6 +17,10 @@ package object types {
   type AutoTableLabel[MT <: MetaTypes] = analyzer2.AutoTableLabel
   type DatabaseTableName[MT <: MetaTypes] = analyzer2.DatabaseTableName[MT#DatabaseTableNameImpl]
 
+  type FromProvenance[MT <: MetaTypes] = analyzer2.FromProvenance[MT#DatabaseTableNameImpl]
+  type ToProvenance[MT <: MetaTypes] = analyzer2.ToProvenance[MT#DatabaseTableNameImpl]
+  type ProvenanceMapper[MT <: MetaTypes] = analyzer2.ProvenanceMapper[MT#DatabaseTableNameImpl]
+
   type MonomorphicFunction[MT <: MetaTypes] = functions.MonomorphicFunction[MT#ColumnType]
 
   type TypeInfo[MT <: MetaTypes] = typechecker.TypeInfo[MT#ColumnType, MT#ColumnValue]

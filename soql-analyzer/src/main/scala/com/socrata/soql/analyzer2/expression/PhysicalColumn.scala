@@ -18,9 +18,8 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
 
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean = {
     that match {
-      case PhysicalColumn(thatTable, thatTableName, thatTableCanonicalName, thatColumn, thatTyp) =>
+      case PhysicalColumn(thatTable, thatTableName, thatColumn, thatTyp) =>
         this.typ == that.typ &&
-          this.tableCanonicalName == thatTableCanonicalName &&
           this.tableName == thatTableName &&
           state.tryAssociate(Some(this.table), this.column, Some(thatTable), thatColumn)
       case _ =>
@@ -32,7 +31,6 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
     PhysicalColumn(
       table = table,
       tableName = state.convert(tableName),
-      tableCanonicalName = tableCanonicalName,
       column = state.convert(table, column),
       typ = state.changesOnlyLabels.convertCT(typ)
     )(position)
@@ -56,7 +54,6 @@ trait OPhysicalColumnImpl { this: PhysicalColumn.type =>
     def writeTo(buffer: WriteBuffer, c: PhysicalColumn[MT]): Unit = {
       buffer.write(c.table)
       buffer.write(c.tableName)
-      buffer.write(c.tableCanonicalName)
       buffer.write(c.column)
       buffer.write(c.typ)
       buffer.write(c.position)
@@ -68,7 +65,6 @@ trait OPhysicalColumnImpl { this: PhysicalColumn.type =>
       PhysicalColumn(
         table = buffer.read[AutoTableLabel](),
         tableName = buffer.read[DatabaseTableName](),
-        tableCanonicalName = buffer.read[CanonicalName](),
         column = buffer.read[DatabaseColumnName](),
         typ = buffer.read[CT]()
       )(

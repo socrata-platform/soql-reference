@@ -133,7 +133,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
     d.withValuesMapped { ne => ne.copy(expr = xform(ne.expr)) }
 
   private def mergeSelects(
-    a: Select, aLabel: AutoTableLabel, aResourceName: Option[ScopedResourceName[RNS]], aAlias: Option[ResourceName],
+    a: Select, aLabel: AutoTableLabel, aResourceName: Option[ScopedResourceName], aAlias: Option[ResourceName],
     b: Select, bRejoin: FromRewriter
   ): Option[Statement] =
     // If we decide to merge this, we're going to create some flavor of

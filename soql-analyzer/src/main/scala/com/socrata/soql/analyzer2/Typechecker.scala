@@ -5,13 +5,13 @@ import scala.util.parsing.input.{Position, NoPosition}
 
 import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, CovariantSet}
-import com.socrata.soql.environment.{ColumnName, HoleName, ResourceName, TableName, FunctionName}
+import com.socrata.soql.environment.{ColumnName, HoleName, ResourceName, TableName, FunctionName, Provenance}
 import com.socrata.soql.typechecker.{TypeInfoMetaProjection, FunctionInfo, FunctionCallTypechecker, Passed, TypeMismatchFailure}
 
 class Typechecker[MT <: MetaTypes](
   scope: MT#ResourceNameScope,
   canonicalName: Option[CanonicalName],
-  primaryTable: Option[CanonicalName],
+  primaryTable: Option[Provenance],
   env: Environment[MT],
   namedExprs: Map[ColumnName, Expr[MT]],
   udfParams: Map[HoleName, Position => Expr[MT]],
@@ -145,8 +145,8 @@ class Typechecker[MT <: MetaTypes](
               case None => Left(error(NoSuchColumn(None, name), col.position))
               case Some(Environment.LookupResult.Virtual(table, column, typ)) =>
                 Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(col.position))))
-              case Some(Environment.LookupResult.Physical(tableName, tableCanonicalName, tableLabel, column, typ)) =>
-                Right(Seq(PhysicalColumn[MT](tableLabel, tableName, tableCanonicalName, column, typ)(new AtomicPositionInfo(col.position))))
+              case Some(Environment.LookupResult.Physical(tableName, tableLabel, column, typ)) =>
+                Right(Seq(PhysicalColumn[MT](tableLabel, tableName, column, typ)(new AtomicPositionInfo(col.position))))
             }
         }
       case col@ast.ColumnOrAliasRef(Some(qual), name) =>
@@ -155,8 +155,8 @@ class Typechecker[MT <: MetaTypes](
           case None => Left(error(NoSuchColumn(Some(trueQual), name), col.position))
           case Some(Environment.LookupResult.Virtual(table, column, typ)) =>
             Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(col.position))))
-          case Some(Environment.LookupResult.Physical(tableName, tableCanonicalName, tableLabel, column, typ)) =>
-            Right(Seq(PhysicalColumn[MT](tableLabel, tableName, tableCanonicalName, column, typ)(new AtomicPositionInfo(col.position))))
+          case Some(Environment.LookupResult.Physical(tableName, tableLabel, column, typ)) =>
+            Right(Seq(PhysicalColumn[MT](tableLabel, tableName, column, typ)(new AtomicPositionInfo(col.position))))
         }
       case l: ast.Literal =>
         squash(typeInfo.potentialExprs(l, primaryTable), l.position)

@@ -1,7 +1,7 @@
 package com.socrata.soql.typechecker
 
 import com.socrata.soql.ast.{Hole, Literal}
-import com.socrata.soql.environment.TypeName
+import com.socrata.soql.environment.{TypeName, Provenance}
 import com.socrata.soql.collection.OrderedSet
 import com.socrata.soql.typed.CoreExpr
 import com.socrata.soql.analyzer2
@@ -47,7 +47,7 @@ abstract class TypeInfoMetaProjection[MT <: analyzer2.MetaTypes] extends analyze
 
   val hasType: analyzer2.HasType[CV, CT]
 
-  def potentialExprs(l: Literal, currentPrimaryTable: Option[analyzer2.CanonicalName]): Seq[analyzer2.Expr[MT]]
+  def potentialExprs(l: Literal, currentPrimaryTable: Option[Provenance]): Seq[analyzer2.Expr[MT]]
   def literalBoolean(b: Boolean, position: Position): analyzer2.Expr[MT]
 
   def boolType: CT
@@ -59,4 +59,6 @@ abstract class TypeInfoMetaProjection[MT <: analyzer2.MetaTypes] extends analyze
   final override def isOrdered(typ: CT): Boolean = unproject.isOrdered(typ)
   final override def isBoolean(typ: CT): Boolean = unproject.isBoolean(typ)
   final override def isGroupable(typ: CT): Boolean = unproject.isGroupable(typ)
+
+  def updateProvenance(value: CV)(f: Provenance => Provenance): CV
 }

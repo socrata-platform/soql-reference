@@ -14,7 +14,7 @@ import com.socrata.soql.{BinaryTree, Leaf, TrueOp, Compound, PipeQuery, UnionQue
 import com.socrata.soql.parsing.SoQLPosition
 import com.socrata.soql.ast
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.{ColumnName, ResourceName, TableName, HoleName, UntypedDatasetContext, FunctionName}
+import com.socrata.soql.environment.{ColumnName, ResourceName, TableName, HoleName, UntypedDatasetContext, FunctionName, Provenance}
 import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, TypeInfoMetaProjection}
 import com.socrata.soql.aliases.AliasAnalysis
 import com.socrata.soql.exceptions.AliasAnalysisException
@@ -29,12 +29,16 @@ object SoQLAnalyzer {
 class SoQLAnalyzer[MT <: MetaTypes] private (
   typeInfo: TypeInfoMetaProjection[MT],
   functionInfo: FunctionInfo[MT#ColumnType],
+  toProvenance: ToProvenance[MT#DatabaseTableNameImpl],
   aggregateMerge: Option[(ColumnName, Expr[MT]) => Option[Expr[MT]]]
 ) extends StatementUniverse[MT] {
-  def this(typeInfo: TypeInfo2[MT#ColumnType, MT#ColumnValue], functionInfo: FunctionInfo[MT#ColumnType]) =
-    this(typeInfo.metaProject[MT], functionInfo, None)
+  def this(
+    typeInfo: TypeInfo2[MT#ColumnType, MT#ColumnValue],
+    functionInfo: FunctionInfo[MT#ColumnType],
+    toProvenance: ToProvenance[MT#DatabaseTableNameImpl]
+  ) =
+    this(typeInfo.metaProject[MT], functionInfo, toProvenance, None)
 
-  type ScopedResourceName = com.socrata.soql.analyzer2.ScopedResourceName[RNS]
   type TableMap = com.socrata.soql.analyzer2.TableMap[MT]
   type FoundTables = com.socrata.soql.analyzer2.FoundTables[MT]
   type TableDescription = com.socrata.soql.analyzer2.TableDescription[MT]
@@ -46,7 +50,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
   private val Error = SoQLAnalyzerError.AnalysisError
 
   private def copy(aggregateMerge: Option[(ColumnName, Expr) => Option[Expr]] = aggregateMerge): SoQLAnalyzer[MT] =
-    new SoQLAnalyzer(typeInfo, functionInfo, aggregateMerge)
+    new SoQLAnalyzer(typeInfo, functionInfo, toProvenance, aggregateMerge)
 
   def preserveSystemColumns(aggregateMerge: (ColumnName, Expr) => Option[Expr]): SoQLAnalyzer[MT] =
     copy(aggregateMerge = Some(aggregateMerge))
@@ -130,7 +134,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       intoStatement(from)
     }
 
-    def primaryTableName(scope: RNS, query: FoundTables.Query[MT]): Option[CanonicalName] =
+    def primaryTableName(scope: RNS, query: FoundTables.Query[MT]): Option[Provenance] =
       query match {
         case FoundTables.Saved(rn) =>
           primaryTableName(ScopedResourceName(scope, rn))
@@ -142,23 +146,23 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           primaryTableName(scope, q)
       }
 
-    def primaryTableName(name: ScopedResourceName): Option[CanonicalName] =
+    def primaryTableName(name: ScopedResourceName): Option[Provenance] =
       tableMap.get(name).flatMap { desc =>
         desc match {
-          case ds: TableDescription.Dataset[MT] => Some(ds.canonicalName)
+          case ds: TableDescription.Dataset[MT] => Some(toProvenance.toProvenance(ds.name))
           case q: TableDescription.Query[MT] => primaryTableName(ScopedResourceName(q.scope, q.basedOn))
           case f: TableDescription.TableFunction[MT] => primaryTableName(f.scope, f.parsed)
         }
       }
 
     @tailrec
-    def primaryTableName(scope: RNS, tree: BinaryTree[ast.Select]): Option[CanonicalName] =
+    def primaryTableName(scope: RNS, tree: BinaryTree[ast.Select]): Option[Provenance] =
       tree match {
         case Leaf(select) => primaryTableName(scope, select)
         case compound : Compound[ast.Select] => primaryTableName(scope, compound.left)
       }
 
-    def primaryTableName(scope: RNS, select: ast.Select): Option[CanonicalName] =
+    def primaryTableName(scope: RNS, select: ast.Select): Option[Provenance] =
       select.from.flatMap { tn: TableName =>
         val rn = ResourceName(tn.nameWithoutPrefix)
         primaryTableName(ScopedResourceName(scope, rn))
@@ -169,7 +173,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case from: FromTable =>
           selectFromFrom(
             from.columns.map { case (label, NameEntry(name, typ)) =>
-              labelProvider.columnLabel() -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, from.canonicalName, label, typ)(AtomicPositionInfo.None), name, isSynthetic = false)
+              labelProvider.columnLabel() -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, label, typ)(AtomicPositionInfo.None), name, isSynthetic = false)
             },
             from
           )
@@ -204,7 +208,6 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       if(desc.ordering.isEmpty) {
         FromTable(
           desc.name,
-          desc.canonicalName,
           srn,
           None,
           labelProvider.tableLabel(),
@@ -221,7 +224,6 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
 
         val from = FromTable(
           desc.name,
-          desc.canonicalName,
           srn,
           None,
           labelProvider.tableLabel(),
@@ -238,7 +240,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               if(desc.hiddenColumns(name)) {
                 None
               } else {
-                Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, from.canonicalName, dcn, typ)(AtomicPositionInfo.None), name, isSynthetic = false))
+                Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.None), name, isSynthetic = false))
               }
             },
             from,
@@ -247,7 +249,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             None,
             desc.ordering.map { case TableDescription.Ordering(dcn, ascending, nullLast) =>
               val NameEntry(_, typ) = from.columns(dcn)
-              OrderBy(PhysicalColumn[MT](from.label, from.tableName, from.canonicalName, dcn, typ)(AtomicPositionInfo.None), ascending = ascending, nullLast = nullLast)
+              OrderBy(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.None), ascending = ascending, nullLast = nullLast)
             },
             None,
             None,
@@ -298,9 +300,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       // analyzed.  This is used to look up unqualified user
       // parameters' values.
       canonicalName: Option[CanonicalName],
-      // The canonical name of the source of the primary underlying
-      // table being analyzed
-      primaryTableName: Option[CanonicalName],
+      // The provenance of the primary underlying table being analyzed
+      primaryTableName: Option[Provenance],
       // The current environment in which possibly-qualified
       // column-names can be matched to input columns.
       enclosingEnv: Environment[MT],
@@ -444,9 +445,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     final def findSystemColumns(from: From): Iterable[(ColumnName, Column)] =
       from match {
         case j: Join => findSystemColumns(j.left)
-        case FromTable(tableName, tableCanonicalName, _, _, tableLabel, columns, _) =>
+        case FromTable(tableName, _, _, tableLabel, columns, _) =>
           columns.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>
-            name -> PhysicalColumn[MT](tableLabel, tableName, tableCanonicalName, colLabel, typ)(AtomicPositionInfo.None)
+            name -> PhysicalColumn[MT](tableLabel, tableName, colLabel, typ)(AtomicPositionInfo.None)
           }
         case FromStatement(stmt, tableLabel, _, _) =>
           stmt.schema.iterator.collect { case (colLabel, Statement.SchemaEntry(name, typ, _isSynthetic)) if isSystemColumn(name) =>

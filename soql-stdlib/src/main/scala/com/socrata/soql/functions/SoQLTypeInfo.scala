@@ -4,7 +4,7 @@ import org.joda.time.{DateTime, LocalDateTime, LocalDate, LocalTime, Period}
 import com.vividsolutions.jts.geom.{LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon}
 
 import com.socrata.soql.collection.OrderedSet
-import com.socrata.soql.environment.TypeName
+import com.socrata.soql.environment.{TypeName, Provenance}
 import com.socrata.soql.typed
 import com.socrata.soql.types._
 import com.socrata.soql.typechecker.{TypeInfo, TypeInfo2, TypeInfoMetaProjection}
@@ -33,7 +33,7 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
         def typeOf(cv: CV): CT = cv.typ
       }
 
-      def potentialExprs(l: ast.Literal, primaryTable: Option[analyzer2.CanonicalName]) =
+      def potentialExprs(l: ast.Literal, primaryTable: Option[Provenance]) =
         l match {
           case ast.NullLiteral() => typeParameterUniverse.iterator.map(analyzer2.NullLiteral(_)(new analyzer2.AtomicPositionInfo(l.position))).toVector
           case ast.BooleanLiteral(b) => Seq(analyzer2.LiteralValue[MT](SoQLBoolean(b))(new analyzer2.AtomicPositionInfo(l.position)))
@@ -64,6 +64,21 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
 
       def literalBoolean(b: Boolean, pos: Position) =
         analyzer2.LiteralValue[MT](SoQLBoolean(b))(new analyzer2.AtomicPositionInfo(pos))
+
+      def updateProvenance(v: CV)(f: Provenance => Provenance): CV = {
+        valueEvRev(v) match {
+          case id: SoQLID =>
+            val newId = id.copy()
+            newId.provenance = id.provenance.map(f)
+            newId
+          case version: SoQLVersion =>
+            val newVersion = version.copy()
+            newVersion.provenance = version.provenance.map(f)
+            newVersion
+          case _ =>
+            v
+        }
+      }
     }
 
   def booleanLiteralExpr(b: Boolean, pos: Position) = Seq(typed.BooleanLiteral(b, SoQLBoolean.t)(pos))
@@ -116,13 +131,15 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
     analyzer2.LiteralValue[FakeMT](SoQLPolygon(p))(new analyzer2.AtomicPositionInfo(pos))
   private def textToMultiPolygonExpr(mp: MultiPolygon, pos: Position) =
     analyzer2.LiteralValue[FakeMT](SoQLMultiPolygon(mp))(new analyzer2.AtomicPositionInfo(pos))
-  private def textToRowIdExpr(rid: SoQLID, pos: Position, primaryTable: Option[analyzer2.CanonicalName]) = {
-    rid.provenance = primaryTable.map(_.name)
-    analyzer2.LiteralValue[FakeMT](rid)(new analyzer2.AtomicPositionInfo(pos))
+  private def textToRowIdExpr(rid: SoQLID, pos: Position, primaryTable: Option[Provenance]) = {
+    val newRID = rid.copy()
+    newRID.provenance = primaryTable
+    analyzer2.LiteralValue[FakeMT](newRID)(new analyzer2.AtomicPositionInfo(pos))
   }
-  private def textToRowVersionExpr(rv: SoQLVersion, pos: Position, primaryTable: Option[analyzer2.CanonicalName]) = {
-    rv.provenance = primaryTable.map(_.name)
-    analyzer2.LiteralValue[FakeMT](rv)(new analyzer2.AtomicPositionInfo(pos))
+  private def textToRowVersionExpr(rv: SoQLVersion, pos: Position, primaryTable: Option[Provenance]) = {
+    val newRV = rv.copy()
+    newRV.provenance = primaryTable
+    analyzer2.LiteralValue[FakeMT](newRV)(new analyzer2.AtomicPositionInfo(pos))
   }
 
   private val textToFixedTimestampFunc = getMonomorphically(SoQLFunctions.TextToFixedTimestamp)
@@ -185,26 +202,26 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with TypeInfo2[SoQLTyp
     type TestResult
     def test(s: String): Option[TestResult]
     val functions: Seq[MonomorphicFunction[SoQLType]]
-    val exprs: Seq[(TestResult, Position, Option[analyzer2.CanonicalName]) => analyzer2.Expr[FakeMT]]
+    val exprs: Seq[(TestResult, Position, Option[Provenance]) => analyzer2.Expr[FakeMT]]
   }
   private object Conversions {
     def apply[T](tst: String => Option[T], fs: Seq[MonomorphicFunction[SoQLType]], es: Seq[(T, Position) => analyzer2.Expr[FakeMT]]) = new Conversions {
       type TestResult = T
       def test(s: String) = tst(s)
       val functions = fs
-      val exprs = es.map { ef => (t: T, pos: Position, cn: Option[analyzer2.CanonicalName]) => ef(t, pos) }
+      val exprs = es.map { ef => (t: T, pos: Position, cn: Option[Provenance]) => ef(t, pos) }
     }
     def simple(tst: String => Boolean, fs: Seq[MonomorphicFunction[SoQLType]], es: Seq[(SoQLText, Position) => analyzer2.Expr[FakeMT]]) = new Conversions {
       type TestResult = String
       def test(s: String) = if(tst(s)) Some(s) else None
       val functions = fs
-      val exprs = es.map { ef => (s: String, pos: Position, cn: Option[analyzer2.CanonicalName]) => ef(SoQLText(s), pos) }
+      val exprs = es.map { ef => (s: String, pos: Position, cn: Option[Provenance]) => ef(SoQLText(s), pos) }
     }
-    def provenanced[T](tst: String => Option[T], fs: Seq[MonomorphicFunction[SoQLType]], es: Seq[(T, Position, Option[analyzer2.CanonicalName]) => analyzer2.Expr[FakeMT]]) = new Conversions {
+    def provenanced[T](tst: String => Option[T], fs: Seq[MonomorphicFunction[SoQLType]], es: Seq[(T, Position, Option[Provenance]) => analyzer2.Expr[FakeMT]]) = new Conversions {
       type TestResult = T
       def test(s: String) = tst(s)
       val functions = fs
-      val exprs = es.map { ef => (t: T, pos: Position, cn: Option[analyzer2.CanonicalName]) => ef(t, pos, cn) }
+      val exprs = es.map { ef => (t: T, pos: Position, cn: Option[Provenance]) => ef(t, pos, cn) }
     }
   }
 

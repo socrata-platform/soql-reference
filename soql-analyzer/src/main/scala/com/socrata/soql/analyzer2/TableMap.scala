@@ -31,7 +31,6 @@ class TableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[
     }
 
   type Self[MT <: MetaTypes] = TableMap[MT]
-  type ScopedResourceName = com.socrata.soql.analyzer2.ScopedResourceName[RNS]
 
   def asUnparsedTableMap: UnparsedTableMap[MT] =
     new UnparsedTableMap(underlying.iterator.map { case (rns, m) =>

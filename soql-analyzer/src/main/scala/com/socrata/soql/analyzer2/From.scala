@@ -156,7 +156,6 @@ object AtomicFrom extends from.OAtomicFromImpl
 
 case class FromTable[MT <: MetaTypes](
   tableName: types.DatabaseTableName[MT],
-  canonicalName: CanonicalName,
   definiteResourceName: types.ScopedResourceName[MT],
   alias: Option[ResourceName],
   label: AutoTableLabel,

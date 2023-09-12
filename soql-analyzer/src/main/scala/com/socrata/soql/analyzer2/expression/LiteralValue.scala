@@ -15,8 +15,10 @@ trait LiteralValueImpl[MT <: MetaTypes] { this: LiteralValue[MT] =>
   protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) = ev.cv.docOf(value)
 
   def doRelabel(state: RelabelState) = this
-  def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
-    this.asInstanceOf[LiteralValue[MT2]] // SAFETY: this contains no column references
+  def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) = {
+    implicit val newHasType = hasType.asInstanceOf[HasType[types.ColumnValue[MT2], types.ColumnType[MT2]]] // SAFETY: rewriting database names does not change types
+    LiteralValue[MT2](state.rewriteProvenance(value))(this.position)
+  }
 }
 
 trait OLiteralValueImpl { this: LiteralValue.type =>

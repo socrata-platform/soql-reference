@@ -14,7 +14,7 @@ import com.socrata.soql.functions.MonomorphicFunction
 trait AtomicFromImpl[MT <: MetaTypes] { this: AtomicFrom[MT] =>
   type Self[MT <: MetaTypes] <: AtomicFrom[MT]
 
-  val resourceName: Option[ScopedResourceName[RNS]]
+  val resourceName: Option[ScopedResourceName]
   val alias: Option[ResourceName]
   val label: AutoTableLabel
 
