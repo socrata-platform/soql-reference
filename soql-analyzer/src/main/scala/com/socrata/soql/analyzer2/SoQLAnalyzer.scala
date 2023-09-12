@@ -14,7 +14,7 @@ import com.socrata.soql.{BinaryTree, Leaf, TrueOp, Compound, PipeQuery, UnionQue
 import com.socrata.soql.parsing.SoQLPosition
 import com.socrata.soql.ast
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.{ColumnName, ResourceName, TableName, HoleName, UntypedDatasetContext, FunctionName}
+import com.socrata.soql.environment.{ColumnName, ResourceName, TableName, HoleName, UntypedDatasetContext, FunctionName, Provenance}
 import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, TypeInfoMetaProjection}
 import com.socrata.soql.aliases.AliasAnalysis
 import com.socrata.soql.exceptions.AliasAnalysisException
@@ -29,12 +29,16 @@ object SoQLAnalyzer {
 class SoQLAnalyzer[MT <: MetaTypes] private (
   typeInfo: TypeInfoMetaProjection[MT],
   functionInfo: FunctionInfo[MT#ColumnType],
+  toProvenance: ToProvenance[MT#DatabaseTableNameImpl],
   aggregateMerge: Option[(ColumnName, Expr[MT]) => Option[Expr[MT]]]
 ) extends StatementUniverse[MT] {
-  def this(typeInfo: TypeInfo2[MT#ColumnType, MT#ColumnValue], functionInfo: FunctionInfo[MT#ColumnType]) =
-    this(typeInfo.metaProject[MT], functionInfo, None)
+  def this(
+    typeInfo: TypeInfo2[MT#ColumnType, MT#ColumnValue],
+    functionInfo: FunctionInfo[MT#ColumnType],
+    toProvenance: ToProvenance[MT#DatabaseTableNameImpl]
+  ) =
+    this(typeInfo.metaProject[MT], functionInfo, toProvenance, None)
 
-  type ScopedResourceName = com.socrata.soql.analyzer2.ScopedResourceName[RNS]
   type TableMap = com.socrata.soql.analyzer2.TableMap[MT]
   type FoundTables = com.socrata.soql.analyzer2.FoundTables[MT]
   type TableDescription = com.socrata.soql.analyzer2.TableDescription[MT]
@@ -46,7 +50,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
   private val Error = SoQLAnalyzerError.AnalysisError
 
   private def copy(aggregateMerge: Option[(ColumnName, Expr) => Option[Expr]] = aggregateMerge): SoQLAnalyzer[MT] =
-    new SoQLAnalyzer(typeInfo, functionInfo, aggregateMerge)
+    new SoQLAnalyzer(typeInfo, functionInfo, toProvenance, aggregateMerge)
 
   def preserveSystemColumns(aggregateMerge: (ColumnName, Expr) => Option[Expr]): SoQLAnalyzer[MT] =
     copy(aggregateMerge = Some(aggregateMerge))
@@ -130,7 +134,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       intoStatement(from)
     }
 
-    def primaryTableName(scope: RNS, query: FoundTables.Query[MT]): Option[CanonicalName] =
+    def primaryTableName(scope: RNS, query: FoundTables.Query[MT]): Option[Provenance] =
       query match {
         case FoundTables.Saved(rn) =>
           primaryTableName(ScopedResourceName(scope, rn))
@@ -142,23 +146,23 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           primaryTableName(scope, q)
       }
 
-    def primaryTableName(name: ScopedResourceName): Option[CanonicalName] =
+    def primaryTableName(name: ScopedResourceName): Option[Provenance] =
       tableMap.get(name).flatMap { desc =>
         desc match {
-          case ds: TableDescription.Dataset[MT] => Some(ds.canonicalName)
+          case ds: TableDescription.Dataset[MT] => Some(toProvenance.toProvenance(ds.name))
           case q: TableDescription.Query[MT] => primaryTableName(ScopedResourceName(q.scope, q.basedOn))
           case f: TableDescription.TableFunction[MT] => primaryTableName(f.scope, f.parsed)
         }
       }
 
     @tailrec
-    def primaryTableName(scope: RNS, tree: BinaryTree[ast.Select]): Option[CanonicalName] =
+    def primaryTableName(scope: RNS, tree: BinaryTree[ast.Select]): Option[Provenance] =
       tree match {
         case Leaf(select) => primaryTableName(scope, select)
         case compound : Compound[ast.Select] => primaryTableName(scope, compound.left)
       }
 
-    def primaryTableName(scope: RNS, select: ast.Select): Option[CanonicalName] =
+    def primaryTableName(scope: RNS, select: ast.Select): Option[Provenance] =
       select.from.flatMap { tn: TableName =>
         val rn = ResourceName(tn.nameWithoutPrefix)
         primaryTableName(ScopedResourceName(scope, rn))
@@ -296,9 +300,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       // analyzed.  This is used to look up unqualified user
       // parameters' values.
       canonicalName: Option[CanonicalName],
-      // The canonical name of the source of the primary underlying
-      // table being analyzed
-      primaryTableName: Option[CanonicalName],
+      // The provenance of the primary underlying table being analyzed
+      primaryTableName: Option[Provenance],
       // The current environment in which possibly-qualified
       // column-names can be matched to input columns.
       enclosingEnv: Environment[MT],

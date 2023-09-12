@@ -1,6 +1,7 @@
 package com.socrata.soql.analyzer2
 
 import com.socrata.soql.analyzer2.rewrite.Pass
+import com.socrata.soql.environment.Provenance
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer, Readable, Writable}
 
@@ -91,9 +92,12 @@ class SoQLAnalysis[MT <: MetaTypes] private (
   final def rewriteDatabaseNames[MT2 <: MetaTypes](
     tableName: DatabaseTableName => types.DatabaseTableName[MT2],
     // This is given the _original_ database table name
-    columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
+    columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2],
+    provenanceMapperIn: types.FromProvenance[MT],
+    provenanceMapperOut: types.ToProvenance[MT2],
+    updateProvenance: CV => (Provenance => Provenance) => types.ColumnValue[MT2]
   )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): SoQLAnalysis[MT2] = {
-    copy(statement = statement.rewriteDatabaseNames(tableName, columnName))
+    copy(statement = statement.rewriteDatabaseNames(tableName, columnName, provenanceMapperIn, provenanceMapperOut, updateProvenance))
   }
 
   /** For rewrite trivial table parameters ("trivial" means "column

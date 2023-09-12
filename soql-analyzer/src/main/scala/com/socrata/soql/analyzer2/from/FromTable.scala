@@ -102,7 +102,7 @@ trait OFromTableImpl { this: FromTable.type =>
     def readFrom(buffer: ReadBuffer): FromTable[MT] = {
       FromTable(
         tableName = buffer.read[DatabaseTableName](),
-        definiteResourceName = buffer.read[ScopedResourceName[RNS]](),
+        definiteResourceName = buffer.read[ScopedResourceName](),
         alias = buffer.read[Option[ResourceName]](),
         label = buffer.read[AutoTableLabel](),
         columns = buffer.read[OrderedMap[DatabaseColumnName, NameEntry[CT]]](),

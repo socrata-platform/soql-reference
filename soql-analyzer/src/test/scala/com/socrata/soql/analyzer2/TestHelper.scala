@@ -4,7 +4,7 @@ import org.scalatest.Assertions
 import org.scalatest.matchers.{BeMatcher, MatchResult}
 
 import com.socrata.soql.ast
-import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName}
+import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName, Provenance}
 
 import mocktablefinder._
 
@@ -18,6 +18,11 @@ object TestHelper {
   }
 
   val testTypeInfoProjection = TestTypeInfo.metaProject[TestMT]
+
+  object TestProvenanceMapper extends types.ProvenanceMapper[TestMT] {
+    def fromProvenance(prov: Provenance) = DatabaseTableName(prov.value)
+    def toProvenance(dtn: types.DatabaseTableName[TestMT]) = Provenance(dtn.name)
+  }
 }
 
 trait TestHelper { this: Assertions =>
@@ -43,7 +48,7 @@ trait TestHelper { this: Assertions =>
       case _ => false
     }
 
-  val analyzer = new SoQLAnalyzer[TestMT](TestTypeInfo, TestFunctionInfo)
+  val analyzer = new SoQLAnalyzer[TestMT](TestTypeInfo, TestFunctionInfo, TestHelper.TestProvenanceMapper)
   val systemColumnPreservingAnalyzer = analyzer.preserveSystemColumns { (_, expr) =>
     expr.typ match {
       case TestNumber =>

@@ -10,7 +10,7 @@ import com.rojoma.json.v3.ast.{JArray, JObject, JValue, JString, JNumber}
 import com.rojoma.json.v3.io.{JsonReaderException, JsonReader}
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, JsonKey, JsonUtil}
-import com.socrata.soql.environment.TypeName
+import com.socrata.soql.environment.{TypeName, Provenance}
 import com.socrata.soql.types.obfuscation.{CryptProvider, Obfuscator, LongFormatter}
 import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.vividsolutions.jts.geom.{LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon}
@@ -129,7 +129,7 @@ object SoQLValue {
 }
 
 case class SoQLID(value: Long) extends SoQLValue {
-  var provenance: Option[String] = None // Later, this should become a parameter
+  var provenance: Option[Provenance] = None // Later, this should become a parameter
 
   def typ = SoQLID
 
@@ -202,13 +202,13 @@ case object SoQLID extends SoQLType("row_identifier") {
 
   override def readContentsFrom(buffer: ReadBuffer) = {
     val result = SoQLID(buffer.read[Long]())
-    result.provenance = buffer.read[Option[String]]()
+    result.provenance = buffer.read[Option[Provenance]]()
     result
   }
 }
 
 case class SoQLVersion(value: Long) extends SoQLValue {
-  var provenance: Option[String] = None // Later, this should become a parameter
+  var provenance: Option[Provenance] = None // Later, this should become a parameter
 
   def typ = SoQLVersion
 
@@ -260,7 +260,7 @@ case object SoQLVersion extends SoQLType("row_version") {
 
   override def readContentsFrom(buffer: ReadBuffer) = {
     val result = SoQLVersion(buffer.read[Long]())
-    result.provenance = buffer.read[Option[String]]()
+    result.provenance = buffer.read[Option[Provenance]]()
     result
   }
 }

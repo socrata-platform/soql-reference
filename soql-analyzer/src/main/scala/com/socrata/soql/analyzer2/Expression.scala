@@ -183,14 +183,14 @@ final case class LiteralValue[MT <: MetaTypes](
 )(
   val position: AtomicPositionInfo
 )(
-  implicit ev: HasType[MT#ColumnValue, MT#ColumnType]
+  implicit val hasType: HasType[MT#ColumnValue, MT#ColumnType]
 ) extends
     Literal[MT]
     with expression.LiteralValueImpl[MT]
     with HashedExpr
 {
   // these need to be here and not in the impl for variance reasons
-  val typ = ev.typeOf(value)
+  val typ = hasType.typeOf(value)
   private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
 }
 object LiteralValue extends expression.OLiteralValueImpl

@@ -5,7 +5,7 @@ import scala.util.parsing.input.{Position, NoPosition}
 import java.io.OutputStream
 
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.{ResourceName, TypeName, ColumnName}
+import com.socrata.soql.environment.{ResourceName, TypeName, ColumnName, Provenance}
 import com.socrata.soql.parsing.SoQLPosition
 
 trait Writable[T] {
@@ -56,6 +56,11 @@ object Writable extends `-impl`.WritableTuples {
   implicit object columnName extends Writable[ColumnName] {
     def writeTo(buffer: WriteBuffer, tn: ColumnName): Unit =
       string.writeTo(buffer, tn.name)
+  }
+
+  implicit object provenance extends Writable[Provenance] {
+    def writeTo(buffer: WriteBuffer, p: Provenance): Unit =
+      string.writeTo(buffer, p.value)
   }
 
   implicit object position extends Writable[Position] {

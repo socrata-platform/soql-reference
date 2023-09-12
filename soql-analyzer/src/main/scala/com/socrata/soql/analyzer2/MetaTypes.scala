@@ -93,6 +93,11 @@ trait LabelUniverse[MT <: MetaTypes] extends MetaTypeHelper[MT] {
   type AutoColumnLabel = analyzer2.AutoColumnLabel
   type DatabaseColumnName = analyzer2.DatabaseColumnName[MT#DatabaseColumnNameImpl]
 
+  type ScopedResourceName = analyzer2.ScopedResourceName[MT#ResourceNameScope]
+  type ToProvenance = analyzer2.ToProvenance[MT#DatabaseTableNameImpl]
+  type FromProvenance = analyzer2.FromProvenance[MT#DatabaseTableNameImpl]
+  type ProvenanceMapper = analyzer2.ProvenanceMapper[MT#DatabaseTableNameImpl]
+
   private[analyzer2] type IsomorphismState = analyzer2.IsomorphismState[MT]
   private[analyzer2] type RewriteDatabaseNamesState[MT2 <: MetaTypes] = analyzer2.RewriteDatabaseNamesState[MT, MT2]
 }

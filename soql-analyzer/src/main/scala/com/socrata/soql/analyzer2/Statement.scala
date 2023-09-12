@@ -9,7 +9,7 @@ import com.rojoma.json.v3.ast.JString
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.{ColumnName, ResourceName, TableName}
+import com.socrata.soql.environment.{ColumnName, ResourceName, TableName, Provenance}
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.analyzer2
@@ -35,9 +35,12 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
   final def rewriteDatabaseNames[MT2 <: MetaTypes](
     tableName: DatabaseTableName => types.DatabaseTableName[MT2],
     // This is given the _original_ database table name
-    columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
+    columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2],
+    fromMT1Provenance: types.FromProvenance[MT],
+    toMT2Provenance: types.ToProvenance[MT2],
+    updateProvenance: CV => (Provenance => Provenance) => types.ColumnValue[MT2]
   )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): Self[MT2] =
-    doRewriteDatabaseNames(new RewriteDatabaseNamesState[MT2](tableName, columnName, realTables, changesOnlyLabels))
+    doRewriteDatabaseNames(new RewriteDatabaseNamesState[MT2](tableName, columnName, fromMT1Provenance, toMT2Provenance, updateProvenance, realTables, changesOnlyLabels))
 
   /** The names that the SoQLAnalyzer produces aren't necessarily safe
     * for use in any particular database.  This lets those
