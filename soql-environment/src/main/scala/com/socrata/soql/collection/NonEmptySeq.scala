@@ -53,11 +53,22 @@ case class NonEmptySeq[+T](head: T, tail: Seq[T] = Seq.empty) {
     val newHead = headF(head)
     tail.foldLeft(newHead)(tailF)
   }
+
+  def foldLeft[U](acc: U)(f: (U, T) => U): U = {
+    tail.foldLeft(f(acc, head))(f)
+  }
+
+  def reduceLeft[U >: T](f: (U, T) => U): U = {
+    tail.foldLeft[U](head)(f)
+  }
+
   def exists(f: T => Boolean) = f(head) || tail.exists(f)
 
-  def toSeq: Seq[T] = head +: tail
-
   def forall(f: T => Boolean) = f(head) && tail.forall(f)
+
+  def toSeq: Seq[T] = head +: tail
+  def toList: List[T] = head :: tail.toList
+  def toVector: Vector[T] = head +: tail.toVector
 }
 
 object NonEmptySeq {
