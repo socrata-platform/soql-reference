@@ -1,6 +1,7 @@
 package com.socrata.soql.analyzer2
 
-import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode}
+import com.rojoma.json.v3.ast.{JValue, JObject}
+import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder, AutomaticJsonCodecBuilder, SimpleHierarchyEncodeBuilder, SimpleHierarchyDecodeBuilder, InternalTag}
 
 import com.socrata.soql.environment.{ResourceName, HoleName}
@@ -110,8 +111,35 @@ object UnparsedFoundTables {
   }
 
   implicit def jEncode[MT <: MetaTypes](implicit rnsEncode: JsonEncode[MT#ResourceNameScope], ctEncode: JsonEncode[MT#ColumnType], dtnEncode: JsonEncode[MT#DatabaseTableNameImpl], dcnEncode: JsonEncode[MT#DatabaseColumnNameImpl]) =
-    AutomaticJsonEncodeBuilder[UnparsedFoundTables[MT]]
+    new JsonEncode[UnparsedFoundTables[MT]] {
+      private val autoEncode = AutomaticJsonEncodeBuilder[UnparsedFoundTables[MT]]
+
+      def encode(ft: UnparsedFoundTables[MT]): JObject = {
+        val fields = autoEncode.encode(ft).fields
+        JObject(fields ++ Map("version" -> FoundTables.CurrentVersion))
+      }
+    }
+
   implicit def jDecode[MT <: MetaTypes](implicit rnsDecode: JsonDecode[MT#ResourceNameScope], ctDecode: JsonDecode[MT#ColumnType], dtnDecode: JsonDecode[MT#DatabaseTableNameImpl], dcnDecode: JsonDecode[MT#DatabaseColumnNameImpl]) =
-    AutomaticJsonDecodeBuilder[UnparsedFoundTables[MT]]
+    new JsonDecode[UnparsedFoundTables[MT]] {
+      private val autoDecode = AutomaticJsonDecodeBuilder[UnparsedFoundTables[MT]]
+
+      def decode(x: JValue) = {
+        x match {
+          case obj@JObject(fields) =>
+            fields.get("version") match {
+              case None | Some(FoundTables.Version1) =>
+                decodeV1(obj)
+              case Some(other) =>
+                Left(DecodeError.InvalidValue(other).prefix("version"))
+            }
+          case other =>
+            Left(DecodeError.InvalidType(expected = JObject, got = other.jsonType))
+        }
+      }
+
+      private def decodeV1(obj: JObject) =
+        autoDecode.decode(obj)
+    }
 }
 
