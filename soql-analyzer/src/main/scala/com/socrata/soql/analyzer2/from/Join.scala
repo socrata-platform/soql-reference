@@ -143,14 +143,31 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
   def contains(e: Expr[MT]): Boolean =
     reduce[Boolean](_.contains(e), { (acc, join) => acc || join.right.contains(e) || join.on.contains(e) })
 
-  private[analyzer2] final def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean =
-    // TODO: make this constant-stack if it ever gets used outside of tests
+  private[analyzer2] final def findIsomorphismish(
+    state: IsomorphismState,
+    that: From[MT],
+    recurseStmt: (Statement[MT], IsomorphismState, Option[AutoTableLabel], Option[AutoTableLabel], Statement[MT]) => Boolean
+  ): Boolean =
+    // TODO: make this constant-stack if possible
     that match {
       case Join(thatJoinType, thatLateral, thatLeft, thatRight, thatOn) =>
         this.joinType == thatJoinType &&
           this.lateral == thatLateral &&
-          this.left.findIsomorphism(state, thatLeft) &&
-          this.right.findIsomorphism(state, thatRight) &&
+          this.left.findIsomorphismish(state, thatLeft, recurseStmt) &&
+          this.right.findIsomorphismish(state, thatRight, recurseStmt) &&
+          this.on.findIsomorphism(state, thatOn)
+      case _ =>
+        false
+    }
+
+  private[analyzer2] final def findVerticalSlice(state: IsomorphismState, that: From[MT]): Boolean =
+    // TODO: make this constant-stack if possible
+    that match {
+      case Join(thatJoinType, thatLateral, thatLeft, thatRight, thatOn) =>
+        this.joinType == thatJoinType &&
+          this.lateral == thatLateral &&
+          this.left.findVerticalSlice(state, thatLeft) &&
+          this.right.findVerticalSlice(state, thatRight) &&
           this.on.findIsomorphism(state, thatOn)
       case _ =>
         false

@@ -50,18 +50,85 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
     right.doLabelMap(state)
   }
 
-  private[analyzer2] def findIsomorphism(
+  private[analyzer2] def findIsomorphismish(
+    state: IsomorphismState,
+    thisCurrentTableLabel: Option[AutoTableLabel],
+    thatCurrentTableLabel: Option[AutoTableLabel],
+    that: Statement[MT],
+    recurseStmt: (Statement[MT], IsomorphismState, Option[AutoTableLabel], Option[AutoTableLabel], Statement[MT]) => Boolean,
+    recurseFrom: (From[MT], IsomorphismState, From[MT]) => Boolean,
+  ): Boolean =
+    that match {
+      case CombinedTables(_, thatLeft, thatRight) =>
+        this.left.findIsomorphismish(state, thisCurrentTableLabel, thatCurrentTableLabel, thatLeft, recurseStmt, recurseFrom) &&
+          this.right.findIsomorphismish(state, thisCurrentTableLabel, thatCurrentTableLabel, thatRight, recurseStmt, recurseFrom)
+      case _ =>
+        false
+    }
+
+  private[analyzer2] def findVerticalSlice(
     state: IsomorphismState,
     thisCurrentTableLabel: Option[AutoTableLabel],
     thatCurrentTableLabel: Option[AutoTableLabel],
     that: Statement[MT]
   ): Boolean =
     that match {
-      case CombinedTables(_, thatLeft, thatRight) =>
-        this.left.findIsomorphism(state, thisCurrentTableLabel, thatCurrentTableLabel, thatLeft) &&
-          this.right.findIsomorphism(state, thisCurrentTableLabel, thatCurrentTableLabel, thatRight)
+      case CombinedTables(TableFunc.UnionAll, thatLeft, thatRight) =>
+        // This is the only case where we can actually do a subset
+        // operation (all other ops care about all values in the
+        // selected row).  Now, this is tricky because we don't care
+        // about column ordering, so say we have
+        //   (select x) union (select y)
+        // and the "that" that we're looking at is
+        //   (select a, x) union all (select y, b)
+        // in that case, we want to say "no, this is not a subset" but
+        // a simple "find subset left, find subset right" will say
+        // "yep, the left is a subset and the right is a subset,
+        // therefore this whole thing is a subset!" which is wrong.
+        //
+        // As an even trickier case, say the "that" was
+        //   (select x, x) union all (select x, y)
+        // In that case we want to say "yes this is a subset and the
+        // "x" column in this corresponds to the _second_ column in
+        // "that".  This DOES NOT HANDLE that case and just says "No,
+        // I don't think this is a subset".  Hopefully this is
+        // edge-casey enough to be irrelevant.
+        if(!this.left.findVerticalSlice(state, thisCurrentTableLabel, thatCurrentTableLabel, thatLeft)) {
+          return false
+        }
+
+        // Ok, we have a left-subset.  Good.  Now we need to see if
+        // the _corresponding columns_ on the RHS also form such a
+        // subset.
+        if(!this.right.findVerticalSlice(state, thisCurrentTableLabel, thatCurrentTableLabel, thatRight)) {
+          return false
+        }
+
+        this.schema.keysIterator.zipWithIndex.forall { case (thisLabel, thisLabelIdx) =>
+          val (_, thatLabel) = state.mapFrom(thisCurrentTableLabel, thisLabel).getOrElse {
+            throw new Exception("We've found a vertical slice but it didn't end up in the state??")
+          }
+          val thatLabelIdx = that.schema.keysIterator.indexOf(thatLabel)
+          if(thatLabelIdx == -1) throw new Exception("We've found a vertical slice, but couldn't find the corresponding column??")
+          val thisRightLabel = this.right.schema.keysIterator.drop(thisLabelIdx).next()
+          state.mapFrom(thisCurrentTableLabel, thisRightLabel) match {
+            case Some((_, thatRightLabel)) =>
+              thatRight.schema.keysIterator.indexOf(thatRightLabel) == thatLabelIdx
+            case None =>
+              false
+          }
+        }
       case _ =>
-        false
+        // We care about everything here, but on recursing further we
+        // can go back to only caring about subsets.
+        findIsomorphismish(
+          state,
+          thisCurrentTableLabel,
+          thatCurrentTableLabel,
+          that,
+          (stmt, isostate, thisLbl, thatLbl, that) => stmt.findVerticalSlice(isostate, thisLbl, thatLbl, that),
+          (from, isostate, that) => from.findVerticalSlice(isostate, that)
+        )
     }
 
   def mapAlias(f: Option[ResourceName] => Option[ResourceName]): Self[MT] =

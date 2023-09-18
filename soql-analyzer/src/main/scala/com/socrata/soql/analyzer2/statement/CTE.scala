@@ -44,7 +44,25 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
          definitionQuery = definitionQuery.doRelabel(state),
          useQuery = useQuery.doRelabel(state))
 
-  private[analyzer2] def findIsomorphism(
+  private[analyzer2] def findIsomorphismish(
+    state: IsomorphismState,
+    thisCurrentTableLabel: Option[AutoTableLabel],
+    thatCurrentTableLabel: Option[AutoTableLabel],
+    that: Statement[MT],
+    recurseStmt: (Statement[MT], IsomorphismState, Option[AutoTableLabel], Option[AutoTableLabel], Statement[MT]) => Boolean,
+    recurseFrom: (From[MT], IsomorphismState, From[MT]) => Boolean
+  ): Boolean =
+    that match {
+      case CTE(thatDefLabel, _thatDefAlias, thatDefQuery, thatMatrHint, thatUseQuery) =>
+        state.tryAssociate(this.definitionLabel, thatDefLabel) &&
+          recurseStmt(this.definitionQuery, state, Some(this.definitionLabel), Some(thatDefLabel), thatDefQuery) &&
+          this.materializedHint == thatMatrHint &&
+          this.useQuery.findIsomorphismish(state, thisCurrentTableLabel, thatCurrentTableLabel, thatUseQuery, recurseStmt, recurseFrom)
+      case _ =>
+        false
+    }
+
+  private[analyzer2] def findVerticalSlice(
     state: IsomorphismState,
     thisCurrentTableLabel: Option[AutoTableLabel],
     thatCurrentTableLabel: Option[AutoTableLabel],
@@ -53,9 +71,9 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
     that match {
       case CTE(thatDefLabel, _thatDefAlias, thatDefQuery, thatMatrHint, thatUseQuery) =>
         state.tryAssociate(this.definitionLabel, thatDefLabel) &&
-          this.definitionQuery.findIsomorphism(state, Some(this.definitionLabel), Some(thatDefLabel), thatDefQuery) &&
+          this.definitionQuery.findVerticalSlice(state, Some(this.definitionLabel), Some(thatDefLabel), thatDefQuery) &&
           this.materializedHint == thatMatrHint &&
-          this.useQuery.findIsomorphism(state, thisCurrentTableLabel, thatCurrentTableLabel, thatUseQuery)
+          this.useQuery.findVerticalSlice(state, thisCurrentTableLabel, thatCurrentTableLabel, thatUseQuery)
       case _ =>
         false
     }

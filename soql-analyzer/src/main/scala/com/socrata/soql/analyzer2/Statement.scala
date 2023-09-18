@@ -68,6 +68,45 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
     state: IsomorphismState,
     thisCurrentTableLabel: Option[AutoTableLabel],
     thatCurrentTableLabel: Option[AutoTableLabel],
+    that: Statement[MT],
+  ): Boolean =
+    findIsomorphismish(
+      state,
+      thisCurrentTableLabel,
+      thatCurrentTableLabel,
+      that,
+      (stmt, isostate, thisLbl, thatLbl, that) => stmt.findIsomorphism(isostate, thisLbl, thatLbl, that),
+      (from, isostate, that) => from.findIsomorphism(isostate, that)
+    )
+
+  private[analyzer2] def findIsomorphismish(
+    state: IsomorphismState,
+    thisCurrentTableLabel: Option[AutoTableLabel],
+    thatCurrentTableLabel: Option[AutoTableLabel],
+    that: Statement[MT],
+    recurseStmt: (Statement[MT], IsomorphismState, Option[AutoTableLabel], Option[AutoTableLabel], Statement[MT]) => Boolean,
+    recurseFrom: (From[MT], IsomorphismState, From[MT]) => Boolean
+  ): Boolean
+
+  // A "vertical slice" means "these two Statements will produce the
+  // same number of rows, and each of "this"'s columns is isomorphic
+  // to one of "that"'s columns.
+  final def isVerticalSlice(that: Statement[MT], under: IsomorphismState.View[MT] = IsomorphismState.View.empty): Boolean =
+    findVerticalSlice(under.extend, None, None, that)
+
+  final def verticalSliceOf(that: Statement[MT], under: IsomorphismState.View[MT] = IsomorphismState.View.empty): Option[IsomorphismState.View[MT]] = {
+    val state = under.extend
+    if(findVerticalSlice(state, None, None, that)) {
+      Some(state.finish)
+    } else {
+      None
+    }
+  }
+
+  private[analyzer2] def findVerticalSlice(
+    state: IsomorphismState,
+    thisCurrentTableLabel: Option[AutoTableLabel],
+    thatCurrentTableLabel: Option[AutoTableLabel],
     that: Statement[MT]
   ): Boolean
 

@@ -76,6 +76,17 @@ trait TestHelper { this: Assertions =>
 
   def isomorphicTo[MT <: MetaTypes](right: Statement[MT])(implicit ev: HasDoc[MT#ColumnValue], ev2: HasDoc[MT#DatabaseTableNameImpl], ev3: HasDoc[MT#DatabaseColumnNameImpl]) = new IsomorphicToMatcher(right)
 
+  class VerticalSliceMatcher[MT <: MetaTypes](right: Statement[MT])(implicit ev: HasDoc[MT#ColumnValue], ev2: HasDoc[MT#DatabaseTableNameImpl], ev3: HasDoc[MT#DatabaseColumnNameImpl]) extends BeMatcher[Statement[MT]] {
+    def apply(left: Statement[MT]) =
+      MatchResult(
+        left.isVerticalSlice(right),
+        left.debugStr + "\nwas not a vertical slice of\n" + right.debugStr,
+        left.debugStr + "\nwas a vertical slice of\n" + right.debugStr
+      )
+  }
+
+  def verticalSliceOf[MT <: MetaTypes](right: Statement[MT])(implicit ev: HasDoc[MT#ColumnValue], ev2: HasDoc[MT#DatabaseTableNameImpl], ev3: HasDoc[MT#DatabaseColumnNameImpl]) = new VerticalSliceMatcher(right)
+
   def specFor(params: Map[HoleName, UserParameters.PossibleValue[TestType, TestValue]]): Map[HoleName, TestType] =
     params.iterator.map { case (hn, cv) =>
       val typ = cv match {

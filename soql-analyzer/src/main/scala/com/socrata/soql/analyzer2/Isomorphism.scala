@@ -32,6 +32,9 @@ object IsomorphismState {
 
     def get[B <: A](k: B): Option[B] =
       underlying.get(k).asInstanceOf[Option[B]]
+
+    override def toString =
+      underlying.iterator.map { case (a, b) => s"$a -> $b" }.mkString("DMap(", ", ", ")")
   }
 
   private object DMap {
@@ -57,6 +60,9 @@ object IsomorphismState {
 
     private[analyzer2] def extend: IsomorphismState =
       new IsomorphismState(forwardTables, backwardTables, forwardColumns, backwardColumns)
+
+    override def toString =
+      s"IsomorphismState(\n  $forwardTables,\n  $backwardTables,\n  $forwardColumns, $backwardColumns\n)"
   }
 
   object View {
@@ -73,7 +79,22 @@ class IsomorphismState[MT <: MetaTypes] private (
 ) extends LabelUniverse[MT] {
   private[analyzer2] def this() = this(Map.empty, Map.empty, new IsomorphismState.DMap, new IsomorphismState.DMap)
 
+  private [analyzer2] def attempt(f: IsomorphismState => Boolean): Boolean = {
+    val clone = new IsomorphismState(forwardTables, backwardTables, forwardColumns, backwardColumns)
+    val result = f(clone)
+    if(result) {
+      this.forwardTables = clone.forwardTables
+      this.backwardTables = clone.backwardTables
+      this.forwardColumns = clone.forwardColumns
+      this.backwardColumns = clone.backwardColumns
+    }
+    result
+  }
+
   def finish = new IsomorphismState.View(forwardTables, backwardTables, forwardColumns, backwardColumns)
+
+  def mapFrom(table: Option[AutoTableLabel], col: ColumnLabel): Option[(Option[AutoTableLabel], ColumnLabel)] =
+    forwardColumns.get((table, col))
 
   def tryAssociate(tableA: AutoTableLabel, tableB: AutoTableLabel): Boolean = {
     (tableA, tableB) match {
