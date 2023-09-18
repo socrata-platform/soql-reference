@@ -2,7 +2,7 @@ package com.socrata.soql.analyzer2
 
 import scala.language.higherKinds
 
-import com.rojoma.json.v3.ast.{JValue, JObject, JString}
+import com.rojoma.json.v3.ast.{JValue, JObject, JString, JNumber}
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, AutomaticJsonDecodeBuilder}
 
@@ -197,40 +197,55 @@ object FoundTables {
         }
     }
 
+  val Version1 = JNumber(1)
+  val CurrentVersion = Version1
+
   implicit def jsonEncode[MT <: MetaTypes](implicit rnsEncode: JsonEncode[MT#ResourceNameScope], ctEncode: JsonEncode[MT#ColumnType], dtnEncode: JsonEncode[MT#DatabaseTableNameImpl], dcnEncode: JsonEncode[MT#DatabaseColumnNameImpl]): JsonEncode[FoundTables[MT]] =
     new JsonEncode[FoundTables[MT]] {
-      def encode(v: FoundTables[MT]) = JsonEncode.toJValue(v.asUnparsedFoundTables)
+      def encode(v: FoundTables[MT]) = {
+        val JObject(fields) = JsonEncode.toJValue(v.asUnparsedFoundTables)
+        JObject(fields ++ Map("version" -> CurrentVersion))
+      }
     }
 
   implicit def jsonDecode[MT <: MetaTypes](implicit rnsDecode: JsonDecode[MT#ResourceNameScope], ctDecode: JsonDecode[MT#ColumnType], dtnDecode: JsonDecode[MT#DatabaseTableNameImpl], dcnDecode: JsonDecode[MT#DatabaseColumnNameImpl]) =
     new JsonDecode[FoundTables[MT]] with MetaTypeHelper[MT] {
       def decode(x: JValue): Either[DecodeError, FoundTables[MT]] = x match {
-        case JObject(fields) =>
-          val params =
-            fields.get("parserParameters") match {
-              case Some(params) =>
-                EncodableParameters.paramsCodec.decode(params) match {
-                  case Right(p) => p.toParameters
-                  case Left(e) => return Left(e.prefix("parserParameters"))
-                }
-              case None =>
-                return Left(DecodeError.MissingField("parserParameters"))
-            }
-
-          implicit val tableMapDecode = TableMap.jsonDecode[MT](params)
-          implicit val queryDecode = queryJsonDecode[MT](params)
-
-          case class DecodeHelper(
-            tableMap: TableMap[MT],
-            initialScope: RNS,
-            initialQuery: FoundTables.Query[MT]
-          )
-
-          AutomaticJsonDecodeBuilder[DecodeHelper].decode(x).map { dh =>
-            new FoundTables(dh.tableMap, dh.initialScope, dh.initialQuery, params)
+        case obj@JObject(fields) =>
+          fields.get("version") match {
+            case None | Some(Version1) =>
+              decodeV1(obj)
+            case Some(other) =>
+              Left(DecodeError.InvalidValue(other).prefix("version"))
           }
         case other =>
           Left(DecodeError.InvalidType(expected = JObject, got = other.jsonType))
+      }
+
+      private def decodeV1(obj: JObject): Either[DecodeError, FoundTables[MT]] = {
+        val params =
+          obj.get("parserParameters") match {
+            case Some(params) =>
+              EncodableParameters.paramsCodec.decode(params) match {
+                case Right(p) => p.toParameters
+                case Left(e) => return Left(e.prefix("parserParameters"))
+              }
+            case None =>
+              return Left(DecodeError.MissingField("parserParameters"))
+          }
+
+        implicit val tableMapDecode = TableMap.jsonDecode[MT](params)
+        implicit val queryDecode = queryJsonDecode[MT](params)
+
+        case class DecodeHelper(
+          tableMap: TableMap[MT],
+          initialScope: RNS,
+          initialQuery: FoundTables.Query[MT]
+        )
+
+        AutomaticJsonDecodeBuilder[DecodeHelper].decode(obj).map { dh =>
+          new FoundTables(dh.tableMap, dh.initialScope, dh.initialQuery, params)
+        }
       }
     }
 }
