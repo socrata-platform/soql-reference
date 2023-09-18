@@ -28,7 +28,11 @@ trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
   def find(predicate: Expr[MT] => Boolean) = None
   def contains(e: Expr[MT]): Boolean = false
 
-  private[analyzer2] final def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean =
+  private[analyzer2] final def findIsomorphismish(
+    state: IsomorphismState,
+    that: From[MT],
+    recurseStmt: (Statement[MT], IsomorphismState, Option[AutoTableLabel], Option[AutoTableLabel], Statement[MT]) => Boolean
+  ): Boolean =
     that match {
       case FromSingleRow(thatLabel, thatAlias) =>
         state.tryAssociate(this.label, thatLabel)
@@ -36,6 +40,9 @@ trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
       case _ =>
         false
     }
+
+  private[analyzer2] final def findVerticalSlice(state: IsomorphismState, that: From[MT]): Boolean =
+    findIsomorphism(state, that) // SingleRow has no columns, so this is the same as finding an isomorphism
 
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     this.asInstanceOf[FromSingleRow[MT2]] // safety: this has no labels

@@ -50,7 +50,11 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
     copy(label = state.convert(label))
   }
 
-  private[analyzer2] final def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean =
+  private[analyzer2] final def findIsomorphismish(
+    state: IsomorphismState,
+    that: From[MT],
+    recurseStmt: (Statement[MT], IsomorphismState, Option[AutoTableLabel], Option[AutoTableLabel], Statement[MT]) => Boolean
+  ): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
       case FromTable(thatTableName, thatResourceName, thatAlias, thatLabel, thatColumns, thatPrimaryKeys) =>
@@ -63,7 +67,24 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
               thisEntry.typ == thatEntry.typ
             // don't care about the entry's name
           } &&
-          this.primaryKeys == thatPrimaryKeys
+          this.primaryKeys.toSet == thatPrimaryKeys.toSet
+      case _ =>
+        false
+    }
+
+  private[analyzer2] final def findVerticalSlice(state: IsomorphismState, that: From[MT]): Boolean =
+    that match {
+      case FromTable(thatTableName, thatResourceName, thatAlias, thatLabel, thatColumns, thatPrimaryKeys) =>
+        this.tableName == thatTableName &&
+          state.tryAssociate(this.label, thatLabel) &&
+          this.columns.forall { case (thisColName, thisEntry) =>
+            // We care about column database names and types, but not
+            // human names.
+            thatColumns.get(thisColName).fold(false) { thatEntry =>
+              thisEntry.typ == thatEntry.typ
+            }
+          } &&
+          this.primaryKeys.toSet.subsetOf(thatPrimaryKeys.toSet)
       case _ =>
         false
     }

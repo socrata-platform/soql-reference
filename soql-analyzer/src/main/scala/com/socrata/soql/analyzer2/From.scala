@@ -55,7 +55,36 @@ sealed abstract class From[MT <: MetaTypes] extends LabelUniverse[MT] {
     }
   }
 
-  private[analyzer2] def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean
+  private[analyzer2] def findIsomorphismish(
+    state: IsomorphismState,
+    that: From[MT],
+    recurseStmt: (Statement[MT], IsomorphismState, Option[AutoTableLabel], Option[AutoTableLabel], Statement[MT]) => Boolean
+  ): Boolean
+
+  private[analyzer2] def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean =
+    findIsomorphismish(
+      state,
+      that,
+      (stmt, isostate, thisLbl, thatLbl, that) => stmt.findIsomorphism(isostate, thisLbl, thatLbl, that)
+    )
+
+  // A "vertical slice" means "these two Froms will produce the same
+  // number of rows, and each of "this"'s columns is isomorphic to one
+  // of "that"'s columns.
+  final def isVerticalSlice(that: From[MT], under: IsomorphismState.View[MT] = IsomorphismState.View.empty): Boolean =
+    findVerticalSlice(under.extend, that)
+
+  final def verticalSliceOf(that: From[MT], under: IsomorphismState.View[MT] = IsomorphismState.View.empty): Option[IsomorphismState.View[MT]] = {
+    val state = under.extend
+    if(findVerticalSlice(state, that)) {
+      Some(state.finish)
+    } else {
+      None
+    }
+  }
+
+  private[analyzer2] def findVerticalSlice(state: IsomorphismState, that: From[MT]): Boolean
+
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
 
   def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]]

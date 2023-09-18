@@ -31,11 +31,13 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
       }
     }
 
-  private[analyzer2] def findIsomorphism(
+  private[analyzer2] def findIsomorphismish(
     state: IsomorphismState,
     thisCurrentTableLabel: Option[AutoTableLabel],
     thatCurrentTableLabel: Option[AutoTableLabel],
-    that: Statement[MT]
+    that: Statement[MT],
+    recurseStmt: (Statement[MT], IsomorphismState, Option[AutoTableLabel], Option[AutoTableLabel], Statement[MT]) => Boolean,
+    recurseFrom: (From[MT], IsomorphismState, From[MT]) => Boolean
   ): Boolean =
     that match {
       case Values(thatLabels, thatValues) =>
@@ -52,6 +54,59 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
       case _ =>
         false
     }
+
+  private[analyzer2] def findVerticalSlice(
+    state: IsomorphismState,
+    thisCurrentTableLabel: Option[AutoTableLabel],
+    thatCurrentTableLabel: Option[AutoTableLabel],
+    that: Statement[MT]
+  ): Boolean =
+    that match {
+      case Values(thatLabels, thatValues) if this.values.length == thatValues.length /* need the same number of rows */ =>
+        // Ugh ok this is a little tricky...  We're interested in
+        // matching _columns_, so first transpose our row Seqs:
+        val thisColumns = transpose(this.values)
+        assert(thisColumns.length == this.labels.size)
+        val thatColumns = transpose(thatValues)
+        assert(thatColumns.length == thatLabels.size)
+
+        // Then we want to find a way to associate the entries of
+        // thisColumns with the entries of thatColumns, so if for all
+        // of thisColumns we can find a column in thatColumns where
+        // (a) all the exprs line up and (b) we can associate the
+        // columns' labels, then we're good.  Note that this means
+        // that if we find two different but identical columns in
+        // "this", we'll need two different but identical columns in
+        // "that"!
+        this.labels.iterator.zip(thisColumns.iterator).forall { case (thisLabel, thisColumn) =>
+          thatLabels.iterator.zip(thatColumns.iterator).exists { case (thatLabel, thatColumn) =>
+            thisColumn.iterator.zip(thatColumn.iterator).
+              forall { case (thisExpr, thatExpr) =>
+                thisExpr.findIsomorphism(state, thatExpr)
+              } &&
+              state.tryAssociate(thisCurrentTableLabel, thisLabel, thatCurrentTableLabel, thatLabel)
+          }
+        }
+      case _ =>
+        false
+    }
+
+  private def transpose(rows: NonEmptySeq[NonEmptySeq[Expr[MT]]]): NonEmptySeq[NonEmptySeq[Expr[MT]]] = {
+    assert(rows.tail.forall(_.length == rows.head.length))
+
+    val columns = Array.fill(rows.head.length) { Vector.newBuilder[Expr[MT]] }
+
+    for {
+      row <- rows
+      (expr, idx) <- row.iterator.zipWithIndex
+    } {
+      columns(idx) += expr
+    }
+
+    NonEmptySeq.fromSeqUnsafe(
+      columns.iterator.map { builder => NonEmptySeq.fromSeqUnsafe(builder.result()) }.toVector
+    )
+  }
 
   def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] =
     values.iterator.flatMap(_.iterator.flatMap(_.find(predicate))).nextOption()

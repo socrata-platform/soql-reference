@@ -31,12 +31,27 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
 
   def unique = statement.unique.map(_.map { cn => VirtualColumn[MT](label, cn, statement.schema(cn).typ)(AtomicPositionInfo.None) })
 
-  private[analyzer2] final def findIsomorphism(state: IsomorphismState, that: From[MT]): Boolean =
+  private[analyzer2] final def findIsomorphismish(
+    state: IsomorphismState,
+    that: From[MT],
+    recurseStmt: (Statement[MT], IsomorphismState, Option[AutoTableLabel], Option[AutoTableLabel], Statement[MT]) => Boolean
+  ): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
       case FromStatement(thatStatement, thatLabel, thatResourceName, thatAlias) =>
         state.tryAssociate(this.label, thatLabel) &&
-          this.statement.findIsomorphism(state, Some(this.label), Some(thatLabel), thatStatement)
+          recurseStmt(this.statement, state, Some(this.label), Some(thatLabel), thatStatement)
+        // don't care about aliases
+      case _ =>
+        false
+    }
+
+  private[analyzer2] final def findVerticalSlice(state: IsomorphismState, that: From[MT]): Boolean =
+    // TODO: make this constant-stack if it ever gets used outside of tests
+    that match {
+      case FromStatement(thatStatement, thatLabel, thatResourceName, thatAlias) =>
+        state.tryAssociate(this.label, thatLabel) &&
+          this.statement.findVerticalSlice(state, Some(this.label), Some(thatLabel), thatStatement)
         // don't care about aliases
       case _ =>
         false

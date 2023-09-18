@@ -207,7 +207,53 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
     from.doLabelMap(state)
   }
 
-  private[analyzer2] def findIsomorphism(
+  private[analyzer2] def findIsomorphismish(
+    state: IsomorphismState,
+    thisCurrentTableLabel: Option[AutoTableLabel],
+    thatCurrentTableLabel: Option[AutoTableLabel],
+    that: Statement[MT],
+    recurseStmt: (Statement[MT], IsomorphismState, Option[AutoTableLabel], Option[AutoTableLabel], Statement[MT]) => Boolean,
+    recurseFrom: (From[MT], IsomorphismState, From[MT]) => Boolean,
+  ): Boolean =
+    that match {
+      case Select(
+        thatDistinctiveness,
+        thatSelectList,
+        thatFrom,
+        thatWhere,
+        thatGroupBy,
+        thatHaving,
+        thatOrderBy,
+        thatLimit,
+        thatOffset,
+        thatSearch,
+        thatHint
+      ) =>
+        recurseFrom(this.from, state, thatFrom) &&
+          this.distinctiveness.findIsomorphism(state, thatDistinctiveness) &&
+          this.selectList.size == thatSelectList.size &&
+          this.selectList.iterator.zip(thatSelectList.iterator).forall { case ((thisColLabel, thisNamedExpr), (thatColLabel, thatNamedExpr)) =>
+            state.tryAssociate(thisCurrentTableLabel, thisColLabel, thatCurrentTableLabel, thatColLabel) &&
+              thisNamedExpr.expr.findIsomorphism(state, thatNamedExpr.expr)
+            // do we care about the name or syntheticness?
+          } &&
+          this.where.isDefined == thatWhere.isDefined &&
+          this.where.zip(thatWhere).forall { case (a, b) => a.findIsomorphism(state, b) } &&
+          this.groupBy.length == thatGroupBy.length &&
+          this.groupBy.zip(thatGroupBy).forall { case (a, b) => a.findIsomorphism(state, b) } &&
+          this.having.isDefined == thatHaving.isDefined &&
+          this.having.zip(thatHaving).forall { case (a, b) => a.findIsomorphism(state, b) } &&
+          this.orderBy.length == thatOrderBy.length &&
+          this.orderBy.zip(thatOrderBy).forall { case (a, b) => a.findIsomorphism(state, b) } &&
+          this.limit == thatLimit &&
+          this.offset == thatOffset &&
+          this.search == thatSearch &&
+          this.hint == thatHint
+      case _ =>
+        false
+    }
+
+  private[analyzer2] def findVerticalSlice(
     state: IsomorphismState,
     thisCurrentTableLabel: Option[AutoTableLabel],
     thatCurrentTableLabel: Option[AutoTableLabel],
@@ -226,29 +272,66 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
         thatOffset,
         thatSearch,
         thatHint
-      ) =>
-        this.distinctiveness.findIsomorphism(state, thatDistinctiveness) &&
-          this.selectList.size == thatSelectList.size &&
-          this.selectList.iterator.zip(thatSelectList.iterator).forall { case ((thisColLabel, thisNamedExpr), (thatColLabel, thatNamedExpr)) =>
-            state.tryAssociate(thisCurrentTableLabel, thisColLabel, thatCurrentTableLabel, thatColLabel) &&
-              thisNamedExpr.expr.findIsomorphism(state, thatNamedExpr.expr)
-            // do we care about the name or syntheticness?
-          } &&
-          this.from.findIsomorphism(state, thatFrom) &&
-          this.where.isDefined == thatWhere.isDefined &&
-          this.where.zip(thatWhere).forall { case (a, b) => a.findIsomorphism(state, b) } &&
-          this.groupBy.length == thatGroupBy.length &&
-          this.groupBy.zip(thatGroupBy).forall { case (a, b) => a.findIsomorphism(state, b) } &&
-          this.having.isDefined == thatHaving.isDefined &&
-          this.having.zip(thatHaving).forall { case (a, b) => a.findIsomorphism(state, b) } &&
-          this.orderBy.length == thatOrderBy.length &&
-          this.orderBy.zip(thatOrderBy).forall { case (a, b) => a.findIsomorphism(state, b) } &&
-          this.limit == thatLimit &&
-          this.offset == thatOffset &&
-          this.search == thatSearch &&
-          this.hint == thatHint
+      ) if state.attempt(this.from.findVerticalSlice(_, thatFrom)) =>
+        (this.distinctiveness, thatDistinctiveness) match {
+          case (Distinctiveness.Indistinct(), Distinctiveness.Indistinct()) =>
+            // ok
+          case (Distinctiveness.On(as), Distinctiveness.On(bs)) if as.length == bs.length && as.lazyZip(bs).forall(_.findIsomorphism(state, _)) =>
+            // ok
+          case _ =>
+            // This is a weird case; we need the same schema here but
+            // we don't actually care if our parent tables are exactly
+            // the same...
+            return this.findIsomorphismish(
+              state,
+              thisCurrentTableLabel,
+              thatCurrentTableLabel,
+              that,
+              (stmt, isostate, thisLbl, thatLbl, that) => stmt.findVerticalSlice(isostate, thisLbl, thatLbl, that),
+              (from, isostate, that) => from.findVerticalSlice(isostate, that)
+            )
+        }
+        if(!(this.where.isDefined == thatWhere.isDefined && this.where.lazyZip(thatWhere).forall(_.findIsomorphism(state, _)))) {
+          return false
+        }
+        if(!(this.groupBy.length == thatGroupBy.length && this.groupBy.lazyZip(thatGroupBy).forall(_.findIsomorphism(state, _)))) {
+          return false
+        }
+        if(!(this.having.isDefined == thatHaving.isDefined && this.having.lazyZip(thatHaving).forall(_.findIsomorphism(state, _)))) {
+          return false
+        }
+        if(!(this.orderBy.length == thatOrderBy.length && this.orderBy.lazyZip(thatOrderBy).forall(_.findIsomorphism(state, _)))) {
+          return false
+        }
+        if(this.limit != thatLimit) {
+          return false
+        }
+        if(this.offset != thatOffset) {
+          return false
+        }
+        if(this.search != thatSearch) {
+          return false
+        }
+        if(this.hint != thatHint) {
+          return false
+        }
+
+        this.selectList.iterator.forall { case (thisLabel, thisNamedExpr) =>
+          thatSelectList.iterator.exists { case (thatLabel, thatNamedExpr) =>
+            thisNamedExpr.expr.findIsomorphism(state, thatNamedExpr.expr) &&
+              state.tryAssociate(thisCurrentTableLabel, thisLabel, thatCurrentTableLabel, thatLabel)
+          }
+        }
+
       case _ =>
-        false
+        this.findIsomorphismish(
+          state,
+          thisCurrentTableLabel,
+          thatCurrentTableLabel,
+          that,
+          (stmt, isostate, thisLbl, thatLbl, that) => stmt.findVerticalSlice(isostate, thisLbl, thatLbl, that),
+          (from, isostate, that) => from.findVerticalSlice(isostate, that)
+        )
     }
 
   private[analyzer2] override def doDebugDoc(implicit ev: StatementDocProvider[MT]) =

@@ -885,4 +885,103 @@ select * where first = 'Tom'
     val deser = ReadBuffer.read[SoQLAnalysis[TestMT]](WriteBuffer.asBytes(analysis))
     deser.statement must equal (analysis.statement)
   }
+
+  test("subset - simple") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val superAnalysis = analyze(tf, "twocol", "select *")
+    val subAnalysis = analyze(tf, "twocol", "select text")
+
+    subAnalysis.statement must be (verticalSliceOf(superAnalysis.statement))
+  }
+
+  test("subset - compound") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("a" -> TestText, "b" -> TestNumber, "c" -> TestNumber)
+    )
+
+    val superAnalysis = analyze(tf, "twocol", "select * |> select * (except c) |> select * (except a)")
+    val subAnalysis = analyze(tf, "twocol", "select b |> select b |> select b")
+
+    subAnalysis.statement must be (verticalSliceOf(superAnalysis.statement))
+  }
+
+  test("subset - ignores ordering ordering") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("a" -> TestText, "b" -> TestNumber, "c" -> TestNumber)
+    )
+
+    val superAnalysis = analyze(tf, "twocol", "select a, b")
+    val subAnalysis = analyze(tf, "twocol", "select b, a")
+
+    subAnalysis.statement must be (verticalSliceOf(superAnalysis.statement))
+  }
+
+  test("subset - DISTINCT involved") {
+    val tf = tableFinder(
+      (0, "multicol") -> D("a" -> TestText, "b" -> TestText, "c" -> TestText, "d" -> TestText, "e" -> TestText)
+    )
+
+    val superAnalysis = analyze(tf, "select * from @multicol |> select distinct a, b")
+    val subAnalysis = analyze(tf, "select a, b from @multicol |> select distinct a, b")
+
+    subAnalysis.statement must be (verticalSliceOf(superAnalysis.statement))
+  }
+
+  test("subset - union all with intermediate full") {
+    val tf = tableFinder(
+      (0, "twocol1") -> D("a" -> TestText, "b" -> TestNumber),
+      (0, "twocol2") -> D("c" -> TestText, "d" -> TestNumber)
+    )
+
+    val superAnalysis = analyze(tf, "twocol1", "(select a, b) union all (select c, d from @twocol2)")
+    val subAnalysis = analyze(tf, "twocol1", "(select a) union all (select c from @twocol2)")
+
+    subAnalysis.statement must be (verticalSliceOf(superAnalysis.statement))
+  }
+
+  test("subset - union all succeed with intermediate slice") {
+    val tf = tableFinder(
+      (0, "threecol1") -> D("a" -> TestText, "b" -> TestNumber, "c" -> TestNumber),
+      (0, "threecol2") -> D("d" -> TestText, "e" -> TestNumber, "f" -> TestNumber)
+    )
+
+    val superAnalysis = analyze(tf, "threecol1", "(select a, c) union all (select d, f from @threecol2)")
+    val subAnalysis1 = analyze(tf, "threecol1", "(select c) union all (select f from @threecol2)")
+    val subAnalysis2 = analyze(tf, "threecol1", "(select b) union all (select e from @threecol2)")
+
+    subAnalysis1.statement must be (verticalSliceOf(superAnalysis.statement))
+  }
+
+  test("subset - union all fail") {
+    val tf = tableFinder(
+      (0, "threecol1") -> D("a" -> TestText, "b" -> TestNumber, "c" -> TestNumber),
+      (0, "threecol2") -> D("d" -> TestText, "e" -> TestNumber, "f" -> TestNumber)
+    )
+
+    val superAnalysis = analyze(tf, "threecol1", "(select a, c) union all (select d, f from @threecol2)")
+    val subAnalysis1 = analyze(tf, "threecol1", "(select c) union all (select e from @threecol2)")
+    val subAnalysis2 = analyze(tf, "threecol1", "(select b) union all (select f from @threecol2)")
+
+    subAnalysis1.statement must not be (verticalSliceOf(superAnalysis.statement))
+    subAnalysis2.statement must not be (verticalSliceOf(superAnalysis.statement))
+  }
+
+  test("subset - union") {
+    val tf = tableFinder(
+      (0, "threecol1") -> D("a" -> TestText, "b" -> TestNumber, "c" -> TestNumber),
+      (0, "threecol2") -> D("d" -> TestText, "e" -> TestNumber, "f" -> TestNumber),
+      (0, "qthreecol1") -> Q(0, "threecol1", "select a, b, c"),
+      (0, "qthreecol2") -> Q(0, "threecol2", "select d, e, f"),
+      (0, "qtwocol1") -> Q(0, "threecol1", "select a, b"),
+      (0, "qtwocol2") -> Q(0, "threecol2", "select d, e"),
+    )
+
+    val superAnalysis = analyze(tf, "qthreecol1", "(select a, b) union (select d, e from @qthreecol2)")
+    val subAnalysis = analyze(tf, "qtwocol1", "(select a, b) union all (select d, e from @qtwocol2)")
+
+    subAnalysis.statement must be (verticalSliceOf(superAnalysis.statement))
+  }
 }
