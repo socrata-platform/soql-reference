@@ -1,6 +1,6 @@
 package com.socrata.soql.analyzer2
 
-import com.socrata.soql.analyzer2.rewrite.Pass
+import com.socrata.soql.analyzer2.rewrite.{Pass, RewritePassHelpers}
 import com.socrata.soql.environment.Provenance
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer, Readable, Writable}
@@ -39,9 +39,7 @@ class SoQLAnalysis[MT <: MetaTypes] private (
 
   def applyPasses(
     passes: Seq[Pass],
-    isLiteralTrue: Expr[MT] => Boolean,
-    isOrderable: CT => Boolean,
-    and: MonomorphicFunction[CT]
+    helpers: RewritePassHelpers[MT]
   ): SoQLAnalysis[MT] = {
     if(passes.isEmpty) {
       return this
@@ -54,15 +52,15 @@ class SoQLAnalysis[MT <: MetaTypes] private (
         current =
           pass match {
             case Pass.InlineTrivialParameters =>
-              current.inlineTrivialParameters(isLiteralTrue)
+              current.inlineTrivialParameters(helpers.isLiteralTrue)
             case Pass.PreserveOrdering =>
               current.preserveOrdering
             case Pass.RemoveTrivialSelects =>
               current.removeTrivialSelects
             case Pass.ImposeOrdering =>
-              current.imposeOrdering(isOrderable)
+              current.imposeOrdering(helpers.isOrderable)
             case Pass.Merge =>
-              current.merge(and)
+              current.merge(helpers.and)
             case Pass.RemoveUnusedColumns =>
               current.removeUnusedColumns
             case Pass.RemoveUnusedOrderBy =>
