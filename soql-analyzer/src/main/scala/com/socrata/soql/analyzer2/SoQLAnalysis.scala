@@ -16,6 +16,8 @@ class SoQLAnalysis[MT <: MetaTypes] private (
   private[analyzer2] def this(labelProvider: LabelProvider, statement: Statement[MT]) =
     this(labelProvider, statement, false)
 
+  lazy val physicalTableMap = new PhysicalTableMap[MT].go(statement)
+
   def modify[MT2 <: MetaTypes](f: (LabelProvider, Statement[MT]) => Statement[MT2]): SoQLAnalysis[MT2] = {
     withoutSelectListReferences { self =>
       val lp = self.labelProvider.clone()
