@@ -50,6 +50,8 @@ class UnparsedTableMap[MT <: MetaTypes] private[analyzer2] (private val underlyi
       tablesForScope <- underlying.valuesIterator
       d@UnparsedTableDescription.Dataset(_, _, _, _, _) <- tablesForScope.valuesIterator
     } yield d
+
+  def get(name: ScopedResourceName) = underlying.get(name.scope).flatMap(_.get(name.name))
 }
 
 object UnparsedTableMap {
