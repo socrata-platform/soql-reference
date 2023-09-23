@@ -2,14 +2,14 @@ package com.socrata.soql.analyzer2
 
 import com.socrata.soql.collection._
 
-class FoundTablesTableFinder[MT <: MetaTypes](foundTables: FoundTables[MT]) extends TableFinder[MT] {
-  override protected val parserParameters = foundTables.parserParameters
+class FoundTablesTableFinder[MT <: MetaTypes](foundTables: UnparsedFoundTables[MT]) extends TableFinder[MT] {
+  override protected val parserParameters = foundTables.parserParameters.toParameters
 
   override protected def lookup(name: ScopedResourceName): Either[LookupError, FinderTableDescription] = {
     foundTables.tableMap.get(name) match {
       case Some(description) =>
         description match {
-          case ds: TableDescription.Dataset[MT] =>
+          case ds: UnparsedTableDescription.Dataset[MT] =>
             val converted = Dataset(
               ds.name,
               ds.canonicalName,
@@ -22,21 +22,21 @@ class FoundTablesTableFinder[MT <: MetaTypes](foundTables: FoundTables[MT]) exte
               ds.primaryKeys
             )
             foundDataset(name, converted)
-          case q: TableDescription.Query[MT] =>
+          case q: UnparsedTableDescription.Query[MT] =>
             val converted = Query(
               q.scope,
               q.canonicalName,
               q.basedOn,
-              q.unparsed,
+              q.soql,
               q.parameters,
               q.hiddenColumns
             )
             foundQuery(name, converted)
-          case tf: TableDescription.TableFunction[MT] =>
+          case tf: UnparsedTableDescription.TableFunction[MT] =>
             val converted = TableFunction(
               tf.scope,
               tf.canonicalName,
-              tf.unparsed,
+              tf.soql,
               tf.parameters,
               tf.hiddenColumns
             )
@@ -49,13 +49,13 @@ class FoundTablesTableFinder[MT <: MetaTypes](foundTables: FoundTables[MT]) exte
 
   def refind: Result[FoundTables[MT]] =
     foundTables.initialQuery match {
-      case FoundTables.Saved(resourceName) =>
+      case UnparsedFoundTables.Saved(resourceName) =>
         findTables(foundTables.initialScope, resourceName)
-      case FoundTables.InContext(parent, _soql, text, parameters) =>
+      case UnparsedFoundTables.InContext(parent, text, parameters) =>
         findTables(foundTables.initialScope, parent, text, parameters)
-      case FoundTables.InContextImpersonatingSaved(parent, _soql, text, parameters, impersonating) =>
+      case UnparsedFoundTables.InContextImpersonatingSaved(parent, text, parameters, impersonating) =>
         findTables(foundTables.initialScope, parent, text, parameters, impersonating)
-      case FoundTables.Standalone(_soql, text, parameters) =>
+      case UnparsedFoundTables.Standalone(text, parameters) =>
         findTables(foundTables.initialScope, text, parameters)
     }
 
