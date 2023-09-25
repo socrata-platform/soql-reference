@@ -1,7 +1,7 @@
 package com.socrata.soql.analyzer2
 
-import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode}
-import com.rojoma.json.v3.util.{WrapperJsonEncode, WrapperJsonDecode}
+import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, FieldEncode, FieldDecode}
+import com.rojoma.json.v3.util.{WrapperJsonEncode, WrapperJsonDecode, WrapperFieldEncode}
 
 import com.socrata.prettyprint.prelude._
 
@@ -14,6 +14,11 @@ final case class DatabaseTableName[+T](name: T) {
 object DatabaseTableName {
   implicit def jEncode[T: JsonEncode] = WrapperJsonEncode[DatabaseTableName[T]](_.name)
   implicit def jDecode[T: JsonDecode] = WrapperJsonDecode[DatabaseTableName[T]](DatabaseTableName[T](_))
+
+  implicit def fEncode[T: FieldEncode] = WrapperFieldEncode[DatabaseTableName[T]]({ dtn => FieldEncode[T].encode(dtn.name) })
+  implicit def fDecode[T: FieldDecode] = new FieldDecode[DatabaseTableName[T]] {
+    override def decode(s: String) = FieldDecode[T].decode(s).map(DatabaseTableName(_))
+  }
 
   implicit def serialize[T: Writable] = new Writable[DatabaseTableName[T]] {
     def writeTo(buffer: WriteBuffer, d: DatabaseTableName[T]) =

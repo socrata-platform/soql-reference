@@ -1,8 +1,8 @@
 package com.socrata.soql.analyzer2
 
 import com.rojoma.json.v3.ast.{JValue, JNumber, JString}
-import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
-import com.rojoma.json.v3.util.{SimpleHierarchyEncodeBuilder, SimpleHierarchyDecodeBuilder, TagToValue, WrapperJsonEncode, WrapperJsonDecode}
+import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError, FieldEncode, FieldDecode}
+import com.rojoma.json.v3.util.{SimpleHierarchyEncodeBuilder, SimpleHierarchyDecodeBuilder, TagToValue, WrapperJsonEncode, WrapperJsonDecode, WrapperFieldEncode}
 
 import com.socrata.prettyprint.prelude._
 
@@ -97,6 +97,21 @@ object AutoTableLabel {
       }
   }
 
+  implicit object fCodec extends FieldEncode[AutoTableLabel] with FieldDecode[AutoTableLabel] {
+    def encode(v: AutoTableLabel) = v.name.toString
+    def decode(s: String) =
+      try {
+        val n = BigInt(s)
+        if(n.isValidInt) {
+          Right(new AutoTableLabel(n.intValue))
+        } else {
+          Left(DecodeError.InvalidField(s))
+        }
+      } catch {
+        case _ : NumberFormatException => Left(DecodeError.InvalidField(s))
+      }
+  }
+
   implicit object serialize extends Writable[AutoTableLabel] with Readable[AutoTableLabel] {
     def writeTo(buffer: WriteBuffer, a: AutoTableLabel) =
       buffer.write(a.name)
@@ -158,6 +173,11 @@ final case class DatabaseColumnName[T](name: T) extends ColumnLabel[T] {
 object DatabaseColumnName {
   implicit def jEncode[T: JsonEncode] = WrapperJsonEncode[DatabaseColumnName[T]](_.name)
   implicit def jDecode[T: JsonDecode] = WrapperJsonDecode[DatabaseColumnName[T]](DatabaseColumnName[T](_))
+
+  implicit def fEncode[T: FieldEncode] = WrapperFieldEncode[DatabaseColumnName[T]]({ dcn => FieldEncode[T].encode(dcn.name) })
+  implicit def fDecode[T: FieldDecode] = new FieldDecode[DatabaseColumnName[T]] {
+    override def decode(s: String) = FieldDecode[T].decode(s).map(DatabaseColumnName(_))
+  }
 
   implicit def serialize[T : Writable] = new Writable[DatabaseColumnName[T]] {
     def writeTo(buffer: WriteBuffer, d: DatabaseColumnName[T]) =
