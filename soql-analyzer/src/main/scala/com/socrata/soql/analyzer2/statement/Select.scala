@@ -300,7 +300,10 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
         if(!(this.having.isDefined == thatHaving.isDefined && this.having.lazyZip(thatHaving).forall(_.findIsomorphism(state, _)))) {
           return false
         }
-        if(!(this.orderBy.length == thatOrderBy.length && this.orderBy.lazyZip(thatOrderBy).forall(_.findIsomorphism(state, _)))) {
+        // "<=" because if "that" is more constrained than "this" in
+        // ordering then we can actually get a valid vertical slice
+        // out of it, since that's ordering satisfies this anyway.
+        if(!(this.orderBy.length <= thatOrderBy.length && this.orderBy.lazyZip(thatOrderBy).forall(_.findIsomorphism(state, _)))) {
           return false
         }
         if(this.limit != thatLimit) {
