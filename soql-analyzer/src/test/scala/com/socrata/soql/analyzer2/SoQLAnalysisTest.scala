@@ -14,7 +14,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
   val windowFunction = TestFunctions.WindowFunction.monomorphic.get
   val and = TestFunctions.And.monomorphic.get
 
-  test("direct query does not add a column") {
+  test("preserve ordering - direct query does not add a column") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -23,7 +23,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
     analysis.preserveOrdering.statement.schema.size must equal (2)
   }
 
-  test("unordered-on-unordered doesn't change under order preservation") {
+  test("preserve ordering - unordered-on-unordered doesn't change under order preservation") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -32,7 +32,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
     analysis.preserveOrdering.statement must equal (analysis.statement)
   }
 
-  test("unordered-on-ordered pipes does not generate an ordering column if unnecessary") {
+  test("preserve ordering - unordered-on-ordered pipes does not generate an ordering column if unnecessary") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -42,7 +42,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
     analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("unordered-on-ordered pipes generates a synthetic ordering column if necessary") {
+  test("preserve ordering - unordered-on-ordered pipes generates a synthetic ordering column if necessary") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -59,7 +59,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("ordered-on-ordered pipes does not generate an ordering column if unnecessary") {
+  test("preserve ordering - ordered-on-ordered pipes does not generate an ordering column if unnecessary") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -69,7 +69,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
     analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("ordered-on-ordered pipes generates an ordering column") {
+  test("preserve ordering - ordered-on-ordered pipes generates an ordering column") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -79,7 +79,7 @@ class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
     analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("orderings are blocked by aggregations and do not continue beyond them if not required by a window function") {
+  test("preserve ordering - orderings are blocked by aggregations and do not continue beyond them") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -96,30 +96,6 @@ select * order by num+1
 select * order by num+1
   |> select *
   |> select *
-  |> select text, num, num+2 as o1, text+'x' as o2 group by text, num order by num+2, text+'x'
-  |> select * (except o1, o2) order by o1, o2
-""")
-
-    analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
-  }
-
-  test("orderings are blocked by aggregations but continue again beyond them if required") {
-    val tf = tableFinder(
-      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
-    )
-
-    val analysis = analyze(tf, "twocol", """
-select * order by num+1
-  |> select *
-  |> select *, window_function() over ()
-  |> select text, num group by text, num order by num+2, text+'x'
-  |> select *
-""")
-
-    val expectedAnalysis = analyze(tf, "twocol", """
-select *, num+1 as ordering order by num+1
-  |> select * order by ordering
-  |> select * (except ordering), window_function() over () order by ordering
   |> select text, num, num+2 as o1, text+'x' as o2 group by text, num order by num+2, text+'x'
   |> select * (except o1, o2) order by o1, o2
 """)
@@ -379,13 +355,13 @@ select b, n |> select n join @udf(b) as @udf on true
     analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("remove unused order by - keep ordering when there's a window function involved") {
+  test("remove unused order by - window functions don't force ordering to be kept") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
     val analysis = analyze(tf, "twocol", "select text, num, window_function() over () order by text |> select text, num order by num")
-    val expectedAnalysis = analyze(tf, "twocol", "select text, num, window_function() over () order by text |> select text, num order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num, window_function() over () |> select text, num order by num")
 
     analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
   }

@@ -49,12 +49,7 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extend
           created
         }
 
-        // If we're windowed, we want the underlying query ordered if
-        // possible even if our caller doesn't care, unless there's an
-        // aggregate in the way, in which case the aggregate will
-        // destroy any underlying ordering anyway so we stop caring.
-
-        val wantSubqueryOrdered = (select.isWindowed || wantOutputOrdered) && !select.isAggregated && distinctiveness == Distinctiveness.Indistinct()
+        val wantSubqueryOrdered = wantOutputOrdered && !select.isAggregated && distinctiveness == Distinctiveness.Indistinct()
         val (extraOrdering, newFrom) = rewriteFrom(from, wantSubqueryOrdered, wantSubqueryOrdered)
 
         // We will at the very least want to add the ordering
