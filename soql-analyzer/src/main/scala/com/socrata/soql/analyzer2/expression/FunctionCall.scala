@@ -17,8 +17,8 @@ trait FunctionCallImpl[MT <: MetaTypes] { this: FunctionCall[MT] =>
   val typ = function.result
 
   val size = 1 + args.iterator.map(_.size).sum
-  def isAggregated = args.exists(_.isAggregated)
-  def isWindowed = args.exists(_.isWindowed)
+  val isAggregated = args.exists(_.isAggregated)
+  val isWindowed = args.exists(_.isWindowed)
 
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] =
     args.foldLeft(Map.empty[AutoTableLabel, Set[ColumnLabel]]) { (acc, arg) =>

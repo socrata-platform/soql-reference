@@ -326,10 +326,26 @@ class Typechecker[MT <: MetaTypes](
                       val (start, rest1) = frameBound(rest)
                       val rest2 = and(rest1)
                       val (end, rest3) = frameBound(rest2)
+
+                      if(start == FrameBound.UnboundedFollowing) {
+                        return Left(error(IllegalStartFrameBound(start.text), frames.head.position))
+                      }
+                      if(end == FrameBound.UnboundedPreceding) {
+                        return Left(error(IllegalEndFrameBound(end.text), rest2.head.position))
+                      }
+                      if(start.level > end.level) {
+                        return Left(error(MismatchedFrameBound(start.text, end.text), rest2.head.position))
+                      }
+
                       val excl = optFrameExclusion(rest3)
                       Some(Frame(frameContext, start, Some(end), excl))
                     case rest @ Seq(_, _ @ _*) =>
                       val (start, rest1) = frameBound(rest)
+
+                      if(start == FrameBound.UnboundedFollowing) {
+                        return Left(error(IllegalStartFrameBound(start.text), frames.head.position))
+                      }
+
                       val excl = optFrameExclusion(rest1)
                       Some(Frame(frameContext, start, None, excl))
                     case Seq() =>

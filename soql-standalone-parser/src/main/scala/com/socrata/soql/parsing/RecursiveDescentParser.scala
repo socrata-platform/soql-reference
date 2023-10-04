@@ -1229,10 +1229,10 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     reader.first match {
       case a@UNBOUNDED() =>
         reader.rest.first match {
-          case b@PRECEDING() =>
+          case b@(PRECEDING() | FOLLOWING()) =>
             ParseResult(reader.rest.rest, Seq(tokenToLiteral(a), tokenToLiteral(b)))
           case _ =>
-            fail(reader.rest, PRECEDING())
+            fail(reader.rest, PRECEDING(), FOLLOWING())
         }
       case a@CURRENT() =>
         reader.rest.first match {

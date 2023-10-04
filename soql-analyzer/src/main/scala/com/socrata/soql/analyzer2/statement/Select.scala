@@ -115,7 +115,8 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
       orderBy.iterator.exists(_.expr.isAggregated)
 
   def isWindowed =
-    selectList.valuesIterator.exists(_.expr.isWindowed)
+    selectList.valuesIterator.exists(_.expr.isWindowed) ||
+      orderBy.iterator.exists(_.expr.isWindowed)
 
   lazy val unique: LazyList[Seq[AutoColumnLabel]] = {
     val selectedColumns = selectList.iterator.collect {

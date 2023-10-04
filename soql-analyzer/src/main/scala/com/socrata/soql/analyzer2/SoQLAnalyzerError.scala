@@ -238,6 +238,9 @@ object SoQLAnalyzerError {
           and("no-such-function", AutomaticJsonCodecBuilder[NoSuchFunction]).
           and("type-mismatch", AutomaticJsonCodecBuilder[TypeMismatch]).
           and("requires-window", AutomaticJsonCodecBuilder[RequiresWindow]).
+          and("illegal-start-frame-bound", AutomaticJsonCodecBuilder[IllegalStartFrameBound]).
+          and("illegal-end-frame-bound", AutomaticJsonCodecBuilder[IllegalEndFrameBound]).
+          and("mismatched-frame-bound", AutomaticJsonCodecBuilder[MismatchedFrameBound]).
           and("non-aggregate", AutomaticJsonCodecBuilder[NonAggregate]).
           and("non-window-function", AutomaticJsonCodecBuilder[NonWindowFunction]).
           and("distinct-with-over", AutomaticJsonCodecBuilder[DistinctWithOver]).
@@ -280,6 +283,19 @@ object SoQLAnalyzerError {
       case class RequiresWindow(
         name: FunctionName
       ) extends AnalysisError(s"${name} requires a window clause") with TypecheckError
+
+      case class IllegalStartFrameBound(
+        bound: String
+      ) extends AnalysisError(s"${bound} cannot be used as a starting frame bound") with TypecheckError
+
+      case class IllegalEndFrameBound(
+        bound: String
+      ) extends AnalysisError(s"${bound} cannot be used as an ending frame bound") with TypecheckError
+
+      case class MismatchedFrameBound(
+        start: String,
+        end: String
+      ) extends AnalysisError(s"${start} cannot be followed by ${end}") with TypecheckError
 
       case class NonAggregate(
         name: FunctionName

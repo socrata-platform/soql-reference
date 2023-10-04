@@ -5,23 +5,30 @@ import com.socrata.prettyprint.prelude._
 import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 sealed abstract class FrameBound {
-  def debugDoc: Doc[Nothing]
+  def text: String
+  def debugDoc: Doc[Nothing] = Doc(text)
+  val level: Int // an end bound is not allowed to have a lower level than a start bound
 }
 object FrameBound {
   case object UnboundedPreceding extends FrameBound {
-    def debugDoc = d"UNBOUNDED PRECEDING"
+    def text = "UNBOUNDED PRECEDING"
+    val level = 0
   }
   case class Preceding(n: Long) extends FrameBound {
-    def debugDoc = d"$n PRECEDING"
+    def text = s"$n PRECEDING"
+    val level = 1
   }
   case object CurrentRow extends FrameBound {
-    def debugDoc = d"CURRENT ROW"
+    def text = "CURRENT ROW"
+    val level = 2
   }
   case class Following(n: Long) extends FrameBound {
-    def debugDoc = d"$n FOLLOWING"
+    def text = s"$n FOLLOWING"
+    val level = 3
   }
   case object UnboundedFollowing extends FrameBound {
-    def debugDoc = d"UNBOUNDED FOLLOWING"
+    def text = "UNBOUNDED FOLLOWING"
+    val level = 4
   }
 
   implicit object serialize extends Writable[FrameBound] with Readable[FrameBound] {
