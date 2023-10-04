@@ -26,7 +26,7 @@ class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[
 
         select.copy(
           from = newFrom,
-          orderBy = if(callerCaresAboutOrder || limit.isDefined || offset.isDefined || select.isWindowed) orderBy else Nil
+          orderBy = if(callerCaresAboutOrder || limit.isDefined || offset.isDefined) orderBy else Nil
         )
     }
   }
