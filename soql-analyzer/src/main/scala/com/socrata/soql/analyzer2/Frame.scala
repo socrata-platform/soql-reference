@@ -10,6 +10,11 @@ case class Frame(
   end: Option[FrameBound],
   exclusion: Option[FrameExclusion]
 ) {
+  require(start != FrameBound.UnboundedFollowing)
+  for(end <- end) {
+    require(end != FrameBound.UnboundedPreceding)
+    require(end.level >= start.level)
+  }
   def debugDoc =
     Seq(
       Some(context.debugDoc),
