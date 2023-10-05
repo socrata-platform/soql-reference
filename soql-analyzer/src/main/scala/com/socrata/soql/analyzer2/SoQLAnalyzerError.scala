@@ -15,7 +15,7 @@ import com.socrata.soql.collection.CovariantSet
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName, FunctionName, TypeName}
 import com.socrata.soql.parsing.{RecursiveDescentParser, SoQLPosition}
 
-sealed abstract class SoQLAnalyzerError[+RNS, +Data <: SoQLAnalyzerError.Payload](msg: String)
+sealed abstract class SoQLAnalyzerError[+RNS, +Data <: SoQLAnalyzerError.Payload](val msg: String)
 
 object SoQLAnalyzerError {
   private implicit class AugCodec[T <: AnyRef](shc: SimpleHierarchyCodecBuilder[T]) {
