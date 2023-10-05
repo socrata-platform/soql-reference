@@ -17,11 +17,7 @@ trait AggregateFunctionCallImpl[MT <: MetaTypes] { this: AggregateFunctionCall[M
 
   val typ = function.result
   def isAggregated = true
-  val isWindowed = { // aggregate
-    assert(!args.exists(_.isWindowed))
-    assert(!filter.exists(_.isWindowed))
-    false
-  }
+  val isWindowed = false
 
   val size = 1 + args.iterator.map(_.size).sum + filter.fold(0)(_.size)
 
