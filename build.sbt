@@ -15,7 +15,7 @@ lazy val soqlSerialize = (project in file("soql-serialize")).
 
 lazy val soqlAnalyzer = (project in file("soql-analyzer")).
   settings(SoqlAnalyzer.settings).
-  dependsOn(soqlParser, soqlSerialize, soqlTypes % "test")
+  dependsOn(soqlParser, soqlSerialize, soqlUtils, soqlTypes % "test")
 
 lazy val soqlTypes = (project in file("soql-types")).
   settings(SoqlTypes.settings).

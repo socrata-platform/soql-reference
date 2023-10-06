@@ -21,6 +21,8 @@ object Main extends App {
       */
     case "soql" =>
       SoqlToy
+    case "soql2" =>
+      analyzer2.Soql2Toy
     case other =>
       fail("soqltoy: unknown command " + other)
   }
