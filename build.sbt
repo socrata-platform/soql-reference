@@ -1,6 +1,6 @@
 lazy val root = (project in file(".")).
   settings(BuildSettings.buildSettings ++ Seq(publishArtifact := false)).
-  aggregate (soqlEnvironment, soqlParser, soqlSerialize, soqlAnalyzer, soqlTypes, soqlStdlib, soqlToy, soqlPack, soqlUtils, soqlDocs)
+  aggregate (soqlEnvironment, soqlParser, soqlSerialize, soqlAnalyzer, soqlTypes, soqlStdlib, soqlToy, soqlPack, soqlUtils, soqlDocs, soqlSqlizer)
 
 lazy val soqlEnvironment = (project in file("soql-environment")).
   settings(SoqlEnvironment.settings)
@@ -40,6 +40,10 @@ lazy val soqlDocs = (project in file("soql-docs")).
 lazy val soqlUtils = (project in file("soql-utils")).
   settings(SoqlUtils.settings).
   dependsOn(soqlSerialize)
+
+lazy val soqlSqlizer = (project in file("soql-sqlizer")).
+  settings(SoqlSqlizer.settings).
+  dependsOn(soqlAnalyzer)
 
 val soqldoc = inputKey[Unit]("Build soql documentation")
 
