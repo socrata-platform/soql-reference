@@ -3,6 +3,8 @@ package com.socrata.soql
 import scala.collection.compat._
 
 import com.socrata.prettyprint.prelude._
+import com.socrata.soql.analyzer2._
+import com.socrata.soql.collection.OrderedMap
 
 package object sqlizer {
   implicit class AugmentSeq[T](private val underlying: Seq[Doc[T]]) extends AnyVal {
@@ -47,4 +49,7 @@ package object sqlizer {
       }
     }
   }
+
+  type AugmentedSchema[MT <: MetaTypes with MetaTypesExt] = OrderedMap[types.ColumnLabel[MT], AugmentedType[MT]]
+  type AvailableSchemas[MT <: MetaTypes with MetaTypesExt] = Map[AutoTableLabel, AugmentedSchema[MT]]
 }
