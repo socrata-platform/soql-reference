@@ -1,6 +1,7 @@
 package com.socrata.soql.sqlizer
 
 import com.socrata.soql.analyzer2._
+import com.socrata.soql.collection.OrderedMap
 import com.socrata.prettyprint
 
 import com.socrata.soql.sqlizer
@@ -23,4 +24,7 @@ trait SqlizerUniverse[MT <: MetaTypes with MetaTypesExt] extends StatementUniver
   type ExtraContext = MT#ExtraContext
   type ExtraContextResult = MT#ExtraContextResult
   type ExprSqlFactory = sqlizer.ExprSqlFactory[MT]
+
+  type AugmentedSchema = sqlizer.AugmentedSchema[MT]
+  type AvailableSchemas = sqlizer.AvailableSchemas[MT]
 }

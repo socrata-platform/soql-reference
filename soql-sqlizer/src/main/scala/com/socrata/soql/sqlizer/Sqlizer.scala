@@ -73,24 +73,18 @@ import com.socrata.prettyprint.{SimpleDocStream, SimpleDocTree, tree}
 // references (in the order by case, distributing asc/desc nulls
 // first/last over the list)
 
-abstract class Sqlizer[MT <: MetaTypes with MetaTypesExt] extends SqlizerUniverse[MT] {
+class Sqlizer[MT <: MetaTypes with MetaTypesExt](
+  val funcallSqlizer: FuncallSqlizer[MT],
+  val exprSqlFactory: ExprSqlFactory[MT],
+  val namespace: SqlNamespaces[MT],
+  val rewriteSearch: RewriteSearch[MT],
+  val toProvenance: types.ToProvenance[MT],
+  val isRollup: types.DatabaseTableName[MT] => Boolean,
+  val mkRepProvider: (Sqlizer[MT], Map[AutoTableLabel, types.DatabaseTableName[MT]], MT#ExtraContext) => Rep.Provider[MT]
+) extends SqlizerUniverse[MT] {
   type DynamicContext = Sqlizer.DynamicContext[MT]
 
-  private var counter = 0L
-
-  val funcallSqlizer: FuncallSqlizer
-  val exprSqlFactory: ExprSqlFactory
-
-  type AugmentedSchema = OrderedMap[ColumnLabel, AugmentedType]
-  type AvailableSchemas = Map[AutoTableLabel, AugmentedSchema]
-
-  val namespace: SqlNamespaces
-  val systemContext: Map[String, String]
-  val rewriteSearch: RewriteSearch
-  val toProvenance: types.ToProvenance[MT]
-  def isRollup(dtn: DatabaseTableName): Boolean
-
-  def mkRepProvider(physicalTableFor: Map[AutoTableLabel, DatabaseTableName]): Rep.Provider[MT]
+  val exprSqlizer = new ExprSqlizer(funcallSqlizer, exprSqlFactory)
 
   def apply(
     analysis: SoQLAnalysis[MT],
@@ -114,12 +108,12 @@ abstract class Sqlizer[MT <: MetaTypes with MetaTypesExt] extends SqlizerUnivers
     ec: ExtraContext
   ): (Doc, AugmentedSchema, DynamicContext) = {
     val rewritten = rewriteSearch(analysis.statement)
-    val repFor = mkRepProvider(analysis.physicalTableMap)
+    val repFor = mkRepProvider(this, analysis.physicalTableMap, ec)
     val dynamicContext = Sqlizer.DynamicContext[MT](
       repFor,
-      systemContext,
       ProvenanceTracker(rewritten, e => repFor(e.typ).provenanceOf(e), toProvenance, isRollup),
       analysis.physicalTableMap,
+      new GensymProvider(namespace),
       ec
     )
 
@@ -205,7 +199,7 @@ abstract class Sqlizer[MT <: MetaTypes with MetaTypesExt] extends SqlizerUnivers
   }
 
   private def recompress(dynamicContext: DynamicContext, stmt: Doc, schema: AugmentedSchema, mask: Set[ColumnLabel]): (Doc, AugmentedSchema) = {
-    val tmpTable = Doc(namespace.gensym())
+    val tmpTable = Doc(dynamicContext.gensymProvider.next())
     val schemaOrder = schema.keys.toSeq
 
     val selectionDoc = Seq(
@@ -261,7 +255,7 @@ abstract class Sqlizer[MT <: MetaTypes with MetaTypesExt] extends SqlizerUnivers
     dynamicContext: DynamicContext,
     topLevel: Boolean
   ): (Doc, AugmentedSchema) = {
-    val exprSqlizer = new ExprSqlizer(this, availableSchemas, Vector.empty, dynamicContext)
+    val exprSqlizer = this.exprSqlizer.withContext(availableSchemas, Vector.empty, dynamicContext)
 
     // Ugh, why are valueses so weird?
     // Ok so, if we have a single row, just sqlize it as a FROMless SELECT.
@@ -337,7 +331,7 @@ abstract class Sqlizer[MT <: MetaTypes with MetaTypesExt] extends SqlizerUnivers
         case (label, name) => Doc(label) -> name
       }.toVector
 
-      val valuesLabel = Doc(namespace.gensym())
+      val valuesLabel = Doc(dynamicContext.gensymProvider.next())
 
       val selection = physicalSchema.map { case (physicalColName, outputName) =>
         valuesLabel ++ d"." ++ Doc(physicalColName) +#+ d"AS" +#+ Doc(physicalColName).annotate(SqlizeAnnotation.OutputName[MT](outputName))
@@ -410,7 +404,7 @@ abstract class Sqlizer[MT <: MetaTypes with MetaTypesExt] extends SqlizerUnivers
     val (fromSql, availableSchemas) = sqlizeFrom(from, preSchemas, dynamicContext)
 
     val selectListExprs: Vector[(AutoColumnLabel, (ExprSql, ColumnName))] = {
-      val exprSqlizer = new ExprSqlizer(this, availableSchemas, Vector.empty, dynamicContext)
+      val exprSqlizer = this.exprSqlizer.withContext(availableSchemas, Vector.empty, dynamicContext)
       selectList.iterator.map { case (label, namedExpr) =>
         val sqlized = exprSqlizer.sqlize(namedExpr.expr)
         val wrapped =
@@ -452,7 +446,7 @@ abstract class Sqlizer[MT <: MetaTypes with MetaTypesExt] extends SqlizerUnivers
       (idx + expr.databaseExprCount, SelectListIndex(idx, isExpanded = false))
     }.toVector
 
-    val exprSqlizer = new ExprSqlizer(this, availableSchemas, selectListIndices, dynamicContext)
+    val exprSqlizer = this.exprSqlizer.withContext(availableSchemas, selectListIndices, dynamicContext)
 
     val distinctSql = sqlizeDistinct(distinct, exprSqlizer)
 
@@ -500,7 +494,7 @@ abstract class Sqlizer[MT <: MetaTypes with MetaTypesExt] extends SqlizerUnivers
     (stmtSql, augmentedSchema)
   }
 
-  private def sqlizeDistinct(distinct: Distinctiveness, exprSqlizer: ExprSqlizer): Option[Doc] = {
+  private def sqlizeDistinct(distinct: Distinctiveness, exprSqlizer: ExprSqlizer.Contexted[MT]): Option[Doc] = {
     distinct match {
       case Distinctiveness.Indistinct() => None
       case Distinctiveness.FullyDistinct() => Some(d"DISTINCT")
@@ -525,7 +519,7 @@ abstract class Sqlizer[MT <: MetaTypes with MetaTypesExt] extends SqlizerUnivers
         val (leftSql, leftSchemas) = acc
         val Join(joinType, lateral, _left, right, on) = join
         val (rightSql, schemasSoFar) = sqlizeAtomicFrom(right, leftSchemas, dynamicContext)
-        val exprSqlizer = new ExprSqlizer(this, schemasSoFar, Vector.empty, dynamicContext)
+        val exprSqlizer = this.exprSqlizer.withContext(schemasSoFar, Vector.empty, dynamicContext)
         val onSql = exprSqlizer.sqlize(on).compressed.sql
 
         (
@@ -597,9 +591,9 @@ abstract class Sqlizer[MT <: MetaTypes with MetaTypesExt] extends SqlizerUnivers
 object Sqlizer {
   case class DynamicContext[MT <: MetaTypes with MetaTypesExt](
     repFor: Rep.Provider[MT],
-    systemContext: Map[String, String],
     provTracker: ProvenanceTracker[MT],
     physicalTableFor: Map[AutoTableLabel, types.DatabaseTableName[MT]],
+    gensymProvider: GensymProvider,
     extraContext: MT#ExtraContext
   )
 
