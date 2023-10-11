@@ -13,6 +13,7 @@ object RollupExact {
 
 class RollupExact[MT <: MetaTypes](
   semigroupRewriter: SemigroupRewriter[MT],
+  adHocRewriter: AdHocRewriter[MT],
   functionSubset: FunctionSubset[MT],
   functionSplitter: FunctionSplitter[MT],
   splitAnd: SplitAnd[MT],
@@ -732,6 +733,11 @@ class RollupExact[MT <: MetaTypes](
       }.toMap
 
     def rewrite(sExpr: Expr, needsMerge: Boolean = false): Option[Expr] =
+      doNonAdHocRewrite(sExpr, needsMerge = needsMerge) orElse {
+        adHocRewriter(sExpr).findMap(doNonAdHocRewrite(_, needsMerge))
+      }
+
+    private def doNonAdHocRewrite(sExpr: Expr, needsMerge: Boolean): Option[Expr] =
       rewriteSimple(sExpr, needsMerge).orElse { rewriteCompound(sExpr, needsMerge) }
 
     // This exists specifically to handle the case of "avg" but in

@@ -301,4 +301,42 @@ class RollupExactTest extends FunSuite with MustMatchers with RollupTestHelper w
     val rollup = TestRollupInfo(1, "rollup", tf, "select text1, text2, sum(num) from @threecol where text1 = 'hello' group by text1, text2")
     TestRollupExact(select, rollup, analysis.labelProvider) must be (None)
   }
+
+  test("ad-hoc rewrite") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (1, "rollup") -> D("c1" -> TestText, "c2" -> TestNumber)
+    )
+
+    // Because we're only inspecting the bottom 3 bits of `num`, and
+    // because there's an ad-hoc transform that knows the relationship
+    // between the semantics of it and those of bottom_byte (which
+    // extracts the bottom 8 bits of its argument), we can use bitand
+    // on the output of the bottom_dword call of rollup when we
+    // rewrite.
+
+    val rollup = TestRollupInfo(1, "rollup", tf, "select text, bottom_byte(num) from @twocol")
+
+    locally {
+      val Right(foundTables) = tf.findTables(0, "select text, bitand(num, 7) from @twocol", Map.empty)
+      val Right(analysis) = analyzer(foundTables, UserParameters.empty)
+      val select = analysis.statement.asInstanceOf[Select]
+
+      val Some(result) = TestRollupExact(select, rollup, analysis.labelProvider)
+
+      val Right(expectedRollupFT) = tf.findTables(1, "select c1, bitand(c2, 7) from @rollup", Map.empty)
+      val Right(expectedRollupAnalysis) = analyzer(expectedRollupFT, UserParameters.empty)
+      result must be (isomorphicTo(expectedRollupAnalysis.statement))
+    }
+
+    // ...but we _can't_ do this if we're inspecting more than the bottom 8 bits
+
+    locally {
+      val Right(foundTables) = tf.findTables(0, "select text, bitand(num, 511) from @twocol", Map.empty)
+      val Right(analysis) = analyzer(foundTables, UserParameters.empty)
+      val select = analysis.statement.asInstanceOf[Select]
+
+      TestRollupExact(select, rollup, analysis.labelProvider) must be (None)
+    }
+  }
 }

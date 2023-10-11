@@ -41,6 +41,30 @@ trait RollupTestHelper extends TestHelper { this: Assertions =>
       }
   }
 
+  object TestAdHocRewriter extends AdHocRewriter[TestMT] {
+    val BottomByte = TestFunctions.BottomByte.monomorphic.get
+    val BottomDWord = TestFunctions.BottomDWord.monomorphic.get
+    val BitAnd = TestFunctions.BitAnd.monomorphic.get
+
+    // rewrite bitand(x, num_literal) to bitand(bottom_dword(x), num_literal) or bitand(bottom_byte(x), num_literal) if num_literal is a sufficently-small integer
+
+    override def apply(e: Expr): Seq[Expr] = {
+      e match {
+        case fc@FunctionCall(BitAnd, Seq(lhs, rhs@LiteralValue(TestNumber(n)))) if n >= 0 && n < (1L << 32) =>
+          val result = Vector.newBuilder[Expr]
+
+          result += FunctionCall(fc.function, Seq(FunctionCall[TestMT](BottomDWord, Seq(lhs))(FuncallPositionInfo.None), rhs))(fc.position)
+          if(n < (1L << 8)) {
+            result += FunctionCall(fc.function, Seq(FunctionCall[TestMT](BottomByte, Seq(lhs))(FuncallPositionInfo.None), rhs))(fc.position)
+          }
+
+          result.result()
+        case _ =>
+          Nil
+      }
+    }
+  }
+
   object TestFunctionSplitter extends FunctionSplitter[TestMT] {
     private val avg = (
       TestFunctions.Div.monomorphic.get,
@@ -79,6 +103,7 @@ trait RollupTestHelper extends TestHelper { this: Assertions =>
 
   object TestRollupExact extends RollupExact[TestMT](
     TestSemigroupRewriter,
+    TestAdHocRewriter,
     TestFunctionSubset,
     TestFunctionSplitter,
     TestSplitAnd,

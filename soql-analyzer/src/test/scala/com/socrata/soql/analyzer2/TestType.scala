@@ -99,7 +99,7 @@ object TestBoolean extends TestType("boolean", isOrdered = true) {
   def apply(b: Boolean) = if(b) canonicalTrue else canonicalFalse
 }
 
-case class TestNumber(num: Int) extends TestValue {
+case class TestNumber(num: Long) extends TestValue {
   def typ = TestNumber
   def doc = Doc(num)
 }
