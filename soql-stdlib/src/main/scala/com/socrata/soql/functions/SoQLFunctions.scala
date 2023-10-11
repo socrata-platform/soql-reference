@@ -556,6 +556,11 @@ object SoQLFunctions {
     "Pad on the right of a string with a character to a certain length"
   )
 
+  val Unaccent = mf("unaccent", FunctionName("unaccent"), Seq(SoQLText), Seq.empty, SoQLText)(
+    "Remove accents (diacritical marks) from a string",
+    Example("Remove accents from a geographic name", "unaccent('Sainte-Thérèse, Québec') => 'Sainte-Therese, Quebec'", "")
+  )
+
   val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, SoQLNumber, needsWindow = true)(
     NoDocs
   )
