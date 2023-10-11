@@ -63,6 +63,7 @@ object TestFunctions {
   // the former)
   val BottomDWord = mf("bottom_dword", FunctionName("bottom_dword"), Seq(TestNumber), Seq.empty, TestNumber)
   val BottomByte = mf("bottom_byte", FunctionName("bottom_byte"), Seq(TestNumber), Seq.empty, TestNumber)
+  val BitAnd = mf("bitand", FunctionName("bitand"), Seq(TestNumber, TestNumber), Seq.empty, TestNumber)
 
   val castIdentitiesByType = OrderedMap() ++ TestType.typesByName.iterator.map { case (n, t) =>
     t -> mf(n.caseFolded + "::" + n.caseFolded, SpecialFunctions.Cast(n), Seq(t), Seq.empty, t)
