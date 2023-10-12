@@ -39,6 +39,10 @@ class ParserTest extends WordSpec with MustMatchers {
       expectFailure("Expected `AND', but got end of input", "x not between a")
     }
 
+    "require at least one thing in an `in` expression" in {
+      expectFailure("Expected an expression, but got `)'", "x in ()")
+    }
+
     "require a full `is null' clause" in {
       expectFailure("Expected one of `NULL' or `NOT', but got end of input", "x is")
       expectFailure("Expected `NULL', but got end of input", "x is not")

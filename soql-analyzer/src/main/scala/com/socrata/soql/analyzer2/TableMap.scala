@@ -20,6 +20,11 @@ trait TableMapLike[MT <: MetaTypes] extends LabelUniverse[MT] {
   )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): Self[MT2]
 
   def allTableDescriptions: Iterator[TableDescriptionLike.Dataset[MT]]
+
+  def allTables: Set[DatabaseTableName] =
+    allTableDescriptions.foldLeft(Set.empty[DatabaseTableName]) { (acc, tableDescription) =>
+      acc + tableDescription.name
+    }
 }
 
 class TableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[MT#ResourceNameScope, Map[ResourceName, TableDescription[MT]]]) extends TableMapLike[MT] {
@@ -50,17 +55,6 @@ class TableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[
   def getOrElse(name: ScopedResourceName)(orElse: => TableDescription[MT]) = get(name).getOrElse(orElse)
 
   def size = underlying.valuesIterator.map(_.size).sum
-
-  def allTables: Set[DatabaseTableName] =
-    underlying.valuesIterator.foldLeft(Set.empty[DatabaseTableName]) { (acc, tablesInScope) =>
-      tablesInScope.valuesIterator.foldLeft(acc) { (acc, tableDescription) =>
-        tableDescription match {
-          case ds: TableDescription.Dataset[MT] => acc + ds.name
-          case _ : TableDescription.Query[MT] => acc
-          case _ : TableDescription.TableFunction[MT] => acc
-        }
-      }
-    }
 
   def +(kv: (ScopedResourceName, TableDescription[MT])): TableMap[MT] = {
     val (ScopedResourceName(rns, rn), desc) = kv
