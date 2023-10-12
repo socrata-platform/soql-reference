@@ -29,6 +29,7 @@ class UnparsedFoundTables[MT <: MetaTypes] private[analyzer2] (
     )
 
   def allTableDescriptions = tableMap.allTableDescriptions
+  def allTables = tableMap.allTables
 }
 
 object UnparsedFoundTables {
