@@ -1579,10 +1579,14 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
-  private def parseArgList(reader: Reader, arg0: Option[Expression] = None): ParseResult[Seq[Expression]] = {
+  private def parseArgList(reader: Reader, arg0: Option[Expression] = None, allowEmpty: Boolean = true): ParseResult[Seq[Expression]] = {
     reader.first match {
       case RPAREN() =>
-        ParseResult(reader.rest, Nil)
+        if(allowEmpty) {
+          ParseResult(reader.rest, Nil)
+        } else {
+          fail(reader, AnExpression)
+        }
       case _ =>
         val args = Vector.newBuilder[Expression]
         args ++= arg0
@@ -1610,7 +1614,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   private def parseIn(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader): ParseResult[Expression] = {
     reader.first match {
       case LPAREN() =>
-        parseArgList(reader.rest, arg0 = Some(scrutinee)).map { args =>
+        parseArgList(reader.rest, arg0 = Some(scrutinee), allowEmpty = false).map { args =>
           FunctionCall(name, args, None)(scrutinee.position, op.position)
         }
       case _ =>
