@@ -93,10 +93,10 @@ object Soql2Toy extends (Array[String] => Unit) with StatementUniverse[Soql2Toy]
                   println()
                 }
               case Left(err) =>
-                println(err.msg)
+                println(err)
             }
           case Left(err) =>
-            println(err.msg)
+            println(err)
         }
       }
     }

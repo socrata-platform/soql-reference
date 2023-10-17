@@ -4,7 +4,9 @@ import scala.reflect.ClassTag
 
 import com.rojoma.json.v3.ast.{JValue, JString}
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError, Path}
-import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, SimpleHierarchyCodecBuilder, InternalTag}
+import com.rojoma.json.v3.util.{AutomaticJsonCodec, AutomaticJsonCodecBuilder}
+
+import com.socrata.soql.environment.ScopedResourceName
 
 // Ok, this is a little ugly, but here's what it's doing:
 //
@@ -14,7 +16,7 @@ import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, SimpleHierarchyCodecB
 //   "code": "some-identifier-for-machines",
 //   "data": { .. error-specific data .. }
 //   "message": "some explanation for humans",
-//   "scope": relevant-scope // optional, not all errors are scoped
+//   "source": relevant-source // optional, not all errors are sourced
 // }
 //
 // And we want to be able to treat errors that are defined in
@@ -47,12 +49,79 @@ import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, SimpleHierarchyCodecB
 // need to hide the types of things under the Maps (so for example
 // Branch[T] passes through an intermediate type but that's completely
 // hidden in the API.
+@AutomaticJsonCodec
 case class EncodedError(
   code: String,
   data: JValue,
   message: String,
-  scope: Option[JValue]
+  source: Option[ScopedResourceName[JValue]]
+) {
+  def toGeneric[RNS: JsonDecode]: Either[DecodeError, GenericSoQLError[RNS]] = {
+    source match {
+      case Some(srn) =>
+        JsonDecode.fromJValue[ScopedResourceName[RNS]](JsonEncode.toJValue(srn)) match {
+          case Right(newSource) =>
+            Right(
+              GenericSoQLError(
+                code,
+                data,
+                message,
+                Some(newSource)
+              )
+            )
+          case Left(err) =>
+            Left(err.prefix("source"))
+        }
+      case None =>
+        Right(
+          GenericSoQLError(
+            code,
+            data,
+            message,
+            None
+          )
+        )
+    }
+  }
+}
+
+object EncodedError {
+  def fromGeneric[RNS: JsonEncode](v: GenericSoQLError[RNS]) =
+    EncodedError(
+      v.code,
+      v.data,
+      v.message,
+      v.source.map { case ScopedResourceName(scope, name) =>
+        ScopedResourceName(JsonEncode.toJValue(scope), name)
+      }
+    )
+}
+
+// A soql error with a definite scope type, but not otherwise specified
+case class GenericSoQLError[+RNS](
+  code: String,
+  data: JValue,
+  message: String,
+  source: Option[ScopedResourceName[RNS]]
 )
+object GenericSoQLError {
+  implicit def jEncode[RNS: JsonEncode]: JsonEncode[GenericSoQLError[RNS]] =
+    new JsonEncode[GenericSoQLError[RNS]] {
+      def encode(v: GenericSoQLError[RNS]) =
+        JsonEncode.toJValue(EncodedError.fromGeneric(v))
+    }
+
+  implicit def jDecode[RNS: JsonDecode]: JsonDecode[GenericSoQLError[RNS]] =
+    new JsonDecode[GenericSoQLError[RNS]] {
+      def decode(v: JValue) =
+        for {
+          encoded <- JsonDecode.fromJValue[EncodedError](v)
+          result <- encoded.toGeneric[RNS]
+        } yield {
+          result
+        }
+    }
+}
 
 trait SoQLErrorEncode[T] {
   val code: String
@@ -65,13 +134,26 @@ trait SoQLErrorEncode[T] {
   protected final def result[Data: JsonEncode, RNS: JsonEncode](
     data: Data,
     message: String,
-    scope: RNS
+    source: Option[ScopedResourceName[RNS]]
   ): EncodedError = {
     EncodedError(
       code,
       JsonEncode.toJValue(data),
       message,
-      Some(JsonEncode.toJValue(scope))
+      source.map { source => source.copy(scope = JsonEncode.toJValue(source.scope)) }
+    )
+  }
+
+  protected final def result[Data: JsonEncode, RNS: JsonEncode](
+    data: Data,
+    message: String,
+    source: ScopedResourceName[RNS]
+  ): EncodedError = {
+    EncodedError(
+      code,
+      JsonEncode.toJValue(data),
+      message,
+      Some(source.copy(scope = JsonEncode.toJValue(source.scope)))
     )
   }
 
@@ -91,17 +173,31 @@ trait SoQLErrorDecode[T] {
   //
   // for {
   //   decodedData <- data[Intermediate](err)
-  //   decodedScope <- scope[RNS](err)
-  // } yield { .. construct a value from decodedData and decodedScope ... }
+  //   decodedSource <- source[RNS](err)
+  // } yield { .. construct a value from decodedData and decodedSource ... }
   def decode(err: EncodedError): Either[DecodeError, T]
 
   protected final def data[Data: JsonDecode](err: EncodedError): Either[DecodeError, Data] =
     JsonDecode.fromJValue(err.data).left.map(_.prefix("data"))
 
-  protected final def scope[RNS: JsonDecode](err: EncodedError): Either[DecodeError, RNS] = {
-    err.scope match {
-      case Some(scope) => JsonDecode.fromJValue(scope).left.map(_.prefix("scope"))
-      case None => Left(DecodeError.MissingField("scope"))
+  protected final def source[RNS: JsonDecode](err: EncodedError): Either[DecodeError, ScopedResourceName[RNS]] = {
+    err.source match {
+      case Some(jSource) =>
+        JsonDecode.fromJValue[ScopedResourceName[RNS]](JsonEncode.toJValue(jSource)).left.map(_.prefix("source"))
+      case None =>
+        Left(DecodeError.MissingField("source"))
+    }
+  }
+
+  protected final def sourceOpt[RNS: JsonDecode](err: EncodedError): Either[DecodeError, Option[ScopedResourceName[RNS]]] = {
+    err.source match {
+      case Some(jSource) =>
+        JsonDecode.fromJValue[ScopedResourceName[RNS]](JsonEncode.toJValue(jSource)) match {
+          case Right(source) => Right(Some(source))
+          case Left(err) => Left(err.prefix("source"))
+        }
+      case None =>
+        Right(None)
     }
   }
 }
@@ -135,7 +231,7 @@ object SoQLErrorCodec {
 
   // This trait hides some sometype of T
   private trait Branch[T <: AnyRef] {
-    def addToCodec(builder: SimpleHierarchyCodecBuilder[T]): SimpleHierarchyCodecBuilder[T]
+    def addToCodec(builder: ErrorHierarchyCodecBuilder[T]): ErrorHierarchyCodecBuilder[T]
     def mappable: MappedBranch[T]
   }
 
@@ -154,8 +250,8 @@ object SoQLErrorCodec {
 
         private val code = decode.code
 
-        override def addToCodec(builder: SimpleHierarchyCodecBuilder[T]) = {
-          builder.branch[U](code)(jsonEncode(encode), uDecode, implicitly)
+        override def addToCodec(builder: ErrorHierarchyCodecBuilder[T]) = {
+          builder.branch[U]
         }
 
         override def mappable =
@@ -174,7 +270,7 @@ object SoQLErrorCodec {
       new ErrorDecodes(branches.map(_.mappable), codes)
 
     def build: JsonEncode[T] with JsonDecode[T] =
-      branches.reverse.foldLeft(SimpleHierarchyCodecBuilder[T](InternalTag("code", removeTagForSubcodec = false))) { (builder, branch) =>
+      branches.reverse.foldLeft(new ErrorHierarchyCodecBuilder[T]) { (builder, branch) =>
         branch.addToCodec(builder)
       }.build
   }

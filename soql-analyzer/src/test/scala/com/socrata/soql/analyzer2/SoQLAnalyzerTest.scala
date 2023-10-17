@@ -1,6 +1,6 @@
 package com.socrata.soql.analyzer2
 
-import scala.util.parsing.input.NoPosition
+import scala.util.parsing.input.{Position, NoPosition}
 
 import java.math.{BigDecimal => JBigDecimal}
 
@@ -9,19 +9,28 @@ import org.scalatest.{FunSuite, MustMatchers}
 import org.joda.time.{DateTime, LocalDate}
 
 import com.socrata.soql.collection._
+import com.socrata.soql.environment.ScopedResourceName
 import com.socrata.soql.functions.MonomorphicFunction
 
 import mocktablefinder._
 
 class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
+  object Pos {
+    def unapply(pos: Position): Option[(Int, Int)] =
+      pos match {
+        case NoPosition => None
+        case other => Some((other.line, other.column))
+      }
+  }
+
   test("alias analysis qualifiers are correct") {
     val tf = MockTableFinder.empty[TestMT]
     val Right(start) = tf.findTables(0, "select @bleh.whatever from @single_row", Map.empty)
     analyzer(start, UserParameters.empty) match {
       case Right(_) => fail("Expected an error")
-      case Left(SoQLAnalyzerError.TextualError(_, _, _, nsc: SoQLAnalyzerError.AnalysisError.TypecheckError.NoSuchColumn)) =>
-        nsc.qualifier must be (Some(rn("bleh")))
-        nsc.name must be (cn("whatever"))
+      case Left(SoQLAnalyzerError.TypecheckError.NoSuchColumn(None, Pos(1, 8), qualifier, name)) =>
+        qualifier must be (Some(rn("bleh")))
+        name must be (cn("whatever"))
       case Left(err) =>
         fail(s"Wrong error: ${err}")
     }
@@ -341,9 +350,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
     expectFailure(0) {
       analyze(tf, "aaaa-aaaa", "select distinct on (text, num) 5 order by num, num*2, text")(new OnFail {
-        override def onAnalyzerError(e: AnalysisError[Int]): Nothing = {
+        override def onAnalyzerError(e: SoQLAnalyzerError[Int]): Nothing = {
           e match {
-            case SoQLAnalyzerError.TextualError(_, _, _, SoQLAnalyzerError.AnalysisError.DistinctNotPrefixOfOrderBy) =>
+            case SoQLAnalyzerError.DistinctOnNotPrefixOfOrderBy(None, Pos(1, 48)) =>
               expected(0)
             case _ =>
               super.onAnalyzerError(e)
@@ -881,9 +890,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
     expectFailure(0) {
       val analysis = analyze(tf, "aaaa-aaaa", "select distinct n1 order by n2")(new OnFail {
-        override def onAnalyzerError(e: SoQLAnalyzerError[Int, SoQLAnalyzerError.AnalysisError]): Nothing = {
+        override def onAnalyzerError(e: SoQLAnalyzerError[Int]): Nothing = {
           e match {
-            case SoQLAnalyzerError.TextualError(_, _, _, SoQLAnalyzerError.AnalysisError.OrderByMustBeSelectedWhenDistinct) =>
+            case SoQLAnalyzerError.OrderByMustBeSelectedWhenDistinct(None, Pos(1, 29)) =>
               expected(0)
             case _ =>
               super.onAnalyzerError(e)
@@ -994,7 +1003,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val Right(start) = tf.findTables(0, rn("aaaa-aaaa"), "select count(distinct text) over (partition by num)", Map.empty)
     analyzer(start, UserParameters.empty) match {
       case Right(_) => fail("Expected an error")
-      case Left(SoQLAnalyzerError.TextualError(_, _, _, SoQLAnalyzerError.AnalysisError.TypecheckError.DistinctWithOver())) =>
+      case Left(SoQLAnalyzerError.TypecheckError.DistinctWithOver(None, Pos(1, 8))) =>
         // yay
       case Left(err) =>
         fail(s"Wrong error: ${err}")

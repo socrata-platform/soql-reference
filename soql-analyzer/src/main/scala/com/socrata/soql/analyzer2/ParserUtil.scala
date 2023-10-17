@@ -6,6 +6,7 @@ import scala.collection.compat.immutable.LazyList
 
 import com.socrata.soql.BinaryTree
 import com.socrata.soql.ast
+import com.socrata.soql.environment.ScopedResourceName
 import com.socrata.soql.parsing.standalone_exceptions._
 import com.socrata.soql.parsing.{StandaloneParser, AbstractParser, RecursiveDescentParser}
 
@@ -18,43 +19,39 @@ private[analyzer2] object ParserUtil {
         Left(e)
     }
 
-  def parseInContext[RNS](scope: RNS, canonicalName: Option[CanonicalName], soql: String, params: AbstractParser.Parameters): Either[SoQLAnalyzerError.TextualError[RNS, SoQLAnalyzerError.ParserError], BinaryTree[ast.Select]] = {
+  def parseInContext[RNS](source: Option[ScopedResourceName[RNS]], soql: String, params: AbstractParser.Parameters): Either[ParserError[RNS], BinaryTree[ast.Select]] = {
     parseWithoutContext(soql, params).left.map { err =>
-      def p(e: SoQLAnalyzerError.ParserError, p: Position) =
-        SoQLAnalyzerError.TextualError(scope, canonicalName, p, e)
-
       err match {
         case sle: StandaloneLexerException =>
           sle match {
             case UnexpectedEscape(char, pos) =>
-              p(SoQLAnalyzerError.ParserError.UnexpectedEscape(char), pos)
+              ParserError.UnexpectedEscape(source, pos, char)
             case BadUnicodeEscapeCharacter(char, pos) =>
-              p(SoQLAnalyzerError.ParserError.BadUnicodeEscapeCharacter(char), pos)
+              ParserError.BadUnicodeEscapeCharacter(source, pos, char)
             case UnicodeCharacterOutOfRange(value, pos) =>
-              p(SoQLAnalyzerError.ParserError.UnicodeCharacterOutOfRange(value), pos)
+              ParserError.UnicodeCharacterOutOfRange(source, pos, value)
             case UnexpectedCharacter(char, pos) =>
-              p(SoQLAnalyzerError.ParserError.UnexpectedCharacter(char), pos)
+              ParserError.UnexpectedCharacter(source, pos, char)
             case UnexpectedEOF(pos) =>
-              p(SoQLAnalyzerError.ParserError.UnexpectedEOF, pos)
+              ParserError.UnexpectedEOF(source, pos)
             case UnterminatedString(pos) =>
-              p(SoQLAnalyzerError.ParserError.UnterminatedString, pos)
+              ParserError.UnterminatedString(source, pos)
           }
         case bp: BadParse =>
           bp match {
             case expectedToken: BadParse.ExpectedToken =>
-              p(
-                SoQLAnalyzerError.ParserError.ExpectedToken(
-                  expectedToken.reader.alternates.to(LazyList).map(_.printable),
-                  expectedToken.reader.first.quotedPrintable
-                ),
-                expectedToken.reader.first.position
+              ParserError.ExpectedToken(
+                source,
+                expectedToken.reader.first.position,
+                expectedToken.reader.alternates.to(LazyList).map(_.printable),
+                expectedToken.reader.first.quotedPrintable
               )
             case expectedLeafQuery: BadParse.ExpectedLeafQuery =>
-              p(SoQLAnalyzerError.ParserError.ExpectedLeafQuery, expectedLeafQuery.reader.first.position)
+              ParserError.ExpectedLeafQuery(source, expectedLeafQuery.reader.first.position)
             case unexpectedStarSelect: BadParse.UnexpectedStarSelect =>
-              p(SoQLAnalyzerError.ParserError.UnexpectedStarSelect, unexpectedStarSelect.reader.first.position)
+              ParserError.UnexpectedStarSelect(source, unexpectedStarSelect.reader.first.position)
             case unexpectedSystemStarSelect: BadParse.UnexpectedSystemStarSelect =>
-              p(SoQLAnalyzerError.ParserError.UnexpectedSystemStarSelect, unexpectedSystemStarSelect.reader.first.position)
+              ParserError.UnexpectedSystemStarSelect(source, unexpectedSystemStarSelect.reader.first.position)
           }
       }
     }
