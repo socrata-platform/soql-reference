@@ -149,7 +149,7 @@ object SoQLFunctions {
     "Return true if the first is not equal to any of the others, ignoring case differences"
   )
 
-  val make_point = mf("make_point", FunctionName("make_point"), Seq(SoQLNumber, SoQLNumber), Nil, SoQLPoint)(
+  val MakePoint = mf("make_point", FunctionName("make_point"), Seq(SoQLNumber, SoQLNumber), Nil, SoQLPoint)(
     "Produce a point value with the given latitude and longitude - note that the order is lat, lon and not x, y"
   )
 
