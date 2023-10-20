@@ -3,6 +3,7 @@ package com.socrata.soql.analyzer2
 import scala.language.higherKinds
 
 import com.socrata.soql.functions
+import com.socrata.soql.environment
 
 trait MetaTypes {
   type ColumnType
@@ -93,7 +94,7 @@ trait LabelUniverse[MT <: MetaTypes] extends MetaTypeHelper[MT] {
   type AutoColumnLabel = analyzer2.AutoColumnLabel
   type DatabaseColumnName = analyzer2.DatabaseColumnName[MT#DatabaseColumnNameImpl]
 
-  type ScopedResourceName = analyzer2.ScopedResourceName[MT#ResourceNameScope]
+  type ScopedResourceName = environment.ScopedResourceName[MT#ResourceNameScope]
   type ToProvenance = analyzer2.ToProvenance[MT#DatabaseTableNameImpl]
   type FromProvenance = analyzer2.FromProvenance[MT#DatabaseTableNameImpl]
   type ProvenanceMapper = analyzer2.ProvenanceMapper[MT#DatabaseTableNameImpl]

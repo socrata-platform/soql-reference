@@ -7,7 +7,7 @@ import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode}
 import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder, AutomaticJsonCodecBuilder}
 
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.{ResourceName, ColumnName}
+import com.socrata.soql.environment.{ResourceName, ScopedResourceName, ColumnName}
 import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.analyzer2
 

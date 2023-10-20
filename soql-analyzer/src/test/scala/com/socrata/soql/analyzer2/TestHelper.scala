@@ -99,10 +99,10 @@ trait TestHelper { this: Assertions =>
   type TF = TableFinder[TestMT]
 
   class OnFail {
-    def onAnalyzerError(err: SoQLAnalyzerError[Int, SoQLAnalyzerError.AnalysisError]): Nothing =
+    def onAnalyzerError(err: SoQLAnalyzerError[Int]): Nothing =
       fail(err.toString)
 
-    def onTableFinderError(err: SoQLAnalyzerError[Int, SoQLAnalyzerError.TableFinderError]): Nothing =
+    def onTableFinderError(err: TableFinderError[Int]): Nothing =
       fail(err.toString)
   }
 
@@ -116,7 +116,7 @@ trait TestHelper { this: Assertions =>
     ): AnalysisBuilder =
       new AnalysisBuilder(foundTables, params, onFail, false)
 
-    def apply(tf: TF, params: UserParameters[TestType, TestValue], onFail: OnFail)(f: TF => Either[SoQLAnalyzerError[Int, SoQLAnalyzerError.TableFinderError], FoundTables[TestMT]]): AnalysisBuilder =
+    def apply(tf: TF, params: UserParameters[TestType, TestValue], onFail: OnFail)(f: TF => Either[TableFinderError[Int], FoundTables[TestMT]]): AnalysisBuilder =
       f(tf) match {
         case Right(ft) =>
           apply(ft, params, onFail)

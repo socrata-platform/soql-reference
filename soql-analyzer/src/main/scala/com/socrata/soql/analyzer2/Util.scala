@@ -1,7 +1,7 @@
 package com.socrata.soql.analyzer2
 
 import com.socrata.soql.ast
-import com.socrata.soql.environment.{ResourceName, TableName}
+import com.socrata.soql.environment.{ResourceName, ScopedResourceName, TableName}
 import com.socrata.soql.{BinaryTree, Leaf, Compound}
 
 private[analyzer2] object Util {

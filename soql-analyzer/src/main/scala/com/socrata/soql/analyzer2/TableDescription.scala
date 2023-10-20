@@ -10,7 +10,7 @@ import com.socrata.soql.ast
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.collection.OrderedMap
-import com.socrata.soql.environment.{ResourceName, ColumnName, HoleName}
+import com.socrata.soql.environment.{ResourceName, ScopedResourceName, ColumnName, HoleName}
 import com.socrata.soql.BinaryTree
 import com.socrata.soql.analyzer2
 

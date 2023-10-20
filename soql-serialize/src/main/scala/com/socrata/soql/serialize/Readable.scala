@@ -5,7 +5,7 @@ import scala.util.parsing.input.{Position, NoPosition}
 import java.io.{IOException, InputStream}
 
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.{ResourceName, TypeName, ColumnName, Provenance}
+import com.socrata.soql.environment.{ResourceName, ScopedResourceName, TypeName, ColumnName, Provenance}
 import com.socrata.soql.parsing.SoQLPosition
 
 trait Readable[T] {
@@ -62,6 +62,17 @@ object Readable extends `-impl`.ReadableTuples {
       ResourceName(string.readFrom(buffer))
     }
   }
+
+
+  implicit def scopedResourceName[RNS: Readable]: Readable[ScopedResourceName[RNS]] =
+    new Readable[ScopedResourceName[RNS]] {
+      def readFrom(buffer: ReadBuffer): ScopedResourceName[RNS] = {
+        ScopedResourceName(
+          scope = buffer.read[RNS](),
+          name = buffer.read[ResourceName]()
+        )
+      }
+    }
 
   implicit object typeName extends Readable[TypeName] {
     def readFrom(buffer: ReadBuffer): TypeName = {

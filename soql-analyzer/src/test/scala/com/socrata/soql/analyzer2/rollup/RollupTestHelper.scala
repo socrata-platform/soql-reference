@@ -4,7 +4,7 @@ import org.scalatest.Assertions
 
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection.NonEmptySeq
-import com.socrata.soql.environment.ResourceName
+import com.socrata.soql.environment.{ResourceName, ScopedResourceName}
 import com.socrata.soql.functions.MonomorphicFunction
 
 trait RollupTestHelper extends TestHelper { this: Assertions =>

@@ -7,10 +7,10 @@ import com.rojoma.json.v3.util.{AutomaticJsonDecodeBuilder, AutomaticJsonEncodeB
 import com.socrata.soql.BinaryTree
 import com.socrata.soql.ast.Select
 import com.socrata.soql.collection.OrderedMap
-import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName}
+import com.socrata.soql.environment.{ColumnName, ResourceName, ScopedResourceName, HoleName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.StandaloneParser
-import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, DatabaseColumnName, TableDescription, CanonicalName, TableMap, ParserUtil, FoundTables, UnparsedFoundTables, UnparsedTableMap, ScopedResourceName, MetaTypes, MetaTypeHelper}
+import com.socrata.soql.analyzer2.{TableFinder, DatabaseTableName, DatabaseColumnName, TableDescription, CanonicalName, TableMap, ParserUtil, FoundTables, UnparsedFoundTables, UnparsedTableMap, MetaTypes, MetaTypeHelper}
 
 sealed abstract class OptionalBoolean {
   def orElse(b: Boolean): Boolean

@@ -7,7 +7,7 @@ import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, AutomaticJsonDecodeBuilder}
 
 import com.socrata.soql.ast
-import com.socrata.soql.environment.{ResourceName, HoleName, ColumnName}
+import com.socrata.soql.environment.{ResourceName, ScopedResourceName, HoleName, ColumnName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.BinaryTree

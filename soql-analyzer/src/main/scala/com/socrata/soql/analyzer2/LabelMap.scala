@@ -6,7 +6,7 @@ import com.rojoma.json.v3.codec.JsonEncode
 import com.rojoma.json.v3.interpolation._
 import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, NullForNone}
 
-import com.socrata.soql.environment.{ColumnName, ResourceName}
+import com.socrata.soql.environment.{ColumnName, ResourceName, ScopedResourceName}
 
 class LabelMap[MT <: MetaTypes] private[analyzer2] (
   val tableMap: Map[types.AutoTableLabel[MT], types.LabelMap.TableReference[MT]],

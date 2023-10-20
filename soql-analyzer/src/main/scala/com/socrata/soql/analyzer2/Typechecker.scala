@@ -9,7 +9,7 @@ import com.socrata.soql.environment.{ColumnName, HoleName, ResourceName, TableNa
 import com.socrata.soql.typechecker.{TypeInfoMetaProjection, FunctionInfo, FunctionCallTypechecker, Passed, TypeMismatchFailure}
 
 class Typechecker[MT <: MetaTypes](
-  scope: MT#ResourceNameScope,
+  sourceName: Option[types.ScopedResourceName[MT]],
   canonicalName: Option[CanonicalName],
   primaryTable: Option[Provenance],
   env: Environment[MT],
@@ -20,7 +20,7 @@ class Typechecker[MT <: MetaTypes](
   functionInfo: FunctionInfo[MT#ColumnType]
 ) extends ExpressionUniverse[MT] {
   type Error = TypecheckError[RNS]
-  private val TypecheckError = SoQLAnalyzerError.AnalysisError.TypecheckError
+  private val TypecheckError = SoQLAnalyzerError.TypecheckError
   import TypecheckError._
 
   private val funcallTypechecker = new FunctionCallTypechecker(typeInfo, functionInfo)
@@ -34,8 +34,6 @@ class Typechecker[MT <: MetaTypes](
     }
 
   private case class Bail(e: Error) extends Exception with NoStackTrace
-  private def error(e: SoQLAnalyzerError.AnalysisError.TypecheckError, p: Position): Error =
-    SoQLAnalyzerError.TextualError(scope, canonicalName, p, e)
 
   private def finalCheck(expr: ast.Expression, expectedType: Option[CT]): Expr =
     check(expr).flatMap(disambiguate(_, expectedType, expr.position)) match {
@@ -51,7 +49,7 @@ class Typechecker[MT <: MetaTypes](
     expectedType match {
       case Some(t) =>
         exprs.find(_.typ == t).toRight {
-          error(TypeMismatch(Set(typeInfo.typeNameFor(t)), typeInfo.typeNameFor(mostPreferredType(exprs.iterator.map(_.typ).toSet))), pos)
+          TypeMismatch(sourceName, pos, Set(typeInfo.typeNameFor(t)), typeInfo.typeNameFor(mostPreferredType(exprs.iterator.map(_.typ).toSet)))
         }
       case None =>
         Right(exprs.head)
@@ -142,7 +140,7 @@ class Typechecker[MT <: MetaTypes](
             Right(Seq(prechecked.reposition(col.position)))
           case None =>
             env.lookup(name) match {
-              case None => Left(error(NoSuchColumn(None, name), col.position))
+              case None => Left(NoSuchColumn(sourceName, col.position, None, name))
               case Some(Environment.LookupResult.Virtual(table, column, typ)) =>
                 Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(col.position))))
               case Some(Environment.LookupResult.Physical(tableName, tableLabel, column, typ)) =>
@@ -152,7 +150,7 @@ class Typechecker[MT <: MetaTypes](
       case col@ast.ColumnOrAliasRef(Some(qual), name) =>
         val trueQual = ResourceName(qual.substring(TableName.PrefixIndex))
         env.lookup(trueQual, name) match {
-          case None => Left(error(NoSuchColumn(Some(trueQual), name), col.position))
+          case None => Left(NoSuchColumn(sourceName, col.position, Some(trueQual), name))
           case Some(Environment.LookupResult.Virtual(table, column, typ)) =>
             Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(col.position))))
           case Some(Environment.LookupResult.Physical(tableName, tableLabel, column, typ)) =>
@@ -163,7 +161,7 @@ class Typechecker[MT <: MetaTypes](
       case hole@ast.Hole.UDF(name) =>
         udfParams.get(name) match {
           case Some(expr) => Right(Seq(expr(hole.position)))
-          case None => Left(error(UnknownUDFParameter(name), hole.position))
+          case None => Left(UnknownUDFParameter(sourceName, hole.position, name))
         }
       case hole@ast.Hole.SavedQuery(name, view) =>
         userParameter(view.map(CanonicalName), name, hole.position)
@@ -184,7 +182,7 @@ class Typechecker[MT <: MetaTypes](
     paramSet.flatMap(_.get(name)) match {
       case Some(UserParameters.Null(t)) => Right(Seq(NullLiteral(t)(new AtomicPositionInfo(position, NoPosition))))
       case Some(UserParameters.Value(v)) => Right(Seq(LiteralValue(v)(new AtomicPositionInfo(position, NoPosition))(typeInfo.hasType)))
-      case None => Left(error(UnknownUserParameter(canonicalView, name), position))
+      case None => Left(UnknownUserParameter(sourceName, position, canonicalView, name))
     }
   }
 
@@ -201,7 +199,7 @@ class Typechecker[MT <: MetaTypes](
       val typedOrderings = w.orderings.map { ob =>
         val typedExpr = finalCheck(ob.expression, None)
         if(!typeInfo.isOrdered(typedExpr.typ)) {
-          return Left(error(UnorderedOrderBy(typeInfo.typeNameFor(typedExpr.typ)), ob.expression.position))
+          return Left(UnorderedOrderBy(sourceName, ob.expression.position, typeInfo.typeNameFor(typedExpr.typ)))
         }
         OrderBy(typedExpr, ob.ascending, ob.nullLast)
       }
@@ -213,7 +211,7 @@ class Typechecker[MT <: MetaTypes](
     val options = functionInfo.functionsWithArity(name, typedParameters.length)
 
     if(options.isEmpty) {
-      return Left(error(NoSuchFunction(name, typedParameters.length), fc.functionNamePosition))
+      return Left(NoSuchFunction(sourceName, fc.functionNamePosition, name, typedParameters.length))
     }
 
     val (failed, resolved) = divide(funcallTypechecker.resolveOverload(options, typedParameters.map(_.map(_.typ).toSet))) {
@@ -223,7 +221,7 @@ class Typechecker[MT <: MetaTypes](
 
     if(resolved.isEmpty) {
       val TypeMismatchFailure(expected, found, idx) = failed.maxBy(_.idx)
-      return Left(error(TypeMismatch(expected.map(typeInfo.typeNameFor), typeInfo.typeNameFor(mostPreferredType(found))), parameters(idx).position))
+      return Left(TypeMismatch(sourceName, parameters(idx).position, expected.map(typeInfo.typeNameFor), typeInfo.typeNameFor(mostPreferredType(found))))
     }
 
     val potentials = resolved.flatMap { f =>
@@ -250,19 +248,19 @@ class Typechecker[MT <: MetaTypes](
         (typedFilter, typedWindow) match {
           case (Some(boolExpr), None) =>
             if(f.needsWindow) {
-              return Left(error(RequiresWindow(fc.functionName), fc.functionNamePosition))
+              return Left(RequiresWindow(sourceName, fc.functionNamePosition, fc.functionName))
             }
             if(!f.isAggregate && !f.needsWindow) {
-              return Left(error(NonAggregate(fc.functionName), fc.functionNamePosition))
+              return Left(NonAggregateFunction(sourceName, fc.functionNamePosition, fc.functionName))
             }
             AggregateFunctionCall(f, params, false, Some(boolExpr))(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
           case (maybeFilter, Some((partitions, orderings, frames))) =>
             if(!f.needsWindow && !f.isAggregate) {
-              return Left(error(NonWindowFunction(fc.functionName), fc.functionNamePosition))
+              return Left(NonWindowFunction(sourceName, fc.functionNamePosition, fc.functionName))
             }
 
             if(fc.distinct) {
-              return Left(error(DistinctWithOver(), fc.functionNamePosition))
+              return Left(DistinctWithOver(sourceName, fc.functionNamePosition))
             }
 
             // blearghhh ok so the parser does in fact parse this
@@ -328,13 +326,13 @@ class Typechecker[MT <: MetaTypes](
                       val (end, rest3) = frameBound(rest2)
 
                       if(start == FrameBound.UnboundedFollowing) {
-                        return Left(error(IllegalStartFrameBound(start.text), frames.head.position))
+                        return Left(IllegalStartFrameBound(sourceName, frames.head.position, start.text))
                       }
                       if(end == FrameBound.UnboundedPreceding) {
-                        return Left(error(IllegalEndFrameBound(end.text), rest2.head.position))
+                        return Left(IllegalEndFrameBound(sourceName, rest2.head.position, end.text))
                       }
                       if(start.level > end.level) {
-                        return Left(error(MismatchedFrameBound(start.text, end.text), rest2.head.position))
+                        return Left(MismatchedFrameBound(sourceName, rest2.head.position, start.text, end.text))
                       }
 
                       val excl = optFrameExclusion(rest3)
@@ -343,7 +341,7 @@ class Typechecker[MT <: MetaTypes](
                       val (start, rest1) = frameBound(rest)
 
                       if(start == FrameBound.UnboundedFollowing) {
-                        return Left(error(IllegalStartFrameBound(start.text), frames.head.position))
+                        return Left(IllegalStartFrameBound(sourceName, frames.head.position, start.text))
                       }
 
                       val excl = optFrameExclusion(rest1)
@@ -356,13 +354,13 @@ class Typechecker[MT <: MetaTypes](
               }
 
             if(parsedFrames.map(_.context) == FrameContext.Groups && orderings.isEmpty) {
-              return Left(error(GroupsRequiresOrderBy, frames.head.position))
+              return Left(GroupsRequiresOrderBy(sourceName, frames.head.position))
             }
 
             WindowedFunctionCall(f, params, maybeFilter, partitions, orderings, parsedFrames)(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
           case (None, None) =>
             if(f.needsWindow) {
-              return Left(error(RequiresWindow(fc.functionName), fc.functionNamePosition))
+              return Left(RequiresWindow(sourceName, fc.functionNamePosition, fc.functionName))
             }
             if(f.isAggregate) {
               AggregateFunctionCall(f, params, false, None)(new FuncallPositionInfo(fc.position, fc.functionNamePosition))

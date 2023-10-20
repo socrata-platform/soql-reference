@@ -1,6 +1,7 @@
 package com.socrata.soql.analyzer2
 
 import com.socrata.soql.analyzer2
+import com.socrata.soql.environment
 import com.socrata.soql.functions
 import com.socrata.soql.typechecker
 
@@ -28,7 +29,7 @@ package object types {
   type HasType[MT <: MetaTypes] = analyzer2.HasType[MT#ColumnValue, MT#ColumnType]
   type TypeInfoMetaProjection[MT <: MetaTypes] = typechecker.TypeInfoMetaProjection[MT]
 
-  type ScopedResourceName[MT <: MetaTypes] = analyzer2.ScopedResourceName[MT#ResourceNameScope]
+  type ScopedResourceName[MT <: MetaTypes] = environment.ScopedResourceName[MT#ResourceNameScope]
   type NameEntry[MT <: MetaTypes] = analyzer2.NameEntry[MT#ColumnType]
 
   object LabelMap {

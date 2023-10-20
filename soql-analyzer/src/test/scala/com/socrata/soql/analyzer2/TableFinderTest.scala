@@ -1,5 +1,7 @@
 package com.socrata.soql.analyzer2
 
+import scala.util.parsing.input.{Position, NoPosition}
+
 import com.rojoma.json.v3.ast.JString
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode}
 import org.scalatest.FunSuite
@@ -8,7 +10,7 @@ import org.scalatest.matchers.{BeMatcher, MatchResult}
 
 import com.socrata.soql.BinaryTree
 import com.socrata.soql.collection.OrderedMap
-import com.socrata.soql.environment.{ColumnName, ResourceName}
+import com.socrata.soql.environment.{ColumnName, ResourceName, ScopedResourceName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.{StandaloneParser, AbstractParser}
 
@@ -55,28 +57,34 @@ class TableFinderTest extends FunSuite with MustMatchers {
     )
   )
 
-  class NotFoundMatcher(scope: tables.ResourceNameScope, name: ResourceName) extends BeMatcher[tables.Result[Any]] {
+  def posMatches(pos: Position, rowCol: Option[(Int, Int)]) =
+    pos match {
+      case NoPosition => rowCol.isEmpty
+      case other => rowCol == Some((other.line, other.column))
+    }
+
+  class NotFoundMatcher(srn: Option[tables.ScopedResourceName], pos: Option[(Int, Int)], name: ResourceName) extends BeMatcher[tables.Result[Any]] {
     def apply(err: tables.Result[Any]) =
       MatchResult(
         err match {
-          case Left(SoQLAnalyzerError.TextualError(`scope`, _, _, SoQLAnalyzerError.TableFinderError.NotFound(nf))) =>
-            nf == name
+          case Left(TableFinderError.NotFound(containingName, p, nf)) =>
+            containingName == srn && posMatches(p, pos) && nf == name
           case _ =>
             false
         },
-        s"$err was not a not found error over ($scope, ${JString(name.name)})",
-        s"$err was a not found error over ($scope, ${JString(name.name)})"
+        s"$err was not a not found error over ($name:$pos, ${JString(name.name)})",
+        s"$err was a not found error over ($name:$pos, ${JString(name.name)})"
       )
   }
-  def notFound(scope: tables.ResourceNameScope, name: String) =
-    new NotFoundMatcher(scope, ResourceName(name))
+  def notFound(srn: Option[tables.ScopedResourceName], pos: Option[(Int, Int)], name: String) =
+    new NotFoundMatcher(srn, pos, ResourceName(name))
 
-  class RecursiveQueryMatcher[RNS](names: Seq[CanonicalName]) extends BeMatcher[tables.Result[Any]] {
+  class RecursiveQueryMatcher[RNS](srn: Option[tables.ScopedResourceName], pos: Option[(Int, Int)], names: Seq[CanonicalName]) extends BeMatcher[tables.Result[Any]] {
     def apply(err: tables.Result[Any]) =
       MatchResult(
         err match {
-          case Left(SoQLAnalyzerError.TextualError(_, _, _, SoQLAnalyzerError.TableFinderError.RecursiveQuery(path))) =>
-            path == names
+          case Left(TableFinderError.RecursiveQuery(containingName, p, path)) =>
+            containingName == srn && posMatches(p, pos) && path == names
           case _ =>
             false
         },
@@ -84,27 +92,27 @@ class TableFinderTest extends FunSuite with MustMatchers {
         s"$err was a recursive query error over ${names.map{n => JString(n.name)}.mkString(",")}"
       )
   }
-  def recursiveQuery(names: String*) =
-    new RecursiveQueryMatcher(names.map(CanonicalName(_)))
+  def recursiveQuery(srn: Option[tables.ScopedResourceName], pos: Option[(Int, Int)], names: String*) =
+    new RecursiveQueryMatcher(srn, pos, names.map(CanonicalName(_)))
 
   test("can find a table") {
     tables.findTables(0, "select * from @t1", Map.empty).map(_.tableMap) must equal (tables((0, "t1")))
   }
 
   test("will reject mutually recursive queries - context") {
-    tables.findTables(0, ResourceName("bad_one")) must be (recursiveQuery("bad_one","bad_two","bad_one"))
+    tables.findTables(0, ResourceName("bad_one")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_two"))), None, "bad_one","bad_two","bad_one"))
   }
 
   test("will reject mutually recursive queries - from") {
-    tables.findTables(0, ResourceName("bad_three")) must be (recursiveQuery("bad_three","bad_four","bad_three"))
+    tables.findTables(0, ResourceName("bad_three")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_four"))), None, "bad_three","bad_four","bad_three"))
   }
 
   test("will reject mutually recursive queries - mixed") {
-    tables.findTables(0, ResourceName("bad_five")) must be (recursiveQuery("bad_five","bad_six","bad_five"))
+    tables.findTables(0, ResourceName("bad_five")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_six"))), None, "bad_five","bad_six","bad_five"))
   }
 
   test("can fail to find a table") {
-    tables.findTables(0, "select * from @doesnt-exist", Map.empty).map(_.tableMap) must be (notFound(0, "doesnt-exist"))
+    tables.findTables(0, "select * from @doesnt-exist", Map.empty).map(_.tableMap) must be (notFound(None, None, "doesnt-exist"))
   }
 
   test("can find a table implicitly") {
@@ -128,7 +136,7 @@ class TableFinderTest extends FunSuite with MustMatchers {
   }
 
   test("can fail to find a query in a different scope") {
-    tables.findTables(0, ResourceName("t1"), "select key, value join @t6 on @t6.key = key", Map.empty).map(_.tableMap) must be (notFound(1, "t2"))
+    tables.findTables(0, ResourceName("t1"), "select key, value join @t6 on @t6.key = key", Map.empty).map(_.tableMap) must be (notFound(Some(ScopedResourceName(0, ResourceName("t6"))), None, "t2"))
   }
 
   test("Can produce a graph from looking up a saved query") {
