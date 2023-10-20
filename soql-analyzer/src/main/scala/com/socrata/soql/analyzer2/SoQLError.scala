@@ -1,6 +1,7 @@
 package com.socrata.soql.analyzer2
 
 import scala.annotation.tailrec
+import scala.language.higherKinds
 import scala.util.parsing.input.{Position, NoPosition}
 import scala.reflect.ClassTag
 
