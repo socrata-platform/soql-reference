@@ -15,12 +15,12 @@ import com.rojoma.json.v3.util.OrJNull.implicits._
 import com.socrata.soql.collection.CovariantSet
 import com.socrata.soql.environment.{ColumnName, ResourceName, ScopedResourceName, HoleName, FunctionName, TypeName}
 import com.socrata.soql.parsing.{RecursiveDescentParser, SoQLPosition}
-import com.socrata.soql.util.{SoQLErrorCodec, SoQLErrorEncode, SoQLErrorDecode, EncodedError, ErrorHierarchyCodecBuilder}
+import com.socrata.soql.util.{SoQLErrorCodec, SoQLErrorEncode, SoQLErrorDecode, EncodedError, ErrorHierarchyCodecBuilder, PositionCodec}
 
 sealed abstract class SoQLError[+RNS]
 object SoQLError {
   def errorCodecs[RNS : JsonEncode : JsonDecode, T >: SoQLError[RNS] <: AnyRef](
-    codecs: SoQLErrorCodec.ErrorCodecs[T]
+    codecs: SoQLErrorCodec.ErrorCodecs[T] = new SoQLErrorCodec.ErrorCodecs[T]
   ): SoQLErrorCodec.ErrorCodecs[T] =
     SoQLAnalyzerError.errorCodecs[RNS, T](TableFinderError.errorCodecs[RNS, T](codecs))
 }
@@ -30,14 +30,11 @@ trait TextualError[+RNS] {
   val position: Position
 }
 object TextualError {
-  @AutomaticJsonCodec
-  private case class Fields(position: Position)
-
   def simpleEncode[RNS: JsonEncode, T[X] <: TextualError[X]](tag: String, msg: String) = {
     new SoQLErrorEncode[T[RNS]] {
       override val code = tag
       def encode(err: T[RNS]) = {
-        result(Fields(err.position), msg, err.source)
+        result(JObject.canonicalEmpty, msg, err.source, err.position)
       }
     }
   }
@@ -47,10 +44,10 @@ object TextualError {
       override val code = tag
       def decode(v: EncodedError) =
         for {
-          fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          f(source, fields.position)
+          f(source, position)
         }
     }
   }
@@ -63,12 +60,12 @@ object TableFinderError {
     private val tag = "soql.tablefinder.dataset-not-found"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, name: ResourceName)
+    private case class Fields(name: ResourceName)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[NotFound[RNS]] {
       override val code = tag
       def encode(err: NotFound[RNS]) =
-        result(Fields(err.position, err.name), "Dataset not found: " + err.name.name, err.source)
+        result(Fields(err.name), "Dataset not found: " + err.name.name, err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[NotFound[RNS]] {
@@ -77,8 +74,9 @@ object TableFinderError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          NotFound(source, fields.position, fields.name)
+          NotFound(source, position, fields.name)
         }
     }
   }
@@ -88,12 +86,12 @@ object TableFinderError {
     private val tag = "soql.tablefinder.permission-denied"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, name: ResourceName)
+    private case class Fields(name: ResourceName)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[PermissionDenied[RNS]] {
       override val code = tag
       def encode(err: PermissionDenied[RNS]) =
-        result(Fields(err.position, err.name), "Permission denied: " + err.name.name, err.source)
+        result(Fields(err.name), "Permission denied: " + err.name.name, err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[PermissionDenied[RNS]] {
@@ -102,8 +100,9 @@ object TableFinderError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          PermissionDenied(source, fields.position, fields.name)
+          PermissionDenied(source, position, fields.name)
         }
     }
   }
@@ -113,12 +112,12 @@ object TableFinderError {
     private val tag = "soql.tablefinder.recursive-query"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, stack: Seq[CanonicalName])
+    private case class Fields(stack: Seq[CanonicalName])
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[RecursiveQuery[RNS]] {
       override val code = tag
       def encode(err: RecursiveQuery[RNS]) =
-        result(Fields(err.position, err.stack), "Recursive query detected: " + err.stack.map(_.name).mkString(", "), err.source)
+        result(Fields(err.stack), "Recursive query detected: " + err.stack.map(_.name).mkString(", "), err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[RecursiveQuery[RNS]] {
@@ -127,14 +126,15 @@ object TableFinderError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          RecursiveQuery(source, fields.position, fields.stack)
+          RecursiveQuery(source, position, fields.stack)
         }
     }
   }
 
   def errorCodecs[RNS : JsonEncode : JsonDecode, T >: TableFinderError[RNS] <: AnyRef](
-    codecs: SoQLErrorCodec.ErrorCodecs[T]
+    codecs: SoQLErrorCodec.ErrorCodecs[T] = new SoQLErrorCodec.ErrorCodecs[T]
   ): SoQLErrorCodec.ErrorCodecs[T] =
     ParserError.errorCodecs[RNS, T](codecs)
       .branch[NotFound[RNS]]
@@ -159,12 +159,12 @@ object ParserError {
     private val tag = "soql.parser.unexpected-escape"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, char: Char)
+    private case class Fields(char: Char)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[UnexpectedEscape[RNS]] {
       override val code = tag
       def encode(err: UnexpectedEscape[RNS]) =
-        result(Fields(err.position, err.char), "Unexpected escape character: " + JString(err.char.toString), err.source)
+        result(Fields(err.char), "Unexpected escape character: " + JString(err.char.toString), err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[UnexpectedEscape[RNS]] {
@@ -173,8 +173,9 @@ object ParserError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          UnexpectedEscape(source, fields.position, fields.char)
+          UnexpectedEscape(source, position, fields.char)
         }
     }
   }
@@ -184,12 +185,12 @@ object ParserError {
     private val tag = "soql.parser.bad-unicode-escape"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, char: Char)
+    private case class Fields(char: Char)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[BadUnicodeEscapeCharacter[RNS]] {
       override val code = tag
       def encode(err: BadUnicodeEscapeCharacter[RNS]) =
-        result(Fields(err.position, err.char), "Bad character in unicode escape: " + JString(err.char.toString), err.source)
+        result(Fields(err.char), "Bad character in unicode escape: " + JString(err.char.toString), err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[BadUnicodeEscapeCharacter[RNS]] {
@@ -198,8 +199,9 @@ object ParserError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          BadUnicodeEscapeCharacter(source, fields.position, fields.char)
+          BadUnicodeEscapeCharacter(source, position, fields.char)
         }
     }
   }
@@ -209,12 +211,12 @@ object ParserError {
     private val tag = "soql.parser.unicode-character-out-of-range"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, codepoint: Int)
+    private case class Fields(codepoint: Int)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[UnicodeCharacterOutOfRange[RNS]] {
       override val code = tag
       def encode(err: UnicodeCharacterOutOfRange[RNS]) =
-        result(Fields(err.position, err.codepoint), "Unicode codepoint out of range: " + err.codepoint, err.source)
+        result(Fields(err.codepoint), "Unicode codepoint out of range: " + err.codepoint, err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[UnicodeCharacterOutOfRange[RNS]] {
@@ -223,8 +225,9 @@ object ParserError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          UnicodeCharacterOutOfRange(source, fields.position, fields.codepoint)
+          UnicodeCharacterOutOfRange(source, position, fields.codepoint)
         }
     }
   }
@@ -234,12 +237,12 @@ object ParserError {
     private val tag = "soql.parser.unexpected-character"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, char: Char)
+    private case class Fields(char: Char)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[UnexpectedCharacter[RNS]] {
       override val code = tag
       def encode(err: UnexpectedCharacter[RNS]) =
-        result(Fields(err.position, err.char), "Unexpected character: " + JString(err.char.toString), err.source)
+        result(Fields(err.char), "Unexpected character: " + JString(err.char.toString), err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[UnexpectedCharacter[RNS]] {
@@ -248,8 +251,9 @@ object ParserError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          UnexpectedCharacter(source, fields.position, fields.char)
+          UnexpectedCharacter(source, position, fields.char)
         }
     }
   }
@@ -280,12 +284,12 @@ object ParserError {
     private val tag = "soql.parser.expected-token"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, expectations: Seq[String], got: String)
+    private case class Fields(expectations: Seq[String], got: String)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[ExpectedToken[RNS]] {
       override val code = tag
       def encode(err: ExpectedToken[RNS]) =
-        result(Fields(err.position, err.expectations, err.got), RecursiveDescentParser.expectationStringsToEnglish(err.expectations, err.got), err.source)
+        result(Fields(err.expectations, err.got), RecursiveDescentParser.expectationStringsToEnglish(err.expectations, err.got), err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[ExpectedToken[RNS]] {
@@ -294,8 +298,9 @@ object ParserError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          ExpectedToken(source, fields.position, fields.expectations, fields.got)
+          ExpectedToken(source, position, fields.expectations, fields.got)
         }
     }
   }
@@ -325,7 +330,7 @@ object ParserError {
   }
 
   def errorCodecs[RNS : JsonEncode : JsonDecode, T >: ParserError[RNS] <: AnyRef](
-    codecs: SoQLErrorCodec.ErrorCodecs[T]
+    codecs: SoQLErrorCodec.ErrorCodecs[T] = new SoQLErrorCodec.ErrorCodecs[T]
   ): SoQLErrorCodec.ErrorCodecs[T] =
     codecs
       .branch[UnexpectedEscape[RNS]]
@@ -373,12 +378,12 @@ object SoQLAnalyzerError {
     private val tag = "soql.analyzer.expected-boolean"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, got: TypeName)
+    private case class Fields(got: TypeName)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[ExpectedBoolean[RNS]] {
       override val code = tag
       def encode(err: ExpectedBoolean[RNS]) =
-        result(Fields(err.position, err.got), s"Expected a boolean expression but got ${err.got}", err.source)
+        result(Fields(err.got), s"Expected a boolean expression but got ${err.got}", err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[ExpectedBoolean[RNS]] {
@@ -387,8 +392,9 @@ object SoQLAnalyzerError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          ExpectedBoolean(source, fields.position, fields.got)
+          ExpectedBoolean(source, position, fields.got)
         }
     }
   }
@@ -404,12 +410,12 @@ object SoQLAnalyzerError {
     private val tag = "soql.analyzer.incorrect-udf-parameter-count"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, udf: ResourceName, expected: Int, got: Int)
+    private case class Fields(udf: ResourceName, expected: Int, got: Int)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[IncorrectNumberOfUdfParameters[RNS]] {
       override val code = tag
       def encode(err: IncorrectNumberOfUdfParameters[RNS]) =
-        result(Fields(err.position, err.udf, err.expected, err.got), s"Incorrect number of parameters to ${err.udf.name}: expected ${err.expected} but got ${err.got}", err.source)
+        result(Fields(err.udf, err.expected, err.got), s"Incorrect number of parameters to ${err.udf.name}: expected ${err.expected} but got ${err.got}", err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[IncorrectNumberOfUdfParameters[RNS]] {
@@ -418,8 +424,9 @@ object SoQLAnalyzerError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          IncorrectNumberOfUdfParameters(source, fields.position, fields.udf, fields.expected, fields.got)
+          IncorrectNumberOfUdfParameters(source, position, fields.udf, fields.expected, fields.got)
         }
     }
   }
@@ -455,12 +462,12 @@ object SoQLAnalyzerError {
     private val tag = "soql.analyzer.invalid-group-by"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, typ: TypeName)
+    private case class Fields(typ: TypeName)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[InvalidGroupBy[RNS]] {
       override val code = tag
       def encode(err: InvalidGroupBy[RNS]) =
-        result(Fields(err.position, err.typ), s"Cannot GROUP BY an expression of type ${err.typ}", err.source)
+        result(Fields(err.typ), s"Cannot GROUP BY an expression of type ${err.typ}", err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[InvalidGroupBy[RNS]] {
@@ -469,8 +476,9 @@ object SoQLAnalyzerError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          InvalidGroupBy(source, fields.position, fields.typ)
+          InvalidGroupBy(source, position, fields.typ)
         }
     }
   }
@@ -484,12 +492,12 @@ object SoQLAnalyzerError {
     private val tag = "soql.analyzer.parameters-for-non-udf"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, nonUdf: ResourceName)
+    private case class Fields(nonUdf: ResourceName)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[ParametersForNonUDF[RNS]] {
       override val code = tag
       def encode(err: ParametersForNonUDF[RNS]) =
-        result(Fields(err.position, err.nonUdf), s"Cannot provide parameters to non-UDF ${err.nonUdf.name}", err.source)
+        result(Fields(err.nonUdf), s"Cannot provide parameters to non-UDF ${err.nonUdf.name}", err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[ParametersForNonUDF[RNS]] {
@@ -498,8 +506,9 @@ object SoQLAnalyzerError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          ParametersForNonUDF(source, fields.position, fields.nonUdf)
+          ParametersForNonUDF(source, position, fields.nonUdf)
         }
     }
   }
@@ -513,12 +522,12 @@ object SoQLAnalyzerError {
     private val tag = "soql.analyzer.table-alias-already-exists"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, alias: ResourceName)
+    private case class Fields(alias: ResourceName)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[TableAliasAlreadyExists[RNS]] {
       override val code = tag
       def encode(err: TableAliasAlreadyExists[RNS]) =
-        result(Fields(err.position, err.alias), s"Table alias ${err.alias.name} already exists", err.source)
+        result(Fields(err.alias), s"Table alias ${err.alias.name} already exists", err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[TableAliasAlreadyExists[RNS]] {
@@ -527,8 +536,9 @@ object SoQLAnalyzerError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          TableAliasAlreadyExists(source, fields.position, fields.alias)
+          TableAliasAlreadyExists(source, position, fields.alias)
         }
     }
   }
@@ -576,12 +586,12 @@ object SoQLAnalyzerError {
     private val tag = "soql.analyzer.table-operation-type-mismatch"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, left: Seq[TypeName], right: Seq[TypeName])
+    private case class Fields(left: Seq[TypeName], right: Seq[TypeName])
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[TableOperationTypeMismatch[RNS]] {
       override val code = tag
       def encode(err: TableOperationTypeMismatch[RNS]) =
-        result(Fields(err.position, err.left, err.right), s"The left- and right-hand sides of a table operation must have the same schema", err.source)
+        result(Fields(err.left, err.right), s"The left- and right-hand sides of a table operation must have the same schema", err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[TableOperationTypeMismatch[RNS]] {
@@ -590,8 +600,9 @@ object SoQLAnalyzerError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          TableOperationTypeMismatch(source, fields.position, fields.left, fields.right)
+          TableOperationTypeMismatch(source, position, fields.left, fields.right)
         }
     }
   }
@@ -638,12 +649,12 @@ object SoQLAnalyzerError {
     private val tag = "soql.analyzer.aggregate-function-not-allowed"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, name: FunctionName)
+    private case class Fields(name: FunctionName)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[AggregateFunctionNotAllowed[RNS]] {
       override val code = tag
       def encode(err: AggregateFunctionNotAllowed[RNS]) =
-        result(Fields(err.position, err.name), s"Aggregate function ${err.name.name} not allowed here", err.source)
+        result(Fields(err.name), s"Aggregate function ${err.name.name} not allowed here", err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[AggregateFunctionNotAllowed[RNS]] {
@@ -652,8 +663,9 @@ object SoQLAnalyzerError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          AggregateFunctionNotAllowed(source, fields.position, fields.name)
+          AggregateFunctionNotAllowed(source, position, fields.name)
         }
     }
   }
@@ -678,12 +690,12 @@ object SoQLAnalyzerError {
     private val tag = "soql.analyzer.window-function-not-allowed"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, name: FunctionName)
+    private case class Fields(name: FunctionName)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[WindowFunctionNotAllowed[RNS]] {
       override val code = tag
       def encode(err: WindowFunctionNotAllowed[RNS]) =
-        result(Fields(err.position, err.name), s"Window function ${err.name.name} not allowed here", err.source)
+        result(Fields(err.name), s"Window function ${err.name.name} not allowed here", err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[WindowFunctionNotAllowed[RNS]] {
@@ -692,8 +704,9 @@ object SoQLAnalyzerError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          WindowFunctionNotAllowed(source, fields.position, fields.name)
+          WindowFunctionNotAllowed(source, position, fields.name)
         }
     }
   }
@@ -707,12 +720,12 @@ object SoQLAnalyzerError {
     private val tag = "soql.analyzer.parameterless-table-function"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, name: ResourceName)
+    private case class Fields(name: ResourceName)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[ParameterlessTableFunction[RNS]] {
       override val code = tag
       def encode(err: ParameterlessTableFunction[RNS]) =
-        result(Fields(err.position, err.name), s"UDFs require parameters", err.source)
+        result(Fields(err.name), s"UDFs require parameters", err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[ParameterlessTableFunction[RNS]] {
@@ -721,8 +734,9 @@ object SoQLAnalyzerError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          ParameterlessTableFunction(source, fields.position, fields.name)
+          ParameterlessTableFunction(source, position, fields.name)
         }
     }
   }
@@ -747,12 +761,12 @@ object SoQLAnalyzerError {
     private val tag = "soql.analyzer.reserved-table-name"
 
     @AutomaticJsonCodec
-    private case class Fields(position: Position, name: ResourceName)
+    private case class Fields(name: ResourceName)
 
     implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[ReservedTableName[RNS]] {
       override val code = tag
       def encode(err: ReservedTableName[RNS]) =
-        result(Fields(err.position, err.name), s"Table name '${err.name}' is reserved", err.source)
+        result(Fields(err.name), s"Table name '${err.name}' is reserved", err.source, err.position)
     }
 
     implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[ReservedTableName[RNS]] {
@@ -761,8 +775,9 @@ object SoQLAnalyzerError {
         for {
           fields <- data[Fields](v)
           source <- sourceOpt[RNS](v)
+          position <- position(v)
         } yield {
-          ReservedTableName(source, fields.position, fields.name)
+          ReservedTableName(source, position, fields.name)
         }
     }
   }
@@ -779,12 +794,12 @@ object SoQLAnalyzerError {
       private val tag = "soql.analyzer.typechecker.unordered-order-by"
 
       @AutomaticJsonCodec
-      private case class Fields(position: Position, typ: TypeName)
+      private case class Fields(typ: TypeName)
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[UnorderedOrderBy[RNS]] {
         override val code = tag
         def encode(err: UnorderedOrderBy[RNS]) =
-          result(Fields(err.position, err.typ), s"Cannot ORDER BY or DISTINCT ON an expression of type ${err.typ}", err.source)
+          result(Fields(err.typ), s"Cannot ORDER BY or DISTINCT ON an expression of type ${err.typ}", err.source, err.position)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[UnorderedOrderBy[RNS]] {
@@ -793,8 +808,9 @@ object SoQLAnalyzerError {
           for {
             fields <- data[Fields](v)
             source <- sourceOpt[RNS](v)
+            position <- position(v)
           } yield {
-            UnorderedOrderBy(source, fields.position, fields.typ)
+            UnorderedOrderBy(source, position, fields.typ)
           }
       }
     }
@@ -809,12 +825,12 @@ object SoQLAnalyzerError {
       private val tag = "soql.analyzer.typechecker.no-such-column"
 
       @AutomaticJsonCodec
-      private case class Fields(position: Position, qualifier: Option[ResourceName], name: ColumnName)
+      private case class Fields(qualifier: Option[ResourceName], name: ColumnName)
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[NoSuchColumn[RNS]] {
         override val code = tag
         def encode(err: NoSuchColumn[RNS]) =
-          result(Fields(err.position, err.qualifier, err.name), s"No such column ${err.qualifier.fold("")("@" + _ + ".")}${err.name}", err.source)
+          result(Fields(err.qualifier, err.name), s"No such column ${err.qualifier.fold("")("@" + _ + ".")}${err.name}", err.source, err.position)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[NoSuchColumn[RNS]] {
@@ -823,8 +839,9 @@ object SoQLAnalyzerError {
           for {
             fields <- data[Fields](v)
             source <- sourceOpt[RNS](v)
+            position <- position(v)
           } yield {
-            NoSuchColumn(source, fields.position, fields.qualifier, fields.name)
+            NoSuchColumn(source, position, fields.qualifier, fields.name)
           }
       }
     }
@@ -838,12 +855,12 @@ object SoQLAnalyzerError {
       private val tag = "soql.analyzer.typechecker.unknown-udf-parameter"
 
       @AutomaticJsonCodec
-      private case class Fields(position: Position, name: HoleName)
+      private case class Fields(name: HoleName)
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[UnknownUDFParameter[RNS]] {
         override val code = tag
         def encode(err: UnknownUDFParameter[RNS]) =
-          result(Fields(err.position, err.name), s"No such UDF parameter ${err.name}", err.source)
+          result(Fields(err.name), s"No such UDF parameter ${err.name}", err.source, err.position)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[UnknownUDFParameter[RNS]] {
@@ -852,8 +869,9 @@ object SoQLAnalyzerError {
           for {
             fields <- data[Fields](v)
             source <- sourceOpt[RNS](v)
+            position <- position(v)
           } yield {
-            UnknownUDFParameter(source, fields.position, fields.name)
+            UnknownUDFParameter(source, position, fields.name)
           }
       }
     }
@@ -868,12 +886,12 @@ object SoQLAnalyzerError {
       private val tag = "soql.analyzer.typechecker.unknown-user-parameter"
 
       @AutomaticJsonCodec
-      private case class Fields(position: Position, view: Option[CanonicalName], name: HoleName)
+      private case class Fields(view: Option[CanonicalName], name: HoleName)
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[UnknownUserParameter[RNS]] {
         override val code = tag
         def encode(err: UnknownUserParameter[RNS]) =
-          result(Fields(err.position, err.view, err.name), s"No such user parameter ${err.view.fold("")(_.name + "/")}${err.name}", err.source)
+          result(Fields(err.view, err.name), s"No such user parameter ${err.view.fold("")(_.name + "/")}${err.name}", err.source, err.position)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[UnknownUserParameter[RNS]] {
@@ -882,8 +900,9 @@ object SoQLAnalyzerError {
           for {
             fields <- data[Fields](v)
             source <- sourceOpt[RNS](v)
+            position <- position(v)
           } yield {
-            UnknownUserParameter(source, fields.position, fields.view, fields.name)
+            UnknownUserParameter(source, position, fields.view, fields.name)
           }
       }
     }
@@ -898,12 +917,12 @@ object SoQLAnalyzerError {
       private val tag = "soql.analyzer.typechecker.no-such-function"
 
       @AutomaticJsonCodec
-      private case class Fields(position: Position, name: FunctionName, arity: Int)
+      private case class Fields(name: FunctionName, arity: Int)
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[NoSuchFunction[RNS]] {
         override val code = tag
         def encode(err: NoSuchFunction[RNS]) =
-          result(Fields(err.position, err.name, err.arity), s"No such function ${err.name}/${err.name}", err.source)
+          result(Fields(err.name, err.arity), s"No such function ${err.name}/${err.name}", err.source, err.position)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[NoSuchFunction[RNS]] {
@@ -912,8 +931,9 @@ object SoQLAnalyzerError {
           for {
             fields <- data[Fields](v)
             source <- sourceOpt[RNS](v)
+            position <- position(v)
           } yield {
-            NoSuchFunction(source, fields.position, fields.name, fields.arity)
+            NoSuchFunction(source, position, fields.name, fields.arity)
           }
       }
     }
@@ -928,12 +948,12 @@ object SoQLAnalyzerError {
       private val tag = "soql.analyzer.typechecker.type-mismatch"
 
       @AutomaticJsonCodec
-      private case class Fields(position: Position, expected: Set[TypeName], found: TypeName)
+      private case class Fields(expected: Set[TypeName], found: TypeName)
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[TypeMismatch[RNS]] {
         override val code = tag
         def encode(err: TypeMismatch[RNS]) =
-          result(Fields(err.position, err.expected, err.found), s"Type mismatch: found ${err.found}", err.source)
+          result(Fields(err.expected, err.found), s"Type mismatch: found ${err.found}", err.source, err.position)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[TypeMismatch[RNS]] {
@@ -942,8 +962,9 @@ object SoQLAnalyzerError {
           for {
             fields <- data[Fields](v)
             source <- sourceOpt[RNS](v)
+            position <- position(v)
           } yield {
-            TypeMismatch(source, fields.position, fields.expected, fields.found)
+            TypeMismatch(source, position, fields.expected, fields.found)
           }
       }
     }
@@ -957,12 +978,12 @@ object SoQLAnalyzerError {
       private val tag = "soql.analyzer.typechecker.requires-window"
 
       @AutomaticJsonCodec
-      private case class Fields(position: Position, name: FunctionName)
+      private case class Fields(name: FunctionName)
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[RequiresWindow[RNS]] {
         override val code = tag
         def encode(err: RequiresWindow[RNS]) =
-          result(Fields(err.position, err.name), s"${err.name} requires a window clause", err.source)
+          result(Fields(err.name), s"${err.name} requires a window clause", err.source, err.position)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[RequiresWindow[RNS]] {
@@ -971,8 +992,9 @@ object SoQLAnalyzerError {
           for {
             fields <- data[Fields](v)
             source <- sourceOpt[RNS](v)
+            position <- position(v)
           } yield {
-            RequiresWindow(source, fields.position, fields.name)
+            RequiresWindow(source, position, fields.name)
           }
       }
     }
@@ -986,12 +1008,12 @@ object SoQLAnalyzerError {
       private val tag = "soql.analyzer.typechecker.illegal-start-frame-bound"
 
       @AutomaticJsonCodec
-      private case class Fields(position: Position, bound: String)
+      private case class Fields(bound: String)
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[IllegalStartFrameBound[RNS]] {
         override val code = tag
         def encode(err: IllegalStartFrameBound[RNS]) =
-          result(Fields(err.position, err.bound), s"${err.bound} cannot be used as a starting frame bound", err.source)
+          result(Fields(err.bound), s"${err.bound} cannot be used as a starting frame bound", err.source, err.position)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[IllegalStartFrameBound[RNS]] {
@@ -1000,8 +1022,9 @@ object SoQLAnalyzerError {
           for {
             fields <- data[Fields](v)
             source <- sourceOpt[RNS](v)
+            position <- position(v)
           } yield {
-            IllegalStartFrameBound(source, fields.position, fields.bound)
+            IllegalStartFrameBound(source, position, fields.bound)
           }
       }
     }
@@ -1015,12 +1038,12 @@ object SoQLAnalyzerError {
       private val tag = "soql.analyzer.typechecker.illegal-end-frame-bound"
 
       @AutomaticJsonCodec
-      private case class Fields(position: Position, bound: String)
+      private case class Fields(bound: String)
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[IllegalEndFrameBound[RNS]] {
         override val code = tag
         def encode(err: IllegalEndFrameBound[RNS]) =
-          result(Fields(err.position, err.bound), s"${err.bound} cannot be used as a ending frame bound", err.source)
+          result(Fields(err.bound), s"${err.bound} cannot be used as a ending frame bound", err.source, err.position)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[IllegalEndFrameBound[RNS]] {
@@ -1029,8 +1052,9 @@ object SoQLAnalyzerError {
           for {
             fields <- data[Fields](v)
             source <- sourceOpt[RNS](v)
+            position <- position(v)
           } yield {
-            IllegalEndFrameBound(source, fields.position, fields.bound)
+            IllegalEndFrameBound(source, position, fields.bound)
           }
       }
     }
@@ -1045,12 +1069,12 @@ object SoQLAnalyzerError {
       private val tag = "soql.analyzer.typechecker.mismatched-frame-bound"
 
       @AutomaticJsonCodec
-      private case class Fields(position: Position, start: String, end: String)
+      private case class Fields(start: String, end: String)
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[MismatchedFrameBound[RNS]] {
         override val code = tag
         def encode(err: MismatchedFrameBound[RNS]) =
-          result(Fields(err.position, err.start, err.end), s"${err.start} cannot be bollowed by ${err.end}", err.source)
+          result(Fields(err.start, err.end), s"${err.start} cannot be bollowed by ${err.end}", err.source, err.position)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[MismatchedFrameBound[RNS]] {
@@ -1059,8 +1083,9 @@ object SoQLAnalyzerError {
           for {
             fields <- data[Fields](v)
             source <- sourceOpt[RNS](v)
+            position <- position(v)
           } yield {
-            MismatchedFrameBound(source, fields.position, fields.start, fields.end)
+            MismatchedFrameBound(source, position, fields.start, fields.end)
           }
       }
     }
@@ -1074,12 +1099,12 @@ object SoQLAnalyzerError {
       private val tag = "soql.analyzer.typechecker.non-aggregate-function"
 
       @AutomaticJsonCodec
-      private case class Fields(position: Position, name: FunctionName)
+      private case class Fields(name: FunctionName)
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[NonAggregateFunction[RNS]] {
         override val code = tag
         def encode(err: NonAggregateFunction[RNS]) =
-          result(Fields(err.position, err.name), s"${err.name} is not an aggregate function", err.source)
+          result(Fields(err.name), s"${err.name} is not an aggregate function", err.source, err.position)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[NonAggregateFunction[RNS]] {
@@ -1088,8 +1113,9 @@ object SoQLAnalyzerError {
           for {
             fields <- data[Fields](v)
             source <- sourceOpt[RNS](v)
+            position <- position(v)
           } yield {
-            NonAggregateFunction(source, fields.position, fields.name)
+            NonAggregateFunction(source, position, fields.name)
           }
       }
     }
@@ -1103,12 +1129,12 @@ object SoQLAnalyzerError {
       private val tag = "soql.analyzer.typechecker.non-window-function"
 
       @AutomaticJsonCodec
-      private case class Fields(position: Position, name: FunctionName)
+      private case class Fields(name: FunctionName)
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[NonWindowFunction[RNS]] {
         override val code = tag
         def encode(err: NonWindowFunction[RNS]) =
-          result(Fields(err.position, err.name), s"${err.name} is not a window function", err.source)
+          result(Fields(err.name), s"${err.name} is not a window function", err.source, err.position)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[NonWindowFunction[RNS]] {
@@ -1117,8 +1143,9 @@ object SoQLAnalyzerError {
           for {
             fields <- data[Fields](v)
             source <- sourceOpt[RNS](v)
+            position <- position(v)
           } yield {
-            NonWindowFunction(source, fields.position, fields.name)
+            NonWindowFunction(source, position, fields.name)
           }
       }
     }
@@ -1146,7 +1173,7 @@ object SoQLAnalyzerError {
     }
 
     def errorCodecs[RNS : JsonEncode : JsonDecode, T >: TypecheckError[RNS] <: AnyRef](
-      codecs: SoQLErrorCodec.ErrorCodecs[T]
+      codecs: SoQLErrorCodec.ErrorCodecs[T] = new SoQLErrorCodec.ErrorCodecs[T]
     ): SoQLErrorCodec.ErrorCodecs[T] =
       codecs
         .branch[UnorderedOrderBy[RNS]]
@@ -1176,12 +1203,12 @@ object SoQLAnalyzerError {
       private val tag = "soql.analyzer.alias.repeated-exclusion"
 
       @AutomaticJsonCodec
-      private case class Fields(position: Position, name: ColumnName)
+      private case class Fields(name: ColumnName)
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[RepeatedExclusion[RNS]] {
         override val code = tag
         def encode(err: RepeatedExclusion[RNS]) =
-          result(Fields(err.position, err.name), s"Column ${err.name} has already been excluded", err.source)
+          result(Fields(err.name), s"Column ${err.name} has already been excluded", err.source, err.position)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[RepeatedExclusion[RNS]] {
@@ -1190,8 +1217,9 @@ object SoQLAnalyzerError {
           for {
             fields <- data[Fields](v)
             source <- sourceOpt[RNS](v)
+            position <- position(v)
           } yield {
-            RepeatedExclusion(source, fields.position, fields.name)
+            RepeatedExclusion(source, position, fields.name)
           }
       }
     }
@@ -1205,12 +1233,12 @@ object SoQLAnalyzerError {
       private val tag = "soql.analyzer.alias.duplicate-alias"
 
       @AutomaticJsonCodec
-      private case class Fields(position: Position, name: ColumnName)
+      private case class Fields(name: ColumnName)
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[DuplicateAlias[RNS]] {
         override val code = tag
         def encode(err: DuplicateAlias[RNS]) =
-          result(Fields(err.position, err.name), s"There is already a column named ${err.name} selected", err.source)
+          result(Fields(err.name), s"There is already a column named ${err.name} selected", err.source, err.position)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[DuplicateAlias[RNS]] {
@@ -1219,8 +1247,9 @@ object SoQLAnalyzerError {
           for {
             fields <- data[Fields](v)
             source <- sourceOpt[RNS](v)
+            position <- position(v)
           } yield {
-            DuplicateAlias(source, fields.position, fields.name)
+            DuplicateAlias(source, position, fields.name)
           }
       }
     }
@@ -1234,12 +1263,12 @@ object SoQLAnalyzerError {
       private val tag = "soql.analyzer.alias.circular-alias-definition"
 
       @AutomaticJsonCodec
-      private case class Fields(position: Position, name: ColumnName)
+      private case class Fields(name: ColumnName)
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[CircularAliasDefinition[RNS]] {
         override val code = tag
         def encode(err: CircularAliasDefinition[RNS]) =
-          result(Fields(err.position, err.name), s"Circular reference while defining alias ${err.name}", err.source)
+          result(Fields(err.name), s"Circular reference while defining alias ${err.name}", err.source, err.position)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[CircularAliasDefinition[RNS]] {
@@ -1248,8 +1277,9 @@ object SoQLAnalyzerError {
           for {
             fields <- data[Fields](v)
             source <- sourceOpt[RNS](v)
+            position <- position(v)
           } yield {
-            CircularAliasDefinition(source, fields.position, fields.name)
+            CircularAliasDefinition(source, position, fields.name)
           }
       }
     }
@@ -1263,14 +1293,14 @@ object SoQLAnalyzerError {
         .branch[CircularAliasDefinition[RNS]]
 
     def errorCodecs[RNS : JsonEncode : JsonDecode, T >: AliasAnalysisError[RNS] <: AnyRef](
-      codecs: SoQLErrorCodec.ErrorCodecs[T]
+      codecs: SoQLErrorCodec.ErrorCodecs[T] = new SoQLErrorCodec.ErrorCodecs[T]
     ): SoQLErrorCodec.ErrorCodecs[T] =
       errorCodecsMinusNoSuchColumn[RNS, T](codecs)
         .branch[TypecheckError.NoSuchColumn[RNS]]
   }
 
   def errorCodecs[RNS : JsonEncode : JsonDecode, T >: SoQLAnalyzerError[RNS] <: AnyRef](
-    codecs: SoQLErrorCodec.ErrorCodecs[T]
+    codecs: SoQLErrorCodec.ErrorCodecs[T] = new SoQLErrorCodec.ErrorCodecs[T]
   ): SoQLErrorCodec.ErrorCodecs[T] =
     AliasAnalysisError.errorCodecsMinusNoSuchColumn[RNS, T](TypecheckError.errorCodecs[RNS, T](codecs))
       .branch[InvalidParameterType]

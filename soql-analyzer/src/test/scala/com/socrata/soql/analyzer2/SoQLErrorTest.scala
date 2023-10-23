@@ -10,7 +10,7 @@ import com.socrata.soql.analyzer2.mocktablefinder._
 import com.socrata.soql.util.{SoQLErrorCodec, EncodedError}
 
 class SoQLErrorTest extends FunSuite with MustMatchers with TestHelper {
-  lazy val codecs = SoQLError.errorCodecs[Int, SoQLError[Int]](new SoQLErrorCodec.ErrorCodecs)
+  lazy val codecs = SoQLError.errorCodecs[Int, SoQLError[Int]]()
   lazy val jsonCodecs = codecs.build
 
   sealed trait OtherErrors
@@ -23,7 +23,7 @@ class SoQLErrorTest extends FunSuite with MustMatchers with TestHelper {
   }
   object OtherErrors {
     def errorCodecs[T >: OtherErrors <: AnyRef](
-      codecs: SoQLErrorCodec.ErrorCodecs[T]
+      codecs: SoQLErrorCodec.ErrorCodecs[T] = new SoQLErrorCodec.ErrorCodecs[T]
     ): SoQLErrorCodec.ErrorCodecs[T] =
       codecs.branch[OtherError]
   }
@@ -35,7 +35,7 @@ class SoQLErrorTest extends FunSuite with MustMatchers with TestHelper {
   lazy val decode =
     (
       codecs.toDecode.map[MultiError](SomeSoQLError(_)) ++
-        OtherErrors.errorCodecs(new SoQLErrorCodec.ErrorCodecs).toDecode.map[MultiError](SomeOtherError(_))
+        OtherErrors.errorCodecs().toDecode.map[MultiError](SomeOtherError(_))
     ).build
 
   test("No colliding tags") {
