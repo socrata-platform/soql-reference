@@ -1,10 +1,12 @@
 package com.socrata.soql.util
 
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
+import scala.util.parsing.input.Position
 
 import com.rojoma.json.v3.ast.{JValue, JString}
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError, Path}
-import com.rojoma.json.v3.util.{AutomaticJsonCodec, AutomaticJsonCodecBuilder}
+import com.rojoma.json.v3.util.{AutomaticJsonCodec, AutomaticJsonCodecBuilder, JsonKey}
 
 import com.socrata.soql.environment.ScopedResourceName
 
@@ -13,10 +15,11 @@ import com.socrata.soql.environment.ScopedResourceName
 // We want our user-actionable error codes to have a common format.  This format will be:
 //
 // {
-//   "code": "some-identifier-for-machines",
+//   "type": "some-identifier-for-machines",
 //   "data": { .. error-specific data .. }
-//   "message": "some explanation for humans",
+//   "english": "some explanation for humans",
 //   "source": relevant-source // optional, not all errors are sourced
+//   "position": relevant-position // optional, not all errors are positioned
 // }
 //
 // And we want to be able to treat errors that are defined in
@@ -51,10 +54,11 @@ import com.socrata.soql.environment.ScopedResourceName
 // hidden in the API.
 @AutomaticJsonCodec
 case class EncodedError(
-  code: String,
+  @JsonKey("type") typ: String,
   data: JValue,
-  message: String,
-  source: Option[ScopedResourceName[JValue]]
+  english: String,
+  source: Option[ScopedResourceName[JValue]],
+  position: Option[Position]
 ) {
   def toGeneric[RNS: JsonDecode]: Either[DecodeError, GenericSoQLError[RNS]] = {
     source match {
@@ -63,10 +67,11 @@ case class EncodedError(
           case Right(newSource) =>
             Right(
               GenericSoQLError(
-                code,
+                typ,
                 data,
-                message,
-                Some(newSource)
+                english,
+                Some(newSource),
+                position
               )
             )
           case Left(err) =>
@@ -75,35 +80,43 @@ case class EncodedError(
       case None =>
         Right(
           GenericSoQLError(
-            code,
+            typ,
             data,
-            message,
-            None
+            english,
+            None,
+            position
           )
         )
     }
   }
+
+  def withoutSource = copy(source = None)
 }
 
 object EncodedError {
   def fromGeneric[RNS: JsonEncode](v: GenericSoQLError[RNS]) =
     EncodedError(
-      v.code,
+      v.typ,
       v.data,
-      v.message,
+      v.english,
       v.source.map { case ScopedResourceName(scope, name) =>
         ScopedResourceName(JsonEncode.toJValue(scope), name)
-      }
+      },
+      v.position
     )
 }
 
 // A soql error with a definite scope type, but not otherwise specified
 case class GenericSoQLError[+RNS](
-  code: String,
+  typ: String,
   data: JValue,
-  message: String,
-  source: Option[ScopedResourceName[RNS]]
-)
+  english: String,
+  source: Option[ScopedResourceName[RNS]],
+  position: Option[Position]
+) {
+  def withoutSource: GenericSoQLError[Nothing] =
+    copy(source = None)
+}
 object GenericSoQLError {
   implicit def jEncode[RNS: JsonEncode]: JsonEncode[GenericSoQLError[RNS]] =
     new JsonEncode[GenericSoQLError[RNS]] {
@@ -131,37 +144,32 @@ trait SoQLErrorEncode[T] {
   // value representing the non-scope data fields.
   def encode(err: T): EncodedError
 
-  protected final def result[Data: JsonEncode, RNS: JsonEncode](
-    data: Data,
-    message: String,
-    source: Option[ScopedResourceName[RNS]]
-  ): EncodedError = {
-    EncodedError(
-      code,
-      JsonEncode.toJValue(data),
-      message,
-      source.map { source => source.copy(scope = JsonEncode.toJValue(source.scope)) }
-    )
-  }
+  protected final class EncodableSource private[SoQLErrorEncode](private[SoQLErrorEncode] val value: Option[ScopedResourceName[JValue]])
+  protected final class EncodablePosition private[SoQLErrorEncode](private[SoQLErrorEncode] val value: Option[Position])
 
-  protected final def result[Data: JsonEncode, RNS: JsonEncode](
-    data: Data,
-    message: String,
-    source: ScopedResourceName[RNS]
-  ): EncodedError = {
-    EncodedError(
-      code,
-      JsonEncode.toJValue(data),
-      message,
-      Some(source.copy(scope = JsonEncode.toJValue(source.scope)))
-    )
-  }
+  protected final implicit def sourceToEncodable[RNS: JsonEncode](s: ScopedResourceName[RNS]) =
+    sourceOptToEncodable(Some(s))
+  protected final implicit def sourceOptToEncodable[RNS: JsonEncode](s: Option[ScopedResourceName[RNS]]) =
+    new EncodableSource(s.map { source => source.copy(scope = JsonEncode.toJValue(source.scope)) })
+
+  protected final implicit def positionToEncodable(p: Position) =
+    positionOptToEncodable(Some(p))
+  protected final implicit def positionOptToEncodable(p: Option[Position]) =
+    new EncodablePosition(p)
 
   protected final def result[Data: JsonEncode](
     data: Data,
-    message: String
+    message: String,
+    source: EncodableSource = new EncodableSource(None),
+    position: EncodablePosition = new EncodablePosition(None)
   ): EncodedError = {
-    EncodedError(code, JsonEncode.toJValue(data), message, None)
+    EncodedError(
+      code,
+      JsonEncode.toJValue(data),
+      message,
+      source.value,
+      position.value
+    )
   }
 }
 
@@ -178,7 +186,7 @@ trait SoQLErrorDecode[T] {
   def decode(err: EncodedError): Either[DecodeError, T]
 
   protected final def data[Data: JsonDecode](err: EncodedError): Either[DecodeError, Data] =
-    JsonDecode.fromJValue(err.data).left.map(_.prefix("data"))
+    JsonDecode.fromJValue[Data](err.data).left.map(_.prefix("data"))
 
   protected final def source[RNS: JsonDecode](err: EncodedError): Either[DecodeError, ScopedResourceName[RNS]] = {
     err.source match {
@@ -200,6 +208,18 @@ trait SoQLErrorDecode[T] {
         Right(None)
     }
   }
+
+  protected final def position(err: EncodedError): Either[DecodeError, Position] =
+    err.position match {
+      case Some(pos) =>
+        Right(pos)
+      case None =>
+        Left(DecodeError.MissingField("source"))
+    }
+
+  // This just exists for symmetry with source/sourceOpt
+  protected final def positionOpt(err: EncodedError): Either[DecodeError, Option[Position]] =
+    Right(err.position)
 }
 
 abstract class SoQLErrorCodec[T](override val code: String) extends SoQLErrorEncode[T] with SoQLErrorDecode[T]
@@ -220,8 +240,8 @@ object SoQLErrorCodec {
     new JsonDecode[T] {
       def decode(v: JValue) = {
         encodedErrorCodec.decode(v).flatMap { intermediate =>
-          if(intermediate.code != sed.code) {
-            Left(DecodeError.InvalidValue(JString(intermediate.code), Path("code")))
+          if(intermediate.typ != sed.code) {
+            Left(DecodeError.InvalidValue(JString(intermediate.typ), Path("type")))
           } else {
             sed.decode(intermediate)
           }
@@ -307,7 +327,7 @@ object SoQLErrorCodec {
       new ErrorDecodes[U](branches.map(_.map(f)), codes)
 
     def build: JsonDecode[T] =
-      branches.reverse.foldLeft(SimplerHierarchyDecodeBuilder[T]("code")) { (builder, branch) =>
+      branches.reverse.foldLeft(SimplerHierarchyDecodeBuilder[T]("type")) { (builder, branch) =>
         branch.addToDecode(builder)
       }.build
   }

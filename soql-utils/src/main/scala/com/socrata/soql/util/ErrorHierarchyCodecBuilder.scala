@@ -5,7 +5,7 @@ import scala.reflect.ClassTag
 import com.rojoma.json.v3.ast._
 import com.rojoma.json.v3.codec._
 
-class ErrorHierarchyCodecBuilder[Root <: AnyRef] private (enc: ErrorHierarchyEncodeBuilder[Root], dec: ErrorHierarchyDecodeBuilder[Root]) {
+private[util] class ErrorHierarchyCodecBuilder[Root <: AnyRef] private (enc: ErrorHierarchyEncodeBuilder[Root], dec: ErrorHierarchyDecodeBuilder[Root]) {
   def this() = this(new ErrorHierarchyEncodeBuilder[Root], new ErrorHierarchyDecodeBuilder[Root])
 
   def branch[T <: Root : SoQLErrorEncode : SoQLErrorDecode : ClassTag] = {
