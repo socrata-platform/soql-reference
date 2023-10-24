@@ -27,4 +27,5 @@ trait SqlizerUniverse[MT <: MetaTypes with MetaTypesExt] extends StatementUniver
 
   type AugmentedSchema = sqlizer.AugmentedSchema[MT]
   type AvailableSchemas = sqlizer.AvailableSchemas[MT]
+  type SqlizerError = MT#SqlizerError
 }

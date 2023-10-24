@@ -7,4 +7,5 @@ trait MetaTypesExt { this: MetaTypes =>
   type ExtraContext <: sqlizer.ExtraContext[ExtraContextResult]
   type ExtraContextResult
   type CustomSqlizeAnnotation
+  type SqlizerError
 }
