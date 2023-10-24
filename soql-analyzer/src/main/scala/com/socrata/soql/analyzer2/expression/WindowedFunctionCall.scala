@@ -116,7 +116,7 @@ trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
       buffer.write(wfc.filter)
       buffer.write(wfc.partitionBy)
       buffer.write(wfc.orderBy)
-      buffer.write(wfc.frame)(Writable.option(Frame.serialize))
+      buffer.write(wfc.frame)
       buffer.write(wfc.position)
     }
   }
@@ -128,7 +128,7 @@ trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
       val filter = buffer.read[Option[Expr]]()
       val partitionBy = buffer.read[Seq[Expr]]()
       val orderBy = buffer.read[Seq[OrderBy]]()
-      val frame = buffer.read[Option[Frame]]()(Readable.option(Frame.serialize))
+      val frame = buffer.read[Option[Frame]]()
       val position = buffer.read[FuncallPositionInfo]()
       WindowedFunctionCall(
         function,

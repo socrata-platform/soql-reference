@@ -6,6 +6,7 @@ import scala.util.parsing.input.{Position, NoPosition}
 import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, CovariantSet}
 import com.socrata.soql.environment.{ColumnName, HoleName, ResourceName, TableName, FunctionName, Provenance}
+import com.socrata.soql.functions.FunctionType
 import com.socrata.soql.typechecker.{TypeInfoMetaProjection, FunctionInfo, FunctionCallTypechecker, Passed, TypeMismatchFailure}
 
 class Typechecker[MT <: MetaTypes](
@@ -247,17 +248,24 @@ class Typechecker[MT <: MetaTypes](
       }.map { params: Seq[Expr] =>
         (typedFilter, typedWindow) match {
           case (Some(boolExpr), None) =>
-            if(f.needsWindow) {
-              return Left(RequiresWindow(sourceName, fc.functionNamePosition, fc.functionName))
+            f.functionType match {
+              case FunctionType.Window(_) =>
+                return Left(RequiresWindow(sourceName, fc.functionNamePosition, fc.functionName))
+              case FunctionType.Normal =>
+                return Left(NonAggregateFunction(sourceName, fc.functionNamePosition, fc.functionName))
+              case FunctionType.Aggregate =>
+                AggregateFunctionCall(f, params, false, Some(boolExpr))(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
             }
-            if(!f.isAggregate && !f.needsWindow) {
-              return Left(NonAggregateFunction(sourceName, fc.functionNamePosition, fc.functionName))
-            }
-            AggregateFunctionCall(f, params, false, Some(boolExpr))(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
           case (maybeFilter, Some((partitions, orderings, frames))) =>
-            if(!f.needsWindow && !f.isAggregate) {
-              return Left(NonWindowFunction(sourceName, fc.functionNamePosition, fc.functionName))
-            }
+            val frameAllowed =
+              f.functionType match {
+                case FunctionType.Normal =>
+                  return Left(NonWindowFunction(sourceName, fc.functionNamePosition, fc.functionName))
+                case FunctionType.Aggregate =>
+                  true
+                case FunctionType.Window(frameAllowed) =>
+                  frameAllowed
+              }
 
             if(fc.distinct) {
               return Left(DistinctWithOver(sourceName, fc.functionNamePosition))
@@ -357,15 +365,19 @@ class Typechecker[MT <: MetaTypes](
               return Left(GroupsRequiresOrderBy(sourceName, frames.head.position))
             }
 
+            if(parsedFrames.isDefined && !frameAllowed) {
+              // TODO: reject once we've verified that this isn't being used by anything
+            }
+
             WindowedFunctionCall(f, params, maybeFilter, partitions, orderings, parsedFrames)(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
           case (None, None) =>
-            if(f.needsWindow) {
-              return Left(RequiresWindow(sourceName, fc.functionNamePosition, fc.functionName))
-            }
-            if(f.isAggregate) {
-              AggregateFunctionCall(f, params, false, None)(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
-            } else {
-              FunctionCall(f, params)(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
+            f.functionType match {
+              case FunctionType.Window(_) =>
+                return Left(RequiresWindow(sourceName, fc.functionNamePosition, fc.functionName))
+              case FunctionType.Aggregate =>
+                AggregateFunctionCall(f, params, false, None)(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
+              case FunctionType.Normal =>
+                FunctionCall(f, params)(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
             }
         }
       }

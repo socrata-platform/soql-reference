@@ -442,19 +442,19 @@ abstract class FuncallSqlizer[MT <: MetaTypes with MetaTypesExt] extends Sqlizer
     def orderByDoc =
       (d"ORDER BY" ++ Doc.lineSep ++ orderBy.flatMap(_.sqls).commaSep).nest(2).group
 
-    def frameDoc(f: Frame) = {
-      val Frame(context, start, end, exclusion) = f
-        (sqlizeFrameContext(context) ++
-           Doc.lineSep ++
-           sqlizeFrameBound(start, end) ++
-           exclusion.map(sqlizeFrameExclusion).map(Doc.lineSep ++ _).getOrElse(Doc.empty)).group
+    def frameDoc = frame.map { frame =>
+      val Frame(context, start, end, exclusion) = frame
+      (sqlizeFrameContext(context) ++
+         Doc.lineSep ++
+         sqlizeFrameBound(start, end) ++
+         exclusion.map(sqlizeFrameExclusion).map(Doc.lineSep ++ _).getOrElse(Doc.empty)).group
     }
 
     val items =
       Seq(
         if(partitionBy.nonEmpty) Some(partitionByDoc) else None,
         if(orderBy.nonEmpty) Some(orderByDoc) else None,
-        frame.map(frameDoc)
+        frameDoc
       ).flatten
 
     if(items.isEmpty) {
