@@ -36,7 +36,7 @@ sealed abstract class Expr[MT <: MetaTypes] extends Product with LabelUniverse[M
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[MT]
 
-  private[analyzer2] def reposition(p: Position): Self[MT]
+  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT]
 
   final def isIsomorphic(that: Expr[MT], under: IsomorphismState.View[MT] = IsomorphismState.View.empty): Boolean =
     findIsomorphism(under.extend, that)
@@ -66,7 +66,7 @@ sealed abstract class Expr[MT <: MetaTypes] extends Product with LabelUniverse[M
   final def contains(e: Expr[MT]): Boolean = find(_ == e).isDefined
 }
 object Expr {
-  implicit def serialize[MT <: MetaTypes](implicit writableCT: Writable[MT#ColumnType], writableCV: Writable[MT#ColumnValue], writableDTN: Writable[MT#DatabaseTableNameImpl], writableDCN: Writable[MT#DatabaseColumnNameImpl]): Writable[Expr[MT]] = new Writable[Expr[MT]] with ExpressionUniverse[MT] {
+  implicit def serialize[MT <: MetaTypes](implicit writableCT: Writable[MT#ColumnType], writableCV: Writable[MT#ColumnValue], writableDTN: Writable[MT#DatabaseTableNameImpl], writableDCN: Writable[MT#DatabaseColumnNameImpl], writableRNS: Writable[MT#ResourceNameScope]): Writable[Expr[MT]] = new Writable[Expr[MT]] with ExpressionUniverse[MT] {
     implicit val self = this
     def writeTo(buffer: WriteBuffer, t: Expr): Unit =
       t match {
@@ -97,7 +97,7 @@ object Expr {
       }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableCT: Readable[MT#ColumnType], readableCV: Readable[MT#ColumnValue], hasType: HasType[MT#ColumnValue, MT#ColumnType], mf: Readable[MonomorphicFunction[MT#ColumnType]], readableDTN: Readable[MT#DatabaseTableNameImpl], readableDCN: Readable[MT#DatabaseColumnNameImpl]): Readable[Expr[MT]] = new Readable[Expr[MT]] with ExpressionUniverse[MT] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCT: Readable[MT#ColumnType], readableCV: Readable[MT#ColumnValue], hasType: HasType[MT#ColumnValue, MT#ColumnType], mf: Readable[MonomorphicFunction[MT#ColumnType]], readableDTN: Readable[MT#DatabaseTableNameImpl], readableDCN: Readable[MT#DatabaseColumnNameImpl], readableRNS: Readable[MT#ResourceNameScope]): Readable[Expr[MT]] = new Readable[Expr[MT]] with ExpressionUniverse[MT] {
     implicit val self = this
     def readFrom(buffer: ReadBuffer): Expr =
       buffer.read[Int]() match {
@@ -135,7 +135,7 @@ final case class PhysicalColumn[MT <: MetaTypes](
   column: types.DatabaseColumnName[MT],
   typ: MT#ColumnType
 )(
-  val position: AtomicPositionInfo
+  val position: AtomicPositionInfo[MT#ResourceNameScope]
 ) extends
     Column[MT]
     with expression.PhysicalColumnImpl[MT]
@@ -147,7 +147,7 @@ final case class VirtualColumn[MT <: MetaTypes](
   column: AutoColumnLabel,
   typ: MT#ColumnType
 )(
-  val position: AtomicPositionInfo
+  val position: AtomicPositionInfo[MT#ResourceNameScope]
 ) extends
     Column[MT]
     with expression.VirtualColumnImpl[MT]
@@ -162,7 +162,7 @@ final case class SelectListReference[MT <: MetaTypes](
   isWindowed: Boolean,
   typ: MT#ColumnType
 )(
-  val position: AtomicPositionInfo
+  val position: AtomicPositionInfo[MT#ResourceNameScope]
 ) extends
     AtomicExpr[MT]
     with expression.SelectListReferenceImpl[MT]
@@ -181,7 +181,7 @@ sealed abstract class Literal[MT <: MetaTypes]
 final case class LiteralValue[MT <: MetaTypes](
   value: MT#ColumnValue
 )(
-  val position: AtomicPositionInfo
+  val position: AtomicPositionInfo[MT#ResourceNameScope]
 )(
   implicit val hasType: HasType[MT#ColumnValue, MT#ColumnType]
 ) extends
@@ -191,7 +191,7 @@ final case class LiteralValue[MT <: MetaTypes](
 {
   // these need to be here and not in the impl for variance reasons
   val typ = hasType.typeOf(value)
-  private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
+  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT] = copy()(position = position.logicallyReposition(source, p))
 }
 object LiteralValue extends expression.OLiteralValueImpl
 
@@ -200,7 +200,7 @@ object LiteralValue extends expression.OLiteralValueImpl
 final case class NullLiteral[MT <: MetaTypes](
   typ: MT#ColumnType
 )(
-  val position: AtomicPositionInfo
+  val position: AtomicPositionInfo[MT#ResourceNameScope]
 ) extends
     Literal[MT]
     with expression.NullLiteralImpl[MT]
@@ -219,7 +219,7 @@ final case class FunctionCall[MT <: MetaTypes](
   function: MonomorphicFunction[MT#ColumnType],
   args: Seq[Expr[MT]]
 )(
-  val position: FuncallPositionInfo
+  val position: FuncallPositionInfo[MT#ResourceNameScope]
 ) extends
     FuncallLike[MT]
     with expression.FunctionCallImpl[MT]
@@ -234,7 +234,7 @@ final case class AggregateFunctionCall[MT <: MetaTypes](
   distinct: Boolean,
   filter: Option[Expr[MT]]
 )(
-  val position: FuncallPositionInfo
+  val position: FuncallPositionInfo[MT#ResourceNameScope]
 ) extends
     FuncallLike[MT]
     with expression.AggregateFunctionCallImpl[MT]
@@ -254,7 +254,7 @@ final case class WindowedFunctionCall[MT <: MetaTypes](
   orderBy: Seq[OrderBy[MT]], // ditto thus
   frame: Option[Frame]
 )(
-  val position: FuncallPositionInfo
+  val position: FuncallPositionInfo[MT#ResourceNameScope]
 ) extends
     FuncallLike[MT]
     with expression.WindowedFunctionCallImpl[MT]

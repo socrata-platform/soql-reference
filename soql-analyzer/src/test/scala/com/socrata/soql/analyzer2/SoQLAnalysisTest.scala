@@ -440,7 +440,7 @@ select b, n |> select n join @udf(b) as @udf on true
     val analysis = analyze(tf, "twocol", "select text, num")
     val expectedAnalysis = analyze(tf, "twocol", "select text, num order by :id")
 
-    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("impose ordering - group by") {
@@ -451,7 +451,7 @@ select b, n |> select n join @udf(b) as @udf on true
     val analysis = analyze(tf, "twocol", "select text, sum(num) as sum group by text order by sum desc")
     val expectedAnalysis = analyze(tf, "twocol", "select text, sum(num) group by text order by sum(num) desc, text")
 
-    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("impose ordering - group by + inherited PK") {
@@ -462,7 +462,7 @@ select b, n |> select n join @udf(b) as @udf on true
     val analysis = analyze(tf, "twocol", "select unorderable, :id, sum(num) as sum group by unorderable, :id order by sum desc")
     val expectedAnalysis = analyze(tf, "twocol", "select unorderable, :id, sum(num) group by unorderable, :id order by sum(num) desc, :id")
 
-    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("impose ordering - partial distinct on") {
@@ -473,7 +473,7 @@ select b, n |> select n join @udf(b) as @udf on true
     val analysis = analyze(tf, "twocol", "select distinct on (text, num*2) text, num order by text desc")
     val expectedAnalysis = analyze(tf, "twocol", "select distinct on (text, num*2) text, num order by text desc, num*2, num")
 
-    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("impose ordering - partial distinct on & second stage") {
@@ -492,8 +492,8 @@ select b, n |> select n join @udf(b) as @udf on true
     // analysis to preserve ordering before imposing one, we're good.
     val expectedAnalysisWithPreservation = analyze(tf, "twocol", "select distinct on (text, num*2) text, num, num*2 as num_2 order by num_2 desc |> select text, num order by num_2 desc, text, num")
 
-    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
-    analysis.preserveOrdering.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysisWithPreservation.statement))
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.preserveOrdering.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysisWithPreservation.statement))
   }
 
   test("impose ordering - partial distinct on & second stage with PK") {
@@ -510,8 +510,8 @@ select b, n |> select n join @udf(b) as @udf on true
     // through and use it to disambiguate the order by.
     val expectedAnalysisWithPreservation = analyze(tf, "twocol", "select distinct on (text, num*2) text, num, num*2 as num_2, :id order by num_2 desc |> select text, num order by num_2 desc, :id")
 
-    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
-    analysis.preserveOrdering.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysisWithPreservation.statement))
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.preserveOrdering.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysisWithPreservation.statement))
   }
 
   test("impose ordering - non-distinct order by") {
@@ -522,7 +522,7 @@ select b, n |> select n join @udf(b) as @udf on true
     val analysis = analyze(tf, "twocol", "select distinct on (text) text, num order by text, num*3 desc")
     val expectedAnalysis = analyze(tf, "twocol", "select distinct on (text) text, num order by text, num*3 desc, num")
 
-    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("impose ordering - indistinct") {
@@ -533,7 +533,7 @@ select b, n |> select n join @udf(b) as @udf on true
     val analysis = analyze(tf, "twocol", "select text, num*2 order by text, num")
     val expectedAnalysis = analyze(tf, "twocol", "select text, num*2 order by text, num, num*2")
 
-    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("impose ordering - join") {
@@ -545,7 +545,7 @@ select b, n |> select n join @udf(b) as @udf on true
     val analysis = analyze(tf, "twocol", "select text, num*2 join @threecol on true order by num")
     val expectedAnalysis = analyze(tf, "twocol", "select text, num*2 join @threecol on true order by num, :id, @threecol.:id")
 
-    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("impose ordering - union") {
@@ -560,7 +560,7 @@ select b, n |> select n join @udf(b) as @udf on true
     val analysis = analyze(tf, "twocol", "select * union select * from @altcol")
     val expectedAnalysis = analyze(tf, "union", "select * order by text, num")
 
-    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("impose ordering - unorderable") {
@@ -571,7 +571,7 @@ select b, n |> select n join @udf(b) as @udf on true
     val analysis = analyze(tf, "threecol", "select *")
     val expectedAnalysis = analyze(tf, "threecol", "select * order by text, num")
 
-    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("impose ordering - across stages") {
@@ -582,7 +582,7 @@ select b, n |> select n join @udf(b) as @udf on true
     val analysis = analyze(tf, "twocol", "select text, num, num + num as num2 |> select text, num2 order by num2")
     val expectedAnalysis = analyze(tf, "twocol", "select text, num, num+num, :id |> select text, num_num order by num_num, :id")
 
-    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("impose ordering - join and follow-up stage") {
@@ -594,7 +594,7 @@ select b, n |> select n join @udf(b) as @udf on true
     val analysis = analyze(tf, "twocol", "select *, @threecol.* join @threecol on true |> select text, b order by num")
     val expectedAnalysis = analyze(tf, "twocol", "select *, @threecol.*, :id, @threecol.:id as tcid join @threecol on true |> select text, b order by num, :id, tcid")
 
-    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("impose ordering - multiple primary keys") {
@@ -605,7 +605,7 @@ select b, n |> select n join @udf(b) as @udf on true
     val analysis = analyze(tf, "twocol", "select num |> select 1")
     val expectedAnalysis = analyze(tf, "twocol", "select num, :id, text |> select 1 order by :id")
 
-    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("impose ordering - already selected") {
@@ -616,7 +616,7 @@ select b, n |> select n join @udf(b) as @udf on true
     val analysis = analyze(tf, "twocol", "select text, num |> select 1")
     val expectedAnalysis = analyze(tf, "twocol", "select text, num, :id |> select 1 order by :id") // it'll choose :id to order by just because it comes first
 
-    analysis.imposeOrdering(TestTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("addLimitOffset - combined tables") {

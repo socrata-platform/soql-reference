@@ -59,7 +59,7 @@ trait AggregateFunctionCallImpl[MT <: MetaTypes] { this: AggregateFunctionCall[M
       args = args.map(_.doRewriteDatabaseNames(state)),
       filter = filter.map(_.doRewriteDatabaseNames(state)),
       distinct = distinct
-    )(position)
+    )(state.convert(position))
 
   private[analyzer2] def doRelabel(state: RelabelState) =
     copy(args = args.map(_.doRelabel(state)),
@@ -78,11 +78,11 @@ trait AggregateFunctionCallImpl[MT <: MetaTypes] { this: AggregateFunctionCall[M
     args.map(_.debugDoc(ev)).encloseNesting(preArgs, d",", postArgs)
   }
 
-  private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
+  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT] = copy()(position = position.logicallyReposition(source, p))
 }
 
 trait OAggregateFunctionCallImpl { this: AggregateFunctionCall.type =>
-  implicit def serialize[MT <: MetaTypes](implicit expr: Writable[Expr[MT]], mf: Writable[MonomorphicFunction[MT#ColumnType]]) = new Writable[AggregateFunctionCall[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit expr: Writable[Expr[MT]], mf: Writable[MonomorphicFunction[MT#ColumnType]], rns: Writable[MT#ResourceNameScope]) = new Writable[AggregateFunctionCall[MT]] {
     def writeTo(buffer: WriteBuffer, afc: AggregateFunctionCall[MT]): Unit = {
       buffer.write(afc.function)
       buffer.write(afc.args)
@@ -92,7 +92,7 @@ trait OAggregateFunctionCallImpl { this: AggregateFunctionCall.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit expr: Readable[Expr[MT]], mf: Readable[MonomorphicFunction[MT#ColumnType]]) = new Readable[AggregateFunctionCall[MT]] with ExpressionUniverse[MT] {
+  implicit def deserialize[MT <: MetaTypes](implicit expr: Readable[Expr[MT]], mf: Readable[MonomorphicFunction[MT#ColumnType]], rns: Readable[MT#ResourceNameScope]) = new Readable[AggregateFunctionCall[MT]] with ExpressionUniverse[MT] {
     def readFrom(buffer: ReadBuffer): AggregateFunctionCall = {
       val function = buffer.read[MonomorphicFunction]()
       val args = buffer.read[Seq[Expr]]()

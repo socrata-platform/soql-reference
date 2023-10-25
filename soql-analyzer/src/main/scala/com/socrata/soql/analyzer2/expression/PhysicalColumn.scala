@@ -33,7 +33,7 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
       tableName = state.convert(tableName),
       column = state.convert(table, column),
       typ = state.changesOnlyLabels.convertCT(typ)
-    )(position)
+    )(state.convert(position))
 
   private[analyzer2] def doRelabel(state: RelabelState) =
     this
@@ -44,13 +44,14 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
     (table.debugDoc ++ d"." ++ column.debugDoc(ev.columnNameImpl)).
       annotate(Annotation.ColumnRef(table, column))
 
-  private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
+  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT] =
+    copy()(position = position.logicallyReposition(source, p))
 
   def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] = Some(this).filter(predicate)
 }
 
 trait OPhysicalColumnImpl { this: PhysicalColumn.type =>
-  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#ColumnType], writableDTN : Writable[MT#DatabaseTableNameImpl], writableDCN : Writable[MT#DatabaseColumnNameImpl]): Writable[PhysicalColumn[MT]] = new Writable[PhysicalColumn[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#ColumnType], writableDTN : Writable[MT#DatabaseTableNameImpl], writableDCN : Writable[MT#DatabaseColumnNameImpl], writableRNS: Writable[MT#ResourceNameScope]): Writable[PhysicalColumn[MT]] = new Writable[PhysicalColumn[MT]] {
     def writeTo(buffer: WriteBuffer, c: PhysicalColumn[MT]): Unit = {
       buffer.write(c.table)
       buffer.write(c.tableName)
@@ -60,7 +61,7 @@ trait OPhysicalColumnImpl { this: PhysicalColumn.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#ColumnType], readableDTN : Readable[MT#DatabaseTableNameImpl], readableDCN : Readable[MT#DatabaseColumnNameImpl]): Readable[PhysicalColumn[MT]] = new Readable[PhysicalColumn[MT]] with LabelUniverse[MT] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#ColumnType], readableDTN : Readable[MT#DatabaseTableNameImpl], readableDCN : Readable[MT#DatabaseColumnNameImpl], readableRNS: Readable[MT#ResourceNameScope]): Readable[PhysicalColumn[MT]] = new Readable[PhysicalColumn[MT]] with LabelUniverse[MT] {
     def readFrom(buffer: ReadBuffer): PhysicalColumn[MT] = {
       PhysicalColumn(
         table = buffer.read[AutoTableLabel](),

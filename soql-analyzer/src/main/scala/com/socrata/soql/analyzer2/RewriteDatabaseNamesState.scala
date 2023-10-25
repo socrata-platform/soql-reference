@@ -19,6 +19,11 @@ private[analyzer2] case class RewriteDatabaseNamesState[MT1 <: MetaTypes, MT2 <:
   type DatabaseColumnName1 = types.DatabaseColumnName[MT1]
   type DatabaseColumnName2 = types.DatabaseColumnName[MT2]
 
+  type AtomicPositionInfo1 = AtomicPositionInfo[MT1#ResourceNameScope]
+  type AtomicPositionInfo2 = AtomicPositionInfo[MT2#ResourceNameScope]
+  type FuncallPositionInfo1 = FuncallPositionInfo[MT1#ResourceNameScope]
+  type FuncallPositionInfo2 = FuncallPositionInfo[MT2#ResourceNameScope]
+
   private val tableNames = new scala.collection.mutable.HashMap[DatabaseTableName1, DatabaseTableName2]
   private val columnNames = new scala.collection.mutable.HashMap[(DatabaseTableName1, DatabaseColumnName1), DatabaseColumnName2]
 
@@ -54,4 +59,10 @@ private[analyzer2] case class RewriteDatabaseNamesState[MT1 <: MetaTypes, MT2 <:
       case None => throw new Exception("realTables doesn't contain an AutoTableLabel that was found???")
     }
   }
+
+  def convert(pos: AtomicPositionInfo1): AtomicPositionInfo2 =
+    pos.asInstanceOf[AtomicPositionInfo2] // SAFETY: a position contains no database names
+
+  def convert(pos: FuncallPositionInfo1): FuncallPositionInfo2 =
+    pos.asInstanceOf[FuncallPositionInfo2] // SAFETY: a position contains no database names
 }

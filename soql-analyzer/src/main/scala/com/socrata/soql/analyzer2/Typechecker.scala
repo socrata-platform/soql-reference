@@ -7,7 +7,7 @@ import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, CovariantSet}
 import com.socrata.soql.environment.{ColumnName, HoleName, ResourceName, TableName, FunctionName, Provenance}
 import com.socrata.soql.functions.FunctionType
-import com.socrata.soql.typechecker.{TypeInfoMetaProjection, FunctionInfo, FunctionCallTypechecker, Passed, TypeMismatchFailure}
+import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, FunctionCallTypechecker, Passed, TypeMismatchFailure}
 
 class Typechecker[MT <: MetaTypes](
   sourceName: Option[types.ScopedResourceName[MT]],
@@ -15,9 +15,9 @@ class Typechecker[MT <: MetaTypes](
   primaryTable: Option[Provenance],
   env: Environment[MT],
   namedExprs: Map[ColumnName, Expr[MT]],
-  udfParams: Map[HoleName, Position => Expr[MT]],
+  udfParams: Map[HoleName, (Option[types.ScopedResourceName[MT]], Position) => Expr[MT]],
   userParameters: UserParameters[MT#ColumnType, MT#ColumnValue],
-  typeInfo: TypeInfoMetaProjection[MT],
+  typeInfo: TypeInfo2[MT],
   functionInfo: FunctionInfo[MT#ColumnType]
 ) extends ExpressionUniverse[MT] {
   type Error = TypecheckError[RNS]
@@ -138,14 +138,14 @@ class Typechecker[MT <: MetaTypes](
       case col@ast.ColumnOrAliasRef(None, name) =>
         namedExprs.get(name) match {
           case Some(prechecked) =>
-            Right(Seq(prechecked.reposition(col.position)))
+            Right(Seq(prechecked.reposition(sourceName, col.position)))
           case None =>
             env.lookup(name) match {
               case None => Left(NoSuchColumn(sourceName, col.position, None, name))
               case Some(Environment.LookupResult.Virtual(table, column, typ)) =>
-                Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(col.position))))
+                Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(sourceName, col.position))))
               case Some(Environment.LookupResult.Physical(tableName, tableLabel, column, typ)) =>
-                Right(Seq(PhysicalColumn[MT](tableLabel, tableName, column, typ)(new AtomicPositionInfo(col.position))))
+                Right(Seq(PhysicalColumn[MT](tableLabel, tableName, column, typ)(new AtomicPositionInfo(sourceName, col.position))))
             }
         }
       case col@ast.ColumnOrAliasRef(Some(qual), name) =>
@@ -153,15 +153,15 @@ class Typechecker[MT <: MetaTypes](
         env.lookup(trueQual, name) match {
           case None => Left(NoSuchColumn(sourceName, col.position, Some(trueQual), name))
           case Some(Environment.LookupResult.Virtual(table, column, typ)) =>
-            Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(col.position))))
+            Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(sourceName, col.position))))
           case Some(Environment.LookupResult.Physical(tableName, tableLabel, column, typ)) =>
-            Right(Seq(PhysicalColumn[MT](tableLabel, tableName, column, typ)(new AtomicPositionInfo(col.position))))
+            Right(Seq(PhysicalColumn[MT](tableLabel, tableName, column, typ)(new AtomicPositionInfo(sourceName, col.position))))
         }
       case l: ast.Literal =>
-        squash(typeInfo.potentialExprs(l, primaryTable), l.position)
+        squash(typeInfo.potentialExprs(l, sourceName, primaryTable), l.position)
       case hole@ast.Hole.UDF(name) =>
         udfParams.get(name) match {
-          case Some(expr) => Right(Seq(expr(hole.position)))
+          case Some(expr) => Right(Seq(expr(sourceName, hole.position)))
           case None => Left(UnknownUDFParameter(sourceName, hole.position, name))
         }
       case hole@ast.Hole.SavedQuery(name, view) =>
@@ -181,8 +181,8 @@ class Typechecker[MT <: MetaTypes](
       }
 
     paramSet.flatMap(_.get(name)) match {
-      case Some(UserParameters.Null(t)) => Right(Seq(NullLiteral(t)(new AtomicPositionInfo(position, NoPosition))))
-      case Some(UserParameters.Value(v)) => Right(Seq(LiteralValue(v)(new AtomicPositionInfo(position, NoPosition))(typeInfo.hasType)))
+      case Some(UserParameters.Null(t)) => Right(Seq(NullLiteral(t)(new AtomicPositionInfo(sourceName, position, None, NoPosition))))
+      case Some(UserParameters.Value(v)) => Right(Seq(LiteralValue(v)(new AtomicPositionInfo(sourceName, position, None, NoPosition))(typeInfo.hasType)))
       case None => Left(UnknownUserParameter(sourceName, position, canonicalView, name))
     }
   }
@@ -254,7 +254,7 @@ class Typechecker[MT <: MetaTypes](
               case FunctionType.Normal =>
                 return Left(NonAggregateFunction(sourceName, fc.functionNamePosition, fc.functionName))
               case FunctionType.Aggregate =>
-                AggregateFunctionCall(f, params, false, Some(boolExpr))(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
+                AggregateFunctionCall(f, params, false, Some(boolExpr))(new FuncallPositionInfo(sourceName, fc.position, fc.functionNamePosition))
             }
           case (maybeFilter, Some((partitions, orderings, frames))) =>
             val frameAllowed =
@@ -369,15 +369,15 @@ class Typechecker[MT <: MetaTypes](
               // TODO: reject once we've verified that this isn't being used by anything
             }
 
-            WindowedFunctionCall(f, params, maybeFilter, partitions, orderings, parsedFrames)(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
+            WindowedFunctionCall(f, params, maybeFilter, partitions, orderings, parsedFrames)(new FuncallPositionInfo(sourceName, fc.position, fc.functionNamePosition))
           case (None, None) =>
             f.functionType match {
               case FunctionType.Window(_) =>
                 return Left(RequiresWindow(sourceName, fc.functionNamePosition, fc.functionName))
               case FunctionType.Aggregate =>
-                AggregateFunctionCall(f, params, false, None)(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
+                AggregateFunctionCall(f, params, false, None)(new FuncallPositionInfo(sourceName, fc.position, fc.functionNamePosition))
               case FunctionType.Normal =>
-                FunctionCall(f, params)(new FuncallPositionInfo(fc.position, fc.functionNamePosition))
+                FunctionCall(f, params)(new FuncallPositionInfo(sourceName, fc.position, fc.functionNamePosition))
             }
         }
       }

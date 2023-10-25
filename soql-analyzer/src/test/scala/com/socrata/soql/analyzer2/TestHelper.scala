@@ -17,7 +17,7 @@ object TestHelper {
     type DatabaseColumnNameImpl = String
   }
 
-  val testTypeInfoProjection = TestTypeInfo.metaProject[TestMT]
+  val testTypeInfo = new TestTypeInfo[TestMT]
 
   object TestProvenanceMapper extends types.ProvenanceMapper[TestMT] {
     def fromProvenance(prov: Provenance) = DatabaseTableName(prov.value)
@@ -28,7 +28,9 @@ object TestHelper {
 trait TestHelper { this: Assertions =>
   type TestMT = TestHelper.TestMT
 
-  implicit val hasType = TestHelper.testTypeInfoProjection.hasType
+  val testTypeInfo = TestHelper.testTypeInfo
+
+  implicit val hasType = testTypeInfo.hasType
   def t(n: Int) = AutoTableLabel.forTest(n)
   def c(n: Int) = AutoColumnLabel.forTest(n)
   def rn(n: String) = ResourceName(n)
@@ -48,7 +50,7 @@ trait TestHelper { this: Assertions =>
       case _ => false
     }
 
-  val analyzer = new SoQLAnalyzer[TestMT](TestTypeInfo, TestFunctionInfo, TestHelper.TestProvenanceMapper)
+  val analyzer = new SoQLAnalyzer[TestMT](testTypeInfo, TestFunctionInfo, TestHelper.TestProvenanceMapper)
   val systemColumnPreservingAnalyzer = analyzer.preserveSystemColumns { (_, expr) =>
     expr.typ match {
       case TestNumber =>

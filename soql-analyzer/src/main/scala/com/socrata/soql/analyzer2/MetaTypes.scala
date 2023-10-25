@@ -99,6 +99,10 @@ trait LabelUniverse[MT <: MetaTypes] extends MetaTypeHelper[MT] {
   type FromProvenance = analyzer2.FromProvenance[MT#DatabaseTableNameImpl]
   type ProvenanceMapper = analyzer2.ProvenanceMapper[MT#DatabaseTableNameImpl]
 
+  type PositionInfo = analyzer2.PositionInfo[MT#ResourceNameScope]
+  type AtomicPositionInfo = analyzer2.AtomicPositionInfo[MT#ResourceNameScope]
+  type FuncallPositionInfo = analyzer2.FuncallPositionInfo[MT#ResourceNameScope]
+
   private[analyzer2] type IsomorphismState = analyzer2.IsomorphismState[MT]
   private[analyzer2] type RewriteDatabaseNamesState[MT2 <: MetaTypes] = analyzer2.RewriteDatabaseNamesState[MT, MT2]
 }
