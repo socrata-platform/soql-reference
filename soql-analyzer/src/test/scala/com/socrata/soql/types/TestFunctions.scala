@@ -21,10 +21,10 @@ object TestFunctions {
   private val AllTypes = CovariantSet.from(TestType.typesByName.values.toSet)
 
   // helpers to guide type inference (specifically forces TestType to be inferred)
-  private def mf(identity: String, name: FunctionName, params: Seq[TestType], varargs: Seq[TestType], result: TestType, isAggregate: Boolean = false, needsWindow: Boolean = false) =
-    new MonomorphicFunction(identity, name, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow)(Function.Doc.empty).function
-  private def f(identity: String, name: FunctionName, constraints: Map[String, CovariantSet[TestType]], params: Seq[TypeLike[TestType]], varargs: Seq[TypeLike[TestType]], result: TypeLike[TestType], isAggregate: Boolean = false, needsWindow: Boolean = false) =
-    Function(identity, name, constraints, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow, Function.Doc.empty)
+  private def mf(identity: String, name: FunctionName, params: Seq[TestType], varargs: Seq[TestType], result: TestType, functionType: FunctionType = FunctionType.Normal) =
+    new MonomorphicFunction(identity, name, params, varargs, result, functionType)(Function.Doc.empty).function
+  private def f(identity: String, name: FunctionName, constraints: Map[String, CovariantSet[TestType]], params: Seq[TypeLike[TestType]], varargs: Seq[TypeLike[TestType]], result: TypeLike[TestType], functionType: FunctionType = FunctionType.Normal) =
+    Function(identity, name, constraints, params, varargs, result, functionType, Function.Doc.empty)
 
   val TextToLocation = mf("text to location", SpecialFunctions.Cast(TestLocation.name), Seq(TestText), Seq.empty, TestLocation)
 
@@ -35,16 +35,16 @@ object TestFunctions {
   val Gt = f(">", SpecialFunctions.Operator(">"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
   val Lt = f("<", SpecialFunctions.Operator("<"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
 
-  val Max = f("max", FunctionName("max"), Map("a" -> Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
-  val Sum = f("sum", FunctionName("sum"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
-  val Avg = f("avg", FunctionName("avg"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)
-  val CountStar = mf("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, TestNumber, isAggregate = true)
+  val Max = f("max", FunctionName("max"), Map("a" -> Ordered), Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Aggregate)
+  val Sum = f("sum", FunctionName("sum"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Aggregate)
+  val Avg = f("avg", FunctionName("avg"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Aggregate)
+  val CountStar = mf("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, TestNumber, FunctionType.Aggregate)
 
-  val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, TestNumber, needsWindow = true)
+  val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, TestNumber, FunctionType.Window(frameAllowed = false))
 
-  val Mul = f("*", SpecialFunctions.Operator("*"), Map("a" -> NumLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"), isAggregate = false)
+  val Mul = f("*", SpecialFunctions.Operator("*"), Map("a" -> NumLike), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"))
 
-  val And = f("and", SpecialFunctions.Operator("and"), Map.empty, Seq(FixedType(TestBoolean), FixedType(TestBoolean)), Seq.empty, FixedType(TestBoolean), isAggregate = false)
+  val And = f("and", SpecialFunctions.Operator("and"), Map.empty, Seq(FixedType(TestBoolean), FixedType(TestBoolean)), Seq.empty, FixedType(TestBoolean))
 
   val SignedMagnitude10 = f("signed_magnitude_10", FunctionName("signed_magnitude_10"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))
   val SignedMagnitudeLinear = f("signed_magnitude_linear", FunctionName("signed_magnitude_linear"), Map("a" -> NumLike, "b" -> NumLike), Seq(VariableType("a"), VariableType("b")), Seq.empty, VariableType("a"))

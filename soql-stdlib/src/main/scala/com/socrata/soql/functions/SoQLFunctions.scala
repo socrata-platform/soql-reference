@@ -28,9 +28,8 @@ object SoQLFunctions {
     params: Seq[SoQLType],
     varargs: Seq[SoQLType],
     result: SoQLType,
-    isAggregate: Boolean = false,
-    needsWindow: Boolean = false)(doc: String, examples: Example*) =
-    new MonomorphicFunction(identity, name, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow)(Function.Doc(doc, examples, Function.Doc.Normal)).function
+    functionType: FunctionType = FunctionType.Normal)(doc: String, examples: Example*) =
+    new MonomorphicFunction(identity, name, params, varargs, result, functionType)(Function.Doc(doc, examples, Function.Doc.Normal)).function
   private def f(
     identity: String,
     name: FunctionName,
@@ -38,10 +37,9 @@ object SoQLFunctions {
     params: Seq[TypeLike[SoQLType]],
     varargs: Seq[TypeLike[SoQLType]],
     result: TypeLike[SoQLType],
-    isAggregate: Boolean = false,
-    needsWindow: Boolean = false
+    functionType: FunctionType = FunctionType.Normal
   )(doc: String, examples: Example*) =
-    Function(identity, name, constraints, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow, Function.Doc(doc, examples, Function.Doc.Normal))
+    Function(identity, name, constraints, params, varargs, result, functionType, Function.Doc(doc, examples, Function.Doc.Normal))
   private def field(source: SoQLType, field: String, result: SoQLType) =
     mf(
       source.name.name + "_" + field,
@@ -178,19 +176,19 @@ object SoQLFunctions {
 
   val UnionAggPt = f("unionAggPt", FunctionName("spatial_union"), Map("a" -> PointLike),
                      Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiPoint),
-                     isAggregate = true)(
+                     FunctionType.Aggregate)(
     "Merge groups of (multi)points into single multipoints")
   val UnionAggLine = f("unionAggLine", FunctionName("spatial_union"), Map("a" -> LineLike),
                        Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiLine),
-                       isAggregate = true)(
+                       FunctionType.Aggregate)(
     "Merge groups of (multi)lines into single multilines")
   val UnionAggPoly = f("unionAggPoly", FunctionName("spatial_union"), Map("a" -> PolygonLike),
                        Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiPolygon),
-                       isAggregate = true)(
+                       FunctionType.Aggregate)(
     "Merge groups of (multi)polygons into a single multipolygon")
 
   val Extent = f("extent", FunctionName("extent"), Map("a" -> GeospatialLike),
-    Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiPolygon), isAggregate = true)(
+    Seq(VariableType("a")), Seq.empty, FixedType(SoQLMultiPolygon), FunctionType.Aggregate)(
     "Return a bounding box that encloses a set of geometries")
 
   val ConcaveHull = f("concave_hull", FunctionName("concave_hull"), Map("a" -> GeospatialLike, "b" -> RealNumLike),
@@ -202,8 +200,7 @@ object SoQLFunctions {
     Seq(VariableType("a")),
     Seq.empty,
     FixedType(SoQLMultiPolygon),
-    isAggregate = false,
-    needsWindow = false,
+    FunctionType.Normal,
     Function.Doc(
       """
       Return the minimum convex geometry that encloses all of the geometries within a set
@@ -344,46 +341,46 @@ object SoQLFunctions {
     "Return the largest of its arguments, ignoring nulls"
   )
 
-  val Min = f("min", FunctionName("min"), Map("a" -> (Ordered - SoQLBoolean)), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
+  val Min = f("min", FunctionName("min"), Map("a" -> (Ordered - SoQLBoolean)), Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Aggregate)(
     "Return the minimum of a given set of values"
   )
-  val Max = f("max", FunctionName("max"), Map("a" -> (Ordered - SoQLBoolean)), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
+  val Max = f("max", FunctionName("max"), Map("a" -> (Ordered - SoQLBoolean)), Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Aggregate)(
     "Return the maximum of a given set of values"
   )
-  val CountStar = mf("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, SoQLNumber, isAggregate = true)(
+  val CountStar = mf("count(*)", SpecialFunctions.StarFunc("count"), Seq(), Seq.empty, SoQLNumber, FunctionType.Aggregate)(
     "Return a count of a given set of records"
   )
-  val Count = f("count", FunctionName("count"), Map.empty, Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), isAggregate = true)(
+  val Count = f("count", FunctionName("count"), Map.empty, Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), FunctionType.Aggregate)(
     "Return a count of a given set of records"
   )
-  val CountDistinct = f("count_distinct", FunctionName("count_distinct"), Map.empty, Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), isAggregate = true)(
+  val CountDistinct = f("count_distinct", FunctionName("count_distinct"), Map.empty, Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), FunctionType.Aggregate)(
     "Return a distinct count of a given set of records"
   )
-  val Sum = f("sum", FunctionName("sum"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
+  val Sum = f("sum", FunctionName("sum"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Aggregate)(
     "Return the sum of a given set of numbers"
   )
-  val Avg = f("avg", FunctionName("avg"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
+  val Avg = f("avg", FunctionName("avg"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Aggregate)(
     "Return the average of a given set of numbers"
   )
-  val Median = f("median", FunctionName("median"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
+  val Median = f("median", FunctionName("median"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Aggregate)(
     "Return a median of a given set of numbers"
   )
-  val MedianDisc = f("median_disc", FunctionName("median"), Map("a" -> (Ordered -- NumLike)), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
+  val MedianDisc = f("median_disc", FunctionName("median"), Map("a" -> (Ordered -- NumLike)), Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Aggregate)(
     "Return a discrete median of a given set of numbers"
   )
-  val RegrIntercept = mf("regr_intercept", FunctionName("regr_intercept"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber, isAggregate = true) (
+  val RegrIntercept = mf("regr_intercept", FunctionName("regr_intercept"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber, FunctionType.Aggregate) (
     "Return the Ordinary Least Squares Regression intercept of (y, x) columns"
   )
-  val RegrR2 = mf("regr_r2", FunctionName("regr_r2"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber, isAggregate = true) (
+  val RegrR2 = mf("regr_r2", FunctionName("regr_r2"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber, FunctionType.Aggregate) (
     "Return the Coefficient of Determination (R^2) value of the linear regression model"
   )
-  val RegrSlope = mf("regr_slope", FunctionName("regr_slope"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber, isAggregate = true) (
+  val RegrSlope = mf("regr_slope", FunctionName("regr_slope"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber, FunctionType.Aggregate) (
     "Return the Ordinary Least Squares Regression slope of (y, x) columns"
   )
-  val StddevPop = f("stddev_pop", FunctionName("stddev_pop"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
+  val StddevPop = f("stddev_pop", FunctionName("stddev_pop"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Aggregate)(
     "Return the population standard deviation of a given set of numbers"
   )
-  val StddevSamp = f("stddev_samp", FunctionName("stddev_samp"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), isAggregate = true)(
+  val StddevSamp = f("stddev_samp", FunctionName("stddev_samp"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Aggregate)(
     "Return a sampled standard deviation of a given set of numbers"
   )
 
@@ -565,40 +562,40 @@ object SoQLFunctions {
     Example("Remove accents from a geographic name", "unaccent('Sainte-Thérèse, Québec') => 'Sainte-Therese, Quebec'", "")
   )
 
-  val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, SoQLNumber, needsWindow = true)(
+  val RowNumber = mf("row_number", FunctionName("row_number"), Seq(), Seq.empty, SoQLNumber, FunctionType.Window(frameAllowed = false))(
     NoDocs
   )
-  val Rank = mf("rank", FunctionName("rank"), Seq(), Seq.empty, SoQLNumber, needsWindow = true)(
+  val Rank = mf("rank", FunctionName("rank"), Seq(), Seq.empty, SoQLNumber, FunctionType.Window(frameAllowed = true))(
     NoDocs
   )
-  val DenseRank = mf("dense_rank", FunctionName("dense_rank"), Seq(), Seq.empty, SoQLNumber, needsWindow = true)(
+  val DenseRank = mf("dense_rank", FunctionName("dense_rank"), Seq(), Seq.empty, SoQLNumber, FunctionType.Window(frameAllowed = false))(
     NoDocs
   )
-  val FirstValue = f("first value", FunctionName("first_value"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
+  val FirstValue = f("first value", FunctionName("first_value"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Window(frameAllowed = true))(
     NoDocs
   )
-  val LastValue = f("last value", FunctionName("last_value"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
+  val LastValue = f("last value", FunctionName("last_value"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Window(frameAllowed = true))(
     NoDocs
   )
-  val Lead = f("lead", FunctionName("lead"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
+  val Lead = f("lead", FunctionName("lead"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Window(frameAllowed = true))(
     NoDocs
   )
-  val LeadOffset = f("lead_offset", FunctionName("lead"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber)), Seq.empty, VariableType("a"), needsWindow = true)(
+  val LeadOffset = f("lead_offset", FunctionName("lead"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber)), Seq.empty, VariableType("a"), FunctionType.Window(frameAllowed = true))(
     NoDocs
   )
-  val LeadOffsetDefault = f("lead_offset_default", FunctionName("lead"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber), VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
+  val LeadOffsetDefault = f("lead_offset_default", FunctionName("lead"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber), VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Window(frameAllowed = true))(
     NoDocs
   )
-  val Lag = f("lag", FunctionName("lag"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
+  val Lag = f("lag", FunctionName("lag"), Map.empty, Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Window(frameAllowed = false))(
     NoDocs
   )
-  val LagOffset = f("lag_offset", FunctionName("lag"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber)), Seq.empty, VariableType("a"), needsWindow = true)(
+  val LagOffset = f("lag_offset", FunctionName("lag"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber)), Seq.empty, VariableType("a"), FunctionType.Window(frameAllowed = false))(
     NoDocs
   )
-  val LagOffsetDefault = f("lag_offset_default", FunctionName("lag"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber), VariableType("a")), Seq.empty, VariableType("a"), needsWindow = true)(
+  val LagOffsetDefault = f("lag_offset_default", FunctionName("lag"), Map.empty, Seq(VariableType("a"), FixedType(SoQLNumber), VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Window(frameAllowed = false))(
     NoDocs
   )
-  val Ntile = f("ntile", FunctionName("ntile"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), needsWindow=true)(
+  val Ntile = f("ntile", FunctionName("ntile"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, FixedType(SoQLNumber), FunctionType.Window(frameAllowed = false))(
     NoDocs
   )
   val WidthBucket = mf("width_bucket", FunctionName("width_bucket"), Seq(SoQLNumber, SoQLNumber, SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber)(

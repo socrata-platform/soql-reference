@@ -25,9 +25,9 @@ package object types {
   type MonomorphicFunction[MT <: MetaTypes] = functions.MonomorphicFunction[MT#ColumnType]
 
   type TypeInfo[MT <: MetaTypes] = typechecker.TypeInfo[MT#ColumnType, MT#ColumnValue]
+  type TypeInfo2[MT <: MetaTypes] = typechecker.TypeInfo2[MT]
   type FunctionInfo[MT <: MetaTypes] = typechecker.FunctionInfo[MT#ColumnType]
   type HasType[MT <: MetaTypes] = analyzer2.HasType[MT#ColumnValue, MT#ColumnType]
-  type TypeInfoMetaProjection[MT <: MetaTypes] = typechecker.TypeInfoMetaProjection[MT]
 
   type ScopedResourceName[MT <: MetaTypes] = environment.ScopedResourceName[MT#ResourceNameScope]
   type NameEntry[MT <: MetaTypes] = analyzer2.NameEntry[MT#ColumnType]

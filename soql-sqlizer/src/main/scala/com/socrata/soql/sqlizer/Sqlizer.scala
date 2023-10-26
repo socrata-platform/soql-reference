@@ -4,6 +4,7 @@ import scala.collection.compat._
 import scala.collection.mutable.Stack
 import scala.util.parsing.input.{Position, NoPosition}
 import scala.reflect.ClassTag
+import scala.util.control.ControlThrowable
 
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection.OrderedMap
@@ -89,14 +90,17 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
   def apply(
     analysis: SoQLAnalysis[MT],
     ec: ExtraContext
-  )(implicit ct: ClassTag[CV]): Sqlizer.Result[MT] = {
-    val (sql, augmentedSchema, dynamicContext) = sqlize(analysis, true, ec)
-    Sqlizer.Result(
-      sql,
-      new ResultExtractor(augmentedSchema),
-      ec.finish()
-    )
+  )(implicit ct: ClassTag[CV]): Either[SqlizerError, Sqlizer.Result[MT]] = {
+    sqlize(analysis, true, ec).map { case (sql, augmentedSchema, dynamicContext) =>
+      Sqlizer.Result(
+        sql,
+        new ResultExtractor(augmentedSchema),
+        ec.finish()
+      )
+    }
   }
+
+  private class Bail(val err: SqlizerError) extends ControlThrowable
 
   // This produces a SQL statement, but doesn't necessarily apply any
   // postprocessing transforms to the final output columns (which you
@@ -106,7 +110,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
     analysis: SoQLAnalysis[MT],
     rewriteOutputColumns: Boolean,
     ec: ExtraContext
-  ): (Doc, AugmentedSchema, DynamicContext) = {
+  ): Either[SqlizerError, (Doc, AugmentedSchema, DynamicContext)] = {
     val rewritten = rewriteSearch(analysis.statement)
     val repFor = mkRepProvider(this, analysis.physicalTableMap, ec)
     val dynamicContext = Sqlizer.DynamicContext[MT](
@@ -114,12 +118,16 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
       ProvenanceTracker(rewritten, e => repFor(e.typ).provenanceOf(e), toProvenance, isRollup),
       analysis.physicalTableMap,
       new GensymProvider(namespace),
-      ec
+      ec,
+      err => throw new Bail(err)
     )
 
-    val (sql, augmentedSchema) = sqlizeStatement(rewritten, Map.empty, dynamicContext, rewriteOutputColumns)
-
-    (sql, augmentedSchema, dynamicContext)
+    try {
+      val (sql, augmentedSchema) = sqlizeStatement(rewritten, Map.empty, dynamicContext, rewriteOutputColumns)
+      Right((sql, augmentedSchema, dynamicContext))
+    } catch {
+      case bail: Bail => Left(bail.err)
+    }
   }
 
   private def sqlizeStatement(
@@ -594,7 +602,8 @@ object Sqlizer {
     provTracker: ProvenanceTracker[MT],
     physicalTableFor: Map[AutoTableLabel, types.DatabaseTableName[MT]],
     gensymProvider: GensymProvider,
-    extraContext: MT#ExtraContext
+    extraContext: MT#ExtraContext,
+    abortSqlization: MT#SqlizerError => Nothing
   )
 
   def positionInfo[MT <: MetaTypes with MetaTypesExt](doc: SimpleDocStream[SqlizeAnnotation[MT]]): Array[Position] = {

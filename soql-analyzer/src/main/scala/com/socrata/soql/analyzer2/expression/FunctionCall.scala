@@ -44,7 +44,7 @@ trait FunctionCallImpl[MT <: MetaTypes] { this: FunctionCall[MT] =>
     this.copy(
       function = state.changesOnlyLabels.convertCTOnly(function),
       args = args.map(_.doRewriteDatabaseNames(state))
-    )(position)
+    )(state.convert(position))
 
   private[analyzer2] def doRelabel(state: RelabelState) =
     copy(args = args.map(_.doRelabel(state)))(position)
@@ -52,11 +52,12 @@ trait FunctionCallImpl[MT <: MetaTypes] { this: FunctionCall[MT] =>
   protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) =
     args.map(_.debugDoc(ev)).encloseHanging(Doc(function.name.name) ++ d"(", d",", d")")
 
-  private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
+  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT] =
+    copy()(position = position.logicallyReposition(source, p))
 }
 
 trait OFunctionCallImpl { this: FunctionCall.type =>
-  implicit def serialize[MT <: MetaTypes](implicit writableExpr: Writable[Expr[MT]], mf: Writable[MonomorphicFunction[MT#ColumnType]]): Writable[FunctionCall[MT]] = new Writable[FunctionCall[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableExpr: Writable[Expr[MT]], mf: Writable[MonomorphicFunction[MT#ColumnType]], rns: Writable[MT#ResourceNameScope]): Writable[FunctionCall[MT]] = new Writable[FunctionCall[MT]] {
     def writeTo(buffer: WriteBuffer, fc: FunctionCall[MT]): Unit = {
       buffer.write(fc.function)
       buffer.write(fc.args)
@@ -64,7 +65,7 @@ trait OFunctionCallImpl { this: FunctionCall.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableExpr: Readable[Expr[MT]], mf: Readable[MonomorphicFunction[MT#ColumnType]]): Readable[FunctionCall[MT]] = new Readable[FunctionCall[MT]] with ExpressionUniverse[MT] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableExpr: Readable[Expr[MT]], mf: Readable[MonomorphicFunction[MT#ColumnType]], rns: Readable[MT#ResourceNameScope]): Readable[FunctionCall[MT]] = new Readable[FunctionCall[MT]] with ExpressionUniverse[MT] {
     def readFrom(buffer: ReadBuffer): FunctionCall = {
       val function = buffer.read[MonomorphicFunction]()
       val args = buffer.read[Seq[Expr]]()

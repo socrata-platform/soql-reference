@@ -28,13 +28,14 @@ trait SelectListReferenceImpl[MT <: MetaTypes] { this: SelectListReference[MT] =
   protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) =
     Doc(index).annotate(Annotation.SelectListReference[MT](index))
 
-  private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
+  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT] =
+    copy()(position = position.logicallyReposition(source, p))
 
   def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] = Some(this).filter(predicate)
 }
 
 trait OSelectListReferenceImpl { this: SelectListReference.type =>
-  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#ColumnType]) = new Writable[SelectListReference[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#ColumnType], writableRNS: Writable[MT#ResourceNameScope]) = new Writable[SelectListReference[MT]] {
     def writeTo(buffer: WriteBuffer, slr: SelectListReference[MT]): Unit = {
       buffer.write(slr.index)
       buffer.write(slr.isAggregated)
@@ -44,7 +45,7 @@ trait OSelectListReferenceImpl { this: SelectListReference.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#ColumnType]) = new Readable[SelectListReference[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#ColumnType], readableRNS: Readable[MT#ResourceNameScope]) = new Readable[SelectListReference[MT]] with LabelUniverse[MT] {
     def readFrom(buffer: ReadBuffer): SelectListReference[MT] = {
       SelectListReference(
         index = buffer.read[Int](),

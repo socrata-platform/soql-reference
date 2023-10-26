@@ -18,18 +18,19 @@ trait NullLiteralImpl[MT <: MetaTypes] { this: NullLiteral[MT] =>
   def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     this.asInstanceOf[NullLiteral[MT2]] // SAFETY: This does not contain any labels
 
-  private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
+  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT] =
+    copy()(position = position.logicallyReposition(source, p))
 }
 
 trait ONullLiteralImpl { this: NullLiteral.type =>
-  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#ColumnType]) = new Writable[NullLiteral[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#ColumnType], writableRNS: Writable[MT#ResourceNameScope]) = new Writable[NullLiteral[MT]] {
     def writeTo(buffer: WriteBuffer, nl: NullLiteral[MT]): Unit = {
       buffer.write(nl.typ)
       buffer.write(nl.position)
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#ColumnType]) = new Readable[NullLiteral[MT]] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#ColumnType], readableRNS: Readable[MT#ResourceNameScope]) = new Readable[NullLiteral[MT]] with LabelUniverse[MT] {
     def readFrom(buffer: ReadBuffer): NullLiteral[MT] = {
       NullLiteral(
         buffer.read[MT#ColumnType]()

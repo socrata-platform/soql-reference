@@ -19,10 +19,10 @@ object TestFunctions {
   private val AllTypes = CovariantSet.from(TestType.typesByName.values.toSet)
 
   // helpers to guide type inference (specifically forces TestType to be inferred)
-  private def mf(identity: String, name: FunctionName, params: Seq[TestType], varargs: Seq[TestType], result: TestType, isAggregate: Boolean = false, needsWindow: Boolean = false) =
-    new MonomorphicFunction(identity, name, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow)(Function.Doc.empty).function
-  private def f(identity: String, name: FunctionName, constraints: Map[String, CovariantSet[TestType]], params: Seq[TypeLike[TestType]], varargs: Seq[TypeLike[TestType]], result: TypeLike[TestType], isAggregate: Boolean = false, needsWindow: Boolean = false) =
-    Function(identity, name, constraints, params, varargs, result, isAggregate = isAggregate, needsWindow = needsWindow, Function.Doc.empty)
+  private def mf(identity: String, name: FunctionName, params: Seq[TestType], varargs: Seq[TestType], result: TestType, functionType: FunctionType = FunctionType.Normal) =
+    new MonomorphicFunction(identity, name, params, varargs, result, functionType)(Function.Doc.empty).function
+  private def f(identity: String, name: FunctionName, constraints: Map[String, CovariantSet[TestType]], params: Seq[TypeLike[TestType]], varargs: Seq[TypeLike[TestType]], result: TypeLike[TestType], functionType: FunctionType = FunctionType.Normal) =
+    Function(identity, name, constraints, params, varargs, result, functionType, Function.Doc.empty)
 
   val Case = f("case", FunctionName("case"),
     Map("a" -> AllTypes),
@@ -46,16 +46,16 @@ object TestFunctions {
   val Gt = f(">", SpecialFunctions.Operator(">"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
   val Lt = f("<", SpecialFunctions.Operator("<"), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(TestBoolean))
 
-  val RowNumber = mf("row_number", FunctionName("row_number"), Nil, Nil, TestNumber, needsWindow = true)
-  val WindowFunction = mf("window_function", FunctionName("window_function"), Nil, Nil, TestNumber, needsWindow = true)
+  val RowNumber = mf("row_number", FunctionName("row_number"), Nil, Nil, TestNumber, FunctionType.Window(frameAllowed = false))
+  val WindowFunction = mf("window_function", FunctionName("window_function"), Nil, Nil, TestNumber, FunctionType.Window(frameAllowed = true))
 
-  val Sum = mf("sum", FunctionName("sum"), Seq(TestNumber), Nil, TestNumber, isAggregate = true)
-  val Avg = mf("avg", FunctionName("avg"), Seq(TestNumber), Nil, TestNumber, isAggregate = true)
-  val Max = mf("max", FunctionName("max"), Seq(TestNumber), Nil, TestNumber, isAggregate = true)
+  val Sum = mf("sum", FunctionName("sum"), Seq(TestNumber), Nil, TestNumber, FunctionType.Aggregate)
+  val Avg = mf("avg", FunctionName("avg"), Seq(TestNumber), Nil, TestNumber, FunctionType.Aggregate)
+  val Max = mf("max", FunctionName("max"), Seq(TestNumber), Nil, TestNumber, FunctionType.Aggregate)
 
-  val Count = f("count", FunctionName("count"), Map.empty, Seq(VariableType("a")), Nil, FixedType(TestNumber), isAggregate = true)
-  val CountStar = f("count(*)", SpecialFunctions.StarFunc("count"), Map.empty, Nil, Nil, FixedType(TestNumber), isAggregate = true)
-  val CountDistinct = f("count_distinct", FunctionName("count_distinct"), Map.empty, Seq(VariableType("a")), Nil, FixedType(TestNumber), isAggregate = true)
+  val Count = f("count", FunctionName("count"), Map.empty, Seq(VariableType("a")), Nil, FixedType(TestNumber), FunctionType.Aggregate)
+  val CountStar = f("count(*)", SpecialFunctions.StarFunc("count"), Map.empty, Nil, Nil, FixedType(TestNumber), FunctionType.Aggregate)
+  val CountDistinct = f("count_distinct", FunctionName("count_distinct"), Map.empty, Seq(VariableType("a")), Nil, FixedType(TestNumber), FunctionType.Aggregate)
 
   // "extract the least signficant 32 bits" and "extract the least
   // significant 8 bits"; these are used for testing the "function

@@ -9,7 +9,7 @@ import com.socrata.soql.environment.FunctionName
 import com.socrata.soql.typechecker.FunctionInfo
 
 case class MonomorphicFunction[+Type](function: Function[Type], bindings: Map[String, Type]) {
-  def this(identity: String, name: FunctionName, parameters: Seq[Type], repeated: Seq[Type], result: Type, isAggregate: Boolean = false, needsWindow: Boolean = false)(doc: Function.Doc) =
+  def this(identity: String, name: FunctionName, parameters: Seq[Type], repeated: Seq[Type], result: Type, functionType: FunctionType)(doc: Function.Doc) =
     this(Function(
       identity,
       name,
@@ -17,8 +17,7 @@ case class MonomorphicFunction[+Type](function: Function[Type], bindings: Map[St
       parameters.map(FixedType(_)),
       repeated.map(FixedType(_)),
       FixedType(result),
-      isAggregate,
-      needsWindow,
+      functionType,
       doc
     ), Map.empty)
 
@@ -34,6 +33,7 @@ case class MonomorphicFunction[+Type](function: Function[Type], bindings: Map[St
   def minArity = function.minArity
   def isVariadic = function.isVariadic
   def result: Type = bind(function.result)
+  def functionType = function.functionType
   def isAggregate = function.isAggregate
   def needsWindow = function.needsWindow
 

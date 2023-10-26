@@ -1,5 +1,6 @@
 package com.socrata.soql.typechecker
 
+import com.socrata.soql.ast
 import com.socrata.soql.ast.{Hole, Literal}
 import com.socrata.soql.environment.{TypeName, Provenance}
 import com.socrata.soql.collection.OrderedSet
@@ -33,32 +34,13 @@ trait TypeInfo[Type, Value] extends TypeInfoCommon[Type, Value] {
   def literalExprFor(value: Value, pos: Position): Option[CoreExpr[Nothing, Type]]
 }
 
-trait TypeInfo2[Type, Value] extends TypeInfoCommon[Type, Value] {
-  def metaProject[MT <: analyzer2.MetaTypes](
-    implicit typeEv: Type =:= MT#ColumnType,
-    typeEvRev: MT#ColumnType =:= Type,
-    valueEv: Value =:= MT#ColumnValue,
-    valueEvRev: MT#ColumnValue =:= Value
-  ): TypeInfoMetaProjection[MT]
-}
-
-abstract class TypeInfoMetaProjection[MT <: analyzer2.MetaTypes] extends analyzer2.MetaTypeHelper[MT] with TypeInfoCommon[MT#ColumnType, MT#ColumnValue] {
-  val unproject: TypeInfo2[CT, CV]
-
-  val hasType: analyzer2.HasType[CV, CT]
-
-  def potentialExprs(l: Literal, currentPrimaryTable: Option[Provenance]): Seq[analyzer2.Expr[MT]]
-  def literalBoolean(b: Boolean, position: Position): analyzer2.Expr[MT]
+trait TypeInfo2[MT <: analyzer2.MetaTypes] extends analyzer2.StatementUniverse[MT] with TypeInfoCommon[MT#ColumnType, MT#ColumnValue] {
+  def potentialExprs(l: ast.Literal, currentSource: Option[ScopedResourceName], currentPrimaryTable: Option[Provenance]): Seq[Expr]
+  def literalBoolean(b: Boolean, currentSource: Option[ScopedResourceName], position: Position): Expr
 
   def boolType: CT
 
-  final override def typeParameterUniverse: OrderedSet[CT] = unproject.typeParameterUniverse
-  final override def typeOf(value: CV): CT = unproject.typeOf(value)
-  final override def typeNameFor(typ: CT): TypeName = unproject.typeNameFor(typ)
-  final override def typeFor(name: TypeName): Option[CT] = unproject.typeFor(name)
-  final override def isOrdered(typ: CT): Boolean = unproject.isOrdered(typ)
-  final override def isBoolean(typ: CT): Boolean = unproject.isBoolean(typ)
-  final override def isGroupable(typ: CT): Boolean = unproject.isGroupable(typ)
-
   def updateProvenance(value: CV)(f: Provenance => Provenance): CV
+
+  def hasType: analyzer2.HasType[CV, CT]
 }

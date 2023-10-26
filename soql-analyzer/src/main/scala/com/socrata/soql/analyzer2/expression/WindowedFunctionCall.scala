@@ -74,7 +74,7 @@ trait WindowedFunctionCallImpl[MT <: MetaTypes] { this: WindowedFunctionCall[MT]
       filter = filter.map(_.doRewriteDatabaseNames(state)),
       partitionBy = partitionBy.map(_.doRewriteDatabaseNames(state)),
       orderBy = orderBy.map(_.doRewriteDatabaseNames(state))
-    )(position)
+    )(state.convert(position))
 
   private[analyzer2] def doRelabel(state: RelabelState) =
     copy(args = args.map(_.doRelabel(state)),
@@ -105,30 +105,31 @@ trait WindowedFunctionCallImpl[MT <: MetaTypes] { this: WindowedFunctionCall[MT]
     args.map(_.debugDoc(ev)).encloseNesting(preArgs, d",", postArgs)
   }
 
-  private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
+  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT] =
+    copy()(position = position.logicallyReposition(source, p))
 }
 
 trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
-  implicit def serialize[MT <: MetaTypes](implicit expr: Writable[Expr[MT]], mf: Writable[MonomorphicFunction[MT#ColumnType]]) = new Writable[WindowedFunctionCall[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit expr: Writable[Expr[MT]], mf: Writable[MonomorphicFunction[MT#ColumnType]], rns: Writable[MT#ResourceNameScope]) = new Writable[WindowedFunctionCall[MT]] {
     def writeTo(buffer: WriteBuffer, wfc: WindowedFunctionCall[MT]): Unit = {
       buffer.write(wfc.function)
       buffer.write(wfc.args)
       buffer.write(wfc.filter)
       buffer.write(wfc.partitionBy)
       buffer.write(wfc.orderBy)
-      buffer.write(wfc.frame)(Writable.option(Frame.serialize))
+      buffer.write(wfc.frame)
       buffer.write(wfc.position)
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit expr: Readable[Expr[MT]], mf: Readable[MonomorphicFunction[MT#ColumnType]]): Readable[WindowedFunctionCall[MT]] = new Readable[WindowedFunctionCall[MT]] with ExpressionUniverse[MT] {
+  implicit def deserialize[MT <: MetaTypes](implicit expr: Readable[Expr[MT]], mf: Readable[MonomorphicFunction[MT#ColumnType]], rns: Readable[MT#ResourceNameScope]): Readable[WindowedFunctionCall[MT]] = new Readable[WindowedFunctionCall[MT]] with ExpressionUniverse[MT] {
     def readFrom(buffer: ReadBuffer): WindowedFunctionCall = {
       val function = buffer.read[MonomorphicFunction]()
       val args = buffer.read[Seq[Expr]]()
       val filter = buffer.read[Option[Expr]]()
       val partitionBy = buffer.read[Seq[Expr]]()
       val orderBy = buffer.read[Seq[OrderBy]]()
-      val frame = buffer.read[Option[Frame]]()(Readable.option(Frame.serialize))
+      val frame = buffer.read[Option[Frame]]()
       val position = buffer.read[FuncallPositionInfo]()
       WindowedFunctionCall(
         function,

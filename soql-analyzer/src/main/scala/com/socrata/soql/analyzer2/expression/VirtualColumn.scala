@@ -31,7 +31,7 @@ trait VirtualColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Virtu
       table = table,
       column = column,
       typ = state.changesOnlyLabels.convertCT(typ)
-    )(position)
+    )(state.convert(position))
 
   private[analyzer2] def doRelabel(state: RelabelState) =
     copy(table = state.convert(table), column = state.convert(column))(position)
@@ -42,13 +42,14 @@ trait VirtualColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Virtu
     (table.debugDoc ++ d"." ++ column.debugDoc).
       annotate(Annotation.ColumnRef[MT](table, column))
 
-  private[analyzer2] def reposition(p: Position): Self[MT] = copy()(position = position.logicallyReposition(p))
+  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT] =
+    copy()(position = position.logicallyReposition(source, p))
 
   def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] = Some(this).filter(predicate)
 }
 
 trait OVirtualColumnImpl { this: VirtualColumn.type =>
-  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#ColumnType]) = new Writable[VirtualColumn[MT]] {
+  implicit def serialize[MT <: MetaTypes](implicit writableCT : Writable[MT#ColumnType], writableRNS: Writable[MT#ResourceNameScope]) = new Writable[VirtualColumn[MT]] {
     def writeTo(buffer: WriteBuffer, c: VirtualColumn[MT]): Unit = {
       buffer.write(c.table)
       buffer.write(c.column)
@@ -57,7 +58,7 @@ trait OVirtualColumnImpl { this: VirtualColumn.type =>
     }
   }
 
-  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#ColumnType]): Readable[VirtualColumn[MT]] = new Readable[VirtualColumn[MT]] with LabelUniverse[MT] {
+  implicit def deserialize[MT <: MetaTypes](implicit readableCT : Readable[MT#ColumnType], readableRNS: Readable[MT#ResourceNameScope]): Readable[VirtualColumn[MT]] = new Readable[VirtualColumn[MT]] with LabelUniverse[MT] {
     def readFrom(buffer: ReadBuffer): VirtualColumn[MT] = {
       VirtualColumn(
         table = buffer.read[AutoTableLabel](),
