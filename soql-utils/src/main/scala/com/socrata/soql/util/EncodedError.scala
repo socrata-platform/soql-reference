@@ -136,6 +136,10 @@ object GenericSoQLError {
     }
 }
 
+trait AbstractErrorEncode[T] {
+  def encodeError(err: T): EncodedError
+}
+
 trait SoQLErrorEncode[T] {
   val code: String
 
@@ -289,7 +293,7 @@ object SoQLErrorCodec {
     def toDecode: ErrorDecodes[T] =
       new ErrorDecodes(branches.map(_.mappable), codes)
 
-    def build: JsonEncode[T] with JsonDecode[T] =
+    def build: JsonEncode[T] with AbstractErrorEncode[T] with JsonDecode[T] =
       branches.reverse.foldLeft(new ErrorHierarchyCodecBuilder[T]) { (builder, branch) =>
         branch.addToCodec(builder)
       }.build
