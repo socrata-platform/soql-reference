@@ -13,11 +13,12 @@ private[util] class ErrorHierarchyCodecBuilder[Root <: AnyRef] private (enc: Err
     new ErrorHierarchyCodecBuilder[Root](enc.branch[T], dec.branch[T])
   }
 
-  def build: JsonEncode[Root] with JsonDecode[Root] = {
-    new JsonEncode[Root] with JsonDecode[Root] {
+  def build: JsonEncode[Root] with AbstractErrorEncode[Root] with JsonDecode[Root] = {
+    new JsonEncode[Root] with AbstractErrorEncode[Root] with JsonDecode[Root] {
       val e = enc.build
       val d = dec.build
       def encode(x: Root) = e.encode(x)
+      def encodeError(x: Root) = e.encodeError(x)
       def decode(x: JValue) = d.decode(x)
     }
   }
