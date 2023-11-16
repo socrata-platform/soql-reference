@@ -21,8 +21,19 @@ trait Rep[MT <: MetaTypes with MetaTypesExt] extends ExpressionUniverse[MT] {
   def virtualColumnRef(col: VirtualColumn, isExpanded: Boolean): ExprSql[MT]
   def nullLiteral(e: NullLiteral): ExprSql[MT]
   def literal(value: LiteralValue): ExprSql[MT] // type of literal will be appropriate for this rep
-  def expandedColumnCount: Int
-  def expandedDatabaseColumns(name: ColumnLabel): Seq[Doc[Nothing]]
+
+  // "physical" vs "expanded" because of providenced columns; for most
+  // column types these will be the same, but provedenced columns add
+  // one synthetic column to the "expanded" representation.  MOST USER
+  // CODE SHOULD USE "expanded", NOT "physical"; MOST SUBCLASSES
+  // SHOULD DEFINE "physical", NOT "expanded"!!!
+  def physicalColumnCount: Int
+  def expandedColumnCount: Int = physicalColumnCount
+  def physicalDatabaseColumns(name: ColumnLabel): Seq[Doc[Nothing]]
+  def expandedDatabaseColumns(name: ColumnLabel) = physicalDatabaseColumns(name)
+  def physicalDatabaseTypes: Seq[Doc[SqlizeAnnotation[MT]]]
+  def expandedDatabaseTypes = physicalDatabaseTypes
+
   def compressedDatabaseColumn(name: ColumnLabel): Doc[Nothing]
   def isProvenanced: Boolean = false
   def provenanceOf(value: LiteralValue): Set[Option[Provenance]]
@@ -54,8 +65,6 @@ trait Rep[MT <: MetaTypes with MetaTypesExt] extends ExpressionUniverse[MT] {
 
   def extractFrom(isExpanded: Boolean): (ResultSet, Int) => (Int, CV)
 
-  def expandedDatabaseTypes: Seq[Doc[SqlizeAnnotation[MT]]]
-
   def indices(tableName: DatabaseTableName, label: ColumnLabel): Seq[Doc[Nothing]]
 }
 object Rep {
@@ -84,9 +93,11 @@ object Rep {
           exprSqlFactory(namespace.tableLabel(col.table) ++ d"." ++ compressedDatabaseColumn(col.column), col)
         }
 
-      override def expandedColumnCount = 1
+      override def physicalColumnCount = 1
 
-      override def expandedDatabaseColumns(name: ColumnLabel) = Seq(compressedDatabaseColumn(name))
+      override def physicalDatabaseColumns(name: ColumnLabel) = Seq(compressedDatabaseColumn(name))
+
+      override def physicalDatabaseTypes = Seq(sqlType)
 
       override def compressedDatabaseColumn(name: ColumnLabel) = namespace.columnBase(name)
 
@@ -105,8 +116,6 @@ object Rep {
       protected def doExtractFrom(rs: ResultSet, dbCol: Int): CV
 
       override def provenanceOf(e: LiteralValue) = Set.empty
-
-      override def expandedDatabaseTypes = Seq(sqlType)
     }
 
     protected abstract class CompoundColumnRep(val typ: CT) extends Rep {
@@ -153,14 +162,16 @@ object Rep {
       override def nullLiteral(e: NullLiteral) =
         exprSqlFactory(Seq(d"null :: text", d"null ::" +#+ primarySqlTyp), e)
 
-      override def expandedColumnCount = 2
+      final override def physicalColumnCount = 1
+      final override def expandedColumnCount = 1 + physicalColumnCount
 
-      override def expandedDatabaseTypes = Seq(d"text", primarySqlTyp)
+      final override def physicalDatabaseTypes = Seq(primarySqlTyp)
+      final override def expandedDatabaseTypes = d"text" +: physicalDatabaseTypes
 
-      override def expandedDatabaseColumns(name: ColumnLabel) = {
-        val base = namespace.columnBase(name)
-        Seq(base ++ d"_provenance", base)
-      }
+      final override def physicalDatabaseColumns(name: ColumnLabel) =
+        Seq(namespace.columnBase(name))
+      final override def expandedDatabaseColumns(name: ColumnLabel) =
+        (namespace.columnBase(name) ++ d"_provenance") +: physicalDatabaseColumns(name)
 
       override def compressedDatabaseColumn(name: ColumnLabel) =
         namespace.columnBase(name)
