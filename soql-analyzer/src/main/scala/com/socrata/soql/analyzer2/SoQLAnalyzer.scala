@@ -116,6 +116,10 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
   private final class State(tableMap: TableMap, userParameters: UserParameters) {
     val labelProvider = new LabelProvider
 
+    class LazyBox[+T](x: => T) {
+      lazy val get: T = x
+    }
+
     sealed abstract class ImplicitFrom {
       def optionalize: ImplicitFrom
     }
@@ -129,15 +133,15 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       // query _must not_ provide one that queries something else, but
       // _may_ do "FROM @this AS @alias"
       case class Required(from: AtomicFrom) extends ImplicitFrom {
-        def optionalize = Optional(from.relabel(labelProvider))
+        def optionalize = Optional(new LazyBox(from.relabel(labelProvider)))
       }
       // "optional" means "there is an implicit FROM, but it is not
       // required to be used in the current context; the current soql
       // query may _either_ do "FROM @this AS @alias" or it may do
       // "FROM (something_else)"; either way a FROM clause _is_
       // required.
-      case class Optional(from: AtomicFrom) extends ImplicitFrom {
-        def optionalize = Optional(from.relabel(labelProvider))
+      case class Optional(from: LazyBox[AtomicFrom]) extends ImplicitFrom {
+        def optionalize = Optional(new LazyBox(from.get.relabel(labelProvider)))
       }
     }
 
@@ -797,7 +801,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           val alias = ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))
           if(rn == SoQLAnalyzer.This) {
             // chained query: {something} |> select ... from @this [as alias]
-            prev.reAlias(Some(alias))
+            prev.get.reAlias(Some(alias))
           } else {
             // we have an implicit from, but we're not required to use it
             // so we've got "select ... from sometable ..." here.
