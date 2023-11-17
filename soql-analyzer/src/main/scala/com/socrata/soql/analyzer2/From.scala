@@ -36,6 +36,7 @@ sealed abstract class From[MT <: MetaTypes] extends LabelUniverse[MT] {
 
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]): Self[MT2]
 
+  final def relabel(using: LabelProvider): Self[MT] = doRelabel(new RelabelState(using))
   private[analyzer2] def doRelabel(state: RelabelState): Self[MT]
 
   private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit

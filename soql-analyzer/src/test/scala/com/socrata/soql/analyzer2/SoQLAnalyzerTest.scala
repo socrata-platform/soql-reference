@@ -1009,4 +1009,28 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         fail(s"Wrong error: ${err}")
     }
   }
+
+  test("Can use @this or a different table name on the RHS of a table op") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds", "select text as t, num*2 as n")
+    )
+
+    val Right(ft1) = tf.findTables(0, rn("q"), "(select t, n) union (select @t.t, @t.n from @this as @t)", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+    val Right(ft2) = tf.findTables(0, rn("q"), "(select t, n) union (select @t.t, @t.n from @q as @t)", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Must provide _some_ from on the RHS of a table op") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds", "select text as t, num*2 as n")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("q"), "(select t, n) union (select 'aaaaa', 5)", Map.empty)
+    val Left(SoQLAnalyzerError.FromRequired(_, _)) = analyzer(ft, UserParameters.empty)
+  }
 }
