@@ -36,7 +36,7 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
     )(state.convert(position))
 
   private[analyzer2] def doRelabel(state: RelabelState) =
-    this
+    copy(table = state.convert(table))(position)
 
   val size = 1
 
