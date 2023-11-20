@@ -10,6 +10,8 @@ import scala.util.parsing.input.{Position, NoPosition}
 import scala.collection.compat._
 import scala.collection.compat.immutable.LazyList
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import com.socrata.soql.{BinaryTree, Leaf, TrueOp, Compound, PipeQuery, UnionQuery, UnionAllQuery, IntersectQuery, IntersectAllQuery, MinusQuery, MinusAllQuery}
 import com.socrata.soql.parsing.SoQLPosition
 import com.socrata.soql.ast
@@ -117,32 +119,55 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     val labelProvider = new LabelProvider
 
     sealed abstract class ImplicitFrom {
-      def optionalize: ImplicitFrom
+      def optionalize(left: Boolean): ImplicitFrom
+      def forced: Boolean
     }
     object ImplicitFrom {
       // "none" means "there is no implicit FROM; the current soql
-      // query _must_ provide a FROM clause.
+      // query _must_ provide a FROM clause and it cannot be
+      // "FROM @this"
       case object None extends ImplicitFrom {
-        def optionalize = this
+        def optionalize(left: Boolean) = this
+        def forced = true
       }
       // "required" means "there is an implicit FROM; the current soql
       // query _must not_ provide one that queries something else, but
       // _may_ do "FROM @this AS @alias"
       case class Required(from: AtomicFrom) extends ImplicitFrom {
-        def optionalize = new Optional(from)
+        def optionalize(left: Boolean) = new Optional(from, left)
+        def forced = true
       }
       // "optional" means "there is an implicit FROM, but it is not
       // required to be used in the current context; the current soql
-      // query may _either_ do "FROM @this AS @alias" or it may do
-      // "FROM (something_else)"; either way a FROM clause _is_
-      // required.
+      // query may do _either_ a FROMless select, a "FROM @this
+      // AS @alias" or "FROM (something_else)".  This is used in
+      // combined-tables queries (union etc) to specify that you _may_
+      // refer to the context query but you don't _have_ to refer to
+      // it in any particular subquery.
       //
-      // This laziness dance is because we only need to guarantee
-      // labels' uniqueness if the optional implicit from is actually
-      // used.
-      class Optional(underlying: AtomicFrom) extends ImplicitFrom {
-        lazy val get: AtomicFrom = underlying.relabel(labelProvider)
-        def optionalize = new Optional(underlying)
+      // I would like to make it so that you _have_ to say
+      // "FROM @this" if you want to use the context query in such a
+      // subquery, but I know for a fact that would break existing
+      // queries which use the context implicitly in the leftmost
+      // subquery, and I'm unconvinced it wouldn't break existing
+      // queries in other positions too; this value controls whether
+      // fromless selects are allowed in non-leftmost positions (note
+      // the "can use nothing on the RHS of a table op" test over in
+      // SoQLAnalyzerTest checks the behavior controlled by this
+      // switch):
+      val allowNonLeftmostImplicitFromInTableOp = true
+      //
+      // This state dance is because we only need to guarantee labels'
+      // uniqueness if the optional implicit from is actually used,
+      // and we only care that the context query is used in _at least
+      // one_ subtree.
+      class Optional(underlying: AtomicFrom, val leftmost: Boolean, forcedOnce: AtomicBoolean = new AtomicBoolean(false)) extends ImplicitFrom {
+        lazy val get: AtomicFrom = locally {
+          forcedOnce.set(true)
+          underlying.relabel(labelProvider)
+        }
+        def optionalize(newLeft: Boolean) = new Optional(underlying, leftmost && newLeft, forcedOnce)
+        def forced = forcedOnce.get
       }
     }
 
@@ -443,8 +468,16 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               hiddenColumns = ctx.hiddenColumns,
               attemptToPreserveSystemColumns = false
             )
-          val lhs = intoStatement(analyzeStatement(subCtx, other.left, from0))
-          val rhs = intoStatement(analyzeStatement(subCtx.copy(primaryTableName = primaryTableName(ctx.scope, other.right)), other.right, from0.optionalize))
+
+          val lhsFrom = from0.optionalize(left = true)
+          val lhs = intoStatement(analyzeStatement(subCtx, other.left, lhsFrom))
+          val rhsFrom = from0.optionalize(left = false)
+          val rhs = intoStatement(analyzeStatement(subCtx.copy(primaryTableName = primaryTableName(ctx.scope, other.right)), other.right, rhsFrom))
+
+          if(from0.isInstanceOf[ImplicitFrom.Required] && !lhsFrom.forced && !rhsFrom.forced) {
+            /* TODO: NEED POS INFO FROM AST - and what is the right position for saying "no one of these table-func'd subselects used the input query? */
+            ctx.chainWithFrom(NoPosition)
+          }
 
           if(lhs.schema.values.map(_.typ) != rhs.schema.values.map(_.typ)) {
             ctx.tableOpTypeMismatch(
@@ -782,7 +815,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
 
       val from0: AtomicFrom = (input, from) match {
-        case (ImplicitFrom.None | _: ImplicitFrom.Optional, None) =>
+        case (ImplicitFrom.None, None) =>
           // No required context and no from given; this is an error
           ctx.noDataSource(NoPosition /* TODO: NEED POS INFO FROM AST */)
         case (ImplicitFrom.Required(prev), Some(tn)) =>
@@ -824,6 +857,13 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case (ImplicitFrom.Required(input), None) =>
           // chained query: {something} |> {the thing we're analyzing}
           input.reAlias(None)
+        case (opt: ImplicitFrom.Optional, None) =>
+          if(opt.leftmost || ImplicitFrom.allowNonLeftmostImplicitFromInTableOp) {
+            // chained query: {something} |> {the thing we're analyzing}
+            opt.get.reAlias(None)
+          } else {
+            ctx.noDataSource(NoPosition /* TODO: NEED POS INFO FROM AST */)
+          }
       }
 
       joins.foldLeft[From](from0) { (left, join) =>

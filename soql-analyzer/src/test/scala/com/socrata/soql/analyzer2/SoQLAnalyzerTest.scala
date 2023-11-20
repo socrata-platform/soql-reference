@@ -1010,27 +1010,74 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("Can use @this or a different table name on the RHS of a table op") {
+  test("Can use @this on the RHS of a table op") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
-      (0, "q") -> Q(0, "ds", "select text as t, num*2 as n")
+      (0, "q") -> Q(0, "ds", "select text as t, num*2 as n"),
+      (0, "w") -> Q(0, "ds", "select text + text as tt, num*3 as n3")
     )
 
-    val Right(ft1) = tf.findTables(0, rn("q"), "(select t, n) union (select @t.t, @t.n from @this as @t)", Map.empty)
+    val Right(ft1) = tf.findTables(0, rn("q"), "(select tt, n3 from @w) union (select @t.t, @t.n from @this as @t)", Map.empty)
     val Right(analysis1) = analyzer(ft1, UserParameters.empty)
-    val Right(ft2) = tf.findTables(0, rn("q"), "(select t, n) union (select @t.t, @t.n from @q as @t)", Map.empty)
+    val Right(ft2) = tf.findTables(0, "(select tt, n3 from @w) union (select t, n from @q)", Map.empty)
     val Right(analysis2) = analyzer(ft2, UserParameters.empty)
 
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 
-  test("Must provide _some_ from on the RHS of a table op") {
+  test("Can use nothing on the RHS of a table op") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
-      (0, "q") -> Q(0, "ds", "select text as t, num*2 as n")
+      (0, "q") -> Q(0, "ds", "select text as t, num*2 as n"),
+      (0, "w") -> Q(0, "ds", "select text + text as tt, num*3 as n3")
     )
 
-    val Right(ft) = tf.findTables(0, rn("q"), "(select t, n) union (select 'aaaaa', 5)", Map.empty)
-    val Left(SoQLAnalyzerError.FromRequired(_, _)) = analyzer(ft, UserParameters.empty)
+    val Right(ft1) = tf.findTables(0, rn("q"), "(select tt, n3 from @w) union (select t, n)", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+    val Right(ft2) = tf.findTables(0, "(select tt, n3 from @w) union (select t, n from @q)", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Can use @this on the LHS of a table op") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds", "select text as t, num*2 as n"),
+      (0, "w") -> Q(0, "ds", "select text + text as tt, num*3 as n3")
+    )
+
+    val Right(ft1) = tf.findTables(0, rn("q"), "(select @t.t, @t.n from @this as @t) union (select tt, n3 from @w)", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+    val Right(ft2) = tf.findTables(0, "(select t, n from @q) union (select tt, n3 from @w)", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Can use nothing on the LHS of a table op") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds", "select text as t, num*2 as n"),
+      (0, "w") -> Q(0, "ds", "select text + text as tt, num*3 as n3")
+    )
+
+    val Right(ft1) = tf.findTables(0, rn("q"), "(select t, n) union (select tt, n3 from @w)", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+    val Right(ft2) = tf.findTables(0, "(select t, n from @q) union (select tt, n3 from @w)", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Must use the context _somewhere_ in a contextual table op") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds", "select text as t, num*2 as n"),
+      (0, "w") -> Q(0, "ds", "select text + text as tt, num*3 as n3")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("q"), "(select t, n from @q) union (select tt, n3 from @w)", Map.empty)
+    val Left(SoQLAnalyzerError.FromForbidden(_, _)) = analyzer(ft, UserParameters.empty)
   }
 }
