@@ -30,23 +30,19 @@ class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends 
         v
 
       case select@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
-        val usedNames = selectList.valuesIterator.map(_.name).to(scm.HashSet)
-        def freshName(base: String) = {
-          val created = Iterator.from(1).map { i => ColumnName(base + "_" + i) }.find { n =>
-            !usedNames.contains(n)
-          }.get
-          usedNames += created
-          created
-        }
-
-        // If we're windowed, we want the underlying query ordered if
-        // possible even if our caller doesn't care, unless there's an
-        // aggregate in the way, in which case the aggregate will
-        // destroy any underlying ordering anyway so we stop caring.
-
         if(distinctiveness == Distinctiveness.FullyDistinct()) {
+          // Can't add columns, so we just need to accept what we're given
           select
         } else {
+          val usedNames = selectList.valuesIterator.map(_.name).to(scm.HashSet)
+          def freshName(base: String) = {
+            val created = Iterator.from(1).map { i => ColumnName(base + "_" + i) }.find { n =>
+              !usedNames.contains(n)
+            }.get
+            usedNames += created
+            created
+          }
+
           val newFrom = rewriteFrom(from)
           if(wantColumns) {
             var existingExprs = selectList.valuesIterator.map(_.expr).to(Set)
