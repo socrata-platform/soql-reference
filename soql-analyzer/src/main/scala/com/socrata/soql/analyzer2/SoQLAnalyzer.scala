@@ -710,16 +710,10 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             // select list.  So we just need to find those columns
             // and order by the relevant column-refs.  We'll
             // actually lift the ORDER BY (together with any
-            // LIMIT/OFFSET) entirely into the superquery, if there
-            // are no window functions involved (since the meaning
-            // of a window function can depend on the ORDER BY)
+            // LIMIT/OFFSET) entirely into the superquery
 
             val (potentiallyUnorderedStatement, potentialLimit, potentialOffset) =
-              if(stmt.selectList.values.exists(_.expr.isWindowed)) {
-                (stmt, None, None)
-              } else {
-                (stmt.copy(orderBy = Nil, limit = None, offset = None), stmt.limit, stmt.offset)
-              }
+              (stmt.copy(orderBy = Nil, limit = None, offset = None), stmt.limit, stmt.offset)
 
             val unfilteredFrom = FromStatement(potentiallyUnorderedStatement, labelProvider.tableLabel(), ctx.scopedResourceName, None)
             val filteredStmt =
