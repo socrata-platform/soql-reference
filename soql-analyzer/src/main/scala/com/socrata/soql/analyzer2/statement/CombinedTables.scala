@@ -19,7 +19,18 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
 
   val schema = left.schema
 
-  def unique = LazyList.empty
+  def unique =
+    op match {
+      case TableFunc.Union | TableFunc.UnionAll =>
+        // Can't promise that adding two sets of rows together will
+        // produce any useful unique fields.
+        LazyList.empty
+
+      case TableFunc.Intersect | TableFunc.IntersectAll | TableFunc.Minus | TableFunc.MinusAll =>
+        // We'll only be returning rows from the left table, so if the
+        // left table has unique columns, then so do we.
+        left.unique
+    }
 
   def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] =
     left.find(predicate).orElse(right.find(predicate))
