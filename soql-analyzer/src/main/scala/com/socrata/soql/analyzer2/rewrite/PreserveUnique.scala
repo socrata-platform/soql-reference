@@ -12,7 +12,10 @@ class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends 
   def rewriteStatement(stmt: Statement, wantColumns: Boolean): Statement = {
     stmt match {
       case ct@CombinedTables(op, left, right) =>
-        // combined tables cannot guarantee unique columns exist
+        // combined tables cannot guarantee unique columns exist.
+        // More specifically, we cannot change left & right in a way
+        // that passes through unselected unique columns without
+        // potentially changing the results of the query.
         ct
 
       case cte@CTE(defLabel, defAlias, defQuery, matHint, useQuery) =>

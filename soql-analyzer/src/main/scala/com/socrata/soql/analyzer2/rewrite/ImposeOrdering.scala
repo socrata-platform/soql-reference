@@ -15,37 +15,23 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
 
         val newTableLabel = labelProvider.tableLabel()
 
+        // If this CombinedTables has a fully-orderable set of unique
+        // columns, we can use them for an order-by.  Otherwise we'll
+        // just order by all that is orderable.
+        val usefulUnique = ct.unique.find(_.forall { c => isOrderable(ct.schema(c).typ) })
+
         def orderByOrderable(predicate: (AutoColumnLabel, CT) => Boolean) =
           ct.schema.iterator.collect { case (columnLabel, Statement.SchemaEntry(_, typ, _isSynthetic)) if predicate(columnLabel, typ) =>
             assert(isOrderable(typ))
             OrderBy(VirtualColumn[MT](newTableLabel, columnLabel, typ)(AtomicPositionInfo.None), true, true)
           }.to(Vector)
 
-        def orderAllThatIsOrderable = orderByOrderable { (_, t) => isOrderable(t) }
-
-        def newOrderBy = op match {
-          case TableFunc.Union | TableFunc.UnionAll =>
-            orderAllThatIsOrderable
-
-          case TableFunc.Intersect | TableFunc.IntersectAll | TableFunc.Minus | TableFunc.MinusAll =>
-            // We'll only be returning rows that exist in the left
-            // subquery's output, so we can use the left query's
-            // unique columns to provide an ordering.
-
-            val leftUniqueOrderable =
-              left.unique.map { cols =>
-                (cols.toSet, cols.map { col => left.schema(col) })
-              }.filter { case (_, schemaEntries) =>
-                schemaEntries.forall { se => isOrderable(se.typ) }
-              }
-
-            leftUniqueOrderable.headOption match {
-              case Some((cols, _schemaEntries)) =>
-                val colSet = cols.toSet
-                orderByOrderable { (col, _) => colSet(col) }
-              case None =>
-                orderAllThatIsOrderable
-            }
+        def newOrderBy = usefulUnique match {
+          case Some(cols) =>
+            val colSet = cols.toSet
+            orderByOrderable { (col, _) => colSet(col) }
+          case None =>
+            orderByOrderable { (_, t) => isOrderable(t) }
         }
 
         Select(
@@ -57,11 +43,6 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
           None,
           Nil,
           None,
-          // This is pretty simplistic; it just says "order by all
-          // orderable columns" which works, but we can do better if
-          // we use knowledge about `op` (e.g., for Intersect and
-          // Minus we can use left.unique if one exists, and for union
-          // we can use left.unique ++ right.unique)
           newOrderBy,
           None,
           None,
@@ -88,7 +69,7 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
           } else {
             from.unique
           }
-        val usefulUnique = allUnique.filter(_.forall { c => isOrderable(c.typ) })
+        val usefulUnique = allUnique.find(_.forall { c => isOrderable(c.typ) })
 
         val existingOrderBy = orderBy.map(_.expr).to(Set)
 
@@ -134,7 +115,7 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
               // them from.
               orderBy ++ allOrderableSelectedCols(except = existingOrderBy)
             case Distinctiveness.Indistinct() =>
-              val additional = usefulUnique.headOption match {
+              val additional = usefulUnique match {
                 case None => allOrderableSelectedCols(except = existingOrderBy)
                 case Some(exprs) => exprs.filterNot(existingOrderBy).map(OrderBy(_, true, true))
               }
