@@ -15,6 +15,39 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
 
         val newTableLabel = labelProvider.tableLabel()
 
+        def orderByOrderable(predicate: (AutoColumnLabel, CT) => Boolean) =
+          ct.schema.iterator.collect { case (columnLabel, Statement.SchemaEntry(_, typ, _isSynthetic)) if predicate(columnLabel, typ) =>
+            assert(isOrderable(typ))
+            OrderBy(VirtualColumn[MT](newTableLabel, columnLabel, typ)(AtomicPositionInfo.None), true, true)
+          }.to(Vector)
+
+        def orderAllThatIsOrderable = orderByOrderable { (_, t) => isOrderable(t) }
+
+        def newOrderBy = op match {
+          case TableFunc.Union | TableFunc.UnionAll =>
+            orderAllThatIsOrderable
+
+          case TableFunc.Intersect | TableFunc.IntersectAll | TableFunc.Minus | TableFunc.MinusAll =>
+            // We'll only be returning rows that exist in the left
+            // subquery's output, so we can use the left query's
+            // unique columns to provide an ordering.
+
+            val leftUniqueOrderable =
+              left.unique.map { cols =>
+                (cols.toSet, cols.map { col => left.schema(col) })
+              }.filter { case (_, schemaEntries) =>
+                schemaEntries.forall { se => isOrderable(se.typ) }
+              }
+
+            leftUniqueOrderable.headOption match {
+              case Some((cols, _schemaEntries)) =>
+                val colSet = cols.toSet
+                orderByOrderable { (col, _) => colSet(col) }
+              case None =>
+                orderAllThatIsOrderable
+            }
+        }
+
         Select(
           Distinctiveness.Indistinct(),
           OrderedMap() ++ ct.schema.iterator.map { case (columnLabel, Statement.SchemaEntry(name, typ, isSynthetic)) =>
@@ -24,9 +57,12 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
           None,
           Nil,
           None,
-          ct.schema.iterator.collect { case (columnLabel, Statement.SchemaEntry(_, typ, _isSynthetic)) if isOrderable(typ) =>
-            OrderBy(VirtualColumn[MT](newTableLabel, columnLabel, typ)(AtomicPositionInfo.None), true, true)
-          }.to(Vector),
+          // This is pretty simplistic; it just says "order by all
+          // orderable columns" which works, but we can do better if
+          // we use knowledge about `op` (e.g., for Intersect and
+          // Minus we can use left.unique if one exists, and for union
+          // we can use left.unique ++ right.unique)
+          newOrderBy,
           None,
           None,
           None,

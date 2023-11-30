@@ -168,14 +168,13 @@ class RollupExact[MT <: MetaTypes](
     // * WHERE must be a supersequence of the candidate's, and the        ✓
     //   parts that aren't must be expressible in terms of the output
     //   columns of candidate
-    // * WHERE and ORDER BY must be isomorphic if the candidate           ✓ (kinda)
-    //   is windowed and the windowed expressions are used in
-    //   this select.
+    // * WHERE must be isomorphic if the candidate is windowed and the    ✓ (kinda, see "This isn't quite right!" below)
+    //   windowed expressions are used in this select.
     // * SEARCH must not exist on either select                           ✓
-    // * If LIMIT and/or OFFSET is specified, either the candidate        ✓
-    //   must not specify or ORDER BY must be isomorphic and this
-    //   function's LIMIT/OFFSET must specify a window completely
-    //   contained within the candidate's LIMIT/OFFSET
+    // * If LIMIT and/or OFFSET is specified on the candidate, then
+    //   the ORDER BY must be no more constraining than the
+    //   candidate's, and the specified window must occur within what
+    //   the candidate has
 
     if(sSearch.isDefined || cSearch.isDefined) {
       log.debug("Bailing because SEARCH makes rollups bad")
@@ -210,15 +209,17 @@ class RollupExact[MT <: MetaTypes](
           return None
       }
 
-    lazy val orderByIsIsomorphic: Boolean =
-      sOrderBy.length == cOrderBy.length &&
+    // If the candidate's ORDER BY matters, it must be at least as
+    // constrained as the select's.
+    lazy val orderByIsIsomorphicUpToSelectsRequirements: Boolean =
+      sOrderBy.length <= cOrderBy.length &&
         sOrderBy.lazyZip(cOrderBy).forall { (a, b) => a.isIsomorphic(b, rewriteInTerms.isoState) }
 
-    if(sIsWindowed && cIsWindowed && (!orderByIsIsomorphic || !whereishIsIsomorphic)) {
+    if(sIsWindowed && cIsWindowed && !whereishIsIsomorphic) {
       // This isn't quite right!  We only need to bail here if one of
       // the candidate's windowed expressions is actually used in the
       // query.
-      log.debug(s"Bailing because the candidate windowed but ORDER BYs and ${whereName}s are not isomorphic")
+      log.debug(s"Bailing because the candidate windowed but ${whereName}s are not isomorphic")
       return None
     }
 
@@ -249,7 +250,7 @@ class RollupExact[MT <: MetaTypes](
 
         // ORDER BY needs to be isomorphic because DISTINCT ON picks
         // the first row
-        if(!whereishIsIsomorphic || !orderByIsIsomorphic) {
+        if(!whereishIsIsomorphic || !orderByIsIsomorphicUpToSelectsRequirements) {
           log.debug(s"Bailing because DISTINCT ON but $whereName or ORDER BY are not isomorphic")
           return None
         }
@@ -269,7 +270,7 @@ class RollupExact[MT <: MetaTypes](
       }
 
     val (newLimit, newOffset) =
-      combineLimitOffset(sLimit, sOffset, cLimit, cOffset, orderByIsIsomorphic).getOrElse {
+      combineLimitOffset(sLimit, sOffset, cLimit, cOffset, orderByIsIsomorphicUpToSelectsRequirements).getOrElse {
         return None
       }
 
@@ -631,14 +632,14 @@ class RollupExact[MT <: MetaTypes](
     sOffset: Option[BigInt],
     cLimit: Option[BigInt],
     cOffset: Option[BigInt],
-    orderByIsIsomorphic: =>Boolean
+    orderByIsIsomorphicUpToSelectsRequirements: =>Boolean
   ): Option[(Option[BigInt], Option[BigInt])] = {
     (cLimit, cOffset) match {
       case (None, None) =>
         Some((sLimit, sOffset))
 
       case (maybeLim, maybeOff) =>
-        if(!orderByIsIsomorphic) {
+        if(!orderByIsIsomorphicUpToSelectsRequirements) {
           log.debug("Bailing because candidate has limit/offset but ORDER BYs are not isomorphic")
           return None
         }

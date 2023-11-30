@@ -548,7 +548,7 @@ select b, n |> select n join @udf(b) as @udf on true
     analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("impose ordering - union") {
+  test("impose ordering - union without unique") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "altcol") -> D("words" -> TestText, "digits" -> TestNumber),
@@ -559,6 +559,21 @@ select b, n |> select n join @udf(b) as @udf on true
 
     val analysis = analyze(tf, "twocol", "select * union select * from @altcol")
     val expectedAnalysis = analyze(tf, "union", "select * order by text, num")
+
+    analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - minus with primary key") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber).withPrimaryKey("text"),
+      (0, "altcol") -> D("words" -> TestText, "digits" -> TestNumber),
+      // Can't put a subselect in initial-FROM position in soql
+      // directly, so we need a saved query to use for that
+      (0, "minus") -> Q(0, "twocol", "select * minus select * from @altcol")
+    )
+
+    val analysis = analyze(tf, "twocol", "select * minus select * from @altcol")
+    val expectedAnalysis = analyze(tf, "minus", "select * order by text")
 
     analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
