@@ -33,6 +33,7 @@ trait Rep[MT <: MetaTypes with MetaTypesExt] extends ExpressionUniverse[MT] {
   def expandedDatabaseColumns(name: ColumnLabel) = physicalDatabaseColumns(name)
   def physicalDatabaseTypes: Seq[Doc[SqlizeAnnotation[MT]]]
   def expandedDatabaseTypes = physicalDatabaseTypes
+  def compressedDatabaseType: Doc[SqlizeAnnotation[MT]]
 
   def compressedDatabaseColumn(name: ColumnLabel): Doc[Nothing]
   def isProvenanced: Boolean = false
@@ -98,6 +99,8 @@ object Rep {
       override def physicalDatabaseColumns(name: ColumnLabel) = Seq(compressedDatabaseColumn(name))
 
       override def physicalDatabaseTypes = Seq(sqlType)
+
+      override def compressedDatabaseType = sqlType
 
       override def compressedDatabaseColumn(name: ColumnLabel) = namespace.columnBase(name)
 
