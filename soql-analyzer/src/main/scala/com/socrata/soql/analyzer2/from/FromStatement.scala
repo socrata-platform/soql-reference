@@ -29,7 +29,7 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
   def contains(e: Expr[MT]): Boolean =
     statement.contains(e)
 
-  def unique = statement.unique.map(_.map { cn => VirtualColumn[MT](label, cn, statement.schema(cn).typ)(AtomicPositionInfo.None) })
+  def unique = statement.unique.map(_.map { cn => VirtualColumn[MT](label, cn, statement.schema(cn).typ)(AtomicPositionInfo.Synthetic) })
 
   private[analyzer2] final def findIsomorphismish(
     state: IsomorphismState,

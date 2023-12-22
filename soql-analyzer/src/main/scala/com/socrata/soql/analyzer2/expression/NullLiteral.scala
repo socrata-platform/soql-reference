@@ -18,8 +18,8 @@ trait NullLiteralImpl[MT <: MetaTypes] { this: NullLiteral[MT] =>
   def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     this.asInstanceOf[NullLiteral[MT2]] // SAFETY: This does not contain any labels
 
-  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT] =
-    copy()(position = position.logicallyReposition(source, p))
+  private[analyzer2] def reReference(reference: Source): Self[MT] =
+    copy()(position = position.reReference(reference))
 }
 
 trait ONullLiteralImpl { this: NullLiteral.type =>

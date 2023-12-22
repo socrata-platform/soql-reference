@@ -1,11 +1,11 @@
 import sbt._
 import Keys._
 
-object SoqlEnvironment{
+object SoqlJsonUtils{
   lazy val settings: Seq[Setting[_]] = BuildSettings.projectSettings() ++ Seq(
-    name := "soql-environment",
+    name := "soql-json-utils",
     libraryDependencies ++= Seq(
-      "com.ibm.icu" % "icu4j" % "63.1"
+      "com.rojoma" %% "rojoma-json-v3" % "3.13.0"
     )
   )
 }

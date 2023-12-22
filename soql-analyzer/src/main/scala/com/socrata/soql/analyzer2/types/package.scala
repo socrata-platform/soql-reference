@@ -30,6 +30,7 @@ package object types {
   type HasType[MT <: MetaTypes] = analyzer2.HasType[MT#ColumnValue, MT#ColumnType]
 
   type ScopedResourceName[MT <: MetaTypes] = environment.ScopedResourceName[MT#ResourceNameScope]
+  type Source[MT <: MetaTypes] = environment.Source[MT#ResourceNameScope]
   type NameEntry[MT <: MetaTypes] = analyzer2.NameEntry[MT#ColumnType]
 
   object LabelMap {

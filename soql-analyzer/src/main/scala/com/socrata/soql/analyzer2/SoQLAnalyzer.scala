@@ -16,7 +16,7 @@ import com.socrata.soql.{BinaryTree, Leaf, TrueOp, Compound, PipeQuery, UnionQue
 import com.socrata.soql.parsing.SoQLPosition
 import com.socrata.soql.ast
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.{ColumnName, ResourceName, ScopedResourceName, TableName, HoleName, UntypedDatasetContext, FunctionName, Provenance}
+import com.socrata.soql.environment.{ColumnName, ResourceName, ScopedResourceName, Source, TableName, HoleName, UntypedDatasetContext, FunctionName, Provenance}
 import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo}
 import com.socrata.soql.aliases.AliasAnalysis
 import com.socrata.soql.exceptions.AliasAnalysisException
@@ -228,7 +228,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case from: FromTable =>
           selectFromFrom(
             from.columns.map { case (label, NameEntry(name, typ)) =>
-              labelProvider.columnLabel() -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, label, typ)(AtomicPositionInfo.None), name, isSynthetic = false)
+              labelProvider.columnLabel() -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, label, typ)(AtomicPositionInfo.Synthetic), name, isSynthetic = false)
             },
             from
           )
@@ -273,7 +273,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         for(TableDescription.Ordering(col, _ascending, _nullLast) <- desc.ordering) {
           val typ = desc.schema(col).typ
           if(!typeInfo.isOrdered(typ)) {
-            throw Bail(SoQLAnalyzerError.TypecheckError.UnorderedOrderBy(Some(srn), NoPosition, typeInfo.typeNameFor(typ)))
+            // should this be Synthetic instead of saved...?
+            throw Bail(SoQLAnalyzerError.TypecheckError.UnorderedOrderBy(Source.Saved(srn, NoPosition), typeInfo.typeNameFor(typ)))
           }
         }
 
@@ -295,7 +296,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               if(desc.hiddenColumns(name)) {
                 None
               } else {
-                Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.None), name, isSynthetic = false))
+                Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.Synthetic), name, isSynthetic = false))
               }
             },
             from,
@@ -304,7 +305,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             None,
             desc.ordering.map { case TableDescription.Ordering(dcn, ascending, nullLast) =>
               val NameEntry(_, typ) = from.columns(dcn)
-              OrderBy(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.None), ascending = ascending, nullLast = nullLast)
+              OrderBy(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.Synthetic), ascending = ascending, nullLast = nullLast)
             },
             None,
             None,
@@ -373,63 +374,63 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         throw Bail(e)
 
       def expectedBoolean(expr: ast.Expression, got: CT): Nothing =
-        error(Error.ExpectedBoolean(scopedResourceName, expr.position, typeInfo.typeNameFor(got)))
+        error(Error.ExpectedBoolean(Source.nonSynthetic(scopedResourceName, expr.position), typeInfo.typeNameFor(got)))
       def incorrectNumberOfParameters(forUdf: ResourceName, expected: Int, got: Int, position: Position): Nothing =
-        error(Error.IncorrectNumberOfUdfParameters(scopedResourceName, position, forUdf, expected, got))
-      def distinctOnMustBePrefixOfOrderBy(position: Position): Nothing =
-        error(Error.DistinctOnNotPrefixOfOrderBy(scopedResourceName, position))
-      def orderByMustBeSelected(position: Position): Nothing =
-        error(Error.OrderByMustBeSelectedWhenDistinct(scopedResourceName, position))
-      def invalidGroupBy(typ: CT, position: Position): Nothing =
-        error(Error.InvalidGroupBy(scopedResourceName, position, typeInfo.typeNameFor(typ)))
-      def unorderedOrderBy(typ: CT, position: Position): Nothing =
-        error(Error.TypecheckError.UnorderedOrderBy(scopedResourceName, position, typeInfo.typeNameFor(typ)))
+        error(Error.IncorrectNumberOfUdfParameters(Source.nonSynthetic(scopedResourceName, position), forUdf, expected, got))
+      def distinctOnMustBePrefixOfOrderBy(source: Source): Nothing =
+        error(Error.DistinctOnNotPrefixOfOrderBy(source))
+      def orderByMustBeSelected(source: Source): Nothing =
+        error(Error.OrderByMustBeSelectedWhenDistinct(source))
+      def invalidGroupBy(typ: CT, source: Source): Nothing =
+        error(Error.InvalidGroupBy(source, typeInfo.typeNameFor(typ)))
+      def unorderedOrderBy(typ: CT, source: Source): Nothing =
+        error(Error.TypecheckError.UnorderedOrderBy(source, typeInfo.typeNameFor(typ)))
       def parametersForNonUdf(name: ResourceName, position: Position): Nothing =
-        error(Error.ParametersForNonUDF(scopedResourceName, position, name))
+        error(Error.ParametersForNonUDF(Source.nonSynthetic(scopedResourceName, position), name))
       def addScopeError(e: AddScopeError, position: Position): Nothing =
         e match {
           case AddScopeError.NameExists(n) =>
-            error(Error.TableAliasAlreadyExists(scopedResourceName, position, n))
+            error(Error.TableAliasAlreadyExists(Source.nonSynthetic(scopedResourceName, position), n))
           case AddScopeError.MultipleImplicit =>
             // This shouldn't be able to occur from user input - the
             // grammar disallows it.
             throw new Exception("Multiple implicit tables??")
         }
       def noDataSource(position: Position): Nothing =
-        error(Error.FromRequired(scopedResourceName, position))
+        error(Error.FromRequired(Source.nonSynthetic(scopedResourceName, position)))
       def chainWithFrom(position: Position): Nothing =
-        error(Error.FromForbidden(scopedResourceName, position))
+        error(Error.FromForbidden(Source.nonSynthetic(scopedResourceName, position)))
       def fromThisWithoutContext(position: Position): Nothing =
-        error(Error.FromThisWithoutContext(scopedResourceName, position))
+        error(Error.FromThisWithoutContext(Source.nonSynthetic(scopedResourceName, position)))
       def tableOpTypeMismatch(left: OrderedMap[ColumnName, CT], right: OrderedMap[ColumnName, CT], position: Position): Nothing =
-        error(Error.TableOperationTypeMismatch(scopedResourceName, position, left.valuesIterator.map(typeInfo.typeNameFor).toVector, right.valuesIterator.map(typeInfo.typeNameFor).toVector))
+        error(Error.TableOperationTypeMismatch(Source.nonSynthetic(scopedResourceName, position), left.valuesIterator.map(typeInfo.typeNameFor).toVector, right.valuesIterator.map(typeInfo.typeNameFor).toVector))
       def literalNotAllowedInGroupBy(pos: Position): Nothing =
-        error(Error.LiteralNotAllowedInGroupBy(scopedResourceName, pos))
+        error(Error.LiteralNotAllowedInGroupBy(Source.nonSynthetic(scopedResourceName, pos)))
       def literalNotAllowedInOrderBy(pos: Position): Nothing =
-        error(Error.LiteralNotAllowedInOrderBy(scopedResourceName, pos))
+        error(Error.LiteralNotAllowedInOrderBy(Source.nonSynthetic(scopedResourceName, pos)))
       def literalNotAllowedInDistinctOn(pos: Position): Nothing =
-        error(Error.LiteralNotAllowedInDistinctOn(scopedResourceName, pos))
-      def aggregateFunctionNotAllowed(name: FunctionName, pos: Position): Nothing =
-        error(Error.AggregateFunctionNotAllowed(scopedResourceName, pos, name))
-      def ungroupedColumnReference(pos: Position): Nothing =
-        error(Error.UngroupedColumnReference(scopedResourceName, pos))
-      def windowFunctionNotAllowed(name: FunctionName, pos: Position): Nothing =
-        error(Error.WindowFunctionNotAllowed(scopedResourceName, pos, name))
+        error(Error.LiteralNotAllowedInDistinctOn(Source.nonSynthetic(scopedResourceName, pos)))
+      def aggregateFunctionNotAllowed(name: FunctionName, source: Source): Nothing =
+        error(Error.AggregateFunctionNotAllowed(source, name))
+      def ungroupedColumnReference(source: Source): Nothing =
+        error(Error.UngroupedColumnReference(source))
+      def windowFunctionNotAllowed(name: FunctionName, source: Source): Nothing =
+        error(Error.WindowFunctionNotAllowed(source, name))
       def reservedTableName(name: ResourceName, pos: Position): Nothing =
-        error(Error.ReservedTableName(scopedResourceName, pos, name))
+        error(Error.ReservedTableName(Source.nonSynthetic(scopedResourceName, pos), name))
       def augmentAliasAnalysisException(aae: AliasAnalysisException): Nothing = {
         import com.socrata.soql.{exceptions => SE}
 
         aae match {
           case SE.RepeatedException(name, pos) =>
-            error(Error.AliasAnalysisError.RepeatedExclusion(scopedResourceName, pos, name))
+            error(Error.AliasAnalysisError.RepeatedExclusion(Source.nonSynthetic(scopedResourceName, pos), name))
           case SE.CircularAliasDefinition(name, pos) =>
-            error(Error.AliasAnalysisError.CircularAliasDefinition(scopedResourceName, pos, name))
+            error(Error.AliasAnalysisError.CircularAliasDefinition(Source.nonSynthetic(scopedResourceName, pos), name))
           case SE.DuplicateAlias(name, pos) =>
-            error(Error.AliasAnalysisError.DuplicateAlias(scopedResourceName, pos, name))
+            error(Error.AliasAnalysisError.DuplicateAlias(Source.nonSynthetic(scopedResourceName, pos), name))
           case nsc@SE.NoSuchColumn(name, pos) =>
             val qual = nsc.asInstanceOf[SE.NoSuchColumn.RealNoSuchColumn].qualifier // ew
-            error(Error.TypecheckError.NoSuchColumn(scopedResourceName, pos, qual.map(_.substring(1)).map(ResourceName(_)), name))
+            error(Error.TypecheckError.NoSuchColumn(Source.nonSynthetic(scopedResourceName, pos), qual.map(_.substring(1)).map(ResourceName(_)), name))
           case SE.NoSuchTable(_, _) =>
             throw new Exception("Alias analysis doesn't actually throw NoSuchTable")
         }
@@ -510,11 +511,11 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case j: Join => findSystemColumns(j.left)
         case FromTable(tableName, _, _, tableLabel, columns, _) =>
           columns.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>
-            name -> PhysicalColumn[MT](tableLabel, tableName, colLabel, typ)(AtomicPositionInfo.None)
+            name -> PhysicalColumn[MT](tableLabel, tableName, colLabel, typ)(AtomicPositionInfo.Synthetic)
           }
         case FromStatement(stmt, tableLabel, _, _) =>
           stmt.schema.iterator.collect { case (colLabel, Statement.SchemaEntry(name, typ, _isSynthetic)) if isSystemColumn(name) =>
-            name -> VirtualColumn[MT](tableLabel, colLabel, typ)(AtomicPositionInfo.None)
+            name -> VirtualColumn[MT](tableLabel, colLabel, typ)(AtomicPositionInfo.Synthetic)
           }.toSeq
         case FromSingleRow(_, _) =>
           Nil
@@ -619,7 +620,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         }
         val checked = finalState.typecheck(expr)
         if(!typeInfo.isGroupable(checked.typ)) {
-          ctx.invalidGroupBy(checked.typ, checked.position.logicalPosition)
+          ctx.invalidGroupBy(checked.typ, checked.position.reference)
         }
         checked
       }
@@ -630,7 +631,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         }
         val checked = finalState.typecheck(expr)
         if(!typeInfo.isOrdered(checked.typ)) {
-          ctx.unorderedOrderBy(checked.typ, checked.position.logicalPosition)
+          ctx.unorderedOrderBy(checked.typ, checked.position.reference)
         }
         OrderBy(checked, ascending, nullLast)
       }
@@ -639,7 +640,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case Distinctiveness.On(exprs) =>
           for(expr <- exprs) {
             if(!typeInfo.isOrdered(expr.typ)) {
-              ctx.unorderedOrderBy(expr.typ, expr.position.logicalPosition)
+              ctx.unorderedOrderBy(expr.typ, expr.position.reference)
             }
           }
 
@@ -651,14 +652,14 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               if(distinctExprs(orderBy.head)) {
                 loop(distinctExprs, remainingDistinctExprs - orderBy.head, orderBy.tail)
               } else {
-                ctx.distinctOnMustBePrefixOfOrderBy(orderBy.head.position.logicalPosition)
+                ctx.distinctOnMustBePrefixOfOrderBy(orderBy.head.position.reference)
               }
             }
           }
           loop(exprs.to(Set), exprs.to(Set), checkedOrderBys.to(LazyList).map(_.expr))
         case Distinctiveness.FullyDistinct() =>
           for(missingOb <- checkedOrderBys.find { ob => !finalState.namedExprs.values.exists(_ == ob.expr) }) {
-            ctx.orderByMustBeSelected(missingOb.expr.position.logicalPosition)
+            ctx.orderByMustBeSelected(missingOb.expr.position.reference)
           }
         case Distinctiveness.Indistinct() =>
           // all well
@@ -723,7 +724,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                   if(ctx.hiddenColumns(cn)) {
                     None
                   } else {
-                    Some(labelProvider.columnLabel() -> NamedExpr(VirtualColumn(unfilteredFrom.label, label, expr.typ)(AtomicPositionInfo.None), cn, isSynthetic = isSynthetic))
+                    Some(labelProvider.columnLabel() -> NamedExpr(VirtualColumn(unfilteredFrom.label, label, expr.typ)(AtomicPositionInfo.Synthetic), cn, isSynthetic = isSynthetic))
                   }
                 },
                 unfilteredFrom,
@@ -738,7 +739,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                       throw new Exception("Internal error: found an order by whose expr is not in the select list??")
                     }
 
-                  ob.copy(expr = VirtualColumn(unfilteredFrom.label, columnLabel, columnTyp)(AtomicPositionInfo.None))
+                  ob.copy(expr = VirtualColumn(unfilteredFrom.label, columnLabel, columnTyp)(AtomicPositionInfo.Synthetic))
                 },
                 limit = potentialLimit,
                 offset = potentialOffset,
@@ -961,7 +962,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               val outOfLineParamsLabel = labelProvider.tableLabel()
               val innerUdfParams =
                 outOfLineParamsQuery.schema.keys.lazyZip(typecheckedParams).map { case (colLabel, (name, expr)) =>
-                  name -> { (sourceName: Option[ScopedResourceName], p: Position) => VirtualColumn(outOfLineParamsLabel, colLabel, expr.typ)(new AtomicPositionInfo(sourceName, p)) }
+                  name -> { (sourceName: Option[ScopedResourceName], p: Position) => VirtualColumn(outOfLineParamsLabel, colLabel, expr.typ)(new AtomicPositionInfo(Source.nonSynthetic(sourceName, p))) }
                 }.toMap
 
               val udfCtx = Ctx(
@@ -981,14 +982,14 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 Select(
                   Distinctiveness.Indistinct(),
                   OrderedMap() ++ useQuery.statement.schema.iterator.map { case (label, Statement.SchemaEntry(name, typ, isSynthetic)) =>
-                    labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](useQuery.label, label, typ)(AtomicPositionInfo.None), name, isSynthetic = isSynthetic)
+                    labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](useQuery.label, label, typ)(AtomicPositionInfo.Synthetic), name, isSynthetic = isSynthetic)
                   },
                   Join(
                     JoinType.Inner,
                     true,
                     FromStatement(outOfLineParamsQuery, outOfLineParamsLabel, None, None),
                     useQuery,
-                    typeInfo.literalBoolean(true, None, NoPosition)
+                    typeInfo.literalBoolean(true, Source.Synthetic)
                   ),
                   None,
                   Nil,
@@ -1067,7 +1068,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           val subCtx = ctx.copy(allowAggregates = false, allowWindow = false)
           args.foreach(verifyAggregatesAndWindowFunctions(subCtx, _))
         case agg: AggregateFunctionCall =>
-          ctx.ctx.aggregateFunctionNotAllowed(agg.function.name, agg.position.functionNamePosition)
+          ctx.ctx.aggregateFunctionNotAllowed(agg.function.name, agg.position.functionNameSource)
         case w@WindowedFunctionCall(f, args, filter, partitionBy, orderBy, _frame) if ctx.allowWindow =>
           // Fun fact: this order by does not have the same no-literals restriction as a select's order-by
           val subCtx = ctx.copy(allowAggregates = ctx.allowAggregates && w.isAggregated, allowWindow = false)
@@ -1075,7 +1076,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           partitionBy.foreach(verifyAggregatesAndWindowFunctions(subCtx, _))
           orderBy.foreach { ob => verifyAggregatesAndWindowFunctions(subCtx, ob.expr) }
         case wfc: WindowedFunctionCall =>
-          ctx.ctx.windowFunctionNotAllowed(wfc.function.name, wfc.position.functionNamePosition)
+          ctx.ctx.windowFunctionNotAllowed(wfc.function.name, wfc.position.functionNameSource)
         case e: Expr if ctx.allowAggregates && ctx.groupBys.contains(e) =>
           // ok, we want an aggregate and this is an expression from the GROUP BY clause
         case FunctionCall(_f, args) =>
@@ -1084,7 +1085,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case c: Column if ctx.allowAggregates =>
           // Column reference, but it's not from the group by clause.
           // Fail!
-          ctx.ctx.ungroupedColumnReference(c.position.logicalPosition)
+          ctx.ctx.ungroupedColumnReference(c.position.reference)
         case _ =>
           // ok
       }
@@ -1095,7 +1096,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
   }
 
   def illegalThisReference(source: Option[ScopedResourceName], position: Position): Nothing =
-    throw Bail(Error.IllegalThisReference(source, position))
+    throw Bail(Error.IllegalThisReference(Source.nonSynthetic(source, position)))
   def parameterlessTableFunction(source: Option[ScopedResourceName], name: ResourceName, position: Position): Nothing =
-    throw Bail(Error.ParameterlessTableFunction(source, position, name))
+    throw Bail(Error.ParameterlessTableFunction(Source.nonSynthetic(source, position), name))
 }

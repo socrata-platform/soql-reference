@@ -17,11 +17,11 @@ trait RollupTestHelper extends TestHelper { this: Assertions =>
     override def apply(f: MonomorphicFunction): Option[Expr => Expr] = {
       f.function.identity match {
         case Max =>
-          Some { max => AggregateFunctionCall[TestMT](TestFunctions.Max.monomorphic.get, Seq(max), false, None)(FuncallPositionInfo.None) }
+          Some { max => AggregateFunctionCall[TestMT](TestFunctions.Max.monomorphic.get, Seq(max), false, None)(FuncallPositionInfo.Synthetic) }
         case Sum =>
-          Some { sum => AggregateFunctionCall[TestMT](TestFunctions.Sum.monomorphic.get, Seq(sum), false, None)(FuncallPositionInfo.None) }
+          Some { sum => AggregateFunctionCall[TestMT](TestFunctions.Sum.monomorphic.get, Seq(sum), false, None)(FuncallPositionInfo.Synthetic) }
         case Count | CountStar =>
-          Some { count => AggregateFunctionCall[TestMT](TestFunctions.Sum.monomorphic.get, Seq(count), false, None)(FuncallPositionInfo.None) }
+          Some { count => AggregateFunctionCall[TestMT](TestFunctions.Sum.monomorphic.get, Seq(count), false, None)(FuncallPositionInfo.Synthetic) }
         case _ =>
           None
       }
@@ -53,9 +53,9 @@ trait RollupTestHelper extends TestHelper { this: Assertions =>
         case fc@FunctionCall(BitAnd, Seq(lhs, rhs@LiteralValue(TestNumber(n)))) if n >= 0 && n < (1L << 32) =>
           val result = Vector.newBuilder[Expr]
 
-          result += FunctionCall(fc.function, Seq(FunctionCall[TestMT](BottomDWord, Seq(lhs))(FuncallPositionInfo.None), rhs))(fc.position)
+          result += FunctionCall(fc.function, Seq(FunctionCall[TestMT](BottomDWord, Seq(lhs))(FuncallPositionInfo.Synthetic), rhs))(fc.position)
           if(n < (1L << 8)) {
-            result += FunctionCall(fc.function, Seq(FunctionCall[TestMT](BottomByte, Seq(lhs))(FuncallPositionInfo.None), rhs))(fc.position)
+            result += FunctionCall(fc.function, Seq(FunctionCall[TestMT](BottomByte, Seq(lhs))(FuncallPositionInfo.Synthetic), rhs))(fc.position)
           }
 
           result.result()
@@ -96,7 +96,7 @@ trait RollupTestHelper extends TestHelper { this: Assertions =>
       }
     override def merge(e: NonEmptySeq[Expr]) = {
       e.reduceLeft { (acc, expr) =>
-        FunctionCall[TestMT](And, Seq(acc, expr))(FuncallPositionInfo.None)
+        FunctionCall[TestMT](And, Seq(acc, expr))(FuncallPositionInfo.Synthetic)
       }
     }
   }

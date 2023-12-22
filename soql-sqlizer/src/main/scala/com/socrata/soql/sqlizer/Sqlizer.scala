@@ -8,7 +8,7 @@ import scala.util.control.ControlThrowable
 
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection.OrderedMap
-import com.socrata.soql.environment.{ColumnName, Provenance}
+import com.socrata.soql.environment.{ColumnName, Provenance, Source}
 import com.socrata.prettyprint.prelude._
 import com.socrata.prettyprint.{SimpleDocStream, SimpleDocTree, tree}
 
@@ -606,35 +606,35 @@ object Sqlizer {
     abortSqlization: MT#SqlizerError => Nothing
   )
 
-  def positionInfo[MT <: MetaTypes with MetaTypesExt](doc: SimpleDocStream[SqlizeAnnotation[MT]]): Array[Position] = {
+  def positionInfo[MT <: MetaTypes with MetaTypesExt](doc: SimpleDocStream[SqlizeAnnotation[MT]]): Array[types.Source[MT]] = {
     val positioner = new Positioner[MT]
     positioner.go(doc.asTree)
     positioner.builder.result()
   }
 
   private class Positioner[MT <: MetaTypes with MetaTypesExt] extends SqlizerUniverse[MT] {
-    val builder = Array.newBuilder[Position]
+    val builder = Array.newBuilder[Source]
 
     def go(node: SimpleDocTree[SqlizeAnnotation]): Unit =
-      processNode(node, NoPosition)
+      processNode(node, Source.Synthetic)
 
-    private def processNode(node: SimpleDocTree[SqlizeAnnotation], p: Position): Unit =
+    private def processNode(node: SimpleDocTree[SqlizeAnnotation], s: Source): Unit =
       node match {
         case tree.Empty => {}
         case tree.Char(_) =>
-          builder += p
+          builder += s
         case tree.Text(t) =>
-          for(i <- 0 until t.length) builder += p
+          for(i <- 0 until t.length) builder += s
         case tree.Line(indent) =>
-          builder += p
-          for(i <- 0 until indent) builder += p
+          builder += s // for the newline
+          for(i <- 0 until indent) builder += s
         case tree.Ann(SqlizeAnnotation.Expression(e), subtree) =>
-          processNode(subtree, e.position.physicalPosition)
+          processNode(subtree, e.position.source)
         case tree.Ann(SqlizeAnnotation.Table(_) | SqlizeAnnotation.OutputName(_) | SqlizeAnnotation.Custom(_), subtree) =>
-          processNode(subtree, p)
+          processNode(subtree, s)
         case tree.Concat(elems) =>
           for(elem <- elems) {
-            processNode(elem, p)
+            processNode(elem, s)
           }
       }
   }

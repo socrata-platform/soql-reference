@@ -36,7 +36,7 @@ sealed abstract class Expr[MT <: MetaTypes] extends Product with LabelUniverse[M
 
   private[analyzer2] def doRelabel(state: RelabelState): Self[MT]
 
-  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT]
+  private[analyzer2] def reReference(reference: Source): Self[MT]
 
   final def isIsomorphic(that: Expr[MT], under: IsomorphismState.View[MT] = IsomorphismState.View.empty): Boolean =
     findIsomorphism(under.extend, that)
@@ -191,7 +191,8 @@ final case class LiteralValue[MT <: MetaTypes](
 {
   // these need to be here and not in the impl for variance reasons
   val typ = hasType.typeOf(value)
-  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT] = copy()(position = position.logicallyReposition(source, p))
+  private[analyzer2] def reReference(reference: Source): Self[MT] =
+    copy()(position = position.reReference(reference))
 }
 object LiteralValue extends expression.OLiteralValueImpl
 

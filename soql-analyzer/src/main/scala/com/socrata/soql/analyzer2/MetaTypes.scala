@@ -95,6 +95,7 @@ trait LabelUniverse[MT <: MetaTypes] extends MetaTypeHelper[MT] {
   type DatabaseColumnName = analyzer2.DatabaseColumnName[MT#DatabaseColumnNameImpl]
 
   type ScopedResourceName = environment.ScopedResourceName[MT#ResourceNameScope]
+  type Source = environment.Source[MT#ResourceNameScope]
   type ToProvenance = analyzer2.ToProvenance[MT#DatabaseTableNameImpl]
   type FromProvenance = analyzer2.FromProvenance[MT#DatabaseTableNameImpl]
   type ProvenanceMapper = analyzer2.ProvenanceMapper[MT#DatabaseTableNameImpl]

@@ -74,14 +74,14 @@ abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
           Iterator.empty
         case ft: FromTable =>
           ft.columns.iterator.flatMap { case (dcn, NameEntry(_, typ)) =>
-            fieldsOf(PhysicalColumn[MT](ft.label, ft.tableName, dcn, typ)(AtomicPositionInfo.None))
+            fieldsOf(PhysicalColumn[MT](ft.label, ft.tableName, dcn, typ)(AtomicPositionInfo.Synthetic))
           }
         case fs: FromStatement =>
           fs.statement.schema.iterator.flatMap { case (acl, Statement.SchemaEntry(_, typ, isSynthetic)) =>
             if(isSynthetic) {
               Nil
             } else {
-              fieldsOf(VirtualColumn[MT](fs.label, acl, typ)(AtomicPositionInfo.None))
+              fieldsOf(VirtualColumn[MT](fs.label, acl, typ)(AtomicPositionInfo.Synthetic))
             }
           }
       }
@@ -99,10 +99,10 @@ abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
                 FunctionCall[MT](
                   concat,
                   Seq(left, litText(" "))
-                )(FuncallPositionInfo.None),
+                )(FuncallPositionInfo.Synthetic),
                 right
               )
-            )(FuncallPositionInfo.None)
+            )(FuncallPositionInfo.Synthetic)
 
           assert(isText(result.typ))
 
@@ -113,10 +113,10 @@ abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
       FunctionCall[MT](
         tsSearch,
         Seq(
-          FunctionCall[MT](toTsVector, Seq(haystack))(FuncallPositionInfo.None),
-          FunctionCall[MT](plainToTsQuery, Seq(needle))(FuncallPositionInfo.None)
+          FunctionCall[MT](toTsVector, Seq(haystack))(FuncallPositionInfo.Synthetic),
+          FunctionCall[MT](plainToTsQuery, Seq(needle))(FuncallPositionInfo.Synthetic)
         )
-      )(FuncallPositionInfo.None)
+      )(FuncallPositionInfo.Synthetic)
     } else {
       litBool(false)
     }
