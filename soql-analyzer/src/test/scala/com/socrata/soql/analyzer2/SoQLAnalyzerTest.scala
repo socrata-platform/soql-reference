@@ -6,6 +6,7 @@ import java.math.{BigDecimal => JBigDecimal}
 
 import org.scalatest.{FunSuite, MustMatchers}
 
+import com.rojoma.json.v3.interpolation._
 import org.joda.time.{DateTime, LocalDate}
 
 import com.socrata.soql.collection._
@@ -1081,5 +1082,55 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
     val Right(ft) = tf.findTables(0, rn("q"), "(select t, n from @q) union (select tt, n3 from @w)", Map.empty)
     val Left(SoQLAnalyzerError.FromForbidden(_)) = analyzer(ft, UserParameters.empty)
+  }
+
+  test("hints get piped through - originating in a table") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber).withOutputColumnHints("num" -> j"true"),
+      (0, "q") -> Q(0, "ds", "select num as a, num*2 as b"),
+      (0, "w") -> Q(0, "q", "select a, b, a*2 as c, b*2 as d")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("w"))
+    val Right(analysis) = analyzer(ft, UserParameters.empty)
+
+    analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true"), None, None, None))
+  }
+
+  test("hints directly on a table") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber).withOutputColumnHints("num" -> j"true")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("ds"))
+    val Right(analysis) = analyzer(ft, UserParameters.empty)
+
+    analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(None, Some(j"true")))
+  }
+
+  test("hints get piped through - originating in a query") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds", "select num as a, num*2 as b").withOutputColumnHints("b" -> j"true"),
+      (0, "w") -> Q(0, "q", "select a, b, a*2 as c, b*2 as d")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("w"))
+    val Right(analysis) = analyzer(ft, UserParameters.empty)
+
+    analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(None, Some(j"true"), None, None))
+  }
+
+  test("hints can be overridden") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber).withOutputColumnHints("num" -> j"true"),
+      (0, "q") -> Q(0, "ds", "select num as a, num*2 as b").withOutputColumnHints("a" -> j"false"),
+      (0, "w") -> Q(0, "q", "select a, b, a*2 as c, b*2 as d")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("w"))
+    val Right(analysis) = analyzer(ft, UserParameters.empty)
+
+    analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"false"), None, None, None))
   }
 }

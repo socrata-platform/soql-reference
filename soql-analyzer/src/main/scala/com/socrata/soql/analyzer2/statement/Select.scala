@@ -4,7 +4,7 @@ import scala.util.parsing.input.{Position, NoPosition}
 import scala.collection.compat._
 import scala.collection.compat.immutable.LazyList
 
-import com.rojoma.json.v3.ast.JString
+import com.rojoma.json.v3.ast.{JString, JValue}
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
@@ -91,9 +91,42 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
   def contains(e: Expr[MT]): Boolean =
     find(_ == e).isDefined
 
-  val schema = selectList.withValuesMapped { case NamedExpr(expr, name, hint, isSynthetic) =>
-    Statement.SchemaEntry[MT](name, expr.typ, hint, isSynthetic = isSynthetic)
+  lazy val schema = selectList.withValuesMapped {
+    case NamedExpr(expr, name, hint, isSynthetic) =>
+      Statement.SchemaEntry[MT](name, expr.typ, hint.orElse(inheritedHint(expr)), isSynthetic = isSynthetic)
   }
+
+  private def inheritedHint(expr: Expr[MT]): Option[JValue] =
+    expr match {
+      case c: Column[MT] =>
+        val tbl = c.table
+        val col = c.column
+        val sourceTable =
+          from.reduce[Option[AtomicFrom[MT]]](
+            { f =>
+              if(f.label == tbl) Some(f)
+              else None
+            },
+            { (found, join) =>
+              if(found.isDefined) {
+                found
+              } else if(join.right.label == tbl) {
+                Some(join.right)
+              } else {
+                None
+              }
+            }
+          )
+        for {
+          t <- sourceTable
+          schemaEnt <- t.schema.find(_.column == col)
+          hint <- schemaEnt.hint
+        } yield {
+          hint
+        }
+      case _ =>
+        None
+    }
 
   def getColumn(cl: ColumnLabel) = cl match {
     case acl: AutoColumnLabel => schema.get(acl)
