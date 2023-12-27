@@ -189,7 +189,7 @@ case class FromTable[MT <: MetaTypes](
   definiteResourceName: types.ScopedResourceName[MT],
   alias: Option[ResourceName],
   label: AutoTableLabel,
-  columns: OrderedMap[types.DatabaseColumnName[MT], NameEntry[types.ColumnType[MT]]],
+  columns: OrderedMap[types.DatabaseColumnName[MT], FromTable.ColumnInfo[MT]],
   primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]]
 ) extends AtomicFrom[MT] with from.FromTableImpl[MT]
 object FromTable extends from.OFromTableImpl

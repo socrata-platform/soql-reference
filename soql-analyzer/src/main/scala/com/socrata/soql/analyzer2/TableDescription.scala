@@ -95,7 +95,7 @@ object TableDescription {
     }.to(Set)
 
     val schema = OrderedMap() ++ columns.iterator.map {
-      case (dcn, DatasetColumnInfo(name, typ, hidden, hint)) => dcn -> NameEntry(name, typ)
+      case (dcn, DatasetColumnInfo(name, typ, hidden, hint)) => dcn -> FromTable.ColumnInfo[MT](name, typ, hint)
     }
 
     require(ordering.forall { o => columns.contains(o.column) })

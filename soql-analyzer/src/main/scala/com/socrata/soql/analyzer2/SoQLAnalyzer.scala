@@ -227,7 +227,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       from match {
         case from: FromTable =>
           selectFromFrom(
-            from.columns.map { case (label, NameEntry(name, typ)) =>
+            from.columns.map { case (label, FromTable.ColumnInfo(name, typ, _hint)) =>
               labelProvider.columnLabel() -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, label, typ)(AtomicPositionInfo.Synthetic), name, isSynthetic = false)
             },
             from
@@ -266,7 +266,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           srn,
           None,
           labelProvider.tableLabel(),
-          columns = desc.schema.filter { case (_, NameEntry(name, _)) => !desc.hiddenColumns(name) },
+          columns = desc.schema.filter { case (_, FromTable.ColumnInfo(name, _, _)) => !desc.hiddenColumns(name) },
           primaryKeys = desc.primaryKeys
         )
       } else {
@@ -292,7 +292,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         FromStatement(
           Select(
             Distinctiveness.Indistinct(),
-            selectList = OrderedMap() ++ from.columns.iterator.zip(columnLabels.iterator).flatMap { case ((dcn, NameEntry(name, typ)), outputLabel) =>
+            selectList = OrderedMap() ++ from.columns.iterator.zip(columnLabels.iterator).flatMap { case ((dcn, FromTable.ColumnInfo(name, typ, _hint)), outputLabel) =>
               if(desc.hiddenColumns(name)) {
                 None
               } else {
@@ -304,7 +304,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             Nil,
             None,
             desc.ordering.map { case TableDescription.Ordering(dcn, ascending, nullLast) =>
-              val NameEntry(_, typ) = from.columns(dcn)
+              val FromTable.ColumnInfo(_, typ, _) = from.columns(dcn)
               OrderBy(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.Synthetic), ascending = ascending, nullLast = nullLast)
             },
             None,
@@ -510,7 +510,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       from match {
         case j: Join => findSystemColumns(j.left)
         case FromTable(tableName, _, _, tableLabel, columns, _) =>
-          columns.collect { case (colLabel, NameEntry(name, typ)) if isSystemColumn(name) =>
+          columns.collect { case (colLabel, FromTable.ColumnInfo(name, typ, _hint)) if isSystemColumn(name) =>
             name -> PhysicalColumn[MT](tableLabel, tableName, colLabel, typ)(AtomicPositionInfo.Synthetic)
           }
         case FromStatement(stmt, tableLabel, _, _) =>

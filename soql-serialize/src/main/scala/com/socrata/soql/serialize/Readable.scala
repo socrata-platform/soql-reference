@@ -4,6 +4,9 @@ import scala.util.parsing.input.{Position, NoPosition}
 
 import java.io.{IOException, InputStream}
 
+import com.rojoma.json.v3.ast.JValue
+import com.rojoma.json.v3.io.{JsonReader, JsonReaderException}
+
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ResourceName, ScopedResourceName, Source, TypeName, ColumnName, Provenance}
 import com.socrata.soql.parsing.SoQLPosition
@@ -219,6 +222,17 @@ object Readable extends `-impl`.ReadableTuples {
         case 0 => None
         case 1 => Some(buffer.read[T]())
         case other => fail("Invalid tag for option: " + other)
+      }
+    }
+  }
+
+  implicit object jvalue extends Readable[JValue] {
+    def readFrom(buffer: ReadBuffer): JValue = {
+      try {
+        JsonReader.fromString(buffer.read[String]())
+      } catch {
+        case e: JsonReaderException =>
+          fail("Invalid JSON: " + e.getMessage)
       }
     }
   }

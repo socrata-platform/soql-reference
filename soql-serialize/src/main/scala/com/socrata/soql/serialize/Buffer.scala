@@ -13,8 +13,9 @@ object Version {
   // are still using them!
   case object V0 extends Version
   case object V1 extends Version
+  case object V2 extends Version
 
-  val current = V1
+  val current = V2
 }
 
 class WriteBuffer private (val version: Version) {
@@ -31,6 +32,7 @@ class WriteBuffer private (val version: Version) {
     val tag = version match {
       case Version.V0 => 0
       case Version.V1 => 1
+      case Version.V2 => 2
     }
     stream.writeUInt32NoTag(tag)
     strings.writeTo(stream)
@@ -63,12 +65,11 @@ class ReadBuffer private (stream: CodedInputStream) {
 
   val version =
     stream.readUInt32() match {
-      case 0 =>
-        Version.V0
-      case 1 =>
-        Version.V1
+      case 0 => Version.V0
+      case 1 => Version.V1
+      case 2 => Version.V2
       case other =>
-        throw new IOException("Invalid version: {}")
+        throw new IOException(s"Invalid version: {other}")
     }
 
   private[serialize] val strings = StringDictionary.readFrom(stream)

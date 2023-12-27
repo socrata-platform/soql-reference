@@ -146,8 +146,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         None,
         t(1),
         OrderedMap(
-          dcn("text") -> NameEntry(cn("text"), TestText),
-          dcn("num") -> NameEntry(cn("num"), TestNumber)
+          dcn("text") -> FromTable.ColumnInfo[TestMT](cn("text"), TestText, None),
+          dcn("num") -> FromTable.ColumnInfo[TestMT](cn("num"), TestNumber, None)
         ),
         Nil
       )
@@ -268,8 +268,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           None,
           t(1),
           OrderedMap(
-            dcn("text") -> NameEntry(cn("text"), TestText),
-            dcn("num") -> NameEntry(cn("num"), TestNumber)
+            dcn("text") -> FromTable.ColumnInfo[TestMT](cn("text"), TestText, None),
+            dcn("num") -> FromTable.ColumnInfo[TestMT](cn("num"), TestNumber, None)
           ),
           Nil
         ),
@@ -315,8 +315,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
               None,
               t(1),
               OrderedMap(
-                dcn("text") -> NameEntry(cn("text"), TestText),
-                dcn("num") -> NameEntry(cn("num"), TestNumber)
+                dcn("text") -> FromTable.ColumnInfo[TestMT](cn("text"), TestText, None),
+                dcn("num") -> FromTable.ColumnInfo[TestMT](cn("num"), TestNumber, None)
               ),
               Nil
             ),
@@ -406,8 +406,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         FromTable[TestMT](
           dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(
-            dcn("text") -> NameEntry(cn("text"), TestText),
-            dcn("num") -> NameEntry(cn("num"), TestNumber)
+            dcn("text") -> FromTable.ColumnInfo[TestMT](cn("text"), TestText, None),
+            dcn("num") -> FromTable.ColumnInfo[TestMT](cn("num"), TestNumber, None)
           ),
           Nil
         ),
@@ -439,8 +439,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")),Some(rn("bbbb-bbbb")),
                     t(4),
                     OrderedMap(
-                      dcn("user") -> NameEntry(cn("user"),TestText),
-                      dcn("allowed") -> NameEntry(cn("allowed"),TestBoolean)
+                      dcn("user") -> FromTable.ColumnInfo[TestMT](cn("user"),TestText, None),
+                      dcn("allowed") -> FromTable.ColumnInfo[TestMT](cn("allowed"),TestBoolean, None)
                     ),
                     Nil
                   ),
@@ -511,8 +511,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         FromTable[TestMT](
           dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(
-            dcn("text") -> NameEntry(cn("text"), TestText),
-            dcn("num") -> NameEntry(cn("num"), TestNumber)
+            dcn("text") -> FromTable.ColumnInfo[TestMT](cn("text"), TestText, None),
+            dcn("num") -> FromTable.ColumnInfo[TestMT](cn("num"), TestNumber, None)
           ),
           Nil
         ),
@@ -544,8 +544,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")),Some(rn("bbbb-bbbb")),
                     t(4),
                     OrderedMap(
-                      dcn("user") -> NameEntry(cn("user"),TestText),
-                      dcn("allowed") -> NameEntry(cn("allowed"),TestBoolean)
+                      dcn("user") -> FromTable.ColumnInfo[TestMT](cn("user"),TestText, None),
+                      dcn("allowed") -> FromTable.ColumnInfo[TestMT](cn("allowed"),TestBoolean, None)
                     ),
                     Nil
                   ),
@@ -615,8 +615,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         FromTable[TestMT](
           dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(
-            dcn("text") -> NameEntry(cn("text"), TestText),
-            dcn("num") -> NameEntry(cn("num"), TestNumber)
+            dcn("text") -> FromTable.ColumnInfo[TestMT](cn("text"), TestText, None),
+            dcn("num") -> FromTable.ColumnInfo[TestMT](cn("num"), TestNumber, None)
           ),
           Nil
         ),
