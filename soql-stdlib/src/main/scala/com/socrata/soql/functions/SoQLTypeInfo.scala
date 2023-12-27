@@ -4,7 +4,7 @@ import org.joda.time.{DateTime, LocalDateTime, LocalDate, LocalTime, Period}
 import com.vividsolutions.jts.geom.{LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon}
 
 import com.socrata.soql.collection.OrderedSet
-import com.socrata.soql.environment.{TypeName, Provenance, ScopedResourceName}
+import com.socrata.soql.environment.{TypeName, Provenance, ScopedResourceName, Source}
 import com.socrata.soql.typed
 import com.socrata.soql.types._
 import com.socrata.soql.typechecker.{TypeInfoCommon, TypeInfo, TypeInfo2}
@@ -39,17 +39,17 @@ sealed trait SoQLTypeInfoCommon extends TypeInfoCommon[SoQLType, SoQLValue] {
 final class SoQLTypeInfo2[MT <: analyzer2.MetaTypes with ({ type ColumnType = SoQLType; type ColumnValue = SoQLValue })] extends TypeInfo2[MT] with SoQLTypeInfoCommon with analyzer2.StatementUniverse[MT] {
   override def potentialExprs(l: ast.Literal, sourceName: Option[analyzer2.types.ScopedResourceName[MT]], primaryTable: Option[Provenance]) =
     l match {
-      case ast.NullLiteral() => typeParameterUniverse.iterator.map(analyzer2.NullLiteral[MT](_)(new analyzer2.AtomicPositionInfo(sourceName, l.position))).toVector
-      case ast.BooleanLiteral(b) => Seq(analyzer2.LiteralValue[MT](SoQLBoolean(b))(new analyzer2.AtomicPositionInfo(sourceName, l.position)))
+      case ast.NullLiteral() => typeParameterUniverse.iterator.map(analyzer2.NullLiteral[MT](_)(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, l.position)))).toVector
+      case ast.BooleanLiteral(b) => Seq(analyzer2.LiteralValue[MT](SoQLBoolean(b))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, l.position))))
       case ast.NumberLiteral(n) =>
-        val baseNumber = analyzer2.LiteralValue[MT](SoQLNumber(n.bigDecimal))(new analyzer2.AtomicPositionInfo(sourceName, l.position))
+        val baseNumber = analyzer2.LiteralValue[MT](SoQLNumber(n.bigDecimal))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, l.position)))
         Seq(
           baseNumber,
-          analyzer2.FunctionCall[MT](SoQLTypeInfo.numberToMoneyFunc, Seq(baseNumber))(new analyzer2.FuncallPositionInfo(sourceName, l.position, None, NoPosition, NoPosition)),
-          analyzer2.FunctionCall[MT](SoQLTypeInfo.numberToDoubleFunc, Seq(baseNumber))(new analyzer2.FuncallPositionInfo(sourceName, l.position, None, NoPosition, NoPosition))
+          analyzer2.FunctionCall[MT](SoQLTypeInfo.numberToMoneyFunc, Seq(baseNumber))(new analyzer2.FuncallPositionInfo(Source.Synthetic, NoPosition)),
+          analyzer2.FunctionCall[MT](SoQLTypeInfo.numberToDoubleFunc, Seq(baseNumber))(new analyzer2.FuncallPositionInfo(Source.Synthetic, NoPosition))
         )
       case ast.StringLiteral(s) =>
-        val baseString = analyzer2.LiteralValue[MT](SoQLText(s))(new analyzer2.AtomicPositionInfo(sourceName, l.position))
+        val baseString = analyzer2.LiteralValue[MT](SoQLText(s))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, l.position)))
         val results = Seq.newBuilder[analyzer2.Expr[MT]]
         results += baseString
         for {
@@ -59,15 +59,15 @@ final class SoQLTypeInfo2[MT <: analyzer2.MetaTypes with ({ type ColumnType = So
         } {
           results += expr(v, sourceName, l.position, primaryTable).asInstanceOf[analyzer2.Expr[MT]] // SAFETY: CT and CV are the same, and that's all this cares about
         }
-        results += analyzer2.FunctionCall[MT](SoQLTypeInfo.textToBlobFunc, Seq(baseString))(new analyzer2.FuncallPositionInfo(sourceName, l.position, None, NoPosition, NoPosition))
-        results += analyzer2.FunctionCall[MT](SoQLTypeInfo.textToPhotoFunc, Seq(baseString))(new analyzer2.FuncallPositionInfo(sourceName, l.position, None, NoPosition, NoPosition))
+        results += analyzer2.FunctionCall[MT](SoQLTypeInfo.textToBlobFunc, Seq(baseString))(new analyzer2.FuncallPositionInfo(Source.Synthetic, NoPosition))
+        results += analyzer2.FunctionCall[MT](SoQLTypeInfo.textToPhotoFunc, Seq(baseString))(new analyzer2.FuncallPositionInfo(Source.Synthetic, NoPosition))
         results.result()
     }
 
   override def boolType = SoQLBoolean.t
 
-  override def literalBoolean(b: Boolean, sourceName: Option[analyzer2.types.ScopedResourceName[MT]], pos: Position) =
-    analyzer2.LiteralValue[MT](SoQLBoolean(b))(new analyzer2.AtomicPositionInfo(sourceName, pos))
+  override def literalBoolean(b: Boolean, source: Source) =
+    analyzer2.LiteralValue[MT](SoQLBoolean(b))(new analyzer2.AtomicPositionInfo(source))
 
   override def updateProvenance(v: CV)(f: Provenance => Provenance): CV = {
     v match {
@@ -100,48 +100,48 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with SoQLTypeInfoCommo
   // to them.
   private class ExprHelper[MT <: analyzer2.MetaTypes with ({type ColumnType = SoQLType; type ColumnValue = SoQLValue})] extends analyzer2.StatementUniverse[MT] {
     def funcExpr(f: MonomorphicFunction) = { (t: SoQLValue, sourceName: Option[ScopedResourceName], pos: Position) =>
-      analyzer2.FunctionCall[MT](f, Seq(analyzer2.LiteralValue[MT](t)(new AtomicPositionInfo(sourceName, pos))))(new FuncallPositionInfo(sourceName, pos, None, NoPosition, NoPosition))
+      analyzer2.FunctionCall[MT](f, Seq(analyzer2.LiteralValue[MT](t)(new AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))))(new FuncallPositionInfo(Source.Synthetic, NoPosition))
     }
 
     def textToFixedTimestampExpr(dt: DateTime, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](SoQLFixedTimestamp(dt))(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](SoQLFixedTimestamp(dt))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToFloatingTimestampExpr(ldt: LocalDateTime, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](SoQLFloatingTimestamp(ldt))(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](SoQLFloatingTimestamp(ldt))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToDateExpr(d: LocalDate, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](SoQLDate(d))(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](SoQLDate(d))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToTimeExpr(t: LocalTime, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](SoQLTime(t))(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](SoQLTime(t))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToIntervalExpr(p: Period, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](SoQLInterval(p))(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](SoQLInterval(p))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToNumberExpr(s: SoQLText, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](SoQLNumber(new java.math.BigDecimal(s.value)))(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](SoQLNumber(new java.math.BigDecimal(s.value)))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToMoneyExpr(s: SoQLText, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](SoQLMoney(new java.math.BigDecimal(s.value)))(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](SoQLMoney(new java.math.BigDecimal(s.value)))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToPhoneExpr(phone: SoQLPhone, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](phone)(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](phone)(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToUrlExpr(url: SoQLUrl, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](url)(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](url)(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToPointExpr(p: Point, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](SoQLPoint(p))(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](SoQLPoint(p))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToMultiPointExpr(mp: MultiPoint, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](SoQLMultiPoint(mp))(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](SoQLMultiPoint(mp))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToLineExpr(l: LineString, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](SoQLLine(l))(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](SoQLLine(l))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToMultiLineExpr(ml: MultiLineString, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](SoQLMultiLine(ml))(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](SoQLMultiLine(ml))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToPolygonExpr(p: Polygon, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](SoQLPolygon(p))(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](SoQLPolygon(p))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToMultiPolygonExpr(mp: MultiPolygon, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](SoQLMultiPolygon(mp))(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](SoQLMultiPolygon(mp))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToRowIdExpr(rid: SoQLID, sourceName: Option[ScopedResourceName], pos: Position, primaryTable: Option[Provenance]) = {
       val newRID = rid.copy()
       newRID.provenance = primaryTable
-      analyzer2.LiteralValue[MT](newRID)(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](newRID)(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     }
     def textToRowVersionExpr(rv: SoQLVersion, sourceName: Option[ScopedResourceName], pos: Position, primaryTable: Option[Provenance]) = {
       val newRV = rv.copy()
       newRV.provenance = primaryTable
-      analyzer2.LiteralValue[MT](newRV)(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      analyzer2.LiteralValue[MT](newRV)(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     }
   }
 
@@ -185,8 +185,8 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with SoQLTypeInfoCommo
   private val booleanRx = "(?i)(true|false|1|0)".r
   private def textToBooleanExpr[MT <: analyzer2.MetaTypes with ({type ColumnType = SoQLType; type ColumnValue = SoQLValue})](s: SoQLText, sourceName: Option[ScopedResourceName[MT#ResourceNameScope]], pos: Position) =
     s.value.toLowerCase match { // this function could be part of ExprHelper, but I want this match close to the definition of booleanRx
-      case "true"|"1" => analyzer2.LiteralValue[MT](SoQLBoolean(true))(new analyzer2.AtomicPositionInfo(sourceName, pos))
-      case "false"|"0" => analyzer2.LiteralValue[MT](SoQLBoolean(false))(new analyzer2.AtomicPositionInfo(sourceName, pos))
+      case "true"|"1" => analyzer2.LiteralValue[MT](SoQLBoolean(true))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
+      case "false"|"0" => analyzer2.LiteralValue[MT](SoQLBoolean(false))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     }
   private def isBooleanLiteral(s: String) = try {
     s match {

@@ -23,7 +23,7 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
         def orderByOrderable(predicate: (AutoColumnLabel, CT) => Boolean) =
           ct.schema.iterator.collect { case (columnLabel, Statement.SchemaEntry(_, typ, _isSynthetic)) if predicate(columnLabel, typ) =>
             assert(isOrderable(typ))
-            OrderBy(VirtualColumn[MT](newTableLabel, columnLabel, typ)(AtomicPositionInfo.None), true, true)
+            OrderBy(VirtualColumn[MT](newTableLabel, columnLabel, typ)(AtomicPositionInfo.Synthetic), true, true)
           }.to(Vector)
 
         def newOrderBy = usefulUnique match {
@@ -37,7 +37,7 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
         Select(
           Distinctiveness.Indistinct(),
           OrderedMap() ++ ct.schema.iterator.map { case (columnLabel, Statement.SchemaEntry(name, typ, isSynthetic)) =>
-            labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newTableLabel, columnLabel, typ)(AtomicPositionInfo.None), name, isSynthetic = isSynthetic)
+            labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newTableLabel, columnLabel, typ)(AtomicPositionInfo.Synthetic), name, isSynthetic = isSynthetic)
           },
           FromStatement(ct, newTableLabel, None, None),
           None,

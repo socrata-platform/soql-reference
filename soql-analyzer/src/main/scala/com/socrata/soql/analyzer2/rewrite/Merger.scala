@@ -268,7 +268,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
       val windowUsed =
         a.orderBy.exists(_.expr.isWindowed) ||
           a.selectList.iterator.filter(_._2.expr.isWindowed).exists { case (k, namedExpr) =>
-            b.directlyContains(VirtualColumn(aLabel, k, namedExpr.expr.typ)(AtomicPositionInfo.None))
+            b.directlyContains(VirtualColumn(aLabel, k, namedExpr.expr.typ)(AtomicPositionInfo.Synthetic))
           }
 
       if(windowUsed) {
@@ -288,7 +288,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
         if(b.isWindowed) {
           val windowsWithinWindows =
             a.selectList.iterator.filter(_._2.expr.isWindowed).exists { case (k, namedExpr) =>
-              val target = VirtualColumn(aLabel, k, namedExpr.expr.typ)(AtomicPositionInfo.None)
+              val target = VirtualColumn(aLabel, k, namedExpr.expr.typ)(AtomicPositionInfo.Synthetic)
               b.directlyFind {
                 case e: WindowedFunctionCall => e.contains(target)
                 case _ => false
@@ -366,7 +366,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
       case (None, None) => None
       case (Some(a), None) => Some(a)
       case (None, Some(b)) => Some(replaceRefs(aTable, aColumns, b))
-      case (Some(a), Some(b)) => Some(FunctionCall(and, Seq(a, replaceRefs(aTable, aColumns, b)))(FuncallPositionInfo.None))
+      case (Some(a), Some(b)) => Some(FunctionCall(and, Seq(a, replaceRefs(aTable, aColumns, b)))(FuncallPositionInfo.Synthetic))
     }
 
   private def replaceRefs(aTable: AutoTableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr], b: Expr) =

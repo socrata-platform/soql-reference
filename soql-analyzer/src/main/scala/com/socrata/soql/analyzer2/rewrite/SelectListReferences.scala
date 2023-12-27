@@ -79,7 +79,7 @@ class SelectListReferences[MT <: MetaTypes] private () extends StatementUniverse
       def unnumericateExpr(e: Expr): Expr = {
         e match {
           case r@SelectListReference(idxPlusOne, _, _, _) =>
-            selectListIndices(idxPlusOne - 1).reposition(r.position.logicalSource, r.position.logicalPosition)
+            selectListIndices(idxPlusOne - 1).reReference(r.position.reference)
           case other =>
             other
         }

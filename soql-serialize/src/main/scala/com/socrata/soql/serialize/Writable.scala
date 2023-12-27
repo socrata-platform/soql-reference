@@ -5,7 +5,7 @@ import scala.util.parsing.input.{Position, NoPosition}
 import java.io.OutputStream
 
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.{ResourceName, ScopedResourceName, TypeName, ColumnName, Provenance}
+import com.socrata.soql.environment.{ResourceName, ScopedResourceName, Source, TypeName, ColumnName, Provenance}
 import com.socrata.soql.parsing.SoQLPosition
 
 trait Writable[T] {
@@ -92,6 +92,22 @@ object Writable extends `-impl`.WritableTuples {
           val newlinePos = ls.indexOf('\n')
           val line = if(newlinePos == -1) "" else ls.substring(0, newlinePos)
           buffer.write(line)
+      }
+    }
+  }
+
+  implicit def source[RNS: Writable] = new Writable[Source[RNS]] {
+    override def writeTo(buffer: WriteBuffer, source: Source[RNS]): Unit = {
+      source match {
+        case Source.Anonymous(pos) =>
+          buffer.write(0)
+          buffer.write(pos)
+        case Source.Synthetic =>
+          buffer.write(1)
+        case Source.Saved(srn, pos) =>
+          buffer.write(2)
+          buffer.write(srn)
+          buffer.write(pos)
       }
     }
   }

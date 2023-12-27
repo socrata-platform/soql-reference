@@ -60,7 +60,7 @@ trait TestHelper { this: Assertions =>
             Seq(expr),
             false,
             None
-          )(FuncallPositionInfo.None)
+          )(FuncallPositionInfo.Synthetic)
         )
       case _ =>
         None
@@ -172,7 +172,7 @@ trait TestHelper { this: Assertions =>
 
   private def aggregateMerge(colName: ColumnName, expr: Expr[TestMT]): Option[Expr[TestMT]] = {
     if(colName == ColumnName(":id")) {
-      Some(AggregateFunctionCall[TestMT](TestFunctions.Max.monomorphic.get, Seq(expr), false, None)(FuncallPositionInfo.None))
+      Some(AggregateFunctionCall[TestMT](TestFunctions.Max.monomorphic.get, Seq(expr), false, None)(FuncallPositionInfo.Synthetic))
     } else {
       None
     }
@@ -233,11 +233,11 @@ trait TestHelper { this: Assertions =>
 
     def literalValue(value: LiteralValue): ast.Expression =
       value.value match {
-        case TestText(s) => ast.StringLiteral(s)(value.position.logicalPosition)
-        case TestNumber(n) => ast.NumberLiteral(n)(value.position.logicalPosition)
-        case TestBoolean(b) => ast.BooleanLiteral(b)(value.position.logicalPosition)
-        case TestUnorderable(s) => ast.StringLiteral(s)(value.position.logicalPosition)
-        case TestNull => ast.NullLiteral()(value.position.logicalPosition)
+        case TestText(s) => ast.StringLiteral(s)(value.position.source.position)
+        case TestNumber(n) => ast.NumberLiteral(n)(value.position.source.position)
+        case TestBoolean(b) => ast.BooleanLiteral(b)(value.position.source.position)
+        case TestUnorderable(s) => ast.StringLiteral(s)(value.position.source.position)
+        case TestNull => ast.NullLiteral()(value.position.source.position)
       }
 
     override def auto_table_label_prefix = "t"

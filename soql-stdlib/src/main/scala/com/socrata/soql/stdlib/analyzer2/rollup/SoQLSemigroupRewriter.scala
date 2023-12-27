@@ -27,10 +27,10 @@ class SoQLSemigroupRewriter[MT <: MetaTypes with ({type ColumnType = SoQLType; t
           Seq(expr),
           false,
           None
-        )(FuncallPositionInfo.None),
-        LiteralValue[MT](SoQLNumber(JBigDecimal.ZERO))(AtomicPositionInfo.None)
+        )(FuncallPositionInfo.Synthetic),
+        LiteralValue[MT](SoQLNumber(JBigDecimal.ZERO))(AtomicPositionInfo.Synthetic)
       )
-    )(FuncallPositionInfo.None)
+    )(FuncallPositionInfo.Synthetic)
 
   private def simple(f: Function[CT], binding: String): (Function[CT], Expr => Expr) =
     f -> { expr =>
@@ -42,7 +42,7 @@ class SoQLSemigroupRewriter[MT <: MetaTypes with ({type ColumnType = SoQLType; t
         Seq(expr),
         false,
         None
-      )(FuncallPositionInfo.None)
+      )(FuncallPositionInfo.Synthetic)
     }
 
   private val semigroupMap = Seq[(Function[CT], Expr => Expr)](

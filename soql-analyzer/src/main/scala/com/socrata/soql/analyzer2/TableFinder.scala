@@ -5,7 +5,7 @@ import scala.util.parsing.input.{Position, NoPosition}
 
 import com.socrata.soql.ast
 import com.socrata.soql.collection.OrderedMap
-import com.socrata.soql.environment.{ResourceName, ScopedResourceName, ColumnName, HoleName, TableName}
+import com.socrata.soql.environment.{ResourceName, ScopedResourceName, Source, ColumnName, HoleName, TableName}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.{BinaryTree, Leaf, Compound}
@@ -95,15 +95,126 @@ trait TableFinder[MT <: MetaTypes] {
 
   type TableMap = com.socrata.soql.analyzer2.TableMap[MT]
 
+  //  This is a callstack _excluding_ the current query, and as a
+  //  result it may be empty.
+  private sealed trait CallerStack {
+    def callstack: Seq[CanonicalName]
+    def contains(canonicalName: CanonicalName): Boolean
+
+    // This is the point in the Caller's source that made the call to
+    // the current query.
+    def callerSource: Option[Source[ResourceNameScope]]
+  }
+  private object CallerStack {
+    case object Empty extends CallerStack {
+      def callstack: Seq[CanonicalName] = Nil
+      def contains(canonicalName: CanonicalName): Boolean = false
+      def callerSource = None
+    }
+    // This caller explicity named its callee
+    case class Explicit(stack: CallStack, reference: Position) extends CallerStack {
+      def callstack: Seq[CanonicalName] = stack.callstack
+      def contains(canonicalName: CanonicalName): Boolean = stack.contains(canonicalName)
+      def callerSource = stack match {
+        case CallStack.Anonymous(_) => Some(Source.Anonymous(reference))
+        case CallStack.Saved(srn, _, _) => Some(Source.Saved(srn, reference))
+      }
+    }
+    // This caller implicitly named its callee (i.e., it was a query
+    // on a saved query or dataset)
+    case class Implicit(stack: CallStack) extends CallerStack {
+      def callstack: Seq[CanonicalName] = stack.callstack
+      def contains(canonicalName: CanonicalName): Boolean = stack.contains(canonicalName)
+
+      // This is a little weird, and I'm not 100% sure I like it?  It
+      // defines the source of an implicit reference to a parent to be
+      // "the child, but no position", which is reasonable but doesn't
+      // sit well?  The obvious alternative ("no source") also doesn't
+      // sst very well...
+      def callerSource = stack match {
+        case CallStack.Anonymous(_) => Some(Source.Anonymous(NoPosition))
+        case CallStack.Saved(srn, _, _) => Some(Source.Saved(srn, NoPosition))
+      }
+    }
+  }
+  // This is a callstack _including_ the current query (and as a
+  // result it is never "empty")
+  private sealed trait CallStack {
+    def caller: CallerStack
+    def source(pos: Position): Source[ResourceNameScope]
+    def callstack: Seq[CanonicalName]
+    def contains(canonicalName: CanonicalName): Boolean
+  }
+  private object CallStack {
+    case class Anonymous(impersonating: Option[CanonicalName]) extends CallStack {
+      override def caller = CallerStack.Empty
+      override def callstack = impersonating.toSeq
+      override def source(pos: Position) = Source.Anonymous(pos)
+      override def contains(canonicalName: CanonicalName): Boolean =
+        impersonating match {
+          case Some(i) => i == canonicalName
+          case None => false
+        }
+    }
+    case class Saved(srn: ScopedResourceName, canonicalName: CanonicalName, caller: CallerStack) extends CallStack {
+      override def callstack = {
+        val result = Vector.newBuilder[CanonicalName]
+        @tailrec
+        def loop(ptr: CallStack): Unit =
+          ptr match {
+            case Saved(_, cn, tail) =>
+              result += cn
+              tail match {
+                case CallerStack.Implicit(stack) =>
+                  loop(stack)
+                case CallerStack.Explicit(stack, _) =>
+                  loop(stack)
+                case CallerStack.Empty =>
+                  // done
+              }
+            case other =>
+              result ++= other.callstack
+          }
+        loop(this)
+        result.result()
+      }
+      override def source(pos: Position) = Source.Saved(srn, pos)
+      override def contains(canonicalName: CanonicalName): Boolean = {
+        @tailrec
+        def loop(ptr: CallStack): Boolean =
+          ptr match {
+            case Saved(_, cn, tail) =>
+              if(cn == canonicalName) {
+                true
+              } else {
+                tail match {
+                  case CallerStack.Implicit(stack) =>
+                    loop(stack)
+                  case CallerStack.Explicit(stack, _) =>
+                    loop(stack)
+                  case CallerStack.Empty =>
+                    false
+                }
+              }
+            case other =>
+              other.contains(canonicalName)
+          }
+
+        loop(this)
+      }
+    }
+  }
+
   /** Find all tables referenced from the given SoQL.  No implicit context is assumed. */
   final def findTables(scope: ResourceNameScope, text: String, parameters: Map[HoleName, ColumnType]): Result[FoundTables[MT]] = {
-    walkSoQL(scope, FoundTables.Standalone[MT](_, _, parameters), text, TableMap.empty, Nil)
+    walkSoQL(scope, FoundTables.Standalone[MT](_, _, parameters), text, TableMap.empty, CallStack.Anonymous(None))
   }
 
   /** Find all tables referenced from the given SoQL on name that provides an implicit context. */
   final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String, parameters: Map[HoleName, ColumnType]): Result[FoundTables[MT]] = {
-    walkFromName(ScopedResourceName(scope, resourceName), None, NoPosition, TableMap.empty, Nil).flatMap { acc =>
-      walkSoQL(scope, FoundTables.InContext[MT](resourceName, _, _, parameters), text, acc, Nil)
+    val firstFrame = CallStack.Anonymous(None)
+    walkFromName(ScopedResourceName(scope, resourceName), TableMap.empty, CallerStack.Implicit(firstFrame)).flatMap { acc =>
+      walkSoQL(scope, FoundTables.InContext[MT](resourceName, _, _, parameters), text, acc, firstFrame)
     }
   }
 
@@ -114,14 +225,15 @@ trait TableFinder[MT <: MetaTypes] {
     * to be found, and we want that parameter map to be editable.
     */
   final def findTables(scope: ResourceNameScope, resourceName: ResourceName, text: String, parameters: Map[HoleName, ColumnType], impersonating: CanonicalName): Result[FoundTables[MT]] = {
-    walkFromName(ScopedResourceName(scope, resourceName), None, NoPosition, TableMap.empty, List(impersonating)).flatMap { acc =>
-      walkSoQL(scope, FoundTables.InContextImpersonatingSaved[MT](resourceName, _, _, parameters, impersonating), text, acc, List(impersonating))
+    val firstFrame = CallStack.Anonymous(Some(impersonating))
+    walkFromName(ScopedResourceName(scope, resourceName), TableMap.empty, CallerStack.Implicit(firstFrame)).flatMap { acc =>
+      walkSoQL(scope, FoundTables.InContextImpersonatingSaved[MT](resourceName, _, _, parameters, impersonating), text, acc, firstFrame)
     }
   }
 
   /** Find all tables referenced from the given name. */
   final def findTables(scope: ResourceNameScope, resourceName: ResourceName): Result[FoundTables[MT]] = {
-    walkFromName(ScopedResourceName(scope, resourceName), None, NoPosition, TableMap.empty, Nil).map { acc =>
+    walkFromName(ScopedResourceName(scope, resourceName), TableMap.empty, CallerStack.Empty).map { acc =>
       FoundTables[MT](acc, scope, FoundTables.Saved(resourceName), parserParameters)
     }
   }
@@ -129,8 +241,7 @@ trait TableFinder[MT <: MetaTypes] {
   // A helper that lifts the abstract function into the Result world
   private def doLookup(
     scopedName: ScopedResourceName, // the name of the thing we're looking up
-    caller: Option[ScopedResourceName], // the name of the thing that is referencing `scopedName`
-    pos: Position // the position of the reference within `caller`
+    caller: Option[Source[ResourceNameScope]] // the location of the reference of `scopedName`
   ): Result[TableDescription[MT]] = {
     lookup(scopedName) match {
       case Right(ds: Dataset) =>
@@ -140,9 +251,9 @@ trait TableFinder[MT <: MetaTypes] {
       case Right(TableFunction(scope, canonicalName, text, params, hiddenColumns)) =>
         parse(Some(scopedName), text, true).map(TableDescription.TableFunction[MT](scope, canonicalName, _, text, params, hiddenColumns))
       case Left(LookupError.NotFound) =>
-        Left(TableFinderError.NotFound(caller, pos, scopedName.name))
+        Left(TableFinderError.NotFound(caller, scopedName.name))
       case Left(LookupError.PermissionDenied) =>
-        Left(TableFinderError.PermissionDenied(caller, pos, scopedName.name))
+        Left(TableFinderError.PermissionDenied(caller, scopedName.name))
     }
   }
 
@@ -150,11 +261,12 @@ trait TableFinder[MT <: MetaTypes] {
     ParserUtil.parseInContext(name, text, parserParameters.copy(allowHoles = udfParamsAllowed))
   }
 
-  private def walkFromName(scopedName: ScopedResourceName, caller: Option[ScopedResourceName], pos: Position, acc: TableMap, stack: List[CanonicalName]): Result[TableMap] = {
+  private def walkFromName(scopedName: ScopedResourceName, acc: TableMap, callerStack: CallerStack): Result[TableMap] = {
     acc.get(scopedName) match {
       case Some(desc) =>
-        if(stack.contains(desc.canonicalName)) {
-          Left(TableFinderError.RecursiveQuery(caller, pos, desc.canonicalName :: stack))
+        if(callerStack.contains(desc.canonicalName)) {
+          // if we have a stack, then we'd better have a caller too...
+          Left(TableFinderError.RecursiveQuery(callerStack.callerSource.get, desc.canonicalName +: callerStack.callstack))
         } else {
           Right(acc)
         }
@@ -162,32 +274,36 @@ trait TableFinder[MT <: MetaTypes] {
         if(Util.isSpecialTableName(scopedName)) {
           Right(acc)
         } else {
-          for {
-            desc <- doLookup(scopedName, caller, pos)
-            acc <- walkDesc(scopedName, caller, pos, desc, acc + (scopedName -> desc), stack)
-          } yield acc
+          doLookup(scopedName, callerStack.callerSource) match {
+            case Right(desc) =>
+              if(callerStack.contains(desc.canonicalName)) {
+                Left(TableFinderError.RecursiveQuery(callerStack.callerSource.get, desc.canonicalName +: callerStack.callstack))
+              } else {
+                val newStack = CallStack.Saved(scopedName, desc.canonicalName, callerStack)
+                walkDesc(scopedName, desc, acc + (scopedName -> desc), newStack)
+              }
+            case Left(err) =>
+              Left(err)
+          }
         }
     }
   }
 
-  def walkDesc(scopedName: ScopedResourceName, caller: Option[ScopedResourceName], pos: Position, desc: TableDescription[MT], acc: TableMap, stack: List[CanonicalName]): Result[TableMap] = {
-    if(stack.contains(desc.canonicalName)) {
-      return Left(TableFinderError.RecursiveQuery(caller, pos, desc.canonicalName :: stack))
-    }
+  def walkDesc(scopedName: ScopedResourceName, desc: TableDescription[MT], acc: TableMap, stack: CallStack): Result[TableMap] = {
     desc match {
       case TableDescription.Dataset(_, _, _, _, _) => Right(acc)
       case TableDescription.Query(scope, canonicalName, basedOn, tree, _unparsed, _params, _hiddenColumns) =>
         for {
-          acc <- walkFromName(ScopedResourceName(scope, basedOn), Some(scopedName), NoPosition, acc, canonicalName :: stack)
-          acc <- walkTree(scope, Some(scopedName), tree, acc, canonicalName :: stack)
+          acc <- walkFromName(ScopedResourceName(scope, basedOn), acc, CallerStack.Implicit(stack))
+          acc <- walkTree(scope, Some(scopedName), tree, acc, stack)
         } yield acc
       case TableDescription.TableFunction(scope, canonicalName, tree, _unparsed, _params, _hiddenColumns) =>
-        walkTree(scope, Some(scopedName), tree, acc, canonicalName :: stack)
+        walkTree(scope, Some(scopedName), tree, acc, stack)
     }
   }
 
   // This walks anonymous in a context soql.  Named soql gets parsed in doLookup
-  private def walkSoQL(scope: ResourceNameScope, context: (BinaryTree[ast.Select], String) => FoundTables.Query[MT], text: String, acc: TableMap, stack: List[CanonicalName]): Result[FoundTables[MT]] = {
+  private def walkSoQL(scope: ResourceNameScope, context: (BinaryTree[ast.Select], String) => FoundTables.Query[MT], text: String, acc: TableMap, stack: CallStack): Result[FoundTables[MT]] = {
     for {
       tree <- parse(None, text, udfParamsAllowed = false)
       acc <- walkTree(scope, None, tree, acc, stack)
@@ -196,7 +312,7 @@ trait TableFinder[MT <: MetaTypes] {
     }
   }
 
-  private def walkTree(scope: ResourceNameScope, treeName: Option[ScopedResourceName], bt: BinaryTree[ast.Select], acc: TableMap, stack: List[CanonicalName]): Result[TableMap] = {
+  private def walkTree(scope: ResourceNameScope, treeName: Option[ScopedResourceName], bt: BinaryTree[ast.Select], acc: TableMap, stack: CallStack): Result[TableMap] = {
     bt match {
       case Leaf(s) => walkSelect(scope, treeName, s, acc, stack)
       case c: Compound[ast.Select] =>
@@ -207,7 +323,7 @@ trait TableFinder[MT <: MetaTypes] {
     }
   }
 
-  private def walkSelect(scope: ResourceNameScope, selectName: Option[ScopedResourceName], s: ast.Select, acc0: TableMap, stack: List[CanonicalName]): Result[TableMap] = {
+  private def walkSelect(scope: ResourceNameScope, selectName: Option[ScopedResourceName], s: ast.Select, acc0: TableMap, stack: CallStack): Result[TableMap] = {
     val ast.Select(
       _distinct,
       _selection,
@@ -225,9 +341,12 @@ trait TableFinder[MT <: MetaTypes] {
 
     var acc = acc0
 
+    def effectiveSource(pos: Position) =
+      Some(Source.nonSynthetic(selectName, pos))
+
     for(tn <- from) {
       val scopedName = ScopedResourceName(scope, ResourceName(tn.nameWithoutPrefix))
-      walkFromName(scopedName, selectName, NoPosition /* TODO: need position info from AST */, acc, stack) match {
+      walkFromName(scopedName, acc, CallerStack.Explicit(stack, NoPosition /* TODO: need position info from AST */)) match {
         case Right(newAcc) =>
           acc = newAcc
         case Left(err) =>
@@ -239,11 +358,11 @@ trait TableFinder[MT <: MetaTypes] {
       val newAcc =
         join.from match {
           case ast.JoinTable(tn) =>
-            walkFromName(ScopedResourceName(scope, ResourceName(tn.nameWithoutPrefix)), selectName, NoPosition /* TODO: need position info from AST */, acc, stack)
+            walkFromName(ScopedResourceName(scope, ResourceName(tn.nameWithoutPrefix)), acc, CallerStack.Explicit(stack, NoPosition /* TODO: need position info from AST */))
           case ast.JoinQuery(q, _) =>
             walkTree(scope, selectName, q, acc, stack)
           case ast.JoinFunc(f, _) =>
-            walkFromName(ScopedResourceName(scope, ResourceName(f.nameWithoutPrefix)), selectName, NoPosition /* TODO: need position info from AST */, acc, stack)
+            walkFromName(ScopedResourceName(scope, ResourceName(f.nameWithoutPrefix)), acc, CallerStack.Explicit(stack, NoPosition /* TODO: need position info from AST */))
         }
 
       newAcc match {

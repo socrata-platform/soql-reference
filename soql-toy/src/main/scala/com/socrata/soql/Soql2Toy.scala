@@ -60,7 +60,7 @@ object Soql2Toy extends (Array[String] => Unit) with StatementUniverse[Soql2Toy]
     val analyzer = new SoQLAnalyzer[Soql2Toy](SoQLTypeInfo.soqlTypeInfo2, SoQLFunctionInfo, provenanceMapper).
       preserveSystemColumns { (columnName, expr) =>
         if(columnName == ColumnName(":id")) {
-          Some(AggregateFunctionCall[Soql2Toy](MonomorphicFunction(SoQLFunctions.Max, Map("a" -> SoQLID)), Seq(expr), false, None)(FuncallPositionInfo.None))
+          Some(AggregateFunctionCall[Soql2Toy](MonomorphicFunction(SoQLFunctions.Max, Map("a" -> SoQLID)), Seq(expr), false, None)(FuncallPositionInfo.Synthetic))
         } else {
           None
         }

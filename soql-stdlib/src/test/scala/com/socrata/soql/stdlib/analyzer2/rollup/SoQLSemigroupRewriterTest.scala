@@ -45,7 +45,7 @@ class SoQLSemigroupRewriterTest extends FunSuite with MustMatchers {
       DatabaseTableName("rollup"),
       DatabaseColumnName("c1"),
       SoQLNumber
-    )(AtomicPositionInfo.None)
+    )(AtomicPositionInfo.Synthetic)
 
   test("merge max") {
     val Some(f) = rewriter(MonomorphicFunction(SoQLFunctions.Max, Map("a" -> SoQLNumber)))

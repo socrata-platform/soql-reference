@@ -36,7 +36,7 @@ trait TypeInfo[Type, Value] extends TypeInfoCommon[Type, Value] {
 
 trait TypeInfo2[MT <: analyzer2.MetaTypes] extends analyzer2.StatementUniverse[MT] with TypeInfoCommon[MT#ColumnType, MT#ColumnValue] {
   def potentialExprs(l: ast.Literal, currentSource: Option[ScopedResourceName], currentPrimaryTable: Option[Provenance]): Seq[Expr]
-  def literalBoolean(b: Boolean, currentSource: Option[ScopedResourceName], position: Position): Expr
+  def literalBoolean(b: Boolean, currentSource: Source): Expr
 
   def boolType: CT
 

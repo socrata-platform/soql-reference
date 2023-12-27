@@ -45,7 +45,7 @@ class SoQLAdHocRewriterTest extends FunSuite with MustMatchers {
       DatabaseTableName("rollup"),
       DatabaseColumnName("c1"),
       SoQLNumber
-    )(AtomicPositionInfo.None)
+    )(AtomicPositionInfo.Synthetic)
 
   test("limited by literals's truncatedness") {
     rewriter(analyze("floating_timestamp < '2001-01-02'")) must equal (Seq(analyze("date_trunc_ymd(floating_timestamp) < '2001-01-02'")))

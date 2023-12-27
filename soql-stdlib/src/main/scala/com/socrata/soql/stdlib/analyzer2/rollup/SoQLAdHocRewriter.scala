@@ -32,13 +32,13 @@ class SoQLAdHocRewriter[MT <: MetaTypes with ({type ColumnType = SoQLType; type 
 
         def addYear(expr: Expr): Unit = {
           if(timestamp.getDayOfMonth == 1 && timestamp.getMonthOfYear == 1) {
-            result += FunctionCall(fc.function, Seq(FunctionCall[MT](DateTruncY, Seq(expr))(FuncallPositionInfo.None), rhs))(fc.position)
+            result += FunctionCall(fc.function, Seq(FunctionCall[MT](DateTruncY, Seq(expr))(FuncallPositionInfo.Synthetic), rhs))(fc.position)
           }
         }
 
         def addMonth(expr: Expr): Unit = {
           if(timestamp.getDayOfMonth == 1) {
-            result += FunctionCall(fc.function, Seq(FunctionCall[MT](DateTruncYM, Seq(expr))(FuncallPositionInfo.None), rhs))(fc.position)
+            result += FunctionCall(fc.function, Seq(FunctionCall[MT](DateTruncYM, Seq(expr))(FuncallPositionInfo.Synthetic), rhs))(fc.position)
           }
         }
 
@@ -54,7 +54,7 @@ class SoQLAdHocRewriter[MT <: MetaTypes with ({type ColumnType = SoQLType; type 
             // nothing; we can't truncate further
 
           case _ =>
-            result += FunctionCall(fc.function, Seq(FunctionCall[MT](DateTruncYMD, Seq(lhs))(FuncallPositionInfo.None), rhs))(fc.position)
+            result += FunctionCall(fc.function, Seq(FunctionCall[MT](DateTruncYMD, Seq(lhs))(FuncallPositionInfo.Synthetic), rhs))(fc.position)
             addMonth(lhs)
             addYear(lhs)
         }

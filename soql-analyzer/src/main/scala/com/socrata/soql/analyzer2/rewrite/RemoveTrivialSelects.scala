@@ -137,7 +137,7 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
           case TrivialSelect(selectList, subFrom, schemaChanges) if permitSchemaChange || !schemaChanges =>
             val newColumnMap =
               cm ++ selectList.iterator.map { case (columnLabel, column) =>
-                VirtualColumn(fromLabel, columnLabel, column.typ)(AtomicPositionInfo.None) -> column
+                VirtualColumn(fromLabel, columnLabel, column.typ)(AtomicPositionInfo.Synthetic) -> column
               }
             (subFrom, newColumnMap)
           case other =>

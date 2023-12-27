@@ -106,18 +106,18 @@ class SoQLApproximation[MT <: MetaTypes] private (ops: SoQLApproximation.MetaOps
       case lv@LiteralValue(_value) =>
         ops.literalValue(lv)
       case nl@NullLiteral(_typ) =>
-        ast.NullLiteral()(nl.position.logicalPosition)
+        ast.NullLiteral()(nl.position.source.position)
       case pc@PhysicalColumn(table, _tableName, column, _typ) =>
-        ast.ColumnOrAliasRef(Some(convertAutoTableLabel(table)), ops.databaseColumnName(column))(pc.position.logicalPosition)
+        ast.ColumnOrAliasRef(Some(convertAutoTableLabel(table)), ops.databaseColumnName(column))(pc.position.source.position)
       case vc@VirtualColumn(table, column, _typ) =>
-        ast.ColumnOrAliasRef(Some(convertAutoTableLabel(table)), convertAutoColumnLabel(column))(vc.position.logicalPosition)
+        ast.ColumnOrAliasRef(Some(convertAutoTableLabel(table)), convertAutoColumnLabel(column))(vc.position.source.position)
       case fc@FunctionCall(func, args) =>
-        ast.FunctionCall(func.name, args.map(convertExpr))(fc.position.logicalPosition, fc.position.functionNamePosition)
+        ast.FunctionCall(func.name, args.map(convertExpr))(fc.position.source.position, fc.position.functionNameSource.position)
       case afc@AggregateFunctionCall(func, args, distinct, filter) =>
         if(distinct) {
           throw new Exception("Cannot convert a FunctionCall with a DISTINCT to an AST")
         }
-        ast.FunctionCall(func.name, args.map(convertExpr), filter.map(convertExpr))(afc.position.logicalPosition, afc.position.functionNamePosition)
+        ast.FunctionCall(func.name, args.map(convertExpr), filter.map(convertExpr))(afc.position.source.position, afc.position.functionNameSource.position)
       case wfc@WindowedFunctionCall(func, args, filter, partitionBy, orderBy, frame) =>
         // uggghhghgh
         val frameStuff = frame.map { frame =>
@@ -153,7 +153,7 @@ class SoQLApproximation[MT <: MetaTypes] private (ops: SoQLApproximation.MetaOps
                  orderBy.map(convertOrderBy),
                  frameStuff
                ))
-        )(wfc.position.logicalPosition, wfc.position.functionNamePosition)
+        )(wfc.position.source.position, wfc.position.functionNameSource.position)
 
       case _ : SelectListReference =>
         throw new Exception("Cannot get a soql approximation for a select list reference")

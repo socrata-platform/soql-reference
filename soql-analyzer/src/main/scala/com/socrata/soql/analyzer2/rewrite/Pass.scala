@@ -1,12 +1,11 @@
 package com.socrata.soql.analyzer2.rewrite
 
-import scala.reflect.ClassTag
-
 import com.rojoma.json.v3.ast.{JValue, JObject}
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 import com.rojoma.json.v3.util.{SimpleHierarchyCodecBuilder, InternalTag, AutomaticJsonDecodeBuilder, AutomaticJsonEncodeBuilder}
 
 import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer, Readable, Writable}
+import com.socrata.soql.jsonutils.HierarchyImplicits._
 
 sealed abstract class Pass
 
@@ -22,21 +21,6 @@ object Pass {
   case class Page(size: BigInt, offset: BigInt) extends Pass
   case class AddLimitOffset(limit: Option[BigInt], offset: Option[BigInt]) extends Pass
   case object RemoveOrderBy extends Pass
-
-  private class SingletonCodec[T](value: T) extends JsonEncode[T] with JsonDecode[T] {
-    def encode(t: T) = JObject.canonicalEmpty
-    def decode(j: JValue) =
-      j match {
-        case obj: JObject => Right(value)
-        case other => Left(DecodeError.InvalidType(expected = JObject, got = other.jsonType))
-      }
-  }
-  implicit class AugmentedSHCB[T <: AnyRef](private val underlying: SimpleHierarchyCodecBuilder[T]) extends AnyVal {
-    def singleton[U <: T : ClassTag](tag: String, value: U) = {
-      implicit val c = new SingletonCodec(value)
-      underlying.branch[U](tag)
-    }
-  }
 
   implicit val jCodec = SimpleHierarchyCodecBuilder[Pass](InternalTag("pass"))
     .singleton("inline_trivial_parameters", InlineTrivialParameters)

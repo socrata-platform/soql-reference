@@ -5,7 +5,7 @@ import scala.util.parsing.input.{Position, NoPosition}
 import java.io.{IOException, InputStream}
 
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.{ResourceName, ScopedResourceName, TypeName, ColumnName, Provenance}
+import com.socrata.soql.environment.{ResourceName, ScopedResourceName, Source, TypeName, ColumnName, Provenance}
 import com.socrata.soql.parsing.SoQLPosition
 
 trait Readable[T] {
@@ -110,6 +110,24 @@ object Readable extends `-impl`.ReadableTuples {
           SimplePosition(line, column, lineText)
         case other =>
           fail("Unknown position type " + other)
+      }
+    }
+  }
+
+  implicit def source[RNS: Readable] = new Readable[Source[RNS]] {
+    override def readFrom(buffer: ReadBuffer): Source[RNS] = {
+      buffer.read[Int]() match {
+        case 0 =>
+          val pos = buffer.read[Position]()
+          Source.Anonymous(pos)
+        case 1 =>
+          Source.Synthetic
+        case 2 =>
+          val srn = buffer.read[ScopedResourceName[RNS]]()
+          val pos = buffer.read[Position]()
+          Source.Saved(srn, pos)
+        case other =>
+          fail("Unknown source tag " + other)
       }
     }
   }

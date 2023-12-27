@@ -7,6 +7,7 @@ import org.scalatest.{FunSuite, MustMatchers}
 import com.rojoma.json.v3.util.{SimpleHierarchyCodecBuilder, InternalTag}
 
 import com.socrata.soql.analyzer2.mocktablefinder._
+import com.socrata.soql.environment.Source
 import com.socrata.soql.util.{SoQLErrorCodec, EncodedError}
 
 class SoQLErrorTest extends FunSuite with MustMatchers with TestHelper {
@@ -48,17 +49,17 @@ class SoQLErrorTest extends FunSuite with MustMatchers with TestHelper {
       (0, "q") -> Q(0, "a", "haha invalid soql")
     )
 
-    val Left(err@ParserError.ExpectedToken(_, _, _, _)) = tf.findTables(0, rn("q"))
+    val Left(err@ParserError.ExpectedToken(_, _, _)) = tf.findTables(0, rn("q"))
     val encoded = jsonCodecs.encode(err)
 
-    val Right(SomeSoQLError(err2@ParserError.ExpectedToken(_, _, _, _))) = decode.decode(encoded)
+    val Right(SomeSoQLError(err2@ParserError.ExpectedToken(_, _, _))) = decode.decode(encoded)
 
     // positions, annoyingly, don't round-trip through json, so make
     // sure their observable things are the same
-    err2.position.line must equal (err.position.line)
-    err2.position.column must equal (err.position.column)
-    err2.position.longString must equal (err.position.longString)
+    err2.source.position.line must equal (err.source.position.line)
+    err2.source.position.column must equal (err.source.position.column)
+    err2.source.position.longString must equal (err.source.position.longString)
 
-    err2.copy(position = NoPosition) must equal (err.copy(position = NoPosition))
+    err2.copy(source = err2.source.withPosition(NoPosition)) must equal (err.copy(source = err.source.withPosition(NoPosition)))
   }
 }

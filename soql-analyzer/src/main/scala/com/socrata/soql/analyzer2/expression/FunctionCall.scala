@@ -52,8 +52,8 @@ trait FunctionCallImpl[MT <: MetaTypes] { this: FunctionCall[MT] =>
   protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) =
     args.map(_.debugDoc(ev)).encloseHanging(Doc(function.name.name) ++ d"(", d",", d")")
 
-  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT] =
-    copy()(position = position.logicallyReposition(source, p))
+  private[analyzer2] def reReference(reference: Source): Self[MT] =
+    copy()(position = position.reReference(reference))
 }
 
 trait OFunctionCallImpl { this: FunctionCall.type =>

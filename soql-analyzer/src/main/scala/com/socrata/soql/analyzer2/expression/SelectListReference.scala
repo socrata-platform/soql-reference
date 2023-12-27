@@ -28,8 +28,8 @@ trait SelectListReferenceImpl[MT <: MetaTypes] { this: SelectListReference[MT] =
   protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) =
     Doc(index).annotate(Annotation.SelectListReference[MT](index))
 
-  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT] =
-    copy()(position = position.logicallyReposition(source, p))
+  private[analyzer2] def reReference(reference: Source): Self[MT] =
+    copy()(position = position.reReference(reference))
 
   def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] = Some(this).filter(predicate)
 }

@@ -4,7 +4,7 @@ import scala.util.parsing.input.Position
 
 import com.socrata.soql.ast
 import com.socrata.soql.collection.OrderedSet
-import com.socrata.soql.environment.{TypeName, Provenance}
+import com.socrata.soql.environment.{Source, TypeName, Provenance}
 import com.socrata.soql.typechecker.TypeInfo2
 
 object TestTypeInfo {
@@ -23,22 +23,22 @@ class TestTypeInfo[MT <: MetaTypes with ({ type ColumnType = TestType; type Colu
 
   def boolType = TestBoolean
 
-  def literalBoolean(b: Boolean, source: Option[ScopedResourceName], position: Position): Expr =
-    LiteralValue[MT](TestBoolean(b))(new AtomicPositionInfo(source, position))
+  def literalBoolean(b: Boolean, source: Source): Expr =
+    LiteralValue[MT](TestBoolean(b))(new AtomicPositionInfo(source))
 
   def potentialExprs(l: ast.Literal, source: Option[ScopedResourceName], currentPrimaryTable: Option[Provenance]): Seq[Expr] =
     l match {
       case ast.StringLiteral(s) =>
         val asInt =
           try {
-            Some(LiteralValue[MT](TestNumber(s.toInt))(new AtomicPositionInfo(source, l.position)))
+            Some(LiteralValue[MT](TestNumber(s.toInt))(new AtomicPositionInfo(Source.nonSynthetic(source, l.position))))
           } catch {
             case _ : NumberFormatException => None
           }
-        Seq(LiteralValue[MT](TestText(s))(new AtomicPositionInfo(source, l.position))) ++ asInt
-      case ast.NumberLiteral(n) => Seq(LiteralValue[MT](TestNumber(n.toInt))(new AtomicPositionInfo(source, l.position)))
-      case ast.BooleanLiteral(b) => Seq(LiteralValue[MT](TestBoolean(b))(new AtomicPositionInfo(source, l.position)))
-      case ast.NullLiteral() => typeParameterUniverse.iterator.map(NullLiteral[MT](_)(new AtomicPositionInfo(source, l.position))).toVector
+        Seq(LiteralValue[MT](TestText(s))(new AtomicPositionInfo(Source.nonSynthetic(source, l.position)))) ++ asInt
+      case ast.NumberLiteral(n) => Seq(LiteralValue[MT](TestNumber(n.toInt))(new AtomicPositionInfo(Source.nonSynthetic(source, l.position))))
+      case ast.BooleanLiteral(b) => Seq(LiteralValue[MT](TestBoolean(b))(new AtomicPositionInfo(Source.nonSynthetic(source, l.position))))
+      case ast.NullLiteral() => typeParameterUniverse.iterator.map(NullLiteral[MT](_)(new AtomicPositionInfo(Source.nonSynthetic(source, l.position)))).toVector
     }
 
   def updateProvenance(v: CV)(f: Provenance => Provenance) = v

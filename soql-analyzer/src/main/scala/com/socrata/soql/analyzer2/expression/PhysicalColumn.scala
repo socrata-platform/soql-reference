@@ -44,8 +44,8 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
     (table.debugDoc ++ d"." ++ column.debugDoc(ev.columnNameImpl)).
       annotate(Annotation.ColumnRef(table, column))
 
-  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT] =
-    copy()(position = position.logicallyReposition(source, p))
+  private[analyzer2] def reReference(reference: Source): Self[MT] =
+    copy()(position = position.reReference(reference))
 
   def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]] = Some(this).filter(predicate)
 }

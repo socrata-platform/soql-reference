@@ -12,8 +12,9 @@ object Version {
   // delete them when they're obsolete in order to find places that
   // are still using them!
   case object V0 extends Version
+  case object V1 extends Version
 
-  val current = V0
+  val current = V1
 }
 
 class WriteBuffer private (val version: Version) {
@@ -29,6 +30,7 @@ class WriteBuffer private (val version: Version) {
   private def writeTo(stream: CodedOutputStream): Unit = {
     val tag = version match {
       case Version.V0 => 0
+      case Version.V1 => 1
     }
     stream.writeUInt32NoTag(tag)
     strings.writeTo(stream)
@@ -63,6 +65,8 @@ class ReadBuffer private (stream: CodedInputStream) {
     stream.readUInt32() match {
       case 0 =>
         Version.V0
+      case 1 =>
+        Version.V1
       case other =>
         throw new IOException("Invalid version: {}")
     }

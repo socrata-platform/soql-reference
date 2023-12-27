@@ -282,7 +282,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
         exprReplaces.get((table, column)) match {
           case Some(replacement) =>
             assert(replacement.typ == typ)
-            replacement
+            replacement.reReference(vc.position.reference)
           case None =>
             vc
         }

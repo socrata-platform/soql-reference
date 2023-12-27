@@ -10,7 +10,7 @@ import org.scalatest.matchers.{BeMatcher, MatchResult}
 
 import com.socrata.soql.BinaryTree
 import com.socrata.soql.collection.OrderedMap
-import com.socrata.soql.environment.{ColumnName, ResourceName, ScopedResourceName}
+import com.socrata.soql.environment.{ColumnName, ResourceName, ScopedResourceName, Source}
 import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.{StandaloneParser, AbstractParser}
 
@@ -67,8 +67,10 @@ class TableFinderTest extends FunSuite with MustMatchers {
     def apply(err: tables.Result[Any]) =
       MatchResult(
         err match {
-          case Left(TableFinderError.NotFound(containingName, p, nf)) =>
-            containingName == srn && posMatches(p, pos) && nf == name
+          case Left(TableFinderError.NotFound(Some(Source.Anonymous(p)), nf)) =>
+            srn.isEmpty && posMatches(p, pos) && nf == name
+          case Left(TableFinderError.NotFound(Some(Source.Saved(containingName, p)), nf)) =>
+            Some(containingName) == srn && posMatches(p, pos) && nf == name
           case _ =>
             false
         },
@@ -83,8 +85,10 @@ class TableFinderTest extends FunSuite with MustMatchers {
     def apply(err: tables.Result[Any]) =
       MatchResult(
         err match {
-          case Left(TableFinderError.RecursiveQuery(containingName, p, path)) =>
-            containingName == srn && posMatches(p, pos) && path == names
+          case Left(TableFinderError.RecursiveQuery(Source.Anonymous(p), path)) =>
+            srn.isEmpty && posMatches(p, pos) && path == names
+          case Left(TableFinderError.RecursiveQuery(Source.Saved(containingName, p), path)) =>
+            Some(containingName) == srn && posMatches(p, pos) && path == names
           case _ =>
             false
         },
@@ -99,6 +103,14 @@ class TableFinderTest extends FunSuite with MustMatchers {
     tables.findTables(0, "select * from @t1", Map.empty).map(_.tableMap) must equal (tables((0, "t1")))
   }
 
+  test("can fail to find find a table at top level - saved") {
+    tables.findTables(0, ResourceName("does_not_exist")) must equal (Left(TableFinderError.NotFound(None, ResourceName("does_not_exist"))))
+  }
+
+  test("can fail to find find a table at top level - with query") {
+    tables.findTables(0, ResourceName("does_not_exist"), "select *", Map.empty) must equal (Left(TableFinderError.NotFound(Some(Source.Anonymous(NoPosition)), ResourceName("does_not_exist"))))
+  }
+
   test("will reject mutually recursive queries - context") {
     tables.findTables(0, ResourceName("bad_one")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_two"))), None, "bad_one","bad_two","bad_one"))
   }
@@ -109,6 +121,10 @@ class TableFinderTest extends FunSuite with MustMatchers {
 
   test("will reject mutually recursive queries - mixed") {
     tables.findTables(0, ResourceName("bad_five")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_six"))), None, "bad_five","bad_six","bad_five"))
+  }
+
+  test("will reject self-recursive queries when impersonating") {
+    tables.findTables(0, ResourceName("t1"), "select * from @t5", Map.empty, CanonicalName("t5")) must be (recursiveQuery(None, None, "t5","t5"))
   }
 
   test("can fail to find a table") {

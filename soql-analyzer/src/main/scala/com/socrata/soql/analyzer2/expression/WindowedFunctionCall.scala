@@ -105,8 +105,8 @@ trait WindowedFunctionCallImpl[MT <: MetaTypes] { this: WindowedFunctionCall[MT]
     args.map(_.debugDoc(ev)).encloseNesting(preArgs, d",", postArgs)
   }
 
-  private[analyzer2] def reposition(source: Option[ScopedResourceName], p: Position): Self[MT] =
-    copy()(position = position.logicallyReposition(source, p))
+  private[analyzer2] def reReference(reference: Source): Self[MT] =
+    copy()(position = position.reReference(reference))
 }
 
 trait OWindowedFunctionCallImpl { this: WindowedFunctionCall.type =>
