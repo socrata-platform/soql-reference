@@ -91,42 +91,26 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
   def contains(e: Expr[MT]): Boolean =
     find(_ == e).isDefined
 
-  lazy val schema = selectList.withValuesMapped {
-    case NamedExpr(expr, name, hint, isSynthetic) =>
-      Statement.SchemaEntry[MT](name, expr.typ, hint.orElse(inheritedHint(expr)), isSynthetic = isSynthetic)
-  }
+  lazy val schema = locally {
+    def atomicFromSchema(af: AtomicFrom[MT]): Map[(AutoTableLabel, ColumnLabel), JValue] =
+      af.schema.iterator.flatMap { schemaEnt =>
+        schemaEnt.hint.map { hint => (af.label, schemaEnt.column) -> hint }
+      }.toMap
 
-  private def inheritedHint(expr: Expr[MT]): Option[JValue] =
-    expr match {
-      case c: Column[MT] =>
-        val tbl = c.table
-        val col = c.column
-        val sourceTable =
-          from.reduce[Option[AtomicFrom[MT]]](
-            { f =>
-              if(f.label == tbl) Some(f)
-              else None
-            },
-            { (found, join) =>
-              if(found.isDefined) {
-                found
-              } else if(join.right.label == tbl) {
-                Some(join.right)
-              } else {
-                None
-              }
-            }
-          )
-        for {
-          t <- sourceTable
-          schemaEnt <- t.schema.find(_.column == col)
-          hint <- schemaEnt.hint
-        } yield {
-          hint
+    val fromSchemaByTableCol = from.reduce[Map[(AutoTableLabel, ColumnLabel), JValue]](
+      atomicFromSchema _,
+      { (acc, join) => acc ++ atomicFromSchema(join.right) }
+    )
+    selectList.withValuesMapped { case NamedExpr(expr, name, hint, isSynthetic) =>
+      def inheritedHint: Option[JValue] =
+        expr match {
+          case c: Column[MT] => fromSchemaByTableCol.get((c.table, c.column))
+          case _ => None
         }
-      case _ =>
-        None
+
+      Statement.SchemaEntry[MT](name, expr.typ, hint.orElse(inheritedHint), isSynthetic = isSynthetic)
     }
+  }
 
   def getColumn(cl: ColumnLabel) = cl match {
     case acl: AutoColumnLabel => schema.get(acl)
