@@ -95,7 +95,7 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
     definitionQuery.doLabelMap(state)
     val tr = LabelMap.TableReference(None, None)
     state.tableMap += definitionLabel -> tr
-    for((columnLabel, Statement.SchemaEntry(name, _typ, _isSynthetic)) <- definitionQuery.schema) {
+    for((columnLabel, Statement.SchemaEntry(name, _typ, _isSynthetic, _hint)) <- definitionQuery.schema) {
       state.columnMap += (definitionLabel, columnLabel) -> (tr, name)
     }
     useQuery.doLabelMap(state)

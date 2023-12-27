@@ -802,15 +802,15 @@ class RollupExact[MT <: MetaTypes](
           functionSubset(sExpr, ne.expr, isoState).map((label, ne, _))
         }
       ) match {
-        case Some((selectedColumn, NamedExpr(rollupExpr@AggregateFunctionCall(func, args, false, None), _name, _isSynthetic), functionExtract)) if needsMerge =>
+        case Some((selectedColumn, NamedExpr(rollupExpr@AggregateFunctionCall(func, args, false, None), _name, _hint, _isSynthetic), functionExtract)) if needsMerge =>
           assert(rollupExpr.typ == sExpr.typ)
           semigroupRewriter(func).map { merger =>
             functionExtract(merger(PhysicalColumn[MT](newFrom.label, newFrom.tableName, columnLabelMap(selectedColumn), rollupExpr.typ)(sExpr.position.asAtomic)))
           }
-        case Some((selectedColumn, NamedExpr(_ : AggregateFunctionCall, _name, _isSynthetic), _)) if needsMerge =>
+        case Some((selectedColumn, NamedExpr(_ : AggregateFunctionCall, _name, _hint, _isSynthetic), _)) if needsMerge =>
           log.debug("can't rewrite, the aggregate has a 'distinct' or 'filter'")
           None
-        case Some((selectedColumn, NamedExpr(_ : WindowedFunctionCall, _name, _isSynthetic), _)) if needsMerge =>
+        case Some((selectedColumn, NamedExpr(_ : WindowedFunctionCall, _name, _hint, _isSynthetic), _)) if needsMerge =>
           log.debug("can't rewrite, windowed function call")
           None
         case Some((selectedColumn, ne, functionExtract)) =>

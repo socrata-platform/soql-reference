@@ -20,9 +20,9 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   def find(predicate: Expr[MT] => Boolean) = None
   def contains(e: Expr[MT]): Boolean = false
 
-  def schema = columns.iterator.map { case (dcn, FromTable.ColumnInfo(_, typ, _hint)) =>
+  def schema = columns.iterator.map { case (dcn, FromTable.ColumnInfo(_, typ, hint)) =>
     From.SchemaEntry(
-      label, dcn, typ,
+      label, dcn, typ, hint,
       isSynthetic = false // table columns are never synthetic
     )
   }.toVector

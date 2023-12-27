@@ -19,6 +19,9 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
           var exprs = OrderedMap[AutoColumnLabel, Column]()
 
           for((label, namedExpr) <- selectList) {
+            if(namedExpr.hint != None) { // if a selected column has a hint, it's not trivial
+              return None
+            }
             namedExpr.expr match {
               case c: Column if c.table == from.label => exprs += label -> c
               case _ => return None
@@ -33,7 +36,7 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
           if(!schemaChanged) {
             // now a less-trivial check to see if we've changed the
             // input schema more subtly.
-            schemaChanged = exprs.values.lazyZip(fromSchema).exists { case (columnExpr, From.SchemaEntry(sourceTable, sourceColumn, _typ, _isSynthetic)) =>
+            schemaChanged = exprs.values.lazyZip(fromSchema).exists { case (columnExpr, From.SchemaEntry(sourceTable, sourceColumn, _typ, _hint, _isSynthetic)) =>
               columnExpr.table != sourceTable || columnExpr.column != sourceColumn
             }
           }
@@ -65,8 +68,8 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
 
         val result = Select(
           rewriteDistinctiveness(distinctiveness, columnMap),
-          OrderedMap() ++ selectList.iterator.map { case (label, NamedExpr(expr, name, isSynthetic)) =>
-            (label, NamedExpr(rewriteExpr(expr, columnMap), name, isSynthetic = isSynthetic))
+          OrderedMap() ++ selectList.iterator.map { case (label, NamedExpr(expr, name, hint, isSynthetic)) =>
+            (label, NamedExpr(rewriteExpr(expr, columnMap), name, hint, isSynthetic = isSynthetic))
           },
           newFrom,
           where.map(rewriteExpr(_, columnMap)),

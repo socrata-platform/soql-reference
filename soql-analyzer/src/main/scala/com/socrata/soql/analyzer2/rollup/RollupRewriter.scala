@@ -54,6 +54,7 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
                   sourceLabel -> NamedExpr(
                     PhysicalColumn[MT](from.label, from.tableName, rollupCol, sourceEnt.typ)(AtomicPositionInfo.Synthetic),
                     sourceEnt.name,
+                    sourceEnt.hint,
                     sourceEnt.isSynthetic
                   )
               },
@@ -220,7 +221,7 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
     }.toMap
 
     val computedSelectList = OrderedMap() ++ orderedDemandedColumns.iterator.zipWithIndex.map { case ((col, typ), idx) =>
-      columnMap(col).column -> NamedExpr(col.at(typ, AtomicPositionInfo.Synthetic), ColumnName(s"column_$idx"), isSynthetic = true)
+      columnMap(col).column -> NamedExpr(col.at(typ, AtomicPositionInfo.Synthetic), ColumnName(s"column_$idx"), None, isSynthetic = true)
     }
 
     val target =

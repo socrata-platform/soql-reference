@@ -77,7 +77,7 @@ abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
             fieldsOf(PhysicalColumn[MT](ft.label, ft.tableName, dcn, typ)(AtomicPositionInfo.Synthetic))
           }
         case fs: FromStatement =>
-          fs.statement.schema.iterator.flatMap { case (acl, Statement.SchemaEntry(_, typ, isSynthetic)) =>
+          fs.statement.schema.iterator.flatMap { case (acl, Statement.SchemaEntry(_, typ, _hint, isSynthetic)) =>
             if(isSynthetic) {
               Nil
             } else {

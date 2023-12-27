@@ -91,8 +91,8 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
   def contains(e: Expr[MT]): Boolean =
     find(_ == e).isDefined
 
-  val schema = selectList.withValuesMapped { case NamedExpr(expr, name, isSynthetic) =>
-    Statement.SchemaEntry[MT](name, expr.typ, isSynthetic = isSynthetic)
+  val schema = selectList.withValuesMapped { case NamedExpr(expr, name, hint, isSynthetic) =>
+    Statement.SchemaEntry[MT](name, expr.typ, hint, isSynthetic = isSynthetic)
   }
 
   def getColumn(cl: ColumnLabel) = cl match {
@@ -120,16 +120,16 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
 
   lazy val unique: LazyList[Seq[AutoColumnLabel]] = {
     val selectedColumns = selectList.iterator.collect {
-      case (columnLabel, NamedExpr(PhysicalColumn(table, tableName, col, typ), _name, _isSynthetic)) =>
+      case (columnLabel, NamedExpr(PhysicalColumn(table, tableName, col, typ), _name, _hint, _isSynthetic)) =>
         PhysicalColumn(table, tableName, col, typ)(AtomicPositionInfo.Synthetic) -> columnLabel
-      case (columnLabel, NamedExpr(VirtualColumn(table, col, typ), _name, _isSynthetic)) =>
+      case (columnLabel, NamedExpr(VirtualColumn(table, col, typ), _name, _hint, _isSynthetic)) =>
         VirtualColumn(table, col, typ)(AtomicPositionInfo.Synthetic) -> columnLabel
     }.toMap[Column[MT], AutoColumnLabel]
 
     if(isAggregated) {
       // if we've selected all our grouping-exprs, then those columns
       // effectively represent a primary key.
-      val selectedColumns = selectList.iterator.map { case (columnLabel, NamedExpr(expr, _name, _isSynthetic)) =>
+      val selectedColumns = selectList.iterator.map { case (columnLabel, NamedExpr(expr, _name, _hint, _isSynthetic)) =>
         expr -> columnLabel
       }.toMap
       val synthetic =
@@ -342,7 +342,7 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
     Seq[Option[Doc[Annotation[MT]]]](
       Some(
         (Seq(Some(d"SELECT"), distinctiveness.debugDoc(ev)).flatten.hsep +:
-          selectList.toSeq.zipWithIndex.map { case ((columnLabel, NamedExpr(expr, columnName, _isSynthetic)), idx) =>
+          selectList.toSeq.zipWithIndex.map { case ((columnLabel, NamedExpr(expr, columnName, _hint, _isSynthetic)), idx) =>
             expr.debugDoc(ev).annotate(Annotation.SelectListDefinition[MT](idx+1)) ++ Doc.softlineSep ++ d"AS" +#+ columnLabel.debugDoc.annotate(Annotation.ColumnAliasDefinition[MT](columnName, columnLabel))
           }.punctuate(d",")).sep.nest(2)
       ),

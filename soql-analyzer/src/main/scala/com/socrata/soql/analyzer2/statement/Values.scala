@@ -20,7 +20,7 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
 
   val schema: OrderedMap[AutoColumnLabel, Statement.SchemaEntry[MT]] =
     OrderedMap() ++ values.head.iterator.zip(labels.iterator).zipWithIndex.map { case ((expr, label), idx) =>
-      label -> Statement.SchemaEntry(ColumnName(s"column_${idx+1}"), expr.typ, isSynthetic = false)
+      label -> Statement.SchemaEntry(ColumnName(s"column_${idx+1}"), expr.typ, hint = None, isSynthetic = false)
     }
 
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] =

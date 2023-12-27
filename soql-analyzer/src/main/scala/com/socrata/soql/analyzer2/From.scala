@@ -4,6 +4,8 @@ import scala.language.higherKinds
 import scala.annotation.tailrec
 import scala.collection.compat.immutable.LazyList
 
+import com.rojoma.json.v3.ast.JValue
+
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.collection._
@@ -135,6 +137,7 @@ object From {
     table: AutoTableLabel,
     column: types.ColumnLabel[MT],
     typ: types.ColumnType[MT],
+    hint: Option[JValue],
     isSynthetic: Boolean
   )
 

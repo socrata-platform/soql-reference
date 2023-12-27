@@ -21,7 +21,7 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
         val usefulUnique = ct.unique.find(_.forall { c => isOrderable(ct.schema(c).typ) })
 
         def orderByOrderable(predicate: (AutoColumnLabel, CT) => Boolean) =
-          ct.schema.iterator.collect { case (columnLabel, Statement.SchemaEntry(_, typ, _isSynthetic)) if predicate(columnLabel, typ) =>
+          ct.schema.iterator.collect { case (columnLabel, Statement.SchemaEntry(_, typ, _hint, _isSynthetic)) if predicate(columnLabel, typ) =>
             assert(isOrderable(typ))
             OrderBy(VirtualColumn[MT](newTableLabel, columnLabel, typ)(AtomicPositionInfo.Synthetic), true, true)
           }.to(Vector)
@@ -36,8 +36,8 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
 
         Select(
           Distinctiveness.Indistinct(),
-          OrderedMap() ++ ct.schema.iterator.map { case (columnLabel, Statement.SchemaEntry(name, typ, isSynthetic)) =>
-            labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newTableLabel, columnLabel, typ)(AtomicPositionInfo.Synthetic), name, isSynthetic = isSynthetic)
+          OrderedMap() ++ ct.schema.iterator.map { case (columnLabel, Statement.SchemaEntry(name, typ, hint, isSynthetic)) =>
+            labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newTableLabel, columnLabel, typ)(AtomicPositionInfo.Synthetic), name, hint = None, isSynthetic = isSynthetic)
           },
           FromStatement(ct, newTableLabel, None, None),
           None,
@@ -74,7 +74,7 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
         val existingOrderBy = orderBy.map(_.expr).to(Set)
 
         def allOrderableSelectedCols(except: Expr => Boolean): Iterator[OrderBy] =
-          selectList.valuesIterator.collect { case NamedExpr(expr, name, _isSynthetic) if isOrderable(expr.typ) && !except(expr) =>
+          selectList.valuesIterator.collect { case NamedExpr(expr, name, _hint, _isSynthetic) if isOrderable(expr.typ) && !except(expr) =>
             OrderBy(expr, true, true)
           }
 
