@@ -29,69 +29,102 @@ case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT] {
   private var orderings_ : List[(String, Boolean, Boolean)] = Nil
   private var hiddenColumns_ : Set[String] = Set.empty
   private var primaryKeys_ : List[Seq[String]] = Nil
+  private var outputColumnHints_ : Map[ColumnName, JValue] = Map.empty
+
+  private def copyVars[CT2 >: CT](that: D[CT2]): Unit = {
+    this.orderings_ = that.orderings_
+    this.hiddenColumns_ = that.hiddenColumns_
+    this.primaryKeys_ = that.primaryKeys_
+    this.outputColumnHints_ = that.outputColumnHints_
+  }
 
   def withOrdering(column: String, ascending: Boolean = true, nullLast: OptionalBoolean = OptionalBoolean.Unprovided): D[CT] = {
     val result = D(schema : _*)
+    result.copyVars(this)
     result.orderings_ = (column, ascending, nullLast.orElse(ascending)) :: orderings_
-    result.hiddenColumns_ = hiddenColumns_
-    result.primaryKeys_ = primaryKeys_
     result
   }
   def orderings: Seq[(String, Boolean, Boolean)] = orderings_.reverse
 
   def withHiddenColumns(column: String*): D[CT] = {
     val result = D(schema : _*)
-    result.orderings_ = orderings_
+    result.copyVars(this)
     result.hiddenColumns_ = hiddenColumns_ ++ column
-    result.primaryKeys_ = primaryKeys_
     result
   }
   def hiddenColumns = hiddenColumns_
 
   def withPrimaryKey(column: String*): D[CT] = {
     val result = D(schema : _*)
-    result.orderings_ = orderings_
-    result.hiddenColumns_ = hiddenColumns_
+    result.copyVars(this)
     result.primaryKeys_ = column :: primaryKeys_
     result
   }
   def primaryKeys = primaryKeys_.reverse
+
+  def withOutputColumnHints(hints: (String, JValue)*): D[CT] = {
+    val result = D(schema : _*)
+    result.copyVars(this)
+    result.outputColumnHints_ = outputColumnHints_ ++ hints.map { case (c, v) => ColumnName(c) -> v }
+    result
+  }
+  def outputColumnHints = outputColumnHints_
 }
 case class Q[+RNS, +CT](scope: RNS, parent: String, soql: String, params: (String, CT)*) extends Thing[RNS, CT] {
   private var canonicalName_ : Option[String] = None
   private var hiddenColumns_ : Set[ColumnName] = Set.empty
+  private var outputColumnHints_ : Map[ColumnName, JValue] = Map.empty
+
+  private def copyVars[RNS2 >: RNS, CT2 >: CT](that: Q[RNS2, CT2]): Unit = {
+    this.canonicalName_ = that.canonicalName_
+    this.hiddenColumns_ = that.hiddenColumns_
+    this.outputColumnHints_ = that.outputColumnHints_
+  }
 
   def withCanonicalName(name: String): Q[RNS, CT] = {
     val result = Q(scope, parent, soql, params : _*)
+    result.copyVars(this)
     result.canonicalName_ = Some(name)
-    result.hiddenColumns_ = hiddenColumns_
     result
   }
   def canonicalName = canonicalName_
 
   def withHiddenColumns(column: String*): Q[RNS, CT] = {
     val result = Q(scope, parent, soql, params : _*)
-    result.canonicalName_ = canonicalName_
+    result.copyVars(this)
     result.hiddenColumns_ = hiddenColumns_ ++ column.iterator.map(ColumnName(_))
     result
   }
   def hiddenColumns = hiddenColumns_
+
+  def withOutputColumnHints(hints: (String, JValue)*): Q[RNS, CT] = {
+    val result = Q(scope, parent, soql, params : _*)
+    result.copyVars(this)
+    result.outputColumnHints_ = outputColumnHints_ ++ hints.map { case (c, v) => ColumnName(c) -> v }
+    result
+  }
+  def outputColumnHints = outputColumnHints_
 }
 case class U[+RNS, CT](scope: RNS, soql: String, params: (String, CT)*) extends Thing[RNS, CT] {
   private var canonicalName_ : Option[String] = None
   private var hiddenColumns_ : Set[ColumnName] = Set.empty
 
+  private def copyVars[RNS2 >: RNS, CT2 >: CT](that: U[RNS2, CT]): Unit = {
+    this.canonicalName_ = that.canonicalName_
+    this.hiddenColumns_ = that.hiddenColumns_
+  }
+
   def withCanonicalName(name: String): U[RNS, CT] = {
     val result = U(scope, soql, params : _*)
+    result.copyVars(this)
     result.canonicalName_ = Some(name)
-    result.hiddenColumns_ = hiddenColumns_
     result
   }
   def canonicalName = canonicalName_
 
   def withHiddenColumns(column: String*): U[RNS, CT] = {
     val result = U(scope, soql, params : _*)
-    result.canonicalName_ = canonicalName_
+    result.copyVars(this)
     result.hiddenColumns_ = hiddenColumns_ ++ column.iterator.map(ColumnName(_))
     result
   }
@@ -209,12 +242,13 @@ class MockTableFinder[MT <: MetaTypes](private val raw: Map[(MT#ResourceNameScop
     val converted = thing match {
       case d@D(rawSchema @ _*) =>
         val hiddenColumns = d.hiddenColumns.map(ColumnName(_))
+        val outputColumnHints = d.outputColumnHints
         Dataset(
           DatabaseTableName(rawResourceName),
           CanonicalName(rawResourceName),
           OrderedMap() ++ rawSchema.iterator.map { case (rawColumnName, ct) =>
             val cn = ColumnName(rawColumnName)
-            DatabaseColumnName[MT#DatabaseColumnNameImpl](cn.caseFolded) -> DatasetColumnInfo(cn, ct, hidden = hiddenColumns(cn))
+            DatabaseColumnName[MT#DatabaseColumnNameImpl](cn.caseFolded) -> DatasetColumnInfo(cn, ct, hidden = hiddenColumns(cn), hint = outputColumnHints.get(cn))
           },
           d.orderings.map { case (col, asc, nullLast) => Ordering(DatabaseColumnName(ColumnName(col).caseFolded), asc, nullLast) },
           d.primaryKeys.map(_.map { col => DatabaseColumnName[MT#DatabaseColumnNameImpl](ColumnName(col).caseFolded) })
@@ -226,7 +260,8 @@ class MockTableFinder[MT <: MetaTypes](private val raw: Map[(MT#ResourceNameScop
           ResourceName(parent),
           soql,
           params.iterator.map { case (k, v) => HoleName(k) -> v }.toMap,
-          q.hiddenColumns
+          q.hiddenColumns,
+          q.outputColumnHints
         )
       case u@U(scope, soql, params @ _*) =>
         TableFunction(
@@ -252,11 +287,11 @@ class MockTableFinder[MT <: MetaTypes](private val raw: Map[(MT#ResourceNameScop
   private def parsed(thing: FinderTableDescription) = {
     thing match {
       case ds: Dataset => ds.toParsed
-      case Query(scope, canonicalName, parent, soql, params, hiddenColumns) =>
+      case Query(scope, canonicalName, parent, soql, params, hiddenColumns, outputColumnHints) =>
         TableDescription.Query[MT](
           scope, canonicalName, parent,
           ParserUtil.parseWithoutContext(soql, parserParameters.copy(allowHoles = false)).getOrElse(throw new Exception("broken soql fixture 1")),
-          soql, params, hiddenColumns)
+          soql, params, hiddenColumns, outputColumnHints)
       case TableFunction(scope, canonicalName, soql, params, hiddenColumns) =>
         TableDescription.TableFunction[MT](
           scope, canonicalName,

@@ -330,7 +330,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         tableMap.find(name) match {
           case ds: TableDescription.Dataset[MT] =>
             fromTable(name, ds)
-          case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters, hiddenColumns) =>
+          case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters, hiddenColumns, _outputColumnHints) =>
             // so this is basedOn |> parsed
             // so we want to use "basedOn" as the implicit "from" for "parsed"
             val from = analyzeForFrom(source, ScopedResourceName(scope, basedOn), None, NoPosition /* Yes, actually NoPosition here */)

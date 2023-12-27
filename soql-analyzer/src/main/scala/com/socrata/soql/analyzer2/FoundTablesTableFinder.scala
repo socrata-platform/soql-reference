@@ -14,7 +14,7 @@ class FoundTablesTableFinder[MT <: MetaTypes](foundTables: UnparsedFoundTables[M
               ds.name,
               ds.canonicalName,
               ds.columns.withValuesMapped { dci =>
-                DatasetColumnInfo(dci.name, dci.typ, dci.hidden)
+                DatasetColumnInfo(dci.name, dci.typ, dci.hidden, dci.hint)
               },
               ds.ordering.map { ord =>
                 Ordering(ord.column, ord.ascending, ord.nullLast)
@@ -29,7 +29,8 @@ class FoundTablesTableFinder[MT <: MetaTypes](foundTables: UnparsedFoundTables[M
               q.basedOn,
               q.soql,
               q.parameters,
-              q.hiddenColumns
+              q.hiddenColumns,
+              q.outputColumnHints
             )
             foundQuery(name, converted)
           case tf: UnparsedTableDescription.TableFunction[MT] =>

@@ -5,7 +5,7 @@ import scala.collection.compat._
 import com.rojoma.json.v3.ast.JValue
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 import com.rojoma.json.v3.interpolation._
-import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder, SimpleHierarchyEncodeBuilder, SimpleHierarchyDecodeBuilder, InternalTag}
+import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder, SimpleHierarchyEncodeBuilder, SimpleHierarchyDecodeBuilder, InternalTag, AllowMissing}
 
 import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, OrderedMapHelper}
@@ -49,7 +49,7 @@ object UnparsedTableDescription {
     ordering: Seq[TableDescription.Ordering[MT]],
     primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]]
   ) extends UnparsedTableDescription[MT] with TableDescriptionLike.Dataset[MT] {
-    val hiddenColumns = columns.values.flatMap { case TableDescription.DatasetColumnInfo(name, _, hidden) =>
+    val hiddenColumns = columns.values.flatMap { case TableDescription.DatasetColumnInfo(name, _, hidden, _) =>
       if(hidden) Some(name) else None
     }.to(Set)
 
@@ -68,7 +68,7 @@ object UnparsedTableDescription {
         canonicalName,
         OrderedMap(
           columns.iterator.map { case (dcn, ne) =>
-            columnName(name, dcn) -> TableDescription.DatasetColumnInfo(ne.name, ev.convertCT(ne.typ), ne.hidden)
+            columnName(name, dcn) -> TableDescription.DatasetColumnInfo(ne.name, ev.convertCT(ne.typ), ne.hidden, ne.hint)
           }.toSeq : _*
         ),
         ordering.map { case TableDescription.Ordering(dcn, ascending, nullLast) =>
@@ -107,7 +107,9 @@ object UnparsedTableDescription {
     basedOn: ResourceName,
     soql: String,
     parameters: Map[HoleName, MT#ColumnType],
-    hiddenColumns: Set[ColumnName]
+    hiddenColumns: Set[ColumnName],
+    @AllowMissing("Map.empty")
+    outputColumnHints: Map[ColumnName, JValue]
   ) extends SoQLUnparsedTableDescription[MT] {
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): Query[MT2] =
       copy(
@@ -123,7 +125,8 @@ object UnparsedTableDescription {
           parsed,
           soql,
           parameters,
-          hiddenColumns
+          hiddenColumns,
+          outputColumnHints
         )
       }
 
