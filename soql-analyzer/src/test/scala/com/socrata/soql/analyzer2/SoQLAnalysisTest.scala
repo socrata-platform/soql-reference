@@ -3,6 +3,7 @@ package com.socrata.soql.analyzer2
 import scala.util.parsing.input.NoPosition
 
 import org.scalatest.{FunSuite, MustMatchers}
+import com.rojoma.json.v3.interpolation._
 
 import com.socrata.soql.collection._
 import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer}
@@ -766,6 +767,37 @@ select b, n |> select n join @udf(b) as @udf on true
     val expected = analyze(tf, "threecol", "select text")
 
     analysis.statement must be (isomorphicTo(expected.statement))
+  }
+
+  test("remove trivial selects - preserve local hints") {
+    val tf = tableFinder(
+      (0, "ds") -> D("a" -> TestText),
+      (0, "q") -> Q(0, "ds", "select a"),
+      (0, "q2") -> Q(0, "q", "select a").withOutputColumnHints("a" -> j"true"),
+      (0, "q3") -> Q(0, "ds", "select a").withOutputColumnHints("a" -> j"true")
+    )
+
+    val analysis = analyzeSaved(tf, "q2").removeTrivialSelects
+    val expected = analyzeSaved(tf, "q3")
+
+    analysis.statement must be (isomorphicTo(expected.statement))
+    analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
+  }
+
+  test("remove trivial selects - preserve inherited hints") {
+    val tf = tableFinder(
+      (0, "ds") -> D("a" -> TestText),
+      (0, "q1") -> Q(0, "ds", "select a").withOutputColumnHints("a" -> j"false"),
+      (0, "q2") -> Q(0, "q1", "select a").withOutputColumnHints("a" -> j"true"),
+      (0, "q3") -> Q(0, "q2", "select a"),
+      (0, "w") -> Q(0, "ds", "select a").withOutputColumnHints("a" -> j"true")
+    )
+
+    val analysis = analyzeSaved(tf, "q3").removeTrivialSelects
+    val expected = analyzeSaved(tf, "w")
+
+    analysis.statement must be (isomorphicTo(expected.statement))
+    analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
   }
 
   test("remove trivial selects - chained") {

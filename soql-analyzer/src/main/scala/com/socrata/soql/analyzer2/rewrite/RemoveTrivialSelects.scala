@@ -19,9 +19,6 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
           var exprs = OrderedMap[AutoColumnLabel, Column]()
 
           for((label, namedExpr) <- selectList) {
-            if(namedExpr.hint != None) { // if a selected column has a hint, it's not trivial
-              return None
-            }
             namedExpr.expr match {
               case c: Column if c.table == from.label => exprs += label -> c
               case _ => return None
@@ -69,7 +66,22 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
         val result = Select(
           rewriteDistinctiveness(distinctiveness, columnMap),
           OrderedMap() ++ selectList.iterator.map { case (label, NamedExpr(expr, name, hint, isSynthetic)) =>
-            (label, NamedExpr(rewriteExpr(expr, columnMap), name, hint, isSynthetic = isSynthetic))
+            val newExpr = rewriteExpr(expr, columnMap)
+            def originalInheritedHint =
+              expr match {
+                case c: Column => from.schemaByTableColumn.get((c.table, c.column)).flatMap(_.hint)
+                case _ => None
+              }
+            def newInheritedHint =
+              newExpr match {
+                case c: Column => newFrom.schemaByTableColumn.get((c.table, c.column)).flatMap(_.hint)
+                case _ => None
+              }
+            val newHint = hint orElse {
+              if(originalInheritedHint != newInheritedHint) originalInheritedHint
+              else None
+            }
+            (label, NamedExpr(newExpr, name, newHint, isSynthetic = isSynthetic))
           },
           newFrom,
           where.map(rewriteExpr(_, columnMap)),

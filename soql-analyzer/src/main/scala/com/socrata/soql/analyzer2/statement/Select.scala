@@ -92,19 +92,10 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
     find(_ == e).isDefined
 
   lazy val schema = locally {
-    def atomicFromSchema(af: AtomicFrom[MT]): Map[(AutoTableLabel, ColumnLabel), JValue] =
-      af.schema.iterator.flatMap { schemaEnt =>
-        schemaEnt.hint.map { hint => (af.label, schemaEnt.column) -> hint }
-      }.toMap
-
-    val fromSchemaByTableCol = from.reduce[Map[(AutoTableLabel, ColumnLabel), JValue]](
-      atomicFromSchema _,
-      { (acc, join) => acc ++ atomicFromSchema(join.right) }
-    )
     selectList.withValuesMapped { case NamedExpr(expr, name, hint, isSynthetic) =>
       def inheritedHint: Option[JValue] =
         expr match {
-          case c: Column[MT] => fromSchemaByTableCol.get((c.table, c.column))
+          case c: Column[MT] => from.schemaByTableColumn.get((c.table, c.column)).flatMap(_.hint)
           case _ => None
         }
 
