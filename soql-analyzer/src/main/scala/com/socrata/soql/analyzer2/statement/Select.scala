@@ -95,6 +95,10 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
     selectList.withValuesMapped { case NamedExpr(expr, name, hint, isSynthetic) =>
       def inheritedHint: Option[JValue] =
         expr match {
+          // Why the .get here?  Because just because we have a column
+          // ref, it does not _necessarily_ come from a table in our
+          // FROM - it could come from a sibling table via a lateral
+          // join.  In that case we just won't inherit.
           case c: Column[MT] => from.schemaByTableColumn.get((c.table, c.column)).flatMap(_.hint)
           case _ => None
         }

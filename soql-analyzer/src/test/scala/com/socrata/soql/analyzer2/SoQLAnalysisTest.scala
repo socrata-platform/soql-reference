@@ -282,6 +282,53 @@ select count(*), 1 as x |> select x
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("merge - preserve inherited hints - hint on base") {
+    val tf = tableFinder(
+      (0, "ds") -> D("a" -> TestText).withOutputColumnHints("a" -> j"true")
+    )
+
+    val analysis = analyze(tf, "ds", """
+select a |> select a |> select a
+""").merge(and)
+
+    val expectedAnalysis = analyzeSaved(tf, "ds")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
+  }
+
+  test("merge - preserve inherited hints - hint on intermediate") {
+    val tf = tableFinder(
+      (0, "ds") -> D("a" -> TestText),
+      (0, "q") -> Q(0, "ds", "select a").withOutputColumnHints("a" -> j"true")
+    )
+
+    val analysis = analyze(tf, "q", """
+select a |> select a |> select a
+""").merge(and)
+
+    val expectedAnalysis = analyzeSaved(tf, "ds")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
+  }
+
+
+  test("merge - preserve inherited hints - hint on last") {
+    val tf = tableFinder(
+      (0, "ds") -> D("a" -> TestText),
+      (0, "q1") -> Q(0, "ds", "select a"),
+      (0, "q2") -> Q(0, "q1", "select a").withOutputColumnHints("a" -> j"true")
+    )
+
+    val analysis = analyzeSaved(tf, "q2").merge(and)
+
+    val expectedAnalysis = analyzeSaved(tf, "ds")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
+  }
+
   test("remove unused columns - simple") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)

@@ -69,11 +69,13 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
             val newExpr = rewriteExpr(expr, columnMap)
             def originalInheritedHint =
               expr match {
+                // see the comment in Select#schema for why the .get here
                 case c: Column => from.schemaByTableColumn.get((c.table, c.column)).flatMap(_.hint)
                 case _ => None
               }
             def newInheritedHint =
               newExpr match {
+                // see the comment in Select#schema for why the .get here
                 case c: Column => newFrom.schemaByTableColumn.get((c.table, c.column)).flatMap(_.hint)
                 case _ => None
               }
