@@ -3,6 +3,8 @@ package com.socrata.soql.analyzer2
 import scala.annotation.tailrec
 import scala.util.parsing.input.{Position, NoPosition}
 
+import com.rojoma.json.v3.ast.JValue
+
 import com.socrata.soql.ast
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ResourceName, ScopedResourceName, Source, ColumnName, HoleName, TableName}
@@ -37,7 +39,7 @@ trait TableFinder[MT <: MetaTypes] {
 
   case class Ordering(column: types.DatabaseColumnName[MT], ascending: Boolean, nullLast: Boolean)
 
-  case class DatasetColumnInfo(name: ColumnName, typ: ColumnType, hidden: Boolean)
+  case class DatasetColumnInfo(name: ColumnName, typ: ColumnType, hidden: Boolean, hint: Option[JValue])
 
   /** A base dataset, or a saved query which is being analyzed opaquely. */
   case class Dataset(
@@ -55,8 +57,8 @@ trait TableFinder[MT <: MetaTypes] {
       TableDescription.Dataset[MT](
         databaseName,
         canonicalName,
-        schema.map { case (cl, DatasetColumnInfo(cn, ct, hidden)) =>
-          cl -> TableDescription.DatasetColumnInfo(cn, ct, hidden)
+        schema.map { case (cl, DatasetColumnInfo(cn, ct, hidden, hint)) =>
+          cl -> TableDescription.DatasetColumnInfo(cn, ct, hidden, hint)
         },
         ordering.map { case Ordering(column, ascending, nullLast) =>
           TableDescription.Ordering(column, ascending, nullLast)
@@ -71,7 +73,8 @@ trait TableFinder[MT <: MetaTypes] {
     basedOn: ResourceName,
     soql: String,
     parameters: Map[HoleName, ColumnType],
-    hiddenColumns: Set[ColumnName]
+    hiddenColumns: Set[ColumnName],
+    outputColumnHints: Map[ColumnName, JValue]
   ) extends FinderTableDescription {
   }
   /** A saved table query ("UDF"), with any parameters it defines for itself. */
@@ -246,8 +249,8 @@ trait TableFinder[MT <: MetaTypes] {
     lookup(scopedName) match {
       case Right(ds: Dataset) =>
         Right(ds.toParsed)
-      case Right(Query(scope, canonicalName, basedOn, text, params, hiddenColumns)) =>
-        parse(Some(scopedName), text, false).map(TableDescription.Query[MT](scope, canonicalName, basedOn, _, text, params, hiddenColumns))
+      case Right(Query(scope, canonicalName, basedOn, text, params, hiddenColumns, outputColumnHints)) =>
+        parse(Some(scopedName), text, false).map(TableDescription.Query[MT](scope, canonicalName, basedOn, _, text, params, hiddenColumns, outputColumnHints))
       case Right(TableFunction(scope, canonicalName, text, params, hiddenColumns)) =>
         parse(Some(scopedName), text, true).map(TableDescription.TableFunction[MT](scope, canonicalName, _, text, params, hiddenColumns))
       case Left(LookupError.NotFound) =>
@@ -292,7 +295,7 @@ trait TableFinder[MT <: MetaTypes] {
   def walkDesc(scopedName: ScopedResourceName, desc: TableDescription[MT], acc: TableMap, stack: CallStack): Result[TableMap] = {
     desc match {
       case TableDescription.Dataset(_, _, _, _, _) => Right(acc)
-      case TableDescription.Query(scope, canonicalName, basedOn, tree, _unparsed, _params, _hiddenColumns) =>
+      case TableDescription.Query(scope, canonicalName, basedOn, tree, _unparsed, _params, _hiddenColumns, _outputColumnHints) =>
         for {
           acc <- walkFromName(ScopedResourceName(scope, basedOn), acc, CallerStack.Implicit(stack))
           acc <- walkTree(scope, Some(scopedName), tree, acc, stack)

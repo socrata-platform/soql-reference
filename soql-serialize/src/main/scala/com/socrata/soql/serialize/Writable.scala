@@ -4,6 +4,9 @@ import scala.util.parsing.input.{Position, NoPosition}
 
 import java.io.OutputStream
 
+import com.rojoma.json.v3.ast.JValue
+import com.rojoma.json.v3.io.CompactJsonWriter
+
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ResourceName, ScopedResourceName, Source, TypeName, ColumnName, Provenance}
 import com.socrata.soql.parsing.SoQLPosition
@@ -197,6 +200,12 @@ object Writable extends `-impl`.WritableTuples {
           buffer.data.writeUInt32NoTag(1)
           buffer.write(v)
       }
+    }
+  }
+
+  implicit object jvalue extends Writable[JValue] {
+    def writeTo(buffer: WriteBuffer, v: JValue): Unit = {
+      buffer.write(CompactJsonWriter.toString(v))
     }
   }
 }

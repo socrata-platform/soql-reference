@@ -4,7 +4,7 @@ import scala.util.parsing.input.{Position, NoPosition}
 import scala.collection.compat._
 import scala.collection.compat.immutable.LazyList
 
-import com.rojoma.json.v3.ast.JString
+import com.rojoma.json.v3.ast.{JString, JValue}
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
@@ -91,8 +91,20 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
   def contains(e: Expr[MT]): Boolean =
     find(_ == e).isDefined
 
-  val schema = selectList.withValuesMapped { case NamedExpr(expr, name, isSynthetic) =>
-    Statement.SchemaEntry[MT](name, expr.typ, isSynthetic = isSynthetic)
+  lazy val schema = locally {
+    selectList.withValuesMapped { case NamedExpr(expr, name, hint, isSynthetic) =>
+      def inheritedHint: Option[JValue] =
+        expr match {
+          // Why the .get here?  Because just because we have a column
+          // ref, it does not _necessarily_ come from a table in our
+          // FROM - it could come from a sibling table via a lateral
+          // join.  In that case we just won't inherit.
+          case c: Column[MT] => from.schemaByTableColumn.get((c.table, c.column)).flatMap(_.hint)
+          case _ => None
+        }
+
+      Statement.SchemaEntry[MT](name, expr.typ, hint.orElse(inheritedHint), isSynthetic = isSynthetic)
+    }
   }
 
   def getColumn(cl: ColumnLabel) = cl match {
@@ -120,16 +132,16 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
 
   lazy val unique: LazyList[Seq[AutoColumnLabel]] = {
     val selectedColumns = selectList.iterator.collect {
-      case (columnLabel, NamedExpr(PhysicalColumn(table, tableName, col, typ), _name, _isSynthetic)) =>
+      case (columnLabel, NamedExpr(PhysicalColumn(table, tableName, col, typ), _name, _hint, _isSynthetic)) =>
         PhysicalColumn(table, tableName, col, typ)(AtomicPositionInfo.Synthetic) -> columnLabel
-      case (columnLabel, NamedExpr(VirtualColumn(table, col, typ), _name, _isSynthetic)) =>
+      case (columnLabel, NamedExpr(VirtualColumn(table, col, typ), _name, _hint, _isSynthetic)) =>
         VirtualColumn(table, col, typ)(AtomicPositionInfo.Synthetic) -> columnLabel
     }.toMap[Column[MT], AutoColumnLabel]
 
     if(isAggregated) {
       // if we've selected all our grouping-exprs, then those columns
       // effectively represent a primary key.
-      val selectedColumns = selectList.iterator.map { case (columnLabel, NamedExpr(expr, _name, _isSynthetic)) =>
+      val selectedColumns = selectList.iterator.map { case (columnLabel, NamedExpr(expr, _name, _hint, _isSynthetic)) =>
         expr -> columnLabel
       }.toMap
       val synthetic =
@@ -236,7 +248,7 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
           this.selectList.iterator.zip(thatSelectList.iterator).forall { case ((thisColLabel, thisNamedExpr), (thatColLabel, thatNamedExpr)) =>
             state.tryAssociate(thisCurrentTableLabel, thisColLabel, thatCurrentTableLabel, thatColLabel) &&
               thisNamedExpr.expr.findIsomorphism(state, thatNamedExpr.expr)
-            // do we care about the name or syntheticness?
+            // do we care about the name or syntheticness or hints?
           } &&
           this.where.isDefined == thatWhere.isDefined &&
           this.where.zip(thatWhere).forall { case (a, b) => a.findIsomorphism(state, b) } &&
@@ -342,7 +354,7 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
     Seq[Option[Doc[Annotation[MT]]]](
       Some(
         (Seq(Some(d"SELECT"), distinctiveness.debugDoc(ev)).flatten.hsep +:
-          selectList.toSeq.zipWithIndex.map { case ((columnLabel, NamedExpr(expr, columnName, _isSynthetic)), idx) =>
+          selectList.toSeq.zipWithIndex.map { case ((columnLabel, NamedExpr(expr, columnName, _hint, _isSynthetic)), idx) =>
             expr.debugDoc(ev).annotate(Annotation.SelectListDefinition[MT](idx+1)) ++ Doc.softlineSep ++ d"AS" +#+ columnLabel.debugDoc.annotate(Annotation.ColumnAliasDefinition[MT](columnName, columnLabel))
           }.punctuate(d",")).sep.nest(2)
       ),

@@ -26,7 +26,7 @@ trait RollupInfo[MT <: MetaTypes, RollupId] extends StatementUniverse[MT] {
       None,
       labelProvider.tableLabel(),
       OrderedMap() ++ statement.schema.iterator.map { case (label, schemaEnt) =>
-        columnMap(label) -> NameEntry(schemaEnt.name, schemaEnt.typ)
+        columnMap(label) -> FromTable.ColumnInfo[MT](schemaEnt.name, schemaEnt.typ, None)
       },
       statement.unique.map { columnLabels =>
         columnLabels.map(columnMap)

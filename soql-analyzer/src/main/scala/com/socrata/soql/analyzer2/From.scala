@@ -4,6 +4,8 @@ import scala.language.higherKinds
 import scala.annotation.tailrec
 import scala.collection.compat.immutable.LazyList
 
+import com.rojoma.json.v3.ast.JValue
+
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.collection._
@@ -30,6 +32,17 @@ sealed abstract class From[MT <: MetaTypes] extends LabelUniverse[MT] {
   def unique: LazyList[Seq[Column[MT]]]
 
   def schema: Seq[From.SchemaEntry[MT]]
+  lazy val schemaByTableColumn: Map[(AutoTableLabel, ColumnLabel), From.SchemaEntry[MT]] = locally {
+    def atomicFromSchema(af: AtomicFrom[MT]) =
+      af.schema.iterator.map { schemaEnt =>
+        (af.label, schemaEnt.column) -> schemaEnt
+      }.toMap
+
+    reduce[Map[(AutoTableLabel, ColumnLabel), From.SchemaEntry[MT]]](
+      atomicFromSchema _,
+      { (acc, join) => acc ++ atomicFromSchema(join.right) }
+    )
+  }
 
   // extend the given environment with names introduced by this FROM clause
   private[analyzer2] def extendEnvironment(base: Environment[MT]): Either[AddScopeError, Environment[MT]]
@@ -135,6 +148,7 @@ object From {
     table: AutoTableLabel,
     column: types.ColumnLabel[MT],
     typ: types.ColumnType[MT],
+    hint: Option[JValue],
     isSynthetic: Boolean
   )
 
@@ -189,7 +203,7 @@ case class FromTable[MT <: MetaTypes](
   definiteResourceName: types.ScopedResourceName[MT],
   alias: Option[ResourceName],
   label: AutoTableLabel,
-  columns: OrderedMap[types.DatabaseColumnName[MT], NameEntry[types.ColumnType[MT]]],
+  columns: OrderedMap[types.DatabaseColumnName[MT], FromTable.ColumnInfo[MT]],
   primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]]
 ) extends AtomicFrom[MT] with from.FromTableImpl[MT]
 object FromTable extends from.OFromTableImpl

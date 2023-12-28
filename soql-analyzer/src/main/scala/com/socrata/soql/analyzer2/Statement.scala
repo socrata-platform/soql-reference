@@ -5,7 +5,7 @@ import scala.language.higherKinds
 import scala.util.parsing.input.{Position, NoPosition}
 import scala.collection.compat.immutable.LazyList
 
-import com.rojoma.json.v3.ast.JString
+import com.rojoma.json.v3.ast.{JString, JValue}
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.collection._
@@ -138,6 +138,7 @@ object Statement {
   case class SchemaEntry[MT <: MetaTypes](
     name: ColumnName,
     typ: types.ColumnType[MT],
+    hint: Option[JValue],
     isSynthetic: Boolean
   ) extends MetaTypeHelper[MT] {
     def asNameEntry: NameEntry[CT] = NameEntry(name, typ)

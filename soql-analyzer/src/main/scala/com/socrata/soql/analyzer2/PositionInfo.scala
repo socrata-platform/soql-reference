@@ -88,7 +88,7 @@ object AtomicPositionInfo {
               fail("Unknown AtomicPositionInfo tag " + other)
           }
 
-        case Version.V1 =>
+        case Version.V1 | Version.V2 =>
           buffer.read[Int]() match {
             case 0 =>
               new AtomicPositionInfo(buffer.read[Source[RNS]]())
@@ -173,7 +173,7 @@ object FuncallPositionInfo {
             }
           ctor(buffer.read[Position]())
 
-        case Version.V1 =>
+        case Version.V1 | Version.V2 =>
           val ctor =
             buffer.read[Int]() match {
               case 0 =>

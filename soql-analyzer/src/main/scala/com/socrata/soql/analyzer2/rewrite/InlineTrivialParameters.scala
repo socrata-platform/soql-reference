@@ -185,7 +185,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
                       Select(
                         Distinctiveness.Indistinct(),
                         OrderedMap() ++ newValuesLabels.lazyZip(newValuesExprs.toSeq).map { case (label, (expr, name)) =>
-                          (label, NamedExpr(expr, name, isSynthetic = true))
+                          (label, NamedExpr(expr, name, hint = None, isSynthetic = true))
                         },
                         from,
                         None, Nil, None, Nil, None, None, None, Set.empty

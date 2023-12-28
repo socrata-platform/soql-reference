@@ -67,7 +67,7 @@ object TableDescription {
     private[analyzer2] implicit def decode[MT <: MetaTypes](implicit colDec: JsonDecode[MT#DatabaseColumnNameImpl]) = AutomaticJsonDecodeBuilder[Ordering[MT]]
   }
 
-  case class DatasetColumnInfo[+ColumnType](name: ColumnName, typ: ColumnType, hidden: Boolean)
+  case class DatasetColumnInfo[+ColumnType](name: ColumnName, typ: ColumnType, hidden: Boolean, hint: Option[JValue])
   object DatasetColumnInfo {
     private[analyzer2] implicit def encode[CT: JsonEncode] = AutomaticJsonEncodeBuilder[DatasetColumnInfo[CT]]
     private[analyzer2] implicit def decode[CT: JsonDecode] = AutomaticJsonDecodeBuilder[DatasetColumnInfo[CT]]
@@ -90,12 +90,12 @@ object TableDescription {
       require(columns.contains(col), "Primary key not in dataset")
     }
 
-    val hiddenColumns = columns.values.flatMap { case DatasetColumnInfo(name, _, hidden) =>
+    val hiddenColumns = columns.values.flatMap { case DatasetColumnInfo(name, _, hidden, _) =>
       if(hidden) Some(name) else None
     }.to(Set)
 
     val schema = OrderedMap() ++ columns.iterator.map {
-      case (dcn, DatasetColumnInfo(name, typ, hidden)) => dcn -> NameEntry(name, typ)
+      case (dcn, DatasetColumnInfo(name, typ, hidden, hint)) => dcn -> FromTable.ColumnInfo[MT](name, typ, hint)
     }
 
     require(ordering.forall { o => columns.contains(o.column) })
@@ -136,7 +136,8 @@ object TableDescription {
     parsed: BinaryTree[ast.Select],
     unparsed: String,
     parameters: Map[HoleName, MT#ColumnType],
-    hiddenColumns: Set[ColumnName]
+    hiddenColumns: Set[ColumnName],
+    outputColumnHints: Map[ColumnName, JValue]
   ) extends TableDescription[MT] {
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): Query[MT2] =
       copy(
@@ -151,7 +152,7 @@ object TableDescription {
       this.asInstanceOf[Query[MT2]] // SAFETY: ColumnType isn't changing
 
     def asUnparsedTableDescription =
-      UnparsedTableDescription.Query(scope, canonicalName, basedOn, unparsed, parameters, hiddenColumns)
+      UnparsedTableDescription.Query(scope, canonicalName, basedOn, unparsed, parameters, hiddenColumns, outputColumnHints)
 
     def directlyReferencedTables: Set[types.ScopedResourceName[MT]] =
       Util.walkParsed[MT](Set(ScopedResourceName(scope, basedOn)), scope, parsed)

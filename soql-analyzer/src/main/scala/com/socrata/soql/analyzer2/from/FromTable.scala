@@ -3,12 +3,14 @@ package com.socrata.soql.analyzer2.from
 import scala.annotation.tailrec
 import scala.collection.compat.immutable.LazyList
 
+import com.rojoma.json.v3.ast.JValue
+
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer, Version}
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.{ResourceName, ScopedResourceName}
+import com.socrata.soql.environment.{ResourceName, ScopedResourceName, ColumnName}
 import com.socrata.soql.functions.MonomorphicFunction
 
 trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
@@ -18,9 +20,9 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   def find(predicate: Expr[MT] => Boolean) = None
   def contains(e: Expr[MT]): Boolean = false
 
-  def schema = columns.iterator.map { case (dcn, NameEntry(_, typ)) =>
+  def schema = columns.iterator.map { case (dcn, FromTable.ColumnInfo(_, typ, hint)) =>
     From.SchemaEntry(
-      label, dcn, typ,
+      label, dcn, typ, hint,
       isSynthetic = false // table columns are never synthetic
     )
   }.toVector
@@ -31,7 +33,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
 
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = Map.empty
 
-  private[analyzer2] override final val scope: Scope[MT] = new Scope.Physical[MT](tableName, label, columns)
+  private[analyzer2] override final val scope: Scope[MT] = new Scope.Physical[MT](tableName, label, columns.withValuesMapped(_.asNameEntry))
 
   private[analyzer2] def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
     (tableName.debugDoc(ev.tableNameImpl) ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
@@ -40,8 +42,8 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
     copy[MT2](
       tableName = state.convert(this.tableName),
       definiteResourceName = state.changesOnlyLabels.convertRNSOnly(definiteResourceName),
-      columns = OrderedMap() ++ columns.iterator.map { case (n, ne) =>
-        state.convert(this.tableName, n) -> state.changesOnlyLabels.convertCTOnly(ne)
+      columns = OrderedMap() ++ columns.iterator.map { case (n, columnInfo) =>
+        state.convert(this.tableName, n) -> columnInfo.doRewriteDatabaseNames(state.changesOnlyLabels)
       },
       primaryKeys = primaryKeys.map(_.map(state.convert(this.tableName, _)))
     )
@@ -65,7 +67,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
           this.columns.iterator.zip(thatColumns.iterator).forall { case ((thisColName, thisEntry), (thatColName, thatEntry)) =>
             thisColName == thatColName &&
               thisEntry.typ == thatEntry.typ
-            // don't care about the entry's name
+            // don't care about the entry's name.  Or hints?
           } &&
           this.primaryKeys.toSet == thatPrimaryKeys.toSet
       case _ =>
@@ -101,13 +103,40 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
     val tr = LabelMap.TableReference(resourceName, alias)
     state.tableMap += label -> tr
-    for((columnLabel, NameEntry(columnName, _typ)) <- columns) {
+    for((columnLabel, FromTable.ColumnInfo(columnName, _typ, _hint)) <- columns) {
       state.columnMap += (label, columnLabel) -> (tr, columnName)
     }
   }
 }
 
 trait OFromTableImpl { this: FromTable.type =>
+  case class ColumnInfo[MT <: MetaTypes](name: ColumnName, typ: types.ColumnType[MT], hint: Option[JValue]) {
+    def asNameEntry = NameEntry(name, typ)
+
+    private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](ev: MetaTypes.ChangesOnlyLabels[MT, MT2]) =
+      ColumnInfo(name, ev.convertCT(typ), hint)
+  }
+
+  object ColumnInfo {
+    implicit def serialize[MT <: MetaTypes](implicit ctWritable: Writable[types.ColumnType[MT]]): Writable[ColumnInfo[MT]] = new Writable[ColumnInfo[MT]] {
+      def writeTo(buffer: WriteBuffer, from: ColumnInfo[MT]): Unit = {
+        buffer.write(from.name)
+        buffer.write(from.typ)
+        buffer.write(from.hint)
+      }
+    }
+
+    implicit def deserialize[MT <: MetaTypes](implicit ctReadable: Readable[types.ColumnType[MT]]): Readable[ColumnInfo[MT]] = new Readable[ColumnInfo[MT]] {
+      def readFrom(buffer: ReadBuffer): ColumnInfo[MT] = {
+        ColumnInfo[MT](
+          name = buffer.read[ColumnName](),
+          typ = buffer.read[types.ColumnType[MT]](),
+          hint = buffer.read[Option[JValue]]()
+        )
+      }
+    }
+  }
+
   implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#ResourceNameScope], ctWritable: Writable[MT#ColumnType], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[FromTable[MT]] = new Writable[FromTable[MT]] {
     def writeTo(buffer: WriteBuffer, from: FromTable[MT]): Unit = {
       buffer.write(from.tableName)
@@ -121,14 +150,28 @@ trait OFromTableImpl { this: FromTable.type =>
 
   implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope], ctReadable: Readable[MT#ColumnType], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[FromTable[MT]] = new Readable[FromTable[MT]] with LabelUniverse[MT] {
     def readFrom(buffer: ReadBuffer): FromTable[MT] = {
-      FromTable(
-        tableName = buffer.read[DatabaseTableName](),
-        definiteResourceName = buffer.read[ScopedResourceName](),
-        alias = buffer.read[Option[ResourceName]](),
-        label = buffer.read[AutoTableLabel](),
-        columns = buffer.read[OrderedMap[DatabaseColumnName, NameEntry[CT]]](),
-        primaryKeys = buffer.read[Seq[Seq[DatabaseColumnName]]]()
-      )
+      buffer.version match {
+        case Version.V0 | Version.V1 =>
+          FromTable(
+            tableName = buffer.read[DatabaseTableName](),
+            definiteResourceName = buffer.read[ScopedResourceName](),
+            alias = buffer.read[Option[ResourceName]](),
+            label = buffer.read[AutoTableLabel](),
+            columns = buffer.read[OrderedMap[DatabaseColumnName, NameEntry[CT]]]().withValuesMapped { case NameEntry(name, typ) =>
+              ColumnInfo[MT](name, typ, None)
+            },
+            primaryKeys = buffer.read[Seq[Seq[DatabaseColumnName]]]()
+          )
+        case Version.V2 =>
+          FromTable(
+            tableName = buffer.read[DatabaseTableName](),
+            definiteResourceName = buffer.read[ScopedResourceName](),
+            alias = buffer.read[Option[ResourceName]](),
+            label = buffer.read[AutoTableLabel](),
+            columns = buffer.read[OrderedMap[DatabaseColumnName, ColumnInfo[MT]]](),
+            primaryKeys = buffer.read[Seq[Seq[DatabaseColumnName]]]()
+          )
+      }
     }
   }
 }

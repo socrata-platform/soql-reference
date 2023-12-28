@@ -11,8 +11,8 @@ class AddLimitOffset[MT <: MetaTypes] private (labelProvider: LabelProvider) ext
         val newTableLabel = labelProvider.tableLabel()
         Select(
           Distinctiveness.Indistinct(),
-          OrderedMap() ++ stmt.schema.iterator.map { case (colLabel, Statement.SchemaEntry(name, typ, isSynthetic)) =>
-            labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newTableLabel, colLabel, typ)(AtomicPositionInfo.Synthetic), name, isSynthetic = isSynthetic)
+          OrderedMap() ++ stmt.schema.iterator.map { case (colLabel, Statement.SchemaEntry(name, typ, hint, isSynthetic)) =>
+            labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newTableLabel, colLabel, typ)(AtomicPositionInfo.Synthetic), name, hint = None, isSynthetic = isSynthetic)
           },
           FromStatement(stmt, newTableLabel, None, None),
           None,

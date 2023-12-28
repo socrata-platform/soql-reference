@@ -84,11 +84,11 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extend
           // so they'll just get collected into outputInfo but we
           // won't actually create any newColumns.
           val (newColumns, outputInfo) = orderedSelf.orderBy.map { case OrderBy(expr, asc, nullLast) =>
-            selectList.find { case (label, NamedExpr(e, _, _)) => expr == e } match {
+            selectList.find { case (label, NamedExpr(e, _, _, _)) => expr == e } match {
               case None =>
                 val columnLabel = provider.columnLabel()
-                (Some(columnLabel -> NamedExpr(expr, freshName("order"), isSynthetic = true)), (columnLabel, expr.typ, asc, nullLast))
-              case Some((columnLabel, NamedExpr(existingExpr, _, _))) =>
+                (Some(columnLabel -> NamedExpr(expr, freshName("order"), hint = None, isSynthetic = true)), (columnLabel, expr.typ, asc, nullLast))
+              case Some((columnLabel, NamedExpr(existingExpr, _, _, _))) =>
                 (None, (columnLabel, existingExpr.typ, asc, nullLast))
             }
           }.unzip

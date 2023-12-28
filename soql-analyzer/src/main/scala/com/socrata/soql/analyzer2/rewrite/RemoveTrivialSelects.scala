@@ -33,7 +33,7 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
           if(!schemaChanged) {
             // now a less-trivial check to see if we've changed the
             // input schema more subtly.
-            schemaChanged = exprs.values.lazyZip(fromSchema).exists { case (columnExpr, From.SchemaEntry(sourceTable, sourceColumn, _typ, _isSynthetic)) =>
+            schemaChanged = exprs.values.lazyZip(fromSchema).exists { case (columnExpr, From.SchemaEntry(sourceTable, sourceColumn, _typ, _hint, _isSynthetic)) =>
               columnExpr.table != sourceTable || columnExpr.column != sourceColumn
             }
           }
@@ -65,8 +65,25 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
 
         val result = Select(
           rewriteDistinctiveness(distinctiveness, columnMap),
-          OrderedMap() ++ selectList.iterator.map { case (label, NamedExpr(expr, name, isSynthetic)) =>
-            (label, NamedExpr(rewriteExpr(expr, columnMap), name, isSynthetic = isSynthetic))
+          OrderedMap() ++ selectList.iterator.map { case (label, NamedExpr(expr, name, hint, isSynthetic)) =>
+            val newExpr = rewriteExpr(expr, columnMap)
+            def originalInheritedHint =
+              expr match {
+                // see the comment in Select#schema for why the .get here
+                case c: Column => from.schemaByTableColumn.get((c.table, c.column)).flatMap(_.hint)
+                case _ => None
+              }
+            def newInheritedHint =
+              newExpr match {
+                // see the comment in Select#schema for why the .get here
+                case c: Column => newFrom.schemaByTableColumn.get((c.table, c.column)).flatMap(_.hint)
+                case _ => None
+              }
+            val newHint = hint orElse {
+              if(originalInheritedHint != newInheritedHint) originalInheritedHint
+              else None
+            }
+            (label, NamedExpr(newExpr, name, newHint, isSynthetic = isSynthetic))
           },
           newFrom,
           where.map(rewriteExpr(_, columnMap)),

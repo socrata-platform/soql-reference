@@ -135,89 +135,124 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
   private def mergeSelects(
     a: Select, aLabel: AutoTableLabel, aResourceName: Option[ScopedResourceName], aAlias: Option[ResourceName],
     b: Select, bRejoin: FromRewriter
-  ): Option[Statement] =
+  ): Option[Statement] = {
     // If we decide to merge this, we're going to create some flavor of
     //   select merged_projection from bRejoin(FromStatement(a.from)) ...)
-    (a, b) match {
-      case (a, b) if definitelyRequiresSubselect(a, aLabel, b) =>
-        debug("declaining to merge - definitely requires subselect")
-        None
-      case (a, Select(bDistinct, bSelect, _oldA, None, Nil, None, Nil, bLim, bOff, None, bHint)) =>
-        // Just projection change + possibly limit/offset and
-        // distinctiveness.  We can merge this onto almost anything,
-        // and what we can't merge it onto has been rejected by
-        // definitelyRequiresSubselect - with one exception!  It's
-        // possible for a parent's group-by to have been implicit in
-        // its select list, so we'll only accept this merge if the
-        // resulting query's aggregatedness is the same as the
-        // parent's.
-        debug("simple", a, b)
-        val (newLim, newOff) = Merger.combineLimits(a.limit, a.offset, bLim, bOff)
-        val selectList = mergeSelection(aLabel, a.selectedExprs, bSelect)
-        Some(
-          a.copy(
-            distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
-            selectList = selectList,
-            from = bRejoin(a.from, replaceRefs(aLabel, a.selectedExprs, _)),
-            orderBy = orderByVsDistinct(a.orderBy, selectList.withValuesMapped(_.expr), bDistinct),
-            limit = newLim,
-            offset = newOff,
-            hint = a.hint ++ bHint
-          )
-        ).filter(_.isAggregated == a.isAggregated)
+    val newStatement: Option[Select] =
+      (a, b) match {
+        case (a, b) if definitelyRequiresSubselect(a, aLabel, b) =>
+          debug("declaining to merge - definitely requires subselect")
+          None
+        case (a, Select(bDistinct, bSelect, _oldA, None, Nil, None, Nil, bLim, bOff, None, bHint)) =>
+          // Just projection change + possibly limit/offset and
+          // distinctiveness.  We can merge this onto almost anything,
+          // and what we can't merge it onto has been rejected by
+          // definitelyRequiresSubselect - with one exception!  It's
+          // possible for a parent's group-by to have been implicit in
+          // its select list, so we'll only accept this merge if the
+          // resulting query's aggregatedness is the same as the
+          // parent's.
+          debug("simple", a, b)
+          val (newLim, newOff) = Merger.combineLimits(a.limit, a.offset, bLim, bOff)
+          val selectList = mergeSelection(aLabel, a.selectedExprs, bSelect)
+          Some(
+            a.copy(
+              distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
+              selectList = selectList,
+              from = bRejoin(a.from, replaceRefs(aLabel, a.selectedExprs, _)),
+              orderBy = orderByVsDistinct(a.orderBy, selectList.withValuesMapped(_.expr), bDistinct),
+              limit = newLim,
+              offset = newOff,
+              hint = a.hint ++ bHint
+            )
+          ).filter(_.isAggregated == a.isAggregated)
 
-      case (a@Select(_aDistinct, aSelect, aFrom, aWhere, Nil, None, aOrder, None, None, None, aHint),
-            b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if !b.isAggregated =>
-        debug("non-aggregate on non-aggregate")
-        val selectList = mergeSelection(aLabel, a.selectedExprs, bSelect)
-        Some(a.copy(
-               distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
-               selectList = selectList,
-               from = bRejoin(a.from, replaceRefs(aLabel, a.selectedExprs, _)),
-               where = mergeWhereLike(aLabel, a.selectedExprs, aWhere, bWhere),
-               orderBy = mergeOrderBy(aLabel, a.selectedExprs, orderByVsDistinct(aOrder, selectList.withValuesMapped(_.expr), bDistinct), bOrder),
-               limit = bLim,
-               offset = bOff,
-               hint = a.hint ++ bHint
-             ))
+        case (a@Select(_aDistinct, aSelect, aFrom, aWhere, Nil, None, aOrder, None, None, None, aHint),
+              b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if !b.isAggregated =>
+          debug("non-aggregate on non-aggregate")
+          val selectList = mergeSelection(aLabel, a.selectedExprs, bSelect)
+          Some(a.copy(
+                 distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
+                 selectList = selectList,
+                 from = bRejoin(a.from, replaceRefs(aLabel, a.selectedExprs, _)),
+                 where = mergeWhereLike(aLabel, a.selectedExprs, aWhere, bWhere),
+                 orderBy = mergeOrderBy(aLabel, a.selectedExprs, orderByVsDistinct(aOrder, selectList.withValuesMapped(_.expr), bDistinct), bOrder),
+                 limit = bLim,
+                 offset = bOff,
+                 hint = a.hint ++ bHint
+               ))
 
-      case (a@Select(_aDistinct, aSelect, aFrom, aWhere, Nil, None, _aOrder, None, None, None, aHint),
-            b@Select(bDistinct, bSelect, _oldA, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, bHint)) if b.isAggregated =>
-        debug("aggregate on non-aggregate")
-        Some(Select(
-               distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
-               selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
-               from = bRejoin(aFrom, replaceRefs(aLabel, a.selectedExprs, _)),
-               where = mergeWhereLike(aLabel, a.selectedExprs, aWhere, bWhere),
-               groupBy = mergeGroupBy(aLabel, a.selectedExprs, bGroup),
-               having = mergeWhereLike(aLabel, a.selectedExprs, None, bHaving),
-               orderBy = mergeOrderBy(aLabel, a.selectedExprs, Nil, bOrder),
-               limit = bLim,
-               offset = bOff,
-               search = None,
-               hint = aHint ++ bHint))
+        case (a@Select(_aDistinct, aSelect, aFrom, aWhere, Nil, None, _aOrder, None, None, None, aHint),
+              b@Select(bDistinct, bSelect, _oldA, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, bHint)) if b.isAggregated =>
+          debug("aggregate on non-aggregate")
+          Some(Select(
+                 distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
+                 selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
+                 from = bRejoin(aFrom, replaceRefs(aLabel, a.selectedExprs, _)),
+                 where = mergeWhereLike(aLabel, a.selectedExprs, aWhere, bWhere),
+                 groupBy = mergeGroupBy(aLabel, a.selectedExprs, bGroup),
+                 having = mergeWhereLike(aLabel, a.selectedExprs, None, bHaving),
+                 orderBy = mergeOrderBy(aLabel, a.selectedExprs, Nil, bOrder),
+                 limit = bLim,
+                 offset = bOff,
+                 search = None,
+                 hint = aHint ++ bHint))
 
-      case (a@Select(_aDistinct, aSelect, aFrom, aWhere, aGroup, aHaving, aOrder, None, None, None, aHint),
-            b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if a.isAggregated =>
-        debug("non-aggregate on aggregate")
-        Some(
-          Select(
-            distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
-            selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
-            from = bRejoin(aFrom, replaceRefs(aLabel, a.selectedExprs, _)),
-            where = aWhere,
-            groupBy = aGroup,
-            having = mergeWhereLike(aLabel, a.selectedExprs, aHaving, bWhere),
-            orderBy = mergeOrderBy(aLabel, a.selectedExprs, aOrder, bOrder),
-            limit = bLim,
-            offset = bOff,
-            search = None,
-            hint = aHint ++ bHint)
-        ).filter(_.isAggregated) // again, just in case the aggregation was implicit and our merge removed it
-      case _ =>
-        debug("decline to merge - unknown pattern")
-        None
+        case (a@Select(_aDistinct, aSelect, aFrom, aWhere, aGroup, aHaving, aOrder, None, None, None, aHint),
+              b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if a.isAggregated =>
+          debug("non-aggregate on aggregate")
+          Some(
+            Select(
+              distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
+              selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
+              from = bRejoin(aFrom, replaceRefs(aLabel, a.selectedExprs, _)),
+              where = aWhere,
+              groupBy = aGroup,
+              having = mergeWhereLike(aLabel, a.selectedExprs, aHaving, bWhere),
+              orderBy = mergeOrderBy(aLabel, a.selectedExprs, aOrder, bOrder),
+              limit = bLim,
+              offset = bOff,
+              search = None,
+              hint = aHint ++ bHint)
+          ).filter(_.isAggregated) // again, just in case the aggregation was implicit and our merge removed it
+        case _ =>
+          debug("decline to merge - unknown pattern")
+          None
+      }
+
+    newStatement.map { select =>
+      // fix up hints - this new statement has the same schema as "b"
+      // so we can look up columns in b's select list using this
+      // statement's output column labels.
+      select.copy(
+        selectList = OrderedMap() ++ select.selectList.iterator.map { case (label, namedExpr) =>
+          val originalUninheritedHint = b.selectList(label).hint
+
+          val originalInheritedHint =
+            b.selectList(label).expr match {
+              // see the comment in Select#schema for why the .get here
+              case c: Column => b.from.schemaByTableColumn.get((c.table, c.column)).flatMap(_.hint)
+              case _ => None
+            }
+
+          val newUninheritedHint = namedExpr.hint
+          val newInheritedHint =
+            namedExpr.expr match {
+              // see the comment in Select#schema for why the .get here
+              case c: Column => select.from.schemaByTableColumn.get((c.table, c.column)).flatMap(_.hint)
+              case _ => None
+            }
+
+          val newHint = originalUninheritedHint orElse newUninheritedHint orElse {
+            if(originalInheritedHint != newInheritedHint) originalInheritedHint
+            else None
+          }
+
+          label -> namedExpr.copy(hint = newHint)
+        }
+      )
     }
+  }
 
   private def definitelyRequiresSubselect(a: Select, aLabel: AutoTableLabel, b: Select): Boolean = {
     if(b.hint(SelectHint.NoChainMerge)) {
