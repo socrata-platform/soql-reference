@@ -200,6 +200,26 @@ class RollupExactTest extends FunSuite with MustMatchers with RollupTestHelper w
     }
   }
 
+  test("rollup - compatible where with clause unrelated to the rollup") {
+    val tf = tableFinder(
+      (0, "threecol") -> D("text1" -> TestText, "text2" -> TestText, "num" -> TestNumber, "flag" -> TestBoolean),
+      (1, "rollup") -> D("c1" -> TestText, "c2" -> TestText, "c3" -> TestNumber).withPrimaryKey("c1", "c2")
+    )
+
+    val Right(foundTables) = tf.findTables(0, "select text1, sum(num) from @threecol where flag and text2 = 'world' group by text1", Map.empty)
+    val Right(analysis) = analyzer(foundTables, UserParameters.empty)
+    val select = analysis.statement.asInstanceOf[Select]
+
+    val rollup = TestRollupInfo(1, "rollup", tf, "select text1, text2, sum(num) from @threecol where flag group by text1, text2")
+    val Some(result) = TestRollupExact(select, rollup, analysis.labelProvider)
+
+    locally {
+      val Right(expectedRollupFT) = tf.findTables(1, "select c1, sum(c3) from @rollup where c2 = 'world' group by c1", Map.empty)
+      val Right(expectedRollupAnalysis) = analyzer(expectedRollupFT, UserParameters.empty)
+      result must be (isomorphicTo(expectedRollupAnalysis.statement))
+    }
+  }
+
   test("rollup - refining where") {
     val tf = tableFinder(
       (0, "threecol") -> D("text1" -> TestText, "text2" -> TestText, "num" -> TestNumber),
@@ -300,6 +320,26 @@ class RollupExactTest extends FunSuite with MustMatchers with RollupTestHelper w
 
     val rollup = TestRollupInfo(1, "rollup", tf, "select text1, text2, sum(num) from @threecol where text1 = 'hello' group by text1, text2")
     TestRollupExact(select, rollup, analysis.labelProvider) must be (None)
+  }
+
+  test("same group by - compatible where with clause unrelated to the rollup") {
+    val tf = tableFinder(
+      (0, "threecol") -> D("text1" -> TestText, "text2" -> TestText, "num" -> TestNumber, "flag" -> TestBoolean),
+      (1, "rollup") -> D("c1" -> TestText, "c2" -> TestText, "c3" -> TestNumber).withPrimaryKey("c1", "c2")
+    )
+
+    val Right(foundTables) = tf.findTables(0, "select text1, sum(num) from @threecol where flag and text1 > 'hello' group by text1, text2", Map.empty)
+    val Right(analysis) = analyzer(foundTables, UserParameters.empty)
+    val select = analysis.statement.asInstanceOf[Select]
+
+    val rollup = TestRollupInfo(1, "rollup", tf, "select text1, text2, sum(num) from @threecol where flag group by text1, text2")
+    val Some(result) = TestRollupExact(select, rollup, analysis.labelProvider)
+
+    locally {
+      val Right(expectedRollupFT) = tf.findTables(1, "select c1, c3 from @rollup where c1 > 'hello'", Map.empty)
+      val Right(expectedRollupAnalysis) = analyzer(expectedRollupFT, UserParameters.empty)
+      result must be (isomorphicTo(expectedRollupAnalysis.statement))
+    }
   }
 
   test("ad-hoc rewrite") {
