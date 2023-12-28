@@ -244,7 +244,7 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
           this.selectList.iterator.zip(thatSelectList.iterator).forall { case ((thisColLabel, thisNamedExpr), (thatColLabel, thatNamedExpr)) =>
             state.tryAssociate(thisCurrentTableLabel, thisColLabel, thatCurrentTableLabel, thatColLabel) &&
               thisNamedExpr.expr.findIsomorphism(state, thatNamedExpr.expr)
-            // do we care about the name or syntheticness?
+            // do we care about the name or syntheticness or hints?
           } &&
           this.where.isDefined == thatWhere.isDefined &&
           this.where.zip(thatWhere).forall { case (a, b) => a.findIsomorphism(state, b) } &&

@@ -67,7 +67,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
           this.columns.iterator.zip(thatColumns.iterator).forall { case ((thisColName, thisEntry), (thatColName, thatEntry)) =>
             thisColName == thatColName &&
               thisEntry.typ == thatEntry.typ
-            // don't care about the entry's name
+            // don't care about the entry's name.  Or hints?
           } &&
           this.primaryKeys.toSet == thatPrimaryKeys.toSet
       case _ =>
