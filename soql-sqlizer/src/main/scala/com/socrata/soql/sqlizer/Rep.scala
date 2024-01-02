@@ -1,6 +1,8 @@
 package com.socrata.soql.sqlizer
 
-import java.sql.ResultSet
+import java.io.Writer
+import java.sql.{ResultSet, PreparedStatement}
+
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.environment.Provenance
 import com.socrata.prettyprint.prelude._
@@ -13,6 +15,22 @@ case class SubcolInfo[MT <: MetaTypes with MetaTypesExt](compoundType: types.Col
       case cmp: ExprSql.Compressed[MT] => compressedExtractor(cmp.sql)
     }
   }
+}
+
+trait IngressRep[MT <: MetaTypes with MetaTypesExt] extends SqlizerUniverse[MT] {
+  // returns the "start" of the next column
+  def populatePreparedStatement(stmt: PreparedStatement, start: Int, value: CV): Int
+
+  // write one value to the CSV; this may write more than one CSV cell
+  def csvify(out: Writer, value: CV): Unit
+
+  // Sequence of indexes to be created on this column
+  def indices: Seq[Doc]
+
+  // The "?" SQL for building a prepared statement; this might not be
+  // literally just a sequence of "?"s (e.g., there might be a cast
+  // involved).
+  def placeholders: Seq[Doc]
 }
 
 trait Rep[MT <: MetaTypes with MetaTypesExt] extends ExpressionUniverse[MT] {
@@ -64,9 +82,10 @@ trait Rep[MT <: MetaTypes with MetaTypesExt] extends ExpressionUniverse[MT] {
     raw
   }
 
-  def extractFrom(isExpanded: Boolean): (ResultSet, Int) => (Int, CV)
+  // Ingress support
+  def ingressRep(table: DatabaseTableName, column: ColumnLabel): IngressRep[MT]
 
-  def indices(tableName: DatabaseTableName, label: ColumnLabel): Seq[Doc[Nothing]]
+  def extractFrom(isExpanded: Boolean): (ResultSet, Int) => (Int, CV)
 }
 object Rep {
   trait Provider[MT <: MetaTypes with MetaTypesExt] extends SqlizerUniverse[MT] {
