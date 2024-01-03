@@ -195,8 +195,15 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
     reduce[LazyList[List[Seq[Column[MT]]]]](
       _.unique.to(LazyList).map(_ :: Nil),
       { (uniqueSoFar, join) =>
-        uniqueSoFar.flatMap { uniques =>
-          join.right.unique.map(_ :: uniques)
+        join.joinType match {
+          case JoinType.Inner =>
+            uniqueSoFar.flatMap { uniques =>
+              join.right.unique.map(_ :: uniques)
+            }
+          case JoinType.FullOuter | JoinType.LeftOuter | JoinType.RightOuter =>
+            // outer joins can null out primary key columns, so there
+            // are no more primary keys after encountering one.
+            LazyList.empty
         }
       }
     ).map(_.reverse.flatten)
