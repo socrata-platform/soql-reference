@@ -21,8 +21,8 @@ trait IngressRep[MT <: MetaTypes with MetaTypesExt] extends SqlizerUniverse[MT] 
   // returns the "start" of the next column
   def populatePreparedStatement(stmt: PreparedStatement, start: Int, value: CV): Int
 
-  // write one value to the CSV; this may write more than one CSV cell
-  def csvify(out: Writer, value: CV): Unit
+  // Produce CSV data; this may produce more than one CSV cell
+  def csvify(value: CV): Seq[Option[String]]
 
   // Sequence of indexes to be created on this column
   def indices: Seq[Doc]
