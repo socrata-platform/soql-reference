@@ -1054,4 +1054,44 @@ select * where first = 'Tom'
 
     subAnalysis.statement must be (verticalSliceOf(superAnalysis.statement))
   }
+
+  test("unique - join between unique and non-unique") {
+    val tf = tableFinder(
+      (0, "a") -> D("a1" -> TestText, "a2" -> TestNumber, "a3" -> TestNumber).withPrimaryKey("a1"),
+      (0, "b") -> D("b1" -> TestText, "b2" -> TestNumber, "b3" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "a", "select *, @b.* join @b on a1 = @b.b1")
+    analysis.statement.unique must be (Nil)
+  }
+
+  test("unique - join between multiple uniques") {
+    val tf = tableFinder(
+      (0, "a") -> D("a1" -> TestText, "a2" -> TestNumber, "a3" -> TestNumber).withPrimaryKey("a1"),
+      (0, "b") -> D("b1" -> TestText, "b2" -> TestNumber, "b3" -> TestNumber).withPrimaryKey("b2")
+    )
+
+    val analysis = analyze(tf, "a", "select *, @b.* join @b on a1 = @b.b1")
+    val uniqueNames = analysis.statement.unique.map { cols =>
+      cols.map { col =>
+        analysis.statement.schema(col).name
+      }
+    }
+    uniqueNames must be (Seq(Seq(cn("a1"), cn("b2"))))
+  }
+
+  test("unique - outer join prevents uniqueness") {
+    val tf = tableFinder(
+      (0, "a") -> D("a1" -> TestText, "a2" -> TestNumber, "a3" -> TestNumber).withPrimaryKey("a1"),
+      (0, "b") -> D("b1" -> TestText, "b2" -> TestNumber, "b3" -> TestNumber).withPrimaryKey("b2")
+    )
+
+    val analysis = analyze(tf, "a", "select *, @b.* left outer join @b on a1 = @b.b1")
+    val uniqueNames = analysis.statement.unique.map { cols =>
+      cols.map { col =>
+        analysis.statement.schema(col).name
+      }
+    }
+    uniqueNames must be (Nil)
+  }
 }
