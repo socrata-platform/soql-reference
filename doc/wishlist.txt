@@ -1,0 +1,24 @@
+More position info on AST nodes
+
+Replace TableName with something sane
+
+VALUES source form
+
+Statement in FROM in source form
+
+Window function parsing overhaul
+
+Rewrite "a |> b" into a CTE rather than a direct subselect
+ - this is to make "select x union select x from @this" less duplicatey
+
+Allow non-leaf queries on the RHS of |>
+ - currently denied by parser
+ - also figure out predecence etc.
+ - I think right now it's "|>" is lower-predecence than table ops, all table
+   ops are the same precedence and.. left associative?
+
+OrderedMap -> ListMap
+
+Unaliased `FROM @this`
+
+Get rid of unused types (esp SoQLMoney) - maybe not date/time though?
