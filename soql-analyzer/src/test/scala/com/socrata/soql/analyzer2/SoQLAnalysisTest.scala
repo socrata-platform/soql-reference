@@ -313,7 +313,6 @@ select a |> select a |> select a
     analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
   }
 
-
   test("merge - preserve inherited hints - hint on last") {
     val tf = tableFinder(
       (0, "ds") -> D("a" -> TestText),
@@ -327,6 +326,21 @@ select a |> select a |> select a
 
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
     analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
+  }
+
+  test("merge - lateral join") {
+    val tf = tableFinder(
+      (0, "ds1") -> D("a" -> TestText, "key" -> TestNumber),
+      (0, "ds2") -> D("b" -> TestText, "key" -> TestNumber),
+      (0, "q1") -> Q(0, "ds1", "select a, @b2.b, @b2.fk, @b2.fa from @this as t join lateral (select b, @t.key as fk from @ds2 |> select *, @t.a as fa) as b2 on true"),
+      (0, "q2") -> Q(0, "ds1", "select a, @b2.b, @b2.fk, @b2.fa from @this as t join lateral (select b, @t.key as fk, @t.a as fa from @ds2) as b2 on true")
+    )
+
+    val analysis = analyzeSaved(tf, "q1").merge(and)
+
+    val expectedAnalysis = analyzeSaved(tf, "q2")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("remove unused columns - simple") {
