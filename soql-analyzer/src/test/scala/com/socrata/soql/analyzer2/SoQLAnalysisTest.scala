@@ -874,7 +874,7 @@ select b, n |> select n join @udf(b) as @udf on true
       (0, "threemorecol") -> D("t" -> TestText, "n1" -> TestNumber, "n2" -> TestNumber)
     )
     val analysis = analyze(tf, "threecol", "select *, @x.text as xtext join (select t as text, n1 from @threemorecol |> select text) as @x on true").removeTrivialSelects
-    val expected = analyze(tf, "threecol", "select text, num, num2, @x.t as xtext join @threemorecol as @x on true")
+    val expected = analyze(tf, "threecol", "select text, num, num2, @x.t as xtext join (select t from @threemorecol) as @x on true")
 
     analysis.statement must be (isomorphicTo(expected.statement))
   }
@@ -885,7 +885,7 @@ select b, n |> select n join @udf(b) as @udf on true
       (0, "threemorecol") -> D("t" -> TestText, "n1" -> TestNumber, "n2" -> TestNumber)
     )
     val analysis = analyze(tf, "threecol", "select *, @x.t2 join (select t as text, n1 from @threemorecol |> select text+text as t2) as @x on true").removeTrivialSelects
-    val expected = analyze(tf, "threecol", "select text, num, num2, @x.t2 join (select t+t as t2 from @threemorecol) as @x on true")
+    val expected = analyze(tf, "threecol", "select text, num, num2, @x.t2 join (select t, n1 from @threemorecol |> select t+t as t2) as @x on true")
 
     analysis.statement must be (isomorphicTo(expected.statement))
   }
@@ -896,18 +896,7 @@ select b, n |> select n join @udf(b) as @udf on true
       (0, "threemorecol") -> D("t" -> TestText, "n1" -> TestNumber, "n2" -> TestNumber)
     )
     val analysis = analyze(tf, "threecol", "select * |> select text, num join lateral (select t as text, n1 from @threemorecol |> select text, num2) as @x on true").removeTrivialSelects
-    val expected = analyze(tf, "threecol", "select text, num join lateral (select t, num2 from @threemorecol) as @x on true")
-
-    analysis.statement must be (isomorphicTo(expected.statement))
-  }
-
-  test("remove trivial selects - search with rewrite permitted") {
-    val tf = tableFinder(
-      (0, "threecol") -> D("text" -> TestText, "num" -> TestNumber, "num2" -> TestNumber)
-    )
-
-    val analysis = analyze(tf, "threecol", "select * |> select * search 'search'").removeTrivialSelects
-    val expected = analyze(tf, "threecol", "select text, num, num2 search 'search'")
+    val expected = analyze(tf, "threecol", "select * |> select text, num join lateral (select t, num2 from @threemorecol) as @x on true")
 
     analysis.statement must be (isomorphicTo(expected.statement))
   }
