@@ -1,7 +1,6 @@
 package com.socrata.soql.sqlizer
 
 import com.socrata.soql.functions.Function
-import com.socrata.soql.sqlizer.FuncallSqlizer
 
 object TestFunctionSqlizer extends FuncallSqlizer[TestHelper.TestMT] {
   override val exprSqlFactory = TestHelper.TestExprSqlFactory
