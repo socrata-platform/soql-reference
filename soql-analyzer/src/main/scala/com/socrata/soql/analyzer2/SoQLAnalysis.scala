@@ -75,6 +75,8 @@ class SoQLAnalysis[MT <: MetaTypes] private (
               current.addLimitOffset(limit, offset)
             case Pass.RemoveOrderBy =>
               current.removeOrderBy
+            case Pass.LimitIfUnlimited(limit) =>
+              current.limitIfUnlimited(limit)
           }
       }
       current
@@ -216,6 +218,17 @@ class SoQLAnalysis[MT <: MetaTypes] private (
     copy(
       labelProvider = nlp,
       statement = rewrite.AddLimitOffset(nlp, statement, limit, offset)
+    )
+  }
+
+  /** Add a limit to the query if none exists.  You might want to
+    * imposeOrdering before doing this to ensure the bounds are
+    * meaningful. */
+  def limitIfUnlimited(limit: BigInt) = {
+    val nlp = labelProvider.clone()
+    copy(
+      labelProvider = nlp,
+      statement = rewrite.LimitIfUnlimited(nlp, statement, limit)
     )
   }
 
