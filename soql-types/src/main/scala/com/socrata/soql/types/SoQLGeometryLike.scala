@@ -3,19 +3,17 @@ package com.socrata.soql.types
 import java.util.Base64
 
 import com.google.common.collect.{Interner, Interners}
+import com.rojoma.json.v3.ast.JValue
+import com.rojoma.json.v3.codec.DecodeError
 import com.rojoma.json.v3.io.{CompactJsonWriter, JsonReader}
 import com.socrata.thirdparty.geojson.JtsCodecs
 import com.vividsolutions.jts.geom.{Geometry, GeometryFactory}
-import com.vividsolutions.jts.io.{WKBWriter, WKBReader, WKTReader}
+import com.vividsolutions.jts.io.{WKBWriter, WKBReader, WKTReader, WKTWriter}
 
 import SoQLGeometryLike._
 
 trait SoQLGeometryLike[T <: Geometry] {
   protected val Treified: Class[T]
-
-  private def threadLocal[T](init: => T) = new java.lang.ThreadLocal[T] {
-    override def initialValue(): T = init
-  }
 
   object JsonRep {
     def unapply(text: String): Option[T] =
@@ -25,30 +23,37 @@ trait SoQLGeometryLike[T <: Geometry] {
       CompactJsonWriter.toString(JtsCodecs.geoCodec.encode(geom))
   }
 
-  object WktRep {
-    val gf = threadLocal { new GeometryFactory }
-    val reader = threadLocal { new WKTReader(gf.get) }
+  object JValueRep {
+    def unapply(v: JValue): Either[DecodeError, T] =
+      JtsCodecs.geoCodec.decode(v).flatMap { decoded =>
+        try { Right(Treified.cast(decoded)) }
+        catch {
+          case _: ClassCastException =>
+            Left(DecodeError.InvalidValue(v))
+        }
+      }
 
+    def apply(geom: T): JValue =
+      JtsCodecs.geoCodec.encode(geom)
+  }
+
+  object WktRep {
     def unapply(text: String): Option[T] = {
       try {
-        val geom = interner.intern(reader.get.read(text))
+        val geom = interner.intern(wktReader.read(text))
         Some(Treified.cast(geom))
       } catch {
         case _: Exception => None
       }
     }
 
-    def apply(geom: T): String = geom.toString
+    def apply(geom: T): String = wktWriter.write(geom)
   }
 
   object WkbRep {
-    val gf = threadLocal { new GeometryFactory }
-    val reader = threadLocal { new WKBReader(gf.get) }
-    val writer = threadLocal { new WKBWriter }
-
     def unapply(bytes: Array[Byte]): Option[T] = {
       try {
-        val geom = interner.intern(reader.get.read(bytes))
+        val geom = interner.intern(wkbReader.read(bytes))
         Some(Treified.cast(geom))
       } catch {
         case _: Exception => None
@@ -56,7 +61,7 @@ trait SoQLGeometryLike[T <: Geometry] {
     }
 
     def apply(geom: T): Array[Byte] = {
-      writer.get.write(geom)
+      wkbWriter.write(geom)
     }
   }
 
@@ -106,5 +111,20 @@ trait SoQLGeometryLike[T <: Geometry] {
 }
 
 object SoQLGeometryLike {
+  private def threadLocal[T](init: => T) = new java.lang.ThreadLocal[T] {
+    override def initialValue(): T = init
+  }
+
+  private val gf = threadLocal { new GeometryFactory }
+  private val wktReader_ = threadLocal { new WKTReader(gf.get) }
+  private val wkbReader_ = threadLocal { new WKBReader(gf.get) }
+  private val wktWriter_ = threadLocal { new WKTWriter }
+  private val wkbWriter_ = threadLocal { new WKBWriter }
+
+  def wktReader = wktReader_.get
+  def wkbReader = wkbReader_.get
+  def wktWriter = wktWriter_.get
+  def wkbWriter = wkbWriter_.get
+
   val interner: Interner[Geometry] = Interners.newWeakInterner()
 }
