@@ -1097,4 +1097,151 @@ select * where first = 'Tom'
     }
     uniqueNames must be (Nil)
   }
+
+  test("limit if unlimited - no select") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    val analysis = analyzeSaved(tf, "twocol").limitIfUnlimited(5)
+    val expectedAnalysis = analyze(tf, "twocol", "select * limit 5")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("limit if unlimited - simple select") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    val analysis = analyze(tf, "twocol", "select *").limitIfUnlimited(5)
+    val expectedAnalysis = analyze(tf, "twocol", "select * limit 5")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("limit if unlimited - simple select with limit") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    val analysis = analyze(tf, "twocol", "select * limit 10").limitIfUnlimited(5)
+    val expectedAnalysis = analyze(tf, "twocol", "select * limit 10")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("limit if unlimited - unlimited union") {
+    val tf = tableFinder(
+      (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    val analysis = analyze(tf, "(select * from @twocol1) union (select * from @twocol2)").limitIfUnlimited(5)
+    val expectedAnalysis = analyze(tf, "(select * from @twocol1) union (select * from @twocol2) |> select * limit 5")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("limit if unlimited - left-limited union") {
+    val tf = tableFinder(
+      (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    val analysis = analyze(tf, "(select * from @twocol1 limit 10) union (select * from @twocol2)").limitIfUnlimited(5)
+    val expectedAnalysis = analyze(tf, "(select * from @twocol1 limit 10) union (select * from @twocol2) |> select * limit 5")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("limit if unlimited - right-limited union") {
+    val tf = tableFinder(
+      (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    val analysis = analyze(tf, "(select * from @twocol1) union (select * from @twocol2 limit 10)").limitIfUnlimited(5)
+    val expectedAnalysis = analyze(tf, "(select * from @twocol1) union (select * from @twocol2 limit 10) |> select * limit 5")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("limit if unlimited - bi-limited union") {
+    val tf = tableFinder(
+      (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    val analysis = analyze(tf, "(select * from @twocol1 limit 20) union (select * from @twocol2 limit 10)").limitIfUnlimited(5)
+    val expectedAnalysis = analyze(tf, "(select * from @twocol1 limit 20) union (select * from @twocol2 limit 10)")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("limit if unlimited - un-limited intersect") {
+    val tf = tableFinder(
+      (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    val analysis = analyze(tf, "(select * from @twocol1) intersect (select * from @twocol2)").limitIfUnlimited(5)
+    val expectedAnalysis = analyze(tf, "(select * from @twocol1) intersect (select * from @twocol2) |> select * limit 5")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("limit if unlimited - left-limited intersect") {
+    val tf = tableFinder(
+      (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    val analysis = analyze(tf, "(select * from @twocol1 limit 10) intersect (select * from @twocol2)").limitIfUnlimited(5)
+    val expectedAnalysis = analyze(tf, "(select * from @twocol1 limit 10) intersect (select * from @twocol2)")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("limit if unlimited - right-limited intersect") {
+    val tf = tableFinder(
+      (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    val analysis = analyze(tf, "(select * from @twocol1) intersect (select * from @twocol2 limit 10)").limitIfUnlimited(5)
+    val expectedAnalysis = analyze(tf, "(select * from @twocol1) intersect (select * from @twocol2 limit 10)")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("limit if unlimited - bi-limited intersect") {
+    val tf = tableFinder(
+      (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    val analysis = analyze(tf, "(select * from @twocol1 limit 20) intersect (select * from @twocol2 limit 10)").limitIfUnlimited(5)
+    val expectedAnalysis = analyze(tf, "(select * from @twocol1 limit 20) union (select * from @twocol2 limit 10)")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("limit if unlimited - un-limited minus") {
+    val tf = tableFinder(
+      (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    val analysis = analyze(tf, "(select * from @twocol1) minus (select * from @twocol2)").limitIfUnlimited(5)
+    val expectedAnalysis = analyze(tf, "(select * from @twocol1) minus (select * from @twocol2) |> select * limit 5")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("limit if unlimited - left-limited minus") {
+    val tf = tableFinder(
+      (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    val analysis = analyze(tf, "(select * from @twocol1 limit 10) minus (select * from @twocol2)").limitIfUnlimited(5)
+    val expectedAnalysis = analyze(tf, "(select * from @twocol1 limit 10) minus (select * from @twocol2)")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("limit if unlimited - right-limited minus") {
+    val tf = tableFinder(
+      (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    val analysis = analyze(tf, "(select * from @twocol1) minus (select * from @twocol2 limit 10)").limitIfUnlimited(5)
+    val expectedAnalysis = analyze(tf, "(select * from @twocol1) minus (select * from @twocol2 limit 10) |> select * limit 5")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("limit if unlimited - bi-limited minus") {
+    val tf = tableFinder(
+      (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+    val analysis = analyze(tf, "(select * from @twocol1 limit 20) minus (select * from @twocol2 limit 10)").limitIfUnlimited(5)
+    val expectedAnalysis = analyze(tf, "(select * from @twocol1 limit 20) union (select * from @twocol2 limit 10)")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
 }
