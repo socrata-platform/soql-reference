@@ -36,16 +36,11 @@ class AddLimitOffset[MT <: MetaTypes] private (labelProvider: LabelProvider) ext
 }
 
 object AddLimitOffset {
-  private val zero = BigInt(0)
-
-  def apply[MT <: MetaTypes](labelProvider: LabelProvider, statement: Statement[MT], limit: Option[BigInt], offset: Option[BigInt]): Statement[MT] = {
+  def apply[MT <: MetaTypes](labelProvider: LabelProvider, statement: Statement[MT], limit: Option[NonNegativeBigInt], offset: Option[NonNegativeBigInt]): Statement[MT] = {
     if(limit.isEmpty && offset.isEmpty) {
       statement
     } else {
-      require(limit.getOrElse(zero) >= zero)
-      require(offset.getOrElse(zero) >= zero)
-
-      new AddLimitOffset(labelProvider).rewriteStatement(statement, limit, offset)
+      new AddLimitOffset(labelProvider).rewriteStatement(statement, limit.map(_.underlying), offset.map(_.underlying))
     }
   }
 }

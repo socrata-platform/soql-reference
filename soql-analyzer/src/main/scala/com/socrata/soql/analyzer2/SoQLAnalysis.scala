@@ -1,6 +1,6 @@
 package com.socrata.soql.analyzer2
 
-import com.socrata.soql.analyzer2.rewrite.{Pass, RewritePassHelpers}
+import com.socrata.soql.analyzer2.rewrite.{Pass, RewritePassHelpers, NonNegativeBigInt}
 import com.socrata.soql.environment.Provenance
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer, Readable, Writable}
@@ -207,13 +207,13 @@ class SoQLAnalysis[MT <: MetaTypes] private (
     * imposeOrdering before doing this to ensure the paging is
     * meaningful.  Pages are zero-based (i.e., they're an offset
     * rather than a page number). */
-  def page(pageSize: BigInt, pageOffset: BigInt) = {
+  def page(pageSize: NonNegativeBigInt, pageOffset: NonNegativeBigInt) = {
     addLimitOffset(Some(pageSize), Some(pageOffset * pageSize))
   }
 
   /** Update limit/offset.  You might want to imposeOrdering before
     * doing this to ensure the bounds are meaningful. */
-  def addLimitOffset(limit: Option[BigInt], offset: Option[BigInt]) = {
+  def addLimitOffset(limit: Option[NonNegativeBigInt], offset: Option[NonNegativeBigInt]) = {
     val nlp = labelProvider.clone()
     copy(
       labelProvider = nlp,
@@ -224,7 +224,7 @@ class SoQLAnalysis[MT <: MetaTypes] private (
   /** Add a limit to the query if none exists.  You might want to
     * imposeOrdering before doing this to ensure the bounds are
     * meaningful. */
-  def limitIfUnlimited(limit: BigInt) = {
+  def limitIfUnlimited(limit: NonNegativeBigInt) = {
     val nlp = labelProvider.clone()
     copy(
       labelProvider = nlp,

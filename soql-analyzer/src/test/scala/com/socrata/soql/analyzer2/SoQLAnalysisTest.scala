@@ -704,7 +704,7 @@ select b, n |> select n join @udf(b) as @udf on true
 
     val analysis = analyze(tf, "(select * from @a) union (select * from @b)")
     val expectedAnalysis = analyze(tf, "((select * from @a) union (select * from @b)) |> select * limit 25 offset 50")
-    analysis.addLimitOffset(limit = Some(25), offset = Some(50)).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.addLimitOffset(limit = Some(nnbi(25)), offset = Some(nnbi(50))).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("addLimitOffset - no limit/offset initially") {
@@ -714,7 +714,7 @@ select b, n |> select n join @udf(b) as @udf on true
 
     val analysis = analyze(tf, "twocol", "select text, num*num")
     val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 25 offset 50")
-    analysis.addLimitOffset(limit = Some(25), offset = Some(50)).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.addLimitOffset(limit = Some(nnbi(25)), offset = Some(nnbi(50))).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
 
@@ -725,7 +725,7 @@ select b, n |> select n join @udf(b) as @udf on true
 
     val analysis = analyze(tf, "twocol", "select text, num*num limit 100 offset 100")
     val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 25 offset 150")
-    analysis.addLimitOffset(limit = Some(25), offset = Some(50)).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.addLimitOffset(limit = Some(nnbi(25)), offset = Some(nnbi(50))).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("addLimitOffset - overlaps the end of initial limit/offset") {
@@ -735,7 +735,7 @@ select b, n |> select n join @udf(b) as @udf on true
 
     val analysis = analyze(tf, "twocol", "select text, num*num limit 100 offset 100")
     val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 50 offset 150")
-    analysis.addLimitOffset(limit = Some(500), offset = Some(50)).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.addLimitOffset(limit = Some(nnbi(500)), offset = Some(nnbi(50))).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("addLimitOffset - overlaps the end of initial limit/offset with no new limit provided") {
@@ -745,7 +745,7 @@ select b, n |> select n join @udf(b) as @udf on true
 
     val analysis = analyze(tf, "twocol", "select text, num*num limit 100 offset 100")
     val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 50 offset 150")
-    analysis.addLimitOffset(limit = None, offset = Some(50)).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.addLimitOffset(limit = None, offset = Some(nnbi(50))).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("addLimitOffset - passes the end of initial limit/offset") {
@@ -755,7 +755,7 @@ select b, n |> select n join @udf(b) as @udf on true
 
     val analysis = analyze(tf, "twocol", "select text, num*num limit 100 offset 100")
     val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 0 offset 200") // Note the offset will not pass the end of the original chunk
-    analysis.addLimitOffset(limit = Some(500), offset = Some(500)).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.addLimitOffset(limit = Some(nnbi(500)), offset = Some(nnbi(500))).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("addLimitOffset - passes the end of initial limit/offset with no new limit provided") {
@@ -765,7 +765,7 @@ select b, n |> select n join @udf(b) as @udf on true
 
     val analysis = analyze(tf, "twocol", "select text, num*num limit 100 offset 100")
     val expectedAnalysis = analyze(tf, "twocol", "select text, num*num limit 0 offset 200") // Note the offset will not pass the end of the original chunk
-    analysis.addLimitOffset(limit = None, offset = Some(500)).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.addLimitOffset(limit = None, offset = Some(nnbi(500))).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("inline parameters - all complex") {
@@ -1102,7 +1102,7 @@ select * where first = 'Tom'
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
-    val analysis = analyzeSaved(tf, "twocol").limitIfUnlimited(5)
+    val analysis = analyzeSaved(tf, "twocol").limitIfUnlimited(nnbi(5))
     val expectedAnalysis = analyze(tf, "twocol", "select * limit 5")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -1111,7 +1111,7 @@ select * where first = 'Tom'
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
-    val analysis = analyze(tf, "twocol", "select *").limitIfUnlimited(5)
+    val analysis = analyze(tf, "twocol", "select *").limitIfUnlimited(nnbi(5))
     val expectedAnalysis = analyze(tf, "twocol", "select * limit 5")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -1120,7 +1120,7 @@ select * where first = 'Tom'
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
-    val analysis = analyze(tf, "twocol", "select * limit 10").limitIfUnlimited(5)
+    val analysis = analyze(tf, "twocol", "select * limit 10").limitIfUnlimited(nnbi(5))
     val expectedAnalysis = analyze(tf, "twocol", "select * limit 10")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -1130,7 +1130,7 @@ select * where first = 'Tom'
       (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
     )
-    val analysis = analyze(tf, "(select * from @twocol1) union (select * from @twocol2)").limitIfUnlimited(5)
+    val analysis = analyze(tf, "(select * from @twocol1) union (select * from @twocol2)").limitIfUnlimited(nnbi(5))
     val expectedAnalysis = analyze(tf, "(select * from @twocol1) union (select * from @twocol2) |> select * limit 5")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -1140,7 +1140,7 @@ select * where first = 'Tom'
       (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
     )
-    val analysis = analyze(tf, "(select * from @twocol1 limit 10) union (select * from @twocol2)").limitIfUnlimited(5)
+    val analysis = analyze(tf, "(select * from @twocol1 limit 10) union (select * from @twocol2)").limitIfUnlimited(nnbi(5))
     val expectedAnalysis = analyze(tf, "(select * from @twocol1 limit 10) union (select * from @twocol2) |> select * limit 5")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -1150,7 +1150,7 @@ select * where first = 'Tom'
       (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
     )
-    val analysis = analyze(tf, "(select * from @twocol1) union (select * from @twocol2 limit 10)").limitIfUnlimited(5)
+    val analysis = analyze(tf, "(select * from @twocol1) union (select * from @twocol2 limit 10)").limitIfUnlimited(nnbi(5))
     val expectedAnalysis = analyze(tf, "(select * from @twocol1) union (select * from @twocol2 limit 10) |> select * limit 5")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -1160,7 +1160,7 @@ select * where first = 'Tom'
       (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
     )
-    val analysis = analyze(tf, "(select * from @twocol1 limit 20) union (select * from @twocol2 limit 10)").limitIfUnlimited(5)
+    val analysis = analyze(tf, "(select * from @twocol1 limit 20) union (select * from @twocol2 limit 10)").limitIfUnlimited(nnbi(5))
     val expectedAnalysis = analyze(tf, "(select * from @twocol1 limit 20) union (select * from @twocol2 limit 10)")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -1170,7 +1170,7 @@ select * where first = 'Tom'
       (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
     )
-    val analysis = analyze(tf, "(select * from @twocol1) intersect (select * from @twocol2)").limitIfUnlimited(5)
+    val analysis = analyze(tf, "(select * from @twocol1) intersect (select * from @twocol2)").limitIfUnlimited(nnbi(5))
     val expectedAnalysis = analyze(tf, "(select * from @twocol1) intersect (select * from @twocol2) |> select * limit 5")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -1180,7 +1180,7 @@ select * where first = 'Tom'
       (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
     )
-    val analysis = analyze(tf, "(select * from @twocol1 limit 10) intersect (select * from @twocol2)").limitIfUnlimited(5)
+    val analysis = analyze(tf, "(select * from @twocol1 limit 10) intersect (select * from @twocol2)").limitIfUnlimited(nnbi(5))
     val expectedAnalysis = analyze(tf, "(select * from @twocol1 limit 10) intersect (select * from @twocol2)")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -1190,7 +1190,7 @@ select * where first = 'Tom'
       (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
     )
-    val analysis = analyze(tf, "(select * from @twocol1) intersect (select * from @twocol2 limit 10)").limitIfUnlimited(5)
+    val analysis = analyze(tf, "(select * from @twocol1) intersect (select * from @twocol2 limit 10)").limitIfUnlimited(nnbi(5))
     val expectedAnalysis = analyze(tf, "(select * from @twocol1) intersect (select * from @twocol2 limit 10)")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -1200,7 +1200,7 @@ select * where first = 'Tom'
       (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
     )
-    val analysis = analyze(tf, "(select * from @twocol1 limit 20) intersect (select * from @twocol2 limit 10)").limitIfUnlimited(5)
+    val analysis = analyze(tf, "(select * from @twocol1 limit 20) intersect (select * from @twocol2 limit 10)").limitIfUnlimited(nnbi(5))
     val expectedAnalysis = analyze(tf, "(select * from @twocol1 limit 20) union (select * from @twocol2 limit 10)")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -1210,7 +1210,7 @@ select * where first = 'Tom'
       (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
     )
-    val analysis = analyze(tf, "(select * from @twocol1) minus (select * from @twocol2)").limitIfUnlimited(5)
+    val analysis = analyze(tf, "(select * from @twocol1) minus (select * from @twocol2)").limitIfUnlimited(nnbi(5))
     val expectedAnalysis = analyze(tf, "(select * from @twocol1) minus (select * from @twocol2) |> select * limit 5")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -1220,7 +1220,7 @@ select * where first = 'Tom'
       (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
     )
-    val analysis = analyze(tf, "(select * from @twocol1 limit 10) minus (select * from @twocol2)").limitIfUnlimited(5)
+    val analysis = analyze(tf, "(select * from @twocol1 limit 10) minus (select * from @twocol2)").limitIfUnlimited(nnbi(5))
     val expectedAnalysis = analyze(tf, "(select * from @twocol1 limit 10) minus (select * from @twocol2)")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -1230,7 +1230,7 @@ select * where first = 'Tom'
       (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
     )
-    val analysis = analyze(tf, "(select * from @twocol1) minus (select * from @twocol2 limit 10)").limitIfUnlimited(5)
+    val analysis = analyze(tf, "(select * from @twocol1) minus (select * from @twocol2 limit 10)").limitIfUnlimited(nnbi(5))
     val expectedAnalysis = analyze(tf, "(select * from @twocol1) minus (select * from @twocol2 limit 10) |> select * limit 5")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -1240,7 +1240,7 @@ select * where first = 'Tom'
       (0, "twocol1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "twocol2") -> D("text" -> TestText, "num" -> TestNumber)
     )
-    val analysis = analyze(tf, "(select * from @twocol1 limit 20) minus (select * from @twocol2 limit 10)").limitIfUnlimited(5)
+    val analysis = analyze(tf, "(select * from @twocol1 limit 20) minus (select * from @twocol2 limit 10)").limitIfUnlimited(nnbi(5))
     val expectedAnalysis = analyze(tf, "(select * from @twocol1 limit 20) union (select * from @twocol2 limit 10)")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }

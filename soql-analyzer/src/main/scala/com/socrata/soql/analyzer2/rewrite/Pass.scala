@@ -18,10 +18,10 @@ object Pass {
   case object RemoveUnusedColumns extends Pass
   case object RemoveUnusedOrderBy extends Pass
   case object UseSelectListReferences extends Pass
-  case class Page(size: BigInt, offset: BigInt) extends Pass
-  case class AddLimitOffset(limit: Option[BigInt], offset: Option[BigInt]) extends Pass
+  case class Page(size: NonNegativeBigInt, offset: NonNegativeBigInt) extends Pass
+  case class AddLimitOffset(limit: Option[NonNegativeBigInt], offset: Option[NonNegativeBigInt]) extends Pass
   case object RemoveOrderBy extends Pass
-  case class LimitIfUnlimited(limit: BigInt) extends Pass
+  case class LimitIfUnlimited(limit: NonNegativeBigInt) extends Pass
 
   implicit val jCodec = SimpleHierarchyCodecBuilder[Pass](InternalTag("pass"))
     .singleton("inline_trivial_parameters", InlineTrivialParameters)
@@ -49,10 +49,10 @@ object Pass {
         case 5 => RemoveUnusedColumns
         case 6 => RemoveUnusedOrderBy
         case 7 => UseSelectListReferences
-        case 8 => Page(buffer.read[BigInt](), buffer.read[BigInt]())
-        case 9 => AddLimitOffset(buffer.read[Option[BigInt]](), buffer.read[Option[BigInt]]())
+        case 8 => Page(buffer.read[NonNegativeBigInt](), buffer.read[NonNegativeBigInt]())
+        case 9 => AddLimitOffset(buffer.read[Option[NonNegativeBigInt]](), buffer.read[Option[NonNegativeBigInt]]())
         case 10 => RemoveOrderBy
-        case 11 => LimitIfUnlimited(buffer.read[BigInt]())
+        case 11 => LimitIfUnlimited(buffer.read[NonNegativeBigInt]())
         case other => fail(s"Unknown rewrite pass type $other")
       }
 

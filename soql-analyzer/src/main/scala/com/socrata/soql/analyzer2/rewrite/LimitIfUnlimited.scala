@@ -63,11 +63,7 @@ class LimitIfUnlimited[MT <: MetaTypes] private (labelProvider: LabelProvider) e
 }
 
 object LimitIfUnlimited {
-  private val zero = BigInt(0)
-
-  def apply[MT <: MetaTypes](labelProvider: LabelProvider, statement: Statement[MT], limit: BigInt): Statement[MT] = {
-    require(limit >= zero)
-
-    new LimitIfUnlimited(labelProvider).rewriteStatement(statement, limit)
+  def apply[MT <: MetaTypes](labelProvider: LabelProvider, statement: Statement[MT], limit: NonNegativeBigInt): Statement[MT] = {
+    new LimitIfUnlimited(labelProvider).rewriteStatement(statement, limit.underlying)
   }
 }
