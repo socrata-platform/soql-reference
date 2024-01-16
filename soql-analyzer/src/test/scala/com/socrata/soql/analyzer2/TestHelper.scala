@@ -5,6 +5,7 @@ import org.scalatest.matchers.{BeMatcher, MatchResult}
 
 import com.socrata.soql.ast
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName, Provenance}
+import com.socrata.soql.analyzer2.rewrite.NonNegativeBigInt
 
 import mocktablefinder._
 
@@ -39,6 +40,10 @@ trait TestHelper { this: Assertions =>
   def dcn(n: String) = DatabaseColumnName(n)
   def dtn(n: String) = DatabaseTableName(n)
   def canon(n: String) = CanonicalName(n)
+
+  def nnbi(x: Int) = NonNegativeBigInt(x).getOrElse {
+    throw new Exception("tried to use a negative value to construct a non-negative bigint")
+  }
 
   def xtest(s: String)(f: => Any): Unit = {}
 
