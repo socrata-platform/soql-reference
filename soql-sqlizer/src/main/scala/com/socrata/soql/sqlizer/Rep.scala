@@ -70,6 +70,16 @@ trait Rep[MT <: MetaTypes with MetaTypesExt] extends ExpressionUniverse[MT] {
   // throws an exception if "field" is not a subcolumn of this type
   def subcolInfo(field: String): SubcolInfo[MT]
 
+  // This function's a little weird and slightly hacky.  When we save
+  // rollups we want to normalize all columns into their _expanded_
+  // form, so we basically sqlize the rollup query and then wrap it
+  // into a sql statement like
+  //   select
+  //     ${output_column_labels.flatMap(compresssedSubColumns("top_level", _))}
+  //     from (${sqlized_query}) as top_level
+  // This is why it takes the table-name as a string rather than a
+  // DatabaseTableName; it doesn't represent a "real" database table
+  // at all, but neither is it a true "label"-based table name.
   def compressedSubColumns(table: String, column: ColumnLabel): Seq[Doc[Nothing]]
 
   // This lets us produce a different representation in the top-level
