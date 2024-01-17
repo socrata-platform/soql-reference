@@ -14,6 +14,7 @@ trait TypeInfoCommon[Type, Value] {
     * every real type except null.  It should be ordered by most-preferred
     * to least-preferred for null-disambiguation purposes. */
   def typeParameterUniverse: OrderedSet[Type]
+  lazy val typeParameterUniverseIndices = typeParameterUniverse.iterator.zipWithIndex.toMap
 
   def typeOf(value: Value): Type
   def typeNameFor(typ: Type): TypeName
