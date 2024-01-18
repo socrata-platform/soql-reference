@@ -451,7 +451,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
 
     val selectListIndices = selectListExprs.iterator.foldMap(1) { (idx, labelExpr) =>
       val (_label, (expr, _name)) = labelExpr
-      (idx + expr.databaseExprCount, SelectListIndex(idx, isExpanded = false))
+      (idx + expr.databaseExprCount, SelectListIndex(idx, expr))
     }.toVector
 
     val exprSqlizer = this.exprSqlizer.withContext(availableSchemas, selectListIndices, dynamicContext)

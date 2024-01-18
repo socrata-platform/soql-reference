@@ -19,33 +19,36 @@ class ExprSqlizer[MT <: MetaTypes with MetaTypesExt](
     selectListIndices: IndexedSeq[SelectListIndex],
     sqlizerCtx: Sqlizer.DynamicContext[MT]
   ) extends ExprSqlizer.Contexted[MT] {
-    override def sqlizeOrderBy(e: OrderBy): OrderBySql = {
-      if(sqlizerCtx.repFor(e.expr.typ).isProvenanced) {
-        if(!sqlizerCtx.provTracker(e.expr).isPlural) {
-          sqlize(e.expr) match {
+    protected def sqlizeOrderBy(expr: ExprSql, ascending: Boolean, nullLast: Boolean): OrderBySql = {
+      if(sqlizerCtx.repFor(expr.typ).isProvenanced) {
+        if(!sqlizerCtx.provTracker(expr.expr).isPlural) {
+          expr match {
             case result : ExprSql.Compressed[_] =>
               // Compressed, so we've already lost.  Just order by it.
-              OrderBySql(result, ascending = e.ascending, nullLast = e.nullLast)
+              OrderBySql(result, ascending = ascending, nullLast = nullLast)
             case result : ExprSql.Expanded[_] =>
               // all provenance values in a column with non-plural
               // provenance will be the same same; eliminate them
               // from the generated sql so that the pg optimizer
               // doesn't have to.
               val Seq(_provenance, value) = result.sqls
-              OrderBySql(exprSqlFactory(value, e.expr), ascending = e.ascending, nullLast = e.nullLast)
+              OrderBySql(exprSqlFactory(value, expr.expr), ascending = ascending, nullLast = nullLast)
           }
         } else {
-          OrderBySql(sqlize(e.expr), ascending = e.ascending, nullLast = e.nullLast)
+          OrderBySql(expr, ascending = ascending, nullLast = nullLast)
         }
       } else {
         // We'll compress into a json array it because we don't want
         // ORDER BY's null positioning to be inconsistent depending on
         // whether or not it's expanded
-        OrderBySql(sqlize(e.expr).compressed, ascending = e.ascending, nullLast = e.nullLast)
+        OrderBySql(expr.compressed, ascending = ascending, nullLast = nullLast)
       }
     }
 
-    override def sqlize(e: Expr): ExprSql =
+    override def sqlizeOrderBy(e: OrderBy): OrderBySql =
+      sqlizeOrderBy(sqlize(e.expr), ascending = e.ascending, nullLast = e.nullLast)
+
+    override def sqlize(e: Expr): ExprSql = {
       e match {
         case pc@PhysicalColumn(tbl, _tableName, col, typ) =>
           val trueType = availableSchemas(tbl)(col)
@@ -61,17 +64,13 @@ class ExprSqlizer[MT <: MetaTypes with MetaTypesExt](
         case lit@LiteralValue(v) =>
           sqlizerCtx.repFor(lit.typ).literal(lit)
         case SelectListReference(n, _isAggregated, _isWindowed, typ) =>
-          val SelectListIndex(startingPhysicalColumn, isExpanded) = selectListIndices(n-1)
-          if(isExpanded) {
-            exprSqlFactory(Doc(startingPhysicalColumn.toString), e)
-          } else {
-            exprSqlFactory(
-              (0 until sqlizerCtx.repFor(typ).expandedColumnCount).map { offset =>
-                Doc((startingPhysicalColumn + offset).toString)
-              },
-              e
-            )
-          }
+          val SelectListIndex(startingPhysicalColumn, exprSql) = selectListIndices(n-1)
+          exprSqlFactory(
+            (0 until exprSql.sqls.length).map { offset =>
+              Doc((startingPhysicalColumn + offset).toString)
+            },
+            e
+          )
         case fc@FunctionCall(_func, args) =>
           funcallSqlizer.sqlizeOrdinaryFunction(fc, args.map(sqlize), sqlizerCtx)
         case afc@AggregateFunctionCall(_func, args, _distinct, filter) =>
@@ -86,6 +85,7 @@ class ExprSqlizer[MT <: MetaTypes with MetaTypesExt](
             sqlizerCtx
           )
       }
+    }
   }
 
   def withContext(

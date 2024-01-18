@@ -1,3 +1,5 @@
 package com.socrata.soql.sqlizer
 
-case class SelectListIndex(startingPhysicalColumn: Int, isExpanded: Boolean)
+import com.socrata.soql.analyzer2._
+
+case class SelectListIndex[MT <: MetaTypes with MetaTypesExt](startingPhysicalColumn: Int, exprSql: ExprSql[MT])
