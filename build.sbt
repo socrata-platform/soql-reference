@@ -47,7 +47,7 @@ lazy val soqlUtils = (project in file("soql-utils")).
 
 lazy val soqlSqlizer = (project in file("soql-sqlizer")).
   settings(SoqlSqlizer.settings).
-  dependsOn(soqlAnalyzer)
+  dependsOn(soqlAnalyzer, soqlTypes % "test")
 
 val soqldoc = inputKey[Unit]("Build soql documentation")
 

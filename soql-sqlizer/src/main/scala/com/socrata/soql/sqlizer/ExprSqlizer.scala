@@ -24,12 +24,18 @@ class ExprSqlizer[MT <: MetaTypes with MetaTypesExt](
       override def sqlizeOrderBy(e: OrderBy): OrderBySql = {
         if(sqlizerCtx.repFor(e.expr.typ).isProvenanced) {
           if(!sqlizerCtx.provTracker(e.expr).isPlural) {
-            // all provenance values in a physical column will be the
-            // same; eliminate them from the sqlizer so that the pg
-            // optimizer doesn't have to.
-            val result = sqlize(e.expr)
-            val Seq(_provenance, value) = result.sqls
-            OrderBySql(exprSqlFactory(value, e.expr), ascending = e.ascending, nullLast = e.nullLast)
+            sqlize(e.expr) match {
+              case result : ExprSql.Compressed[_] =>
+                // Compressed, so we've already lost.  Just order by it.
+                OrderBySql(result, ascending = e.ascending, nullLast = e.nullLast)
+              case result : ExprSql.Expanded[_] =>
+                // all provenance values in a column with non-plural
+                // provenance will be the same same; eliminate them
+                // from the generated sql so that the pg optimizer
+                // doesn't have to.
+                val Seq(_provenance, value) = result.sqls
+                OrderBySql(exprSqlFactory(value, e.expr), ascending = e.ascending, nullLast = e.nullLast)
+            }
           } else {
             OrderBySql(sqlize(e.expr), ascending = e.ascending, nullLast = e.nullLast)
           }
