@@ -46,15 +46,30 @@ class Typechecker[MT <: MetaTypes](
     typeInfo.typeParameterUniverse.find(types).get
   }
 
-  private def disambiguate(exprs: Seq[Expr], expectedType: Option[CT], pos: Position): Either[Error, Expr] =
-    expectedType match {
-      case Some(t) =>
-        exprs.find(_.typ == t).toRight {
-          TypeMismatch(Source.nonSynthetic(sourceName, pos), Set(typeInfo.typeNameFor(t)), typeInfo.typeNameFor(mostPreferredType(exprs.iterator.map(_.typ).toSet)))
-        }
-      case None =>
-        Right(exprs.head)
+  private def disambiguate(exprs: Seq[Expr], expectedType: Option[CT], pos: Position): Either[Error, Expr] = {
+    val choices =
+      expectedType match {
+        case Some(t) =>
+          val candidates = exprs.filter(_.typ == t)
+          if(candidates.isEmpty) {
+            return Left(
+              TypeMismatch(Source.nonSynthetic(sourceName, pos), Set(typeInfo.typeNameFor(t)), typeInfo.typeNameFor(mostPreferredType(exprs.iterator.map(_.typ).toSet)))
+            )
+          }
+          candidates
+        case None =>
+          exprs
+      }
+
+    val minSize = choices.minBy(_.size).size
+    val minimal = choices.filter(_.size == minSize)
+    minimal.lengthCompare(1) match {
+      case 1 =>
+        Right(minimal.head)
+      case n =>
+        Right(minimal.minBy { e => typeInfo.typeParameterUniverseIndices(e.typ) })
     }
+  }
 
   private def squash(exprs: Seq[Expr], pos: Position): Either[Error, Seq[Expr]] = {
     var acc = OrderedMap.empty[CT, Expr]
