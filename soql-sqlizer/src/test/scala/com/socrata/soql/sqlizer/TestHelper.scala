@@ -43,6 +43,11 @@ object TestHelper {
       }
   }
 
+  object TestExprSqlizer extends ExprSqlizer[TestMT](
+    TestFunctionSqlizer,
+    TestExprSqlFactory
+  )
+
   object TestSqlNamespaces extends SqlNamespaces[TestMT] {
     override def rawDatabaseTableName(dtn: DatabaseTableName) = {
       val DatabaseTableName(name) = dtn
@@ -61,8 +66,7 @@ object TestHelper {
   }
 
   val TestSqlizer = new Sqlizer[TestMT](
-    TestFunctionSqlizer,
-    TestExprSqlFactory,
+    TestExprSqlizer,
     TestSqlNamespaces,
     TestRewriteSearch,
     TestProvenanceMapper,

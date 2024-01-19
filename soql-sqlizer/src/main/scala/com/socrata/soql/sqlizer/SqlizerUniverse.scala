@@ -24,6 +24,7 @@ trait SqlizerUniverse[MT <: MetaTypes with MetaTypesExt] extends StatementUniver
   type ExtraContext = MT#ExtraContext
   type ExtraContextResult = MT#ExtraContextResult
   type ExprSqlFactory = sqlizer.ExprSqlFactory[MT]
+  type SelectListIndex = sqlizer.SelectListIndex[MT]
 
   type AugmentedSchema = sqlizer.AugmentedSchema[MT]
   type AvailableSchemas = sqlizer.AvailableSchemas[MT]
