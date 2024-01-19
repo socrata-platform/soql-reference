@@ -75,8 +75,7 @@ import com.socrata.prettyprint.{SimpleDocStream, SimpleDocTree, tree}
 // first/last over the list)
 
 class Sqlizer[MT <: MetaTypes with MetaTypesExt](
-  val funcallSqlizer: FuncallSqlizer[MT],
-  val exprSqlFactory: ExprSqlFactory[MT],
+  val exprSqlizer: ExprSqlizer[MT],
   val namespace: SqlNamespaces[MT],
   val rewriteSearch: RewriteSearch[MT],
   val toProvenance: types.ToProvenance[MT],
@@ -85,7 +84,8 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
 ) extends SqlizerUniverse[MT] {
   type DynamicContext = Sqlizer.DynamicContext[MT]
 
-  val exprSqlizer = new ExprSqlizer(funcallSqlizer, exprSqlFactory)
+  def funcallSqlizer = exprSqlizer.funcallSqlizer
+  def exprSqlFactory = exprSqlizer.exprSqlFactory
 
   def apply(
     analysis: SoQLAnalysis[MT],

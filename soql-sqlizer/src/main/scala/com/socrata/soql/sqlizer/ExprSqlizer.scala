@@ -11,8 +11,8 @@ object ExprSqlizer {
 }
 
 class ExprSqlizer[MT <: MetaTypes with MetaTypesExt](
-  protected val funcallSqlizer: FuncallSqlizer[MT],
-  protected val exprSqlFactory: ExprSqlFactory[MT]
+  val funcallSqlizer: FuncallSqlizer[MT],
+  val exprSqlFactory: ExprSqlFactory[MT]
 ) extends SqlizerUniverse[MT] {
   protected class DefaultContextedExprSqlizer(
     availableSchemas: AvailableSchemas,
