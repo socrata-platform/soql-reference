@@ -29,4 +29,10 @@ object DatabaseTableName {
     def readFrom(buffer: ReadBuffer) =
       DatabaseTableName(buffer.read[T]())
   }
+
+  implicit def ordering[T](implicit ordering: Ordering[T]): Ordering[DatabaseTableName[T]] =
+    new Ordering[DatabaseTableName[T]] {
+      def compare(a: DatabaseTableName[T], b: DatabaseTableName[T]) =
+        ordering.compare(a.name, b.name)
+    }
 }
