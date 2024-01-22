@@ -119,6 +119,11 @@ object AutoTableLabel {
     def readFrom(buffer: ReadBuffer) =
       new AutoTableLabel(buffer.read[Int]())
   }
+
+  implicit object ordering extends Ordering[AutoTableLabel] {
+    def compare(a: AutoTableLabel, b: AutoTableLabel) =
+      a.name.compare(b.name)
+  }
 }
 
 sealed abstract class ColumnLabel[+T] {
@@ -164,6 +169,11 @@ object AutoColumnLabel {
     def readFrom(buffer: ReadBuffer) =
       new AutoColumnLabel(buffer.read[Int]())
   }
+
+  implicit object ordering extends Ordering[AutoColumnLabel] {
+    def compare(a: AutoColumnLabel, b: AutoColumnLabel) =
+      a.name.compare(b.name)
+  }
 }
 
 final case class DatabaseColumnName[T](name: T) extends ColumnLabel[T] {
@@ -188,6 +198,12 @@ object DatabaseColumnName {
     def readFrom(buffer: ReadBuffer) =
       DatabaseColumnName(buffer.read[T]())
   }
+
+  implicit def ordering[T](implicit ordering: Ordering[T]): Ordering[DatabaseColumnName[T]] =
+    new Ordering[DatabaseColumnName[T]] {
+      def compare(a: DatabaseColumnName[T], b: DatabaseColumnName[T]) =
+        ordering.compare(a.name, b.name)
+    }
 }
 
 object ColumnLabel {
@@ -227,4 +243,16 @@ object ColumnLabel {
       }
     }
   }
+
+  implicit def ordering[T](implicit ordering: Ordering[T]): Ordering[ColumnLabel[T]] =
+    new Ordering[ColumnLabel[T]] {
+      val dcnOrdering = implicitly[Ordering[DatabaseColumnName[T]]]
+      def compare(a: ColumnLabel[T], b: ColumnLabel[T]) =
+        (a, b) match {
+          case (a: DatabaseColumnName[T], b: DatabaseColumnName[T]) => dcnOrdering.compare(a, b)
+          case (a: DatabaseColumnName[T], b: AutoColumnLabel) => -1
+          case (a: AutoColumnLabel, b: DatabaseColumnName[T]) => 1
+          case (a: AutoColumnLabel, b: AutoColumnLabel) => AutoColumnLabel.ordering.compare(a, b)
+        }
+    }
 }
