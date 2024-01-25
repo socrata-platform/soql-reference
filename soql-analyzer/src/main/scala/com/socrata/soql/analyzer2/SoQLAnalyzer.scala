@@ -53,6 +53,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
 
   private val Error = SoQLAnalyzerError
 
+  private def preserveSystemColumnsRequested =
+    aggregateMerge.isDefined
+
   private def copy(aggregateMerge: Option[(ColumnName, Expr) => Option[Expr]] = aggregateMerge): SoQLAnalyzer[MT] =
     new SoQLAnalyzer(typeInfo, functionInfo, toProvenance, aggregateMerge)
 
@@ -174,7 +177,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     }
 
     def analyze(scope: RNS, query: FoundTables.Query[MT]): Statement = {
-      val ctx = Ctx(scope, None, None, primaryTableName(scope, query), Environment.empty, Map.empty, Set.empty, Map.empty, true)
+      val ctx = Ctx(scope, None, None, primaryTableName(scope, query), Environment.empty, Map.empty, Set.empty, Map.empty, preserveSystemColumnsRequested)
       val from =
         query match {
           case FoundTables.Saved(rn) =>
@@ -450,14 +453,14 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             analyzeStatement(
               Ctx(
                 scope = ctx.scope,
-                scopedResourceName = None,
-                canonicalName = None,
+                scopedResourceName = ctx.scopedResourceName,
+                canonicalName = ctx.canonicalName,
                 primaryTableName = ctx.primaryTableName,
                 enclosingEnv = ctx.enclosingEnv,
                 udfParams = ctx.udfParams,
                 hiddenColumns = Set.empty,
                 outputColumnHints = Map.empty,
-                attemptToPreserveSystemColumns = true
+                attemptToPreserveSystemColumns = preserveSystemColumnsRequested
               ),
               left, from0
             )
@@ -914,14 +917,14 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           ensureLegalAlias(ctx, alias, NoPosition /* TODO: NEED POS INFO FROM AST */)
           val subCtx = Ctx(
             scope = ctx.scope,
-            scopedResourceName = None,
+            scopedResourceName = ctx.scopedResourceName, // still in the same source-code context...
             canonicalName = ctx.canonicalName,
             primaryTableName = primaryTableName(ctx.scope, select),
             enclosingEnv = ctx.enclosingEnv,
             udfParams = ctx.udfParams,
             hiddenColumns = Set.empty,
             outputColumnHints = Map.empty,
-            attemptToPreserveSystemColumns = true
+            attemptToPreserveSystemColumns = preserveSystemColumnsRequested
           )
           analyzeStatement(subCtx, select, ImplicitFrom.None).reAlias(Some(ResourceName(alias)))
         case ast.JoinFunc(tn, params) =>
@@ -939,8 +942,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     }
 
     def analyzeUDF(callerCtx: Ctx, resource: ResourceName, params: Seq[ast.Expression]): AtomicFrom = {
-      val srn = ScopedResourceName(callerCtx.scope, resource)
-      tableMap.find(srn) match {
+      val udfScopedResourceName = ScopedResourceName(callerCtx.scope, resource)
+      tableMap.find(udfScopedResourceName) match {
         case TableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs, hiddenColumns) =>
           if(params.length != paramSpecs.size) {
             callerCtx.incorrectNumberOfParameters(resource, expected = params.length, got = paramSpecs.size, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
@@ -974,7 +977,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
 
               val udfCtx = Ctx(
                 scope = udfScope,
-                scopedResourceName = None,
+                scopedResourceName = Some(udfScopedResourceName),
                 canonicalName = Some(udfCanonicalName),
                 primaryTableName = primaryTableName(udfScope, parsed),
                 enclosingEnv = Environment.empty,
@@ -995,7 +998,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                   Join(
                     JoinType.Inner,
                     true,
-                    FromStatement(outOfLineParamsQuery, outOfLineParamsLabel, None, None),
+                    FromStatement(outOfLineParamsQuery, outOfLineParamsLabel, Some(udfScopedResourceName), None),
                     useQuery,
                     typeInfo.literalBoolean(true, Source.Synthetic)
                   ),
@@ -1009,7 +1012,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                   Set.empty
                 ),
                 labelProvider.tableLabel(),
-                Some(srn),
+                Some(udfScopedResourceName),
                 None
               )
 
@@ -1019,7 +1022,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               // additional joining.
               val udfCtx = Ctx(
                 scope = udfScope,
-                scopedResourceName = Some(srn),
+                scopedResourceName = Some(udfScopedResourceName),
                 canonicalName = Some(udfCanonicalName),
                 primaryTableName = primaryTableName(udfScope, parsed),
                 enclosingEnv = Environment.empty,
