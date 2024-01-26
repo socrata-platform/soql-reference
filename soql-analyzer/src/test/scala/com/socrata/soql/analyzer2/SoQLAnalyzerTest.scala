@@ -438,7 +438,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   FromSingleRow(t(2), None),
                   None, Nil, None, Nil, None, None, None, Set.empty
                 ),
-                t(3), None, None
+                t(3), Some(ScopedResourceName(0,rn("cccc-cccc"))), None
               ),
               FromStatement[TestMT](
                 Select[TestMT](
@@ -472,7 +472,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   ),
                   Nil,None,Nil,Some(1),None,None,Set.empty
                 ),
-                t(5), None, None
+                t(5), Some(ScopedResourceName(0, rn("cccc-cccc"))), None
               ),
               LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.Synthetic)
             ),
@@ -538,14 +538,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             Join[TestMT](
               JoinType.Inner,
               true,
-              FromStatement(
+              FromStatement[TestMT](
                 Select[TestMT](
                   Distinctiveness.Indistinct(),
                   OrderedMap(c(1) -> NamedExpr(PhysicalColumn[TestMT](t(1),dtn("aaaa-aaaa"),dcn("text"),TestText)(AtomicPositionInfo.Synthetic), cn("user"), None, true)),
                   FromSingleRow(t(2), None),
                   None, Nil, None, Nil, None, None, None, Set.empty
                 ),
-                t(3), None, None
+                t(3), Some(ScopedResourceName(0,rn("cccc-cccc"))), None
               ),
               FromStatement[TestMT](
                 Select[TestMT](
@@ -579,7 +579,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   ),
                   Nil,None,Nil,Some(1),None,None,Set.empty
                 ),
-                t(5), None, None
+                t(5), Some(ScopedResourceName(0,rn("cccc-cccc"))), None
               ),
               LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.Synthetic)
             ),
@@ -685,9 +685,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   FromSingleRow(t(2), None),
                   None, Nil, None, Nil, None, None, None, Set.empty
                 ),
-                t(3), None, None
+                t(3), Some(ScopedResourceName(0,rn("bbbb-bbbb"))), None
               ),
-              FromStatement(
+              FromStatement[TestMT](
                 Select[TestMT](
                   Distinctiveness.Indistinct(),
                   OrderedMap(
@@ -699,7 +699,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   FromSingleRow(t(4), Some(rn("single_row"))),
                   None,Nil,None,Nil,None,None,None,Set()
                 ),
-                t(5), None, None
+                t(5), Some(ScopedResourceName(0,rn("bbbb-bbbb"))), None
               ),
               LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.Synthetic)
             ),
@@ -1132,5 +1132,144 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val Right(analysis) = analyzer(ft, UserParameters.empty)
 
     analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"false"), None, None, None))
+  }
+
+  test("errors in anonymous soql have an anonymous source") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds", "select num as a, num*2 as b")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("q"), "select not_found", Map.empty)
+    val Left(err) = analyzer(ft, UserParameters.empty)
+
+    err.maybeSource match {
+      case Some(Source.Anonymous(_)) => // ok
+      case other => fail("Found an incorrect source: " + other)
+    }
+  }
+
+  test("errors in saved soql referenced by anonymous soql have a saved source") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds", "select not_found")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("q"), "select *", Map.empty)
+    val Left(err) = analyzer(ft, UserParameters.empty)
+
+    err.maybeSource match {
+      case Some(Source.Saved(ScopedResourceName(0, q), _)) if q == rn("q") => // ok
+      case other => fail("Found an incorrect source: " + other)
+    }
+  }
+
+  test("errors in saved soql referenced by saved soql have a saved source") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds", "select not_found"),
+      (0, "q2") -> Q(0, "q", "select *")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("q2"))
+    val Left(err) = analyzer(ft, UserParameters.empty)
+
+    err.maybeSource match {
+      case Some(Source.Saved(ScopedResourceName(0, q), _)) if q == rn("q") => // ok
+      case other => fail("Found an incorrect source: " + other)
+    }
+  }
+
+  test("errors in saved subselect soql referenced directly have a saved source") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds", "select 1 join (select not_found from @single_row) as x on true")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("q"))
+    val Left(err) = analyzer(ft, UserParameters.empty)
+
+    err.maybeSource match {
+      case Some(Source.Saved(ScopedResourceName(0, q), _)) if q == rn("q") => // ok
+      case other => fail("Found an incorrect source: " + other)
+    }
+  }
+
+  test("errors in a parameterless udf soql referenced directly have a saved source") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "udf") -> U(0, "select not_found from @single_row"),
+      (0, "q") -> Q(0, "ds", "select 1 join @udf() as x on true")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("q"))
+    val Left(err) = analyzer(ft, UserParameters.empty)
+
+    err.maybeSource match {
+      case Some(Source.Saved(ScopedResourceName(0, udf), _)) if udf == rn("udf") => // ok
+      case other => fail("Found an incorrect source: " + other)
+    }
+  }
+
+  test("errors in a parametered udf soql referenced directly have a saved source") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "udf") -> U(0, "select not_found from @single_row", "x" -> TestNumber),
+      (0, "q") -> Q(0, "ds", "select 1 join @udf(5) as x on true")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("q"))
+    val Left(err) = analyzer(ft, UserParameters.empty)
+
+    err.maybeSource match {
+      case Some(Source.Saved(ScopedResourceName(0, udf), _)) if udf == rn("udf") => // ok
+      case other => fail("Found an incorrect source: " + other)
+    }
+  }
+
+  test("errors in a udf parameter have the right source") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "udf") -> U(0, "select ?x from @single_row", "x" -> TestNumber),
+      (0, "q") -> Q(0, "ds", "select 1 join @udf(not_found) as x on true")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("q"))
+    val Left(err) = analyzer(ft, UserParameters.empty)
+
+    err.maybeSource match {
+      case Some(Source.Saved(ScopedResourceName(0, q), _)) if q == rn("q") => // ok
+      case other => fail("Found an incorrect source: " + other)
+    }
+  }
+
+  test("errors on the left hand side of a a pipe have the right source") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds", "select not_found |> select *")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("q"))
+    val Left(err) = analyzer(ft, UserParameters.empty)
+
+    err.maybeSource match {
+      case Some(Source.Saved(ScopedResourceName(0, q), _)) if q == rn("q") => // ok
+      case other => fail("Found an incorrect source: " + other)
+    }
+  }
+
+  test("errors on the right hand side of a a pipe have the right source") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds", "select * |> select not_found")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("q"))
+    val Left(err) = analyzer(ft, UserParameters.empty)
+
+    err.maybeSource match {
+      case Some(Source.Saved(ScopedResourceName(0, q), _)) if q == rn("q") => // ok
+      case other => fail("Found an incorrect source: " + other)
+    }
   }
 }

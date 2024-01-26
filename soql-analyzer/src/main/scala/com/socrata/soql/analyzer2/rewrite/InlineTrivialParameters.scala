@@ -51,8 +51,10 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
     val values: OrderedMap[AutoColumnLabel, (Expr, ColumnName)],
     val singleRowFrom: Option[FromSingleRow],
     val valuesLabel: AutoTableLabel,
+    val valuesSource: Option[ScopedResourceName],
     val subselect: Statement,
     val subselectLabel: AutoTableLabel,
+    val subselectSource: Option[ScopedResourceName],
     val trueExpr: Expr
   )
 
@@ -82,13 +84,13 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
             FromStatement(
               SingleRowValuesLike(fields, singleRowFrom),
               valuesLabel,
-              None,
+              valuesSource,
               None
             ),
             FromStatement(
               subselect,
               subselectLabel,
-              None,
+              subselectSource,
               None
             ),
             on
@@ -102,7 +104,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
           None,
           hint
         ) if hint.isEmpty && isLiteralTrue(on) && matchingSelects(selectList, subselect.schema, subselectLabel) =>
-          Some(new Candidate(selectList, fields, singleRowFrom, valuesLabel, subselect, subselectLabel, on))
+          Some(new Candidate(selectList, fields, singleRowFrom, valuesLabel, valuesSource, subselect, subselectLabel, subselectSource, on))
         case _ =>
           None
       }
@@ -136,11 +138,13 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
 
         def selectList = c.selectList
         def valuesLabel = c.valuesLabel
+        def valuesSource = c.valuesSource
         // The `values` forms exprs, have not been remapped, so do so now
         val values = c.values.withValuesMapped { case (e, name) => (rewriteExpr(e, exprReplaces), name) }
         def singleRowFrom = c.singleRowFrom
         def subselect = c.subselect
         def subselectLabel = c.subselectLabel
+        def subselectSource = c.subselectSource
         def trueExpr = c.trueExpr
 
         // Now we'll augment our replaces with the trivial ones from
@@ -192,13 +196,13 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
                       )
                   },
                   valuesLabel,
-                  None,
+                  valuesSource,
                   None
                 ),
                 FromStatement(
                   newSubselect,
                   subselectLabel,
-                  None,
+                  subselectSource,
                   None
                 ),
                 trueExpr
