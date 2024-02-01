@@ -3,7 +3,7 @@ package com.socrata.soql.types
 import java.util.Base64
 
 import com.google.common.collect.{Interner, Interners}
-import com.rojoma.json.v3.ast.JValue
+import com.rojoma.json.v3.ast.{JValue, JString, JObject}
 import com.rojoma.json.v3.codec.DecodeError
 import com.rojoma.json.v3.io.{CompactJsonWriter, JsonReader}
 import com.socrata.thirdparty.geojson.JtsCodecs
@@ -14,6 +14,42 @@ import SoQLGeometryLike._
 
 trait SoQLGeometryLike[T <: Geometry] {
   protected val Treified: Class[T]
+
+  protected trait GeoCJsonRep[C <: SoQLValue] extends CJsonRep[C, SoQLValue] {
+    protected def unwrapper(c: C): T
+    protected def wrapper(t: T): C
+
+    // Accept any of, in decending order of precedence:
+    //   * base64-encoded WKB
+    //   * WKT
+    //   * GeoJSON
+    override protected final def fromJValueImpl(v: JValue): Either[DecodeError, C] =
+      v match {
+        case JString(Wkb64Rep(p)) => Right(wrapper(p))
+        case JString(WktRep(p)) => Right(wrapper(p))
+        case s@JString(_) => Left(DecodeError.InvalidValue(s))
+        case o: JObject =>
+          JtsCodecs.geoCodec.decode(o) match {
+            case Right(c) =>
+              val geoValue =
+                try {
+                  Treified.cast(c)
+                } catch {
+                  case _ : ClassCastException =>
+                    return Left(DecodeError.InvalidValue(o))
+                }
+              Right(wrapper(geoValue))
+            case Left(err) => Left(err)
+          }
+        case other =>
+          Left(DecodeError.Multiple(
+                 Seq(DecodeError.InvalidType(expected = JString, got = other.jsonType),
+                     DecodeError.InvalidType(expected = JObject, got = other.jsonType))))
+      }
+
+    override final def toJValue(v: C) =
+      JString(Wkb64Rep(unwrapper(v)))
+  }
 
   object JsonRep {
     def unapply(text: String): Option[T] =
