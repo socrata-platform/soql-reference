@@ -77,6 +77,8 @@ class SoQLAnalysis[MT <: MetaTypes] private (
               current.removeOrderBy
             case Pass.LimitIfUnlimited(limit) =>
               current.limitIfUnlimited(limit)
+            case Pass.RemoveTrivialJoins =>
+              current.removeTrivialJoins(helpers.isLiteralTrue)
           }
       }
       current
@@ -231,6 +233,12 @@ class SoQLAnalysis[MT <: MetaTypes] private (
       statement = rewrite.LimitIfUnlimited(nlp, statement, limit)
     )
   }
+
+  /** SoQL currently sometimes requires that a user do a trivial join to
+    * single_row for syntactic reasons.  This rewrite pass removes
+    * these trivial joins. */
+  def removeTrivialJoins(isLiteralTrue: Expr[MT] => Boolean) =
+    copy(statement = rewrite.RemoveTrivialJoins(statement, isLiteralTrue))
 
   private def copy[MT2 <: MetaTypes](
     labelProvider: LabelProvider = this.labelProvider,
