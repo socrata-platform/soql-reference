@@ -1244,4 +1244,90 @@ select * where first = 'Tom'
     val expectedAnalysis = analyze(tf, "(select * from @twocol1 limit 20) union (select * from @twocol2 limit 10)")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
+
+  test("remove trivial single-row selects - leftmost") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "text" -> TestText,
+        "num" -> TestNumber
+      )
+    )
+
+    val analysis = analyze(tf, "select @table1.text, @table1.num from @single_row join @table1 on true").removeTrivialJoins(isLiteralTrue)
+    val expectedAnalysis = analyze(tf, "select @table1.text, @table1.num from @table1")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("don't remove non-trivial single-row selects - leftmost") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "text" -> TestText,
+        "num" -> TestNumber
+      )
+    )
+
+    val analysis = analyze(tf, "select @table1.text, @table1.num from @single_row join @table1 on false").removeTrivialJoins(isLiteralTrue)
+    val expectedAnalysis = analyze(tf, "select @table1.text, @table1.num from @single_row join @table1 on false")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("remove trivial single-row selects - rightmost") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "text" -> TestText,
+        "num" -> TestNumber
+      )
+    )
+
+    val analysis = analyze(tf, "select @table1.text, @table1.num from @table1 join @single_row on true").removeTrivialJoins(isLiteralTrue)
+    val expectedAnalysis = analyze(tf, "select @table1.text, @table1.num from @table1")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("don't remove non-trivial single-row selects - rightmost") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "text" -> TestText,
+        "num" -> TestNumber
+      )
+    )
+
+    val analysis = analyze(tf, "select @table1.text, @table1.num from @table1 join @single_row on false").removeTrivialJoins(isLiteralTrue)
+    val expectedAnalysis = analyze(tf, "select @table1.text, @table1.num from @table1 join @single_row on false")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("remove trivial single-row selects - midmost") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "text" -> TestText,
+        "num" -> TestNumber
+      ),
+      (0, "table2") -> D(
+        "txet" -> TestText,
+        "mun" -> TestNumber
+      )
+    )
+
+    val analysis = analyze(tf, "select @table1.text, @table1.num, @table2.mun from @table1 join @single_row on true join @table2 on @table1.text = @table2.txet").removeTrivialJoins(isLiteralTrue)
+    val expectedAnalysis = analyze(tf, "select @table1.text, @table1.num, @table2.mun from @table1 join @table2 on @table1.text = @table2.txet")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("don't remove non-trivial single-row selects - midmost") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "text" -> TestText,
+        "num" -> TestNumber
+      ),
+      (0, "table2") -> D(
+        "txet" -> TestText,
+        "mun" -> TestNumber
+      )
+    )
+
+    val analysis = analyze(tf, "select @table1.text, @table1.num, @table2.mun from @table1 join @single_row on false join @table2 on @table1.text = @table2.txet").removeTrivialJoins(isLiteralTrue)
+    val expectedAnalysis = analyze(tf, "select @table1.text, @table1.num, @table2.mun from @table1 join @single_row on false join @table2 on @table1.text = @table2.txet")
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
 }

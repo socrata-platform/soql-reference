@@ -22,6 +22,7 @@ object Pass {
   case class AddLimitOffset(limit: Option[NonNegativeBigInt], offset: Option[NonNegativeBigInt]) extends Pass
   case object RemoveOrderBy extends Pass
   case class LimitIfUnlimited(limit: NonNegativeBigInt) extends Pass
+  case object RemoveTrivialJoins extends Pass
 
   implicit val jCodec = SimpleHierarchyCodecBuilder[Pass](InternalTag("pass"))
     .singleton("inline_trivial_parameters", InlineTrivialParameters)
@@ -36,6 +37,7 @@ object Pass {
     .branch[AddLimitOffset]("add_limit_offset")(AutomaticJsonEncodeBuilder[AddLimitOffset], AutomaticJsonDecodeBuilder[AddLimitOffset], implicitly)
     .singleton("remove_order_by", RemoveOrderBy)
     .branch[LimitIfUnlimited]("limit_if_unlimited")(AutomaticJsonEncodeBuilder[LimitIfUnlimited], AutomaticJsonDecodeBuilder[LimitIfUnlimited], implicitly)
+    .singleton("remove_trivial_joins", RemoveTrivialJoins)
     .build
 
   implicit object serialize extends Readable[Pass] with Writable[Pass] {
@@ -53,6 +55,7 @@ object Pass {
         case 9 => AddLimitOffset(buffer.read[Option[NonNegativeBigInt]](), buffer.read[Option[NonNegativeBigInt]]())
         case 10 => RemoveOrderBy
         case 11 => LimitIfUnlimited(buffer.read[NonNegativeBigInt]())
+        case 12 => RemoveTrivialJoins
         case other => fail(s"Unknown rewrite pass type $other")
       }
 
@@ -78,6 +81,8 @@ object Pass {
         case LimitIfUnlimited(lim) =>
           buffer.write(11)
           buffer.write(lim)
+        case RemoveTrivialJoins =>
+          buffer.write(12)
       }
     }
   }

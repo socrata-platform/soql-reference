@@ -486,11 +486,11 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
       Some(selectListSql).filter(_ => selectListExprs.nonEmpty)
     ).flatten.vsep.nest(2)
 
-    val fromDoc = Seq(d"FROM", fromSql).vsep.nest(2).group
+    val fromDoc = fromSql.map(Seq(d"FROM", _).vsep.nest(2).group)
 
     val stmtSql = Seq(
       Some(selectionDoc),
-      Some(fromDoc),
+      fromDoc,
       whereSql,
       groupBySql,
       havingSql,
@@ -517,29 +517,38 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
     from: From,
     schemasSoFar: AvailableSchemas,
     dynamicContext: DynamicContext
-  ): (Doc, AvailableSchemas) = {
-    // Ok so this is _way_ looser than actual SQL visibility semantics
-    // but because we've been sure to give every table-instance a
-    // unique label, it doesn't matter.
-    from.reduce[(Doc, AvailableSchemas)](
-      sqlizeAtomicFrom(_, schemasSoFar, dynamicContext),
-      { (acc, join) =>
-        val (leftSql, leftSchemas) = acc
-        val Join(joinType, lateral, _left, right, on) = join
-        val (rightSql, schemasSoFar) = sqlizeAtomicFrom(right, leftSchemas, dynamicContext)
-        val exprSqlizer = this.exprSqlizer.withContext(schemasSoFar, Vector.empty, dynamicContext)
-        val onSql = exprSqlizer.sqlize(on).compressed.sql
+  ): (Option[Doc], AvailableSchemas) = {
+    from match {
+      case FromSingleRow(_, _) =>
+        // just a bare single row without even any joins - don't emit
+        // a FROM clause at all.
+        (None, schemasSoFar)
+      case _ =>
+        // Ok so this is _way_ looser than actual SQL visibility semantics
+        // but because we've been sure to give every table-instance a
+        // unique label, it doesn't matter.
+        val (doc, schemas) = from.reduce[(Doc, AvailableSchemas)](
+          sqlizeAtomicFrom(_, schemasSoFar, dynamicContext),
+          { (acc, join) =>
+            val (leftSql, leftSchemas) = acc
+            val Join(joinType, lateral, _left, right, on) = join
+            val (rightSql, schemasSoFar) = sqlizeAtomicFrom(right, leftSchemas, dynamicContext)
+            val exprSqlizer = this.exprSqlizer.withContext(schemasSoFar, Vector.empty, dynamicContext)
+            val onSql = exprSqlizer.sqlize(on).compressed.sql
 
-        (
-          Seq(
-            leftSql,
-            Seq(Some(sqlizeJoinType(joinType)), if(lateral) Some(d"LATERAL") else None, Some(rightSql)).flatten.vsep.nest(2),
-            d"ON" +#+ onSql
-          ).vsep,
-          schemasSoFar
+            (
+              Seq(
+                leftSql,
+                Seq(Some(sqlizeJoinType(joinType)), if(lateral) Some(d"LATERAL") else None, Some(rightSql)).flatten.vsep.nest(2),
+                d"ON" +#+ onSql
+              ).vsep,
+              schemasSoFar
+            )
+          }
         )
-      }
-    )
+
+        (Some(doc), schemas)
+    }
   }
 
   private def sqlizeJoinType(joinType: JoinType): Doc = {
