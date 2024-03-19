@@ -290,4 +290,11 @@ class SqlizerTest extends FunSuite with MustMatchers with TestHelper with Sqlize
     val sqlish = analyze(tf, soql).layoutSingleLine.toString
     sqlish must equal ("SELECT windowed_function(x1.txt) OVER (PARTITION BY x1.category ORDER BY x1.txt ASC NULLS LAST ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING) AS i1 FROM table1 AS x1")
   }
+
+  test("trivial from is eliminated") {
+    val tf = tableFinder()
+    val soql = "select 1, 2 from @single_row"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("SELECT 1.0 :: numeric AS i1, 2.0 :: numeric AS i2")
+  }
 }
