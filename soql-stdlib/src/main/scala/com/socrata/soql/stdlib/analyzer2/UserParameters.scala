@@ -1,10 +1,8 @@
 package com.socrata.soql.stdlib.analyzer2
 
-import com.rojoma.json.v3.ast.{JString, JValue, JNumber}
-import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
+import com.rojoma.json.v3.ast.JValue
+import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode}
 import com.rojoma.json.v3.util.{AutomaticJsonCodec, SimpleHierarchyCodecBuilder, InternalTag, NullForNone, AllowMissing}
-
-import org.joda.time.{DateTime, LocalDateTime}
 
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2.CanonicalName
@@ -19,62 +17,55 @@ object UserParameters {
   }
 
   object Value {
-    private implicit val dateTimeCodec = new JsonEncode[DateTime] with JsonDecode[DateTime] {
-      def encode(t: DateTime) = JString(SoQLFixedTimestamp.StringRep(t))
-      def decode(v: JValue) =
-        v match {
-          case JString(SoQLFixedTimestamp.StringRep(t)) => Right(t)
-          case JString(_) => Left(DecodeError.InvalidValue(v))
-          case _ => Left(DecodeError.InvalidType(expected = JString, got = v.jsonType))
-        }
-    }
-    private implicit val localDateTimeCodec = new JsonEncode[LocalDateTime] with JsonDecode[LocalDateTime] {
-      def encode(t: LocalDateTime) = JString(SoQLFloatingTimestamp.StringRep(t))
-      def decode(v: JValue) =
-        v match {
-          case JString(SoQLFloatingTimestamp.StringRep(t)) => Right(t)
-          case JString(_) => Left(DecodeError.InvalidValue(v))
-          case _ => Left(DecodeError.InvalidType(expected = JString, got = v.jsonType))
-        }
-    }
+    private def fromCJson[T <: SoQLValue](rep: CJsonRep[T, SoQLValue]) =
+      new JsonEncode[T] with JsonDecode[T] {
+        def encode(t: T) = rep.toJValue(t)
+        def decode(v: JValue) = rep.fromJValueRequired(v)
+      }
+
+    private implicit val textCodec = fromCJson(SoQLText.cjsonRep)
+    private implicit val numCodec = fromCJson(SoQLNumber.cjsonRep)
+    private implicit val booleanCodec = fromCJson(SoQLBoolean.cjsonRep)
+    private implicit val fixedTimestampCodec = fromCJson(SoQLFixedTimestamp.cjsonRep)
+    private implicit val floatingTimestampCodec = fromCJson(SoQLFloatingTimestamp.cjsonRep)
 
     @AutomaticJsonCodec
-    case class Text(@NullForNone value: Option[String]) extends Value {
+    case class Text(@NullForNone value: Option[SoQLText]) extends Value {
       private[UserParameters] override def toPossibleValue =
         value match {
-          case Some(s) => analyzer2.UserParameters.Value(SoQLText(s))
+          case Some(s) => analyzer2.UserParameters.Value(s)
           case None => analyzer2.UserParameters.Null(SoQLText)
         }
     }
     @AutomaticJsonCodec
-    case class Number(@NullForNone value: Option[JNumber]) extends Value {
+    case class Number(@NullForNone value: Option[SoQLNumber]) extends Value {
       private[UserParameters] override def toPossibleValue =
         value match {
-          case Some(n) => analyzer2.UserParameters.Value(SoQLNumber(n.toJBigDecimal))
+          case Some(n) => analyzer2.UserParameters.Value(n)
           case None => analyzer2.UserParameters.Null(SoQLNumber)
         }
     }
     @AutomaticJsonCodec
-    case class Bool(@NullForNone value: Option[Boolean]) extends Value {
+    case class Bool(@NullForNone value: Option[SoQLBoolean]) extends Value {
       private[UserParameters] override def toPossibleValue =
         value match {
-          case Some(b) => analyzer2.UserParameters.Value(SoQLBoolean(b))
+          case Some(b) => analyzer2.UserParameters.Value(b)
           case None => analyzer2.UserParameters.Null(SoQLBoolean)
         }
     }
     @AutomaticJsonCodec
-    case class FixedTimestamp(@NullForNone value: Option[DateTime]) extends Value {
+    case class FixedTimestamp(@NullForNone value: Option[SoQLFixedTimestamp]) extends Value {
       private[UserParameters] override def toPossibleValue =
         value match {
-          case Some(ts) => analyzer2.UserParameters.Value(SoQLFixedTimestamp(ts))
+          case Some(ts) => analyzer2.UserParameters.Value(ts)
           case None => analyzer2.UserParameters.Null(SoQLFixedTimestamp)
         }
     }
     @AutomaticJsonCodec
-    case class FloatingTimestamp(@NullForNone value: Option[LocalDateTime]) extends Value {
+    case class FloatingTimestamp(@NullForNone value: Option[SoQLFloatingTimestamp]) extends Value {
       private[UserParameters] override def toPossibleValue =
         value match {
-          case Some(ts) => analyzer2.UserParameters.Value(SoQLFloatingTimestamp(ts))
+          case Some(ts) => analyzer2.UserParameters.Value(ts)
           case None => analyzer2.UserParameters.Null(SoQLFloatingTimestamp)
         }
     }

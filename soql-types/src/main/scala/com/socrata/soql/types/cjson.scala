@@ -18,6 +18,9 @@ trait CJsonReadRep[+T] {
       }
     }
 
+  final def fromJValueRequired(v: JValue): Either[DecodeError, T] =
+    fromJValueImpl(v)
+
   protected def fromJValueImpl(v: JValue): Either[DecodeError, T]
 }
 
