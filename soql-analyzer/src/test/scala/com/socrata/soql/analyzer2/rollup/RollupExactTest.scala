@@ -379,4 +379,28 @@ class RollupExactTest extends FunSuite with MustMatchers with RollupTestHelper w
       TestRollupExact(select, rollup, analysis.labelProvider) must be (None)
     }
   }
+
+  test("A parameterless aggregate cannot be used with a rollup that has the same grouping which does not produce that aggregate as output") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+    )
+
+    val rollup = TestRollupInfo(1, "rollup", tf, "select text, sum(num) from @twocol group by text")
+
+    val Right(foundTables) = tf.findTables(0, "select text, count(*) from @twocol group by text", Map.empty)
+    val Right(analysis) = analyzer(foundTables, UserParameters.empty)
+    val select = analysis.statement.asInstanceOf[Select]
+
+    // So the bug was that was incorrectly saying "I _can_ use this
+    // rollup to answer this query (and generating the nonsense
+    // soql-equivalent "select text, count(*) from @rollup").  This
+    // was happening because the rollup has the same group-by as the
+    // query, so it was going into the "one to one" subpath of the
+    // rewriter, and then it was saying "I can rewrite this aggregate
+    // if I can rewrite all of its arguments" - but since count(*) has
+    // no arguments that was incorrectly succeeding.  The more
+    // accurate test is "I can do this if I'm attempting to use a
+    // rollup that is not itself the result of an aggregation".
+    TestRollupExact(select, rollup, analysis.labelProvider) must be (None)
+  }
 }

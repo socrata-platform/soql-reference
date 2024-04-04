@@ -9,6 +9,20 @@ import com.socrata.soql.collection.{OrderedMap, NonEmptySeq}
 
 object RollupExact {
   private val log = LoggerFactory.getLogger(classOf[RollupExact[_]])
+
+  private sealed abstract class MergeContext(
+    val isNonAggregate: Boolean,
+    val isCoarseningGroup: Boolean,
+    val isFirstAggregate: Boolean
+  ) {
+    if(isCoarseningGroup || isFirstAggregate) {
+      assert(!isNonAggregate)
+    }
+  }
+  private case object NonAggregatedOnNonAggregated extends MergeContext(isNonAggregate = true, isCoarseningGroup = false, isFirstAggregate = false)
+  private case object AggregatedOnNonAggregated extends MergeContext(isNonAggregate = false, isCoarseningGroup = true, isFirstAggregate = true)
+  private case object AggregatedOnSameGroup extends MergeContext(isNonAggregate = false, isCoarseningGroup = false, isFirstAggregate = false)
+  private case object AggregatedOnDifferentGroup extends MergeContext(isNonAggregate = false, isCoarseningGroup = true, isFirstAggregate = false)
 }
 
 class RollupExact[MT <: MetaTypes](
@@ -19,7 +33,7 @@ class RollupExact[MT <: MetaTypes](
   splitAnd: SplitAnd[MT],
   stringifier: Stringifier[MT]
 ) extends ((Select[MT], RollupInfo[MT, _], LabelProvider) => Option[Statement[MT]]) with StatementUniverse[MT] {
-  import RollupExact.log
+  import RollupExact._
 
   private type IsoState = IsomorphismState.View[MT]
 
@@ -128,7 +142,8 @@ class RollupExact[MT <: MetaTypes](
       cSearch,
 
       rewriteInTerms,
-      "WHERE"
+      "WHERE",
+      NonAggregatedOnNonAggregated
     )
   }
 
@@ -158,7 +173,8 @@ class RollupExact[MT <: MetaTypes](
     cSearch: Option[String],
 
     rewriteInTerms: RewriteInTerms,
-    whereName: String
+    whereName: String,
+    mergeContext: MergeContext
   ): Option[Select] = {
     // * the candidate must be indistinct, or its DISTINCT clause         ✓
     //   must match (requires WHERE and ORDER isomorphism, and
@@ -189,7 +205,7 @@ class RollupExact[MT <: MetaTypes](
     val newWhere: Option[Expr] =
       (sWhereish, cWhereish) match {
         case (sWhere, None) =>
-          sWhere.mapFallibly(rewriteInTerms.rewrite(_)).getOrElse {
+          sWhere.mapFallibly(rewriteInTerms.rewrite(_, mergeContext)).getOrElse {
             log.debug(s"Bailing because couldn't rewrite $whereName in terms of candidate output columns")
             return None
           }
@@ -198,7 +214,7 @@ class RollupExact[MT <: MetaTypes](
           if(whereishIsIsomorphic) {
             None
           } else {
-            combineAnd(sWhere, cWhere, rewriteInTerms).getOrElse {
+            combineAnd(sWhere, cWhere, rewriteInTerms, mergeContext).getOrElse {
               log.debug(s"Bailing because couldn't express the query's $whereName in terms of the candidate's $whereName")
               return None
             }
@@ -223,7 +239,7 @@ class RollupExact[MT <: MetaTypes](
       return None
     }
 
-    val newOrderBy: Seq[OrderBy] = sOrderBy.mapFallibly(rewriteInTerms.rewriteOrderBy(_)).getOrElse {
+    val newOrderBy: Seq[OrderBy] = sOrderBy.mapFallibly(rewriteInTerms.rewriteOrderBy(_, mergeContext)).getOrElse {
       log.debug("Bailing because couldn't rewrite ORDER BY in terms of candidate output columns")
       return None
     }
@@ -258,13 +274,13 @@ class RollupExact[MT <: MetaTypes](
         log.debug("Bailing because of a distinctiveness mismatch")
         return None
       }
-    val newDistinctiveness = rewriteDistinctiveness(sDistinctiveness, rewriteInTerms).getOrElse {
+    val newDistinctiveness = rewriteDistinctiveness(sDistinctiveness, rewriteInTerms, mergeContext).getOrElse {
       log.debug("Bailing because failed to rewrite distinctiveness")
       return None
     }
 
     val newSelectList: OrderedMap[AutoColumnLabel, NamedExpr] =
-      OrderedMap() ++ sSelectList.iterator.mapFallibly(rewriteInTerms.rewriteSelectListEntry(_)).getOrElse {
+      OrderedMap() ++ sSelectList.iterator.mapFallibly(rewriteInTerms.rewriteSelectListEntry(_, mergeContext)).getOrElse {
         log.debug("Bailing because failed to rewrite the select list")
         return None
       }
@@ -310,12 +326,12 @@ class RollupExact[MT <: MetaTypes](
     isSubset(s, c, isoState) && isSubset(c, s, isoState.reverse)
   }
 
-  private def rewriteDistinctiveness(distinct: Distinctiveness, rewriteInTerms: RewriteInTerms, needsMerge: Boolean = false): Option[Distinctiveness] = {
+  private def rewriteDistinctiveness(distinct: Distinctiveness, rewriteInTerms: RewriteInTerms, rollupContext: MergeContext): Option[Distinctiveness] = {
     distinct match {
       case Distinctiveness.Indistinct() | Distinctiveness.FullyDistinct() =>
         Some(distinct)
       case Distinctiveness.On(exprs) =>
-        exprs.mapFallibly(rewriteInTerms.rewrite(_, needsMerge)).map(Distinctiveness.On(_))
+        exprs.mapFallibly(rewriteInTerms.rewrite(_, rollupContext)).map(Distinctiveness.On(_))
     }
   }
 
@@ -354,7 +370,7 @@ class RollupExact[MT <: MetaTypes](
         log.debug("Bailing because the candidate has a DISTINCT clause")
         return None
     }
-    val newDistinctiveness = rewriteDistinctiveness(select.distinctiveness, rewriteInTerms).getOrElse {
+    val newDistinctiveness = rewriteDistinctiveness(select.distinctiveness, rewriteInTerms, AggregatedOnNonAggregated).getOrElse {
       log.debug("Bailing because failed to rewrite the query's DISTINCT clause")
       return None
     }
@@ -364,7 +380,7 @@ class RollupExact[MT <: MetaTypes](
         case Some(cWhere) =>
           select.where match {
             case Some(sWhere) =>
-              combineAnd(sWhere, cWhere, rewriteInTerms).getOrElse {
+              combineAnd(sWhere, cWhere, rewriteInTerms, AggregatedOnNonAggregated).getOrElse {
                 log.debug("Bailing because couldn't express the query's WHERE in terms of the candidate's WHERE")
                 return None
               }
@@ -373,25 +389,25 @@ class RollupExact[MT <: MetaTypes](
               return None
           }
         case None =>
-          select.where.mapFallibly(rewriteInTerms.rewrite(_)).getOrElse {
+          select.where.mapFallibly(rewriteInTerms.rewrite(_, AggregatedOnNonAggregated)).getOrElse {
             log.debug("Bailing because unable to rewrite the WHERE in terms of the candidate's output columns")
             return None
           }
       }
 
-    val newGroupBy = select.groupBy.mapFallibly(rewriteInTerms.rewrite(_)).getOrElse {
+    val newGroupBy = select.groupBy.mapFallibly(rewriteInTerms.rewrite(_, AggregatedOnNonAggregated)).getOrElse {
       log.debug("Bailing because unable to rewrite the GROUP BY in terms of the candidate's output columns")
       return None
     }
-    val newHaving = select.having.mapFallibly(rewriteInTerms.rewrite(_)).getOrElse {
+    val newHaving = select.having.mapFallibly(rewriteInTerms.rewrite(_, AggregatedOnNonAggregated)).getOrElse {
       log.debug("Bailing because unable to rewrite the HAVING in terms of the candidate's output columns")
       return None
     }
-    val newOrderBy = select.orderBy.mapFallibly(rewriteInTerms.rewriteOrderBy(_)).getOrElse {
+    val newOrderBy = select.orderBy.mapFallibly(rewriteInTerms.rewriteOrderBy(_, AggregatedOnNonAggregated)).getOrElse {
       log.debug("Bailing because unable to rewrite the ORDER BY in terms of the candidate's output columns")
       return None
     }
-    val newSelectList = OrderedMap() ++ select.selectList.iterator.mapFallibly(rewriteInTerms.rewriteSelectListEntry(_)).getOrElse {
+    val newSelectList = OrderedMap() ++ select.selectList.iterator.mapFallibly(rewriteInTerms.rewriteSelectListEntry(_, AggregatedOnNonAggregated)).getOrElse {
       log.debug("Bailing because unable to rewrite the select list in terms of the candidate's output columns")
       return None
     }
@@ -507,36 +523,36 @@ class RollupExact[MT <: MetaTypes](
       return None
     }
 
-    val newDistinctiveness = rewriteDistinctiveness(select.distinctiveness, rewriteInTerms, needsMerge = true).getOrElse {
+    val newDistinctiveness = rewriteDistinctiveness(select.distinctiveness, rewriteInTerms, rollupContext = AggregatedOnDifferentGroup).getOrElse {
       log.debug("Bailing because failed to rewrite the DISTINCT clause")
       return None
     }
 
     val newSelectList: OrderedMap[AutoColumnLabel, NamedExpr] =
-      OrderedMap() ++ select.selectList.iterator.mapFallibly(rewriteInTerms.rewriteSelectListEntry(_, needsMerge = true)).getOrElse {
+      OrderedMap() ++ select.selectList.iterator.mapFallibly(rewriteInTerms.rewriteSelectListEntry(_, rollupContext = AggregatedOnDifferentGroup)).getOrElse {
         log.debug("Bailing because failed to rewrite the select list")
         return None
       }
 
     val newWhere =
-      select.where.mapFallibly(rewriteInTerms.rewrite(_, needsMerge = true)).getOrElse {
+      select.where.mapFallibly(rewriteInTerms.rewrite(_, rollupContext = AggregatedOnDifferentGroup)).getOrElse {
         log.debug("Bailing because unable to rewrite the WHERE in terms of the candidate's output columns")
         return None
       }
 
     val newGroupBy =
-      select.groupBy.mapFallibly(rewriteInTerms.rewrite(_, needsMerge = true)).getOrElse {
+      select.groupBy.mapFallibly(rewriteInTerms.rewrite(_, rollupContext = AggregatedOnDifferentGroup)).getOrElse {
         log.debug("Bailing because unable to rewrite the GROUP BY in terms of the candidate's output columns")
         return None
       }
 
     val newHaving =
-      select.having.mapFallibly(rewriteInTerms.rewrite(_, needsMerge = true)).getOrElse {
+      select.having.mapFallibly(rewriteInTerms.rewrite(_, rollupContext = AggregatedOnDifferentGroup)).getOrElse {
         log.debug("Bailing because unable to rewrite the HAVING in terms of the candidate's output columns")
         return None
       }
 
-    val newOrderBy = select.orderBy.mapFallibly(rewriteInTerms.rewriteOrderBy(_, needsMerge = true)).getOrElse {
+    val newOrderBy = select.orderBy.mapFallibly(rewriteInTerms.rewriteOrderBy(_, rollupContext = AggregatedOnDifferentGroup)).getOrElse {
       log.debug("Bailing because unable to rewrite the GROUP BY in terms of the candidate's output columns")
       return None
     }
@@ -623,7 +639,8 @@ class RollupExact[MT <: MetaTypes](
       cSearch,
 
       rewriteInTerms,
-      "HAVING"
+      "HAVING",
+      AggregatedOnSameGroup
     )
   }
 
@@ -701,7 +718,7 @@ class RollupExact[MT <: MetaTypes](
     }
   }
 
-  private def combineAnd(sExpr: Expr, cExpr: Expr, rewriteInTerms: RewriteInTerms, needsMerge: Boolean = false): Option[Option[Expr]] = {
+  private def combineAnd(sExpr: Expr, cExpr: Expr, rewriteInTerms: RewriteInTerms, rollupContext: MergeContext): Option[Option[Expr]] = {
     val sSplit = splitAnd.split(sExpr)
     val cSplit = splitAnd.split(cExpr)
 
@@ -713,7 +730,7 @@ class RollupExact[MT <: MetaTypes](
       return None
     }
 
-    NonEmptySeq.fromSeq(newTerms).map(splitAnd.merge).mapFallibly(rewriteInTerms.rewrite(_, needsMerge))
+    NonEmptySeq.fromSeq(newTerms).map(splitAnd.merge).mapFallibly(rewriteInTerms.rewrite(_, rollupContext))
   }
 
   private class RewriteInTerms(
@@ -733,19 +750,19 @@ class RollupExact[MT <: MetaTypes](
         label -> databaseColumnName
       }.toMap
 
-    def rewrite(sExpr: Expr, needsMerge: Boolean = false): Option[Expr] =
-      doNonAdHocRewrite(sExpr, needsMerge = needsMerge) orElse {
-        adHocRewriter(sExpr).findMap(doNonAdHocRewrite(_, needsMerge))
+    def rewrite(sExpr: Expr, rollupContext: MergeContext): Option[Expr] =
+      doNonAdHocRewrite(sExpr, rollupContext = rollupContext) orElse {
+        adHocRewriter(sExpr).findMap(doNonAdHocRewrite(_, rollupContext))
       }
 
-    private def doNonAdHocRewrite(sExpr: Expr, needsMerge: Boolean): Option[Expr] =
-      rewriteSimple(sExpr, needsMerge).orElse { rewriteCompound(sExpr, needsMerge) }
+    private def doNonAdHocRewrite(sExpr: Expr, rollupContext: MergeContext): Option[Expr] =
+      rewriteSimple(sExpr, rollupContext).orElse { rewriteCompound(sExpr, rollupContext) }
 
     // This exists specifically to handle the case of "avg" but in
     // principle could also be used for other things?  Anyway,
     // this rewrites a(x, y, z) into combiner(b(x, y, z), c(x, y, z), ...)
     // and then tries to rewrite that form.
-    private def rewriteCompound(sExpr: Expr, needsMerge: Boolean): Option[Expr] =
+    private def rewriteCompound(sExpr: Expr, rollupContext: MergeContext): Option[Expr] =
       sExpr match {
         case fc@FunctionCall(func, args) =>
           functionSplitter(func).flatMap { case (combiner, inputFuncs) =>
@@ -756,7 +773,7 @@ class RollupExact[MT <: MetaTypes](
                   FunctionCall(inputFunc, args)(fc.position)
                 }
               )(fc.position),
-              needsMerge
+              rollupContext
             )
           }
 
@@ -769,7 +786,7 @@ class RollupExact[MT <: MetaTypes](
                   AggregateFunctionCall(inputFunc, args, distinct, filter)(afc.position)
                 }
               )(afc.position),
-              needsMerge
+              rollupContext
             )
           }
 
@@ -782,7 +799,7 @@ class RollupExact[MT <: MetaTypes](
                   WindowedFunctionCall(inputFunc, args, filter, partitionBy, orderBy, frame)(wfc.position)
                 }
               )(wfc.position),
-              needsMerge
+              rollupContext
             )
           }
 
@@ -790,7 +807,7 @@ class RollupExact[MT <: MetaTypes](
           None
       }
 
-    private def rewriteSimple(sExpr: Expr, needsMerge: Boolean): Option[Expr] =
+    private def rewriteSimple(sExpr: Expr, rollupContext: MergeContext): Option[Expr] =
       candidateSelectList.iterator.findMap { case (label, ne) =>
         if(sExpr.isIsomorphic(ne.expr, isoState)) {
           Some((label, ne, identity[Expr] _))
@@ -802,15 +819,15 @@ class RollupExact[MT <: MetaTypes](
           functionSubset(sExpr, ne.expr, isoState).map((label, ne, _))
         }
       ) match {
-        case Some((selectedColumn, NamedExpr(rollupExpr@AggregateFunctionCall(func, args, false, None), _name, _hint, _isSynthetic), functionExtract)) if needsMerge =>
+        case Some((selectedColumn, NamedExpr(rollupExpr@AggregateFunctionCall(func, args, false, None), _name, _hint, _isSynthetic), functionExtract)) if rollupContext.isCoarseningGroup =>
           assert(rollupExpr.typ == sExpr.typ)
           semigroupRewriter(func).map { merger =>
             functionExtract(merger(PhysicalColumn[MT](newFrom.label, newFrom.tableName, columnLabelMap(selectedColumn), rollupExpr.typ)(sExpr.position.asAtomic)))
           }
-        case Some((selectedColumn, NamedExpr(_ : AggregateFunctionCall, _name, _hint, _isSynthetic), _)) if needsMerge =>
+        case Some((selectedColumn, NamedExpr(_ : AggregateFunctionCall, _name, _hint, _isSynthetic), _)) if rollupContext.isCoarseningGroup =>
           log.debug("can't rewrite, the aggregate has a 'distinct' or 'filter'")
           None
-        case Some((selectedColumn, NamedExpr(_ : WindowedFunctionCall, _name, _hint, _isSynthetic), _)) if needsMerge =>
+        case Some((selectedColumn, NamedExpr(_ : WindowedFunctionCall, _name, _hint, _isSynthetic), _)) if rollupContext.isCoarseningGroup =>
           log.debug("can't rewrite, windowed function call")
           None
         case Some((selectedColumn, ne, functionExtract)) =>
@@ -822,22 +839,22 @@ class RollupExact[MT <: MetaTypes](
             case nul: NullLiteral => Some(nul)
             case slr: SelectListReference => throw new AssertionError("Rollups should never see a SelectListReference")
             case fc@FunctionCall(func, args) =>
-              args.mapFallibly(rewrite(_, needsMerge)).map { newArgs =>
+              args.mapFallibly(rewrite(_, rollupContext)).map { newArgs =>
                 FunctionCall(func, newArgs)(fc.position)
               }
-            case afc@AggregateFunctionCall(func, args, distinct, filter) if !needsMerge =>
+            case afc@AggregateFunctionCall(func, args, distinct, filter) if rollupContext.isFirstAggregate =>
               for {
-                newArgs <- args.mapFallibly(rewrite(_, needsMerge))
-                newFilter <- filter.mapFallibly(rewrite(_, needsMerge))
+                newArgs <- args.mapFallibly(rewrite(_, rollupContext))
+                newFilter <- filter.mapFallibly(rewrite(_, rollupContext))
               } yield {
                 AggregateFunctionCall(func, newArgs, distinct, newFilter)(afc.position)
               }
-            case wfc@WindowedFunctionCall(func, args, filter, partitionBy, orderBy, frame) if !needsMerge =>
+            case wfc@WindowedFunctionCall(func, args, filter, partitionBy, orderBy, frame) if rollupContext.isNonAggregate || rollupContext.isFirstAggregate =>
               for {
-                newArgs <- args.mapFallibly(rewrite(_, needsMerge))
-                newFilter <- filter.mapFallibly(rewrite(_, needsMerge))
-                newPartitionBy <- partitionBy.mapFallibly(rewrite(_, needsMerge))
-                newOrderBy <- orderBy.mapFallibly(rewriteOrderBy(_, needsMerge))
+                newArgs <- args.mapFallibly(rewrite(_, rollupContext))
+                newFilter <- filter.mapFallibly(rewrite(_, rollupContext))
+                newPartitionBy <- partitionBy.mapFallibly(rewrite(_, rollupContext))
+                newOrderBy <- orderBy.mapFallibly(rewriteOrderBy(_, rollupContext))
               } yield {
                 WindowedFunctionCall(func, args, newFilter, newPartitionBy, newOrderBy, frame)(wfc.position)
               }
@@ -846,15 +863,15 @@ class RollupExact[MT <: MetaTypes](
           }
       }
 
-    def rewriteOrderBy(sOrderBy: OrderBy, needsMerge: Boolean = false): Option[OrderBy] =
-      rewrite(sOrderBy.expr, needsMerge).map { newExpr => sOrderBy.copy(expr = newExpr) }
+    def rewriteOrderBy(sOrderBy: OrderBy, rollupContext: MergeContext): Option[OrderBy] =
+      rewrite(sOrderBy.expr, rollupContext).map { newExpr => sOrderBy.copy(expr = newExpr) }
 
-    def rewriteNamedExpr(sNamedExpr: NamedExpr, needsMerge: Boolean = false): Option[NamedExpr] =
-      rewrite(sNamedExpr.expr, needsMerge).map { newExpr => sNamedExpr.copy(expr = newExpr) }
+    def rewriteNamedExpr(sNamedExpr: NamedExpr, rollupContext: MergeContext): Option[NamedExpr] =
+      rewrite(sNamedExpr.expr, rollupContext).map { newExpr => sNamedExpr.copy(expr = newExpr) }
 
-    def rewriteSelectListEntry(sSelectListEntry: (AutoColumnLabel, NamedExpr), needsMerge: Boolean = false): Option[(AutoColumnLabel, NamedExpr)] = {
+    def rewriteSelectListEntry(sSelectListEntry: (AutoColumnLabel, NamedExpr), rollupContext: MergeContext): Option[(AutoColumnLabel, NamedExpr)] = {
       val (sLabel, sNamedExpr) = sSelectListEntry
-      rewriteNamedExpr(sNamedExpr, needsMerge).map { newExpr => sLabel -> newExpr }
+      rewriteNamedExpr(sNamedExpr, rollupContext).map { newExpr => sLabel -> newExpr }
     }
   }
 }
