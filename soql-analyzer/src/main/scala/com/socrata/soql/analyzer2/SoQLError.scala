@@ -907,7 +907,7 @@ object SoQLAnalyzerError {
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[NoSuchFunction[RNS]] {
         override val code = tag
         def encode(err: NoSuchFunction[RNS]) =
-          result(Fields(err.name, err.arity), s"No such function ${err.name}/${err.name}", err.source)
+          result(Fields(err.name, err.arity), s"No such function ${err.name}/${err.arity}", err.source)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[NoSuchFunction[RNS]] {
