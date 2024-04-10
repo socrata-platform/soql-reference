@@ -112,7 +112,9 @@ class SoQLAnalyzer[Type, Value](typeInfo: TypeInfo[Type, Value],
         val ra = rs match {
           case Leaf(s) =>
             val prev = la.outputSchema.leaf
-            val pivotCtx = Map(TableName.PrimaryTable.qualifier -> pivotContext(prev, s))
+            val pivotCtxSchemas = Map(TableName.PrimaryTable.qualifier -> pivotContext(prev, s))
+            // CMU TODO: no idea if grabbing these parameters from implicit context is what we want
+            val pivotCtx = AnalysisContext(pivotCtxSchemas, ctx.parameters)
             Leaf(analyzeWithSelection(s)(pivotCtx))
           case _ =>
             throw RightSideOfPivotQueryMustSelectColumns(rs.outputSchema.leaf.selection.expressions.headOption.map(_.expression.position).getOrElse(NoPosition))
