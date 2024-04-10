@@ -104,6 +104,46 @@ select * order by num+1
     analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("preserve ordering - output columns are not added") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", """select * order by num + 1 |> select * order by string_func(text)""")
+    val expectedAnalysis = analyze(tf, "twocol", """select *, num+1 order by num + 1 |> select text, num order by string_func(text), num_1""")
+    analysis.preserveOrdering.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("preserve ordering with output columns - output columns are added") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", """select * order by num + 1 |> select * order by string_func(text)""")
+    val expectedAnalysis = analyze(tf, "twocol", """select *, num+1 order by num + 1 |> select text, num, string_func(text), num_1 order by string_func(text), num_1""")
+    analysis.dangerous.preserveOrderingWithColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("preserve ordering with output columns - output columns are added without inheritance") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", """select * order by num + 1""")
+    val expectedAnalysis = analyze(tf, "twocol", """select *, num+1 order by num + 1""")
+    analysis.dangerous.preserveOrderingWithColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("preserve ordering with output columns - already-selected output columns are not re-added") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", """select text, num*2 order by num*2, string_func(text)""")
+    val expectedAnalysis = analyze(tf, "twocol", """select text, num*2, string_func(text) order by num*2, string_func(text)""")
+    analysis.dangerous.preserveOrderingWithColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
   test("simple merge") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)

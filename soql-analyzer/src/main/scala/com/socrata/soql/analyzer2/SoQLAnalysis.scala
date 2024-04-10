@@ -1,6 +1,6 @@
 package com.socrata.soql.analyzer2
 
-import com.socrata.soql.analyzer2.rewrite.{Pass, RewritePassHelpers, NonNegativeBigInt}
+import com.socrata.soql.analyzer2.rewrite.{AnyPass, Pass, DangerousPass, RewritePassHelpers, NonNegativeBigInt}
 import com.socrata.soql.environment.Provenance
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer, Readable, Writable}
@@ -39,7 +39,7 @@ class SoQLAnalysis[MT <: MetaTypes] private (
   }
 
   def applyPasses(
-    passes: Seq[Pass],
+    passes: Seq[AnyPass],
     helpers: RewritePassHelpers[MT]
   ): SoQLAnalysis[MT] = {
     if(passes.isEmpty) {
@@ -79,6 +79,8 @@ class SoQLAnalysis[MT <: MetaTypes] private (
               current.limitIfUnlimited(limit)
             case Pass.RemoveTrivialJoins =>
               current.removeTrivialJoins(helpers.isLiteralTrue)
+            case DangerousPass.PreserveOrderingWithColumns =>
+              current.dangerous.preserveOrderingWithColumns
           }
       }
       current
@@ -239,6 +241,22 @@ class SoQLAnalysis[MT <: MetaTypes] private (
     * these trivial joins. */
   def removeTrivialJoins(isLiteralTrue: Expr[MT] => Boolean) =
     copy(statement = rewrite.RemoveTrivialJoins(statement, isLiteralTrue))
+
+  object dangerous {
+    /** Like `preserveOrdering` but in addition it adds columns to the
+      * select list that expose the values used to do ordering, if
+      * they weren't already present and it is possible to do so under
+      * any other constraints imposed by the query. */
+    def preserveOrderingWithColumns: SoQLAnalysis[MT] = {
+      withoutSelectListReferences { self =>
+        val nlp = self.labelProvider.clone()
+        self.copy(
+          labelProvider = nlp,
+          statement = rewrite.PreserveOrdering.withExtraOutputColumns(nlp, self.statement)
+        )
+      }
+    }
+  }
 
   private def copy[MT2 <: MetaTypes](
     labelProvider: LabelProvider = this.labelProvider,

@@ -137,4 +137,8 @@ object PreserveOrdering {
   def apply[MT <: MetaTypes](labelProvider: LabelProvider, stmt: Statement[MT]): Statement[MT] = {
     new PreserveOrdering[MT](labelProvider).rewriteStatement(stmt, true, false)._2
   }
+
+  def withExtraOutputColumns[MT <: MetaTypes](labelProvider: LabelProvider, stmt: Statement[MT]): Statement[MT] = {
+    new PreserveOrdering[MT](labelProvider).rewriteStatement(stmt, true, true)._2
+  }
 }

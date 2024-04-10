@@ -7,7 +7,45 @@ import com.rojoma.json.v3.util.{SimpleHierarchyCodecBuilder, InternalTag, Automa
 import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer, Readable, Writable}
 import com.socrata.soql.jsonutils.HierarchyImplicits._
 
-sealed abstract class Pass
+// These classes' json and binary serializations are written such that
+// the subclass relationship holds in their serialized
+// representations - that is, if you serialize a Pass or a
+// DangerousPass on one end, you can deserialize an AnyPass on the
+// other.  To do this, Pass and DangerousPass need to agree on their
+// tagging schema - for JSON this is easy (just don't reuse any name,
+// which would be confusing anyway); for binary dangerous passes' tags
+// are negative and ordinary passes' tags are non-negative.
+//
+// A "dangerous" pass is one that can leak information.  The canonical
+// (and, at the time of this writing, only) pass like this is
+// PreserveOrderingWithColumns, which, when possible, rewrites the
+// query in such a way that any expressions used in the ORDER BY
+// clause get added to the select-list if they're not already there.
+sealed abstract class AnyPass
+sealed abstract class Pass extends AnyPass
+sealed abstract class DangerousPass extends AnyPass
+
+object AnyPass {
+  private[rewrite] def codecBase[T <: AnyPass] = SimpleHierarchyCodecBuilder[T](InternalTag("pass"))
+
+  implicit val jCodec =
+    DangerousPass.passBuilder(Pass.passBuilder(codecBase[AnyPass])).build
+
+  implicit object serialize extends Readable[AnyPass] with Writable[AnyPass] {
+    def readFrom(buffer: ReadBuffer): AnyPass = {
+      val tag = buffer.read[Int]()
+      if(tag < 0) DangerousPass.serialize.readTaggedFrom(buffer, tag)
+      else Pass.serialize.readTaggedFrom(buffer, tag)
+    }
+
+    def writeTo(buffer: WriteBuffer, rp: AnyPass): Unit = {
+      rp match {
+        case dp: DangerousPass => DangerousPass.serialize.writeTo(buffer, dp)
+        case p: Pass => Pass.serialize.writeTo(buffer, p)
+      }
+    }
+  }
+}
 
 object Pass {
   case object InlineTrivialParameters extends Pass
@@ -24,25 +62,27 @@ object Pass {
   case class LimitIfUnlimited(limit: NonNegativeBigInt) extends Pass
   case object RemoveTrivialJoins extends Pass
 
-  implicit val jCodec = SimpleHierarchyCodecBuilder[Pass](InternalTag("pass"))
-    .singleton("inline_trivial_parameters", InlineTrivialParameters)
-    .singleton("preserve_ordering", PreserveOrdering)
-    .singleton("remove_trivial_selects", RemoveTrivialSelects)
-    .singleton("impose_ordering", ImposeOrdering)
-    .singleton("merge", Merge)
-    .singleton("remove_unused_columns", RemoveUnusedColumns)
-    .singleton("remove_unused_order_by", RemoveUnusedOrderBy)
-    .singleton("use_select_list_references", UseSelectListReferences)
-    .branch[Page]("page")(AutomaticJsonEncodeBuilder[Page], AutomaticJsonDecodeBuilder[Page], implicitly)
-    .branch[AddLimitOffset]("add_limit_offset")(AutomaticJsonEncodeBuilder[AddLimitOffset], AutomaticJsonDecodeBuilder[AddLimitOffset], implicitly)
-    .singleton("remove_order_by", RemoveOrderBy)
-    .branch[LimitIfUnlimited]("limit_if_unlimited")(AutomaticJsonEncodeBuilder[LimitIfUnlimited], AutomaticJsonDecodeBuilder[LimitIfUnlimited], implicitly)
-    .singleton("remove_trivial_joins", RemoveTrivialJoins)
-    .build
+  private[rewrite] def passBuilder[T >: Pass <: AnyRef](builder: SimpleHierarchyCodecBuilder[T]): SimpleHierarchyCodecBuilder[T] =
+    builder
+      .singleton("inline_trivial_parameters", InlineTrivialParameters)
+      .singleton("preserve_ordering", PreserveOrdering)
+      .singleton("remove_trivial_selects", RemoveTrivialSelects)
+      .singleton("impose_ordering", ImposeOrdering)
+      .singleton("merge", Merge)
+      .singleton("remove_unused_columns", RemoveUnusedColumns)
+      .singleton("remove_unused_order_by", RemoveUnusedOrderBy)
+      .singleton("use_select_list_references", UseSelectListReferences)
+      .branch[Page]("page")(AutomaticJsonEncodeBuilder[Page], AutomaticJsonDecodeBuilder[Page], implicitly)
+      .branch[AddLimitOffset]("add_limit_offset")(AutomaticJsonEncodeBuilder[AddLimitOffset], AutomaticJsonDecodeBuilder[AddLimitOffset], implicitly)
+      .singleton("remove_order_by", RemoveOrderBy)
+      .branch[LimitIfUnlimited]("limit_if_unlimited")(AutomaticJsonEncodeBuilder[LimitIfUnlimited], AutomaticJsonDecodeBuilder[LimitIfUnlimited], implicitly)
+      .singleton("remove_trivial_joins", RemoveTrivialJoins)
+
+  implicit val jCodec = passBuilder(AnyPass.codecBase[Pass]).build
 
   implicit object serialize extends Readable[Pass] with Writable[Pass] {
-    def readFrom(buffer: ReadBuffer): Pass =
-      buffer.read[Int]() match {
+    private[rewrite] def readTaggedFrom(buffer: ReadBuffer, tag: Int): Pass =
+      tag match {
         case 0 => InlineTrivialParameters
         case 1 => PreserveOrdering
         case 2 => RemoveTrivialSelects
@@ -58,6 +98,9 @@ object Pass {
         case 12 => RemoveTrivialJoins
         case other => fail(s"Unknown rewrite pass type $other")
       }
+
+    def readFrom(buffer: ReadBuffer): Pass =
+      readTaggedFrom(buffer, buffer.read[Int]())
 
     def writeTo(buffer: WriteBuffer, rp: Pass): Unit = {
       rp match {
@@ -88,3 +131,33 @@ object Pass {
   }
 }
 
+object DangerousPass {
+  case object PreserveOrderingWithColumns extends DangerousPass
+
+  private[rewrite] def passBuilder[T >: DangerousPass <: AnyRef](builder: SimpleHierarchyCodecBuilder[T]): SimpleHierarchyCodecBuilder[T] =
+    builder
+      .singleton("preserve_ordering_with_columns", PreserveOrderingWithColumns)
+
+  implicit val jCodec = passBuilder(AnyPass.codecBase[DangerousPass]).build
+
+  implicit object serialize extends Readable[DangerousPass] with Writable[DangerousPass] {
+    private[rewrite] def readTaggedFrom(buffer: ReadBuffer, tag: Int): DangerousPass =
+      tag match {
+        // tag -1 is deliberately skipped; while I don't think we'll
+        // ever add a third (or fourth etc etc) category, keeping -1
+        // free leaves a compactly-represented hole which we can use
+        // for signalling those further categories later.
+        case -2 => PreserveOrderingWithColumns
+        case other => fail(s"Unknown dangerous rewrite pass type $other")
+      }
+
+    def readFrom(buffer: ReadBuffer): DangerousPass =
+      readTaggedFrom(buffer, buffer.read[Int]())
+
+    def writeTo(buffer: WriteBuffer, rp: DangerousPass): Unit = {
+      rp match {
+        case PreserveOrderingWithColumns => buffer.write(-2)
+      }
+    }
+  }
+}
