@@ -4,6 +4,8 @@ import com.socrata.soql.types._
 import com.socrata.soql.collection.CovariantSet
 
 object SoQLTypeClasses {
+  val AllTypes = CovariantSet.from(SoQLType.typesByName.values.toSet)
+
   val Ordered = CovariantSet[SoQLType](
     SoQLText,
     SoQLNumber,
@@ -37,4 +39,6 @@ object SoQLTypeClasses {
   val NumLike = CovariantSet[SoQLType](SoQLNumber, SoQLDouble, SoQLMoney)
   val RealNumLike = CovariantSet[SoQLType](SoQLNumber, SoQLDouble)
   val TimestampLike = CovariantSet[SoQLType](SoQLFixedTimestamp, SoQLFloatingTimestamp)
+
+  val Stringable = AllTypes -- Seq(SoQLID, SoQLVersion)
 }

@@ -14,8 +14,7 @@ sealed abstract class SoQLFunctions
 object SoQLFunctions {
   private val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLFunctions])
 
-  import SoQLTypeClasses.{Ordered, Equatable, NumLike, RealNumLike, GeospatialLike, TimestampLike, PointLike, LineLike, PolygonLike}
-  private val AllTypes = CovariantSet.from(SoQLType.typesByName.values.toSet)
+  import SoQLTypeClasses.{AllTypes, Ordered, Equatable, NumLike, RealNumLike, GeospatialLike, TimestampLike, PointLike, LineLike, PolygonLike, Stringable}
 
   val NoDocs = "No documentation available"
 
@@ -104,7 +103,7 @@ object SoQLFunctions {
     NoDocs
   ).hidden // Required by the old sqlizer (not a real function, requires a string literal); not necessary in the new-sqlizer
 
-  val Concat = f("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))(
+  val Concat = f("||", SpecialFunctions.Operator("||"), Map("a" -> Stringable, "b" -> Stringable), Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))(
     "Concatenate two strings", Example("Concatenate two strings", "'first' || 'second' as concat", ""), Example("Concatenate with columns", "col_a || 'second' as concat", "")
   )
   val Gte = f(">=", SpecialFunctions.Operator(">="), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))(
