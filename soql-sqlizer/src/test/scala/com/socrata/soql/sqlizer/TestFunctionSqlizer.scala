@@ -1,5 +1,7 @@
 package com.socrata.soql.sqlizer
 
+import com.socrata.prettyprint.prelude._
+
 import com.socrata.soql.functions.Function
 import com.socrata.soql.sqlizer.FuncallSqlizer
 
@@ -12,11 +14,17 @@ object TestFunctionSqlizer extends FuncallSqlizer[TestHelper.TestMT] {
     args.head.compressed
   }
 
+  def sqlizeExpandedFunction(f: FunctionCall, args: Seq[ExprSql], ctx: DynamicContext) = {
+    assert(args.isEmpty)
+    exprSqlFactory(Seq(Doc("\"column a\""), Doc("\"column b\"")), f)
+  }
+
   val ordinaryFunctionMap = Map[Function[CT], (FunctionCall, Seq[ExprSql], DynamicContext) => ExprSql](
     TestFunctions.Eq -> sqlizeEq _,
     TestFunctions.Plus -> sqlizeBinaryOp("+"),
     TestFunctions.Times -> sqlizeBinaryOp("*"),
-    TestFunctions.Compress -> compress
+    TestFunctions.Compress -> compress,
+    TestFunctions.NonTrivialFunctionWhichProducesAnExpandedCompoundValue -> sqlizeExpandedFunction
   )
 
   override def sqlizeOrdinaryFunction(e: FunctionCall, args: Seq[ExprSql], ctx: DynamicContext): ExprSql =
