@@ -87,6 +87,16 @@ trait TestHelper { this: Assertions =>
   val TestExprSqlFactory = TestHelper.TestExprSqlFactory
   val TestExtraContext = TestHelper.TestExtraContext
 
+  val TestRewritePassHelpers = new rewrite.RewritePassHelpers[TestMT] {
+    override val and = TestFunctions.And.monomorphic.get
+    override def isLiteralTrue(e: Expr) =
+      e match {
+        case LiteralValue(TestBoolean(true)) => true
+        case _ => false
+      }
+    override def isOrderable(t: TestType) = true
+  }
+
   val sqlizer = TestHelper.TestSqlizer
   val analyzer = new SoQLAnalyzer[TestMT](TestTypeInfo, TestFunctionInfo, TestProvenanceMapper)
 

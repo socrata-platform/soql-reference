@@ -56,6 +56,8 @@ object TestFunctions {
 
   val Avg = mf("avg", FunctionName("avg"), Seq(TestNumber), Nil, TestNumber, FunctionType.Aggregate)
 
+  val NonTrivialFunctionWhichProducesAnExpandedCompoundValue = mf("expanded_compound", FunctionName("expanded_compound"), Nil, Nil, TestCompound)
+
   val castIdentitiesByType = OrderedMap() ++ TestType.typesByName.iterator.map { case (n, t) =>
     t -> mf(n.caseFolded + "::" + n.caseFolded, SpecialFunctions.Cast(n), Seq(t), Seq.empty, t)
   }

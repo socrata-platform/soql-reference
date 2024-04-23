@@ -12,7 +12,7 @@ import com.socrata.soql.analyzer2.mocktablefinder._
 import com.socrata.soql.sqlizer._
 
 class SqlizerTest extends FunSuite with MustMatchers with TestHelper with SqlizerUniverse[TestHelper.TestMT] {
-  def analyze(tf: TableFinder[TestMT], soql: String): Doc = {
+  def analyze(tf: TableFinder[TestMT], soql: String, passes: Seq[rewrite.AnyPass] = Nil): Doc = {
     val ft =
       tf.findTables(0, soql, Map.empty) match {
         case Right(ft) => ft
@@ -21,7 +21,7 @@ class SqlizerTest extends FunSuite with MustMatchers with TestHelper with Sqlize
 
     val analysis =
       analyzer(ft, UserParameters.empty) match {
-        case Right(an) => an
+        case Right(an) => an.applyPasses(passes, TestRewritePassHelpers)
         case Left(err) => fail("Bad query: " + err)
       }
 
@@ -296,5 +296,14 @@ class SqlizerTest extends FunSuite with MustMatchers with TestHelper with Sqlize
     val soql = "select 1, 2 from @single_row"
     val sqlish = analyze(tf, soql).layoutSingleLine.toString
     sqlish must equal ("SELECT 1.0 :: numeric AS i1, 2.0 :: numeric AS i2")
+  }
+
+  test("order by a selected function call which produces a non-compressed compound column") {
+    val tf = tableFinder()
+    val soql = "select expanded_compound() as ec from @single_row order by ec"
+    val sqlish = analyze(tf, soql, Seq(rewrite.Pass.UseSelectListReferences)).layoutSingleLine.toString
+
+    // and in particular _not_ "select "c a", "c b" order by compress(1, 2)"...
+    sqlish must equal ("""SELECT "column a" AS i1_a, "column b" AS i1_b ORDER BY test_soql_compress_compound("column a", "column b") ASC NULLS LAST""")
   }
 }

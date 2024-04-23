@@ -40,8 +40,21 @@ class ExprSqlizer[MT <: MetaTypes with MetaTypesExt](
       } else {
         // We'll compress into a json array it because we don't want
         // ORDER BY's null positioning to be inconsistent depending on
-        // whether or not it's expanded
-        OrderBySql(expr.compressed, ascending = ascending, nullLast = nullLast)
+        // whether or not it's expanded.
+        //
+        // One wrinkle here: if expr is an expanded compound column
+        // which has been replaced with a select-list reference, we'll
+        // have to undo that replacement because we can't generate
+        //    compress(1, 2)
+        // and have it work.
+        val effectiveExpr =
+          (expr, expr.expr) match {
+            case (expanded: ExprSql.Expanded[MT], ser: SelectListReference) =>
+              selectListIndices(ser.index - 1).exprSql
+            case (other, _) =>
+              other
+          }
+        OrderBySql(effectiveExpr.compressed, ascending = ascending, nullLast = nullLast)
       }
     }
 
