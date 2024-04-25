@@ -121,8 +121,7 @@ class TestRepProvider(
       override def physicalColumnCount = 2
 
       override def physicalDatabaseColumns(name: ColumnLabel) = {
-        val base = namespace.columnBase(name)
-        Seq(base ++ d"_a", base ++ d"_b")
+        Seq(namespace.columnName(name, "a"), namespace.columnName(name, "b"))
       }
 
       override def physicalDatabaseTypes = Seq(d"text", d"numeric")
@@ -139,7 +138,7 @@ class TestRepProvider(
       override def compressedDatabaseType = d"jsonb"
 
       override def compressedDatabaseColumn(name: ColumnLabel) =
-        namespace.columnBase(name)
+        namespace.columnName(name)
 
       override def literal(e: LiteralValue) = {
         val cmp@TestCompound(_, _) = e.value

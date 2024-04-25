@@ -131,7 +131,7 @@ object Rep {
 
       override def compressedDatabaseType = sqlType
 
-      override def compressedDatabaseColumn(name: ColumnLabel) = namespace.columnBase(name)
+      override def compressedDatabaseColumn(name: ColumnLabel) = namespace.columnName(name)
 
       override def compressedSubColumns(table: String, column: ColumnLabel) =
         Seq(Doc(table) ++ d"." ++ compressedDatabaseColumn(column))
@@ -201,12 +201,12 @@ object Rep {
       final override def expandedDatabaseTypes = d"text" +: physicalDatabaseTypes
 
       final override def physicalDatabaseColumns(name: ColumnLabel) =
-        Seq(namespace.columnBase(name))
+        Seq(namespace.columnName(name))
       final override def expandedDatabaseColumns(name: ColumnLabel) =
-        (namespace.columnBase(name) ++ d"_provenance") +: physicalDatabaseColumns(name)
+        (namespace.columnName(name, "provenance")) +: physicalDatabaseColumns(name)
 
       override def compressedDatabaseColumn(name: ColumnLabel) =
-        namespace.columnBase(name)
+        namespace.columnName(name)
 
       override def physicalColumnRef(col: PhysicalColumn) = {
         val dsTable = namespace.tableLabel(col.table)

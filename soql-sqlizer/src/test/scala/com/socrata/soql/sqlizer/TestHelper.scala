@@ -54,9 +54,14 @@ object TestHelper {
       name
     }
 
-    override def rawDatabaseColumnBase(dcn: DatabaseColumnName) = {
+    override def rawDatabaseColumnName(dcn: DatabaseColumnName) = {
       val DatabaseColumnName(name) = dcn
       name
+    }
+
+    override def rawDatabaseColumnName(dcn: DatabaseColumnName, suffix: String) = {
+      val DatabaseColumnName(name) = dcn
+      name + "_" + suffix
     }
 
     override def gensymPrefix: String = "g"
