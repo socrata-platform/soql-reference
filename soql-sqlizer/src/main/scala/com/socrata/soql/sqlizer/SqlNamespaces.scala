@@ -22,22 +22,23 @@ trait SqlNamespaces[MT <: MetaTypes] extends LabelUniverse[MT] {
   def rawColumn(label: ColumnLabel): String =
     label match {
       case dcn: DatabaseColumnName => rawDatabaseColumnName(dcn)
-      case acl: AutoColumnLabel => rawAutoColumn(acl)
+      case acl: AutoColumnLabel => rawAutoColumnName(acl)
     }
 
   def rawColumn(label: ColumnLabel, suffix: String): String =
     label match {
       case dcn: DatabaseColumnName => rawDatabaseColumnName(dcn, suffix)
-      case acl: AutoColumnLabel => rawAutoColumn(acl, suffix)
+      case acl: AutoColumnLabel => rawAutoColumnName(acl, suffix)
     }
 
   def databaseTableName(dtn: DatabaseTableName): Doc[Nothing] = Doc(rawDatabaseTableName(dtn))
   def databaseColumn(dcn: DatabaseColumnName): Doc[Nothing] = Doc(rawDatabaseColumnName(dcn))
   def databaseColumn(dcn: DatabaseColumnName, suffix: String): Doc[Nothing] = Doc(rawDatabaseColumnName(dcn, suffix))
-  def autoColumn(acl: AutoColumnLabel, suffix: String = ""): Doc[Nothing] = Doc(rawAutoColumn(acl, suffix))
+  def autoColumnName(acl: AutoColumnLabel): Doc[Nothing] = Doc(rawAutoColumnName(acl))
+  def autoColumnName(acl: AutoColumnLabel, suffix: String): Doc[Nothing] = Doc(rawAutoColumnName(acl, suffix))
 
-  def rawAutoColumn(acl: AutoColumnLabel): String = s"$autoColumnPrefix${acl.name}"
-  def rawAutoColumn(acl: AutoColumnLabel, suffix: String): String = s"$autoColumnPrefix${acl.name}_$suffix"
+  def rawAutoColumnName(acl: AutoColumnLabel): String = s"$autoColumnPrefix${acl.name}"
+  def rawAutoColumnName(acl: AutoColumnLabel, suffix: String): String = s"$autoColumnPrefix${acl.name}_$suffix"
 
   def indexName(dtn: DatabaseTableName, col: ColumnLabel): Doc[Nothing] =
     Doc(rawIndexName(dtn, col))
