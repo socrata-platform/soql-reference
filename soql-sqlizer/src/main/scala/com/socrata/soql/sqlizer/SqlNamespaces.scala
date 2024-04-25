@@ -13,26 +13,37 @@ trait SqlNamespaces[MT <: MetaTypes] extends LabelUniverse[MT] {
   // that is guaranteed to not conflict with any real column.
   // Otherwise it returns the (base of) the physical column(s) which
   // make up that logical column.
-  def columnBase(label: ColumnLabel): Doc[Nothing] =
-    Doc(rawColumnBase(label))
+  def columnName(label: ColumnLabel): Doc[Nothing] =
+    Doc(rawColumn(label))
 
-  def rawColumnBase(label: ColumnLabel): String =
+  def columnName(label: ColumnLabel, suffix: String): Doc[Nothing] =
+    Doc(rawColumn(label, suffix))
+
+  def rawColumn(label: ColumnLabel): String =
     label match {
-      case dcn: DatabaseColumnName => rawDatabaseColumnBase(dcn)
-      case acl: AutoColumnLabel => rawAutoColumnBase(acl)
+      case dcn: DatabaseColumnName => rawDatabaseColumnName(dcn)
+      case acl: AutoColumnLabel => rawAutoColumn(acl)
+    }
+
+  def rawColumn(label: ColumnLabel, suffix: String): String =
+    label match {
+      case dcn: DatabaseColumnName => rawDatabaseColumnName(dcn, suffix)
+      case acl: AutoColumnLabel => rawAutoColumn(acl, suffix)
     }
 
   def databaseTableName(dtn: DatabaseTableName): Doc[Nothing] = Doc(rawDatabaseTableName(dtn))
-  def databaseColumnBase(dcn: DatabaseColumnName): Doc[Nothing] = Doc(rawDatabaseColumnBase(dcn))
-  def autoColumnBase(acl: AutoColumnLabel): Doc[Nothing] = Doc(rawAutoColumnBase(acl))
+  def databaseColumn(dcn: DatabaseColumnName): Doc[Nothing] = Doc(rawDatabaseColumnName(dcn))
+  def databaseColumn(dcn: DatabaseColumnName, suffix: String): Doc[Nothing] = Doc(rawDatabaseColumnName(dcn, suffix))
+  def autoColumn(acl: AutoColumnLabel, suffix: String = ""): Doc[Nothing] = Doc(rawAutoColumn(acl, suffix))
 
-  def rawAutoColumnBase(acl: AutoColumnLabel): String = s"$autoColumnPrefix${acl.name}"
+  def rawAutoColumn(acl: AutoColumnLabel): String = s"$autoColumnPrefix${acl.name}"
+  def rawAutoColumn(acl: AutoColumnLabel, suffix: String): String = s"$autoColumnPrefix${acl.name}_$suffix"
 
   def indexName(dtn: DatabaseTableName, col: ColumnLabel): Doc[Nothing] =
     Doc(rawIndexName(dtn, col))
 
   def rawIndexName(dtn: DatabaseTableName, col: ColumnLabel): String =
-    idxPrefix + "_" + rawDatabaseTableName(dtn) + "_" + rawColumnBase(col)
+    idxPrefix + "_" + rawDatabaseTableName(dtn) + "_" + rawColumn(col, "")
 
   def indexName(dtn: DatabaseTableName, col: ColumnLabel, subcol: String): Doc[Nothing] =
     Doc(rawIndexName(dtn, col, subcol))
@@ -47,6 +58,9 @@ trait SqlNamespaces[MT <: MetaTypes] extends LabelUniverse[MT] {
   protected def autoColumnPrefix: String
 
   def rawDatabaseTableName(dtn: DatabaseTableName): String
-  def rawDatabaseColumnBase(dcn: DatabaseColumnName): String
+  def rawDatabaseColumnName(dcn: DatabaseColumnName): String
+  // This should create a name which is the moral equivalent of
+  //   rawDatabaseColumnName(dcn) + "_" + suffix
+  def rawDatabaseColumnName(dcn: DatabaseColumnName, suffix: String): String
   def gensymPrefix: String
 }
