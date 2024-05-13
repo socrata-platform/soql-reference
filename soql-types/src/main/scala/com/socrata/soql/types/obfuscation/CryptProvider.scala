@@ -5,8 +5,9 @@ import java.security.SecureRandom
 import org.bouncycastle.crypto.params.KeyParameter
 import org.bouncycastle.crypto.engines.BlowfishEngine
 
-class CryptProvider(key: Array[Byte]) {
-  private val keyParam = new KeyParameter(key)
+class CryptProvider(keyMaterial: Array[Byte]) {
+  def key = java.util.Arrays.copyOf(keyMaterial, keyMaterial.length)
+  private val keyParam = new KeyParameter(keyMaterial)
 
   lazy val encryptor = locally {
     val bf = new BlowfishEngine

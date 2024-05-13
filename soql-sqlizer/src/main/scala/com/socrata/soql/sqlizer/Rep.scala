@@ -40,6 +40,12 @@ trait Rep[MT <: MetaTypes with MetaTypesExt] extends ExpressionUniverse[MT] {
   def nullLiteral(e: NullLiteral): ExprSql[MT]
   def literal(value: LiteralValue): ExprSql[MT] // type of literal will be appropriate for this rep
 
+  // Wrap a sqlized expression in whatever is required to turn it into
+  // a human-friendly form in a "default" way (e.g., for cast-to-text
+  // or being passed to `||`).  Returns `None` if this type cannot be
+  // cast to text on this database.
+  def convertToText(e: ExprSql[MT]): Option[ExprSql[MT]]
+
   // "physical" vs "expanded" because of providenced columns; for most
   // column types these will be the same, but provedenced columns add
   // one synthetic column to the "expanded" representation.  MOST USER

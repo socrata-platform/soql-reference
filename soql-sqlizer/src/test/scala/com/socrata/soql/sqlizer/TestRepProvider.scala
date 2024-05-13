@@ -36,6 +36,8 @@ class TestRepProvider(
         Set(rawId.provenance)
       }
 
+      override def convertToText(e: ExprSql) = None
+
       override def literal(e: LiteralValue) = {
         val rawId = e.value.asInstanceOf[TestID]
 
@@ -77,6 +79,8 @@ class TestRepProvider(
         exprSqlFactory(mkTextLiteral(s), e)
       }
 
+      override def convertToText(e: ExprSql) = Some(e)
+
       override protected def doExtractFrom(rs: ResultSet, dbCol: Int): CV = {
         ???
       }
@@ -89,6 +93,11 @@ class TestRepProvider(
       override def literal(e: LiteralValue) = {
         val TestNumber(n) = e.value
         exprSqlFactory(Doc(n.toString) +#+ d"::" +#+ sqlType, e)
+      }
+
+      override def convertToText(e: ExprSql) = {
+        val converted = d"(" ++ e.compressed.sql ++ d") :: text"
+        Some(exprSqlFactory(converted, e.expr))
       }
 
       override protected def doExtractFrom(rs: ResultSet, dbCol: Int): CV = {
@@ -105,6 +114,8 @@ class TestRepProvider(
         exprSqlFactory(if(b) d"true" else d"false", e)
       }
 
+      override def convertToText(e: ExprSql) = None
+
       override protected def doExtractFrom(rs: ResultSet, dbCol: Int): CV = {
         ???
       }
@@ -117,6 +128,8 @@ class TestRepProvider(
     TestCompound -> new CompoundColumnRep(TestCompound) {
       override def nullLiteral(e: NullLiteral) =
         exprSqlFactory(Seq(d"null :: text", d"null :: numeric"), e)
+
+      override def convertToText(e: ExprSql) = None
 
       override def physicalColumnCount = 2
 
