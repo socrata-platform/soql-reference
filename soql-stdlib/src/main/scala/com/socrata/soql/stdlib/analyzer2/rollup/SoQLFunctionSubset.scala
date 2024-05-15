@@ -17,6 +17,7 @@ class SoQLFunctionSubset[MT <: MetaTypes with ({type ColumnType = SoQLType; type
       (FixedTimeStampZTruncY, FixedTimeStampZTruncYmd),
       (FixedTimeStampZTruncYm, FixedTimeStampZTruncYmd),
       (FixedTimeStampZTruncY, FixedTimeStampZTruncYm),
+      (DateTruncY, DateTruncYm),
     ).map { case (a, b) =>
         (a.monomorphic.get.function.identity, b.monomorphic.get.function.identity) -> a.monomorphic.get
     }.toMap
