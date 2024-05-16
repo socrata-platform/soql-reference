@@ -662,7 +662,7 @@ case class SoQLDate(value: LocalDate) extends SoQLValue {
     buffer.write(typ.StringRep(value))
   }
 }
-case object SoQLDate extends SoQLType("date") with NonObfuscatedType {
+case object SoQLDate extends SoQLType("datestamp") with NonObfuscatedType {
   type Self = SoQLDate
 
   val cjsonRep: CJsonRep[SoQLDate, SoQLValue] = new SoQLValueCJsonRep[SoQLDate] {
