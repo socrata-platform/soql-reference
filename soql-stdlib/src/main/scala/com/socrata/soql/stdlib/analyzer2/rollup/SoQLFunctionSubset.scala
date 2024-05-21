@@ -11,12 +11,44 @@ class SoQLFunctionSubset[MT <: MetaTypes with ({type ColumnType = SoQLType; type
   private val monomorphicMap = locally {
     import SoQLFunctions._
     Seq(
-      (FloatingTimeStampTruncY, FloatingTimeStampTruncYmd),
+      // out of a YMD timestamp truncation, we can further truncate
       (FloatingTimeStampTruncYm, FloatingTimeStampTruncYmd),
+      (FloatingTimeStampTruncY, FloatingTimeStampTruncYmd),
+      // .. or extract one of the date-related fields
+      (FloatingTimestampDateField, FloatingTimeStampTruncYmd),
+      (FloatingTimestampYearField, FloatingTimeStampTruncYmd),
+      (FloatingTimeStampExtractY, FloatingTimeStampTruncYmd),
+      (FloatingTimestampMonthField, FloatingTimeStampTruncYmd),
+      (FloatingTimeStampExtractM, FloatingTimeStampTruncYmd),
+      (FloatingTimestampDayField, FloatingTimeStampTruncYmd),
+      (FloatingTimeStampExtractD, FloatingTimeStampTruncYmd),
+      (FloatingTimestampDayOfWeekField, FloatingTimeStampTruncYmd),
+      (FloatingTimeStampExtractDow, FloatingTimeStampTruncYmd),
+      (FloatingTimestampWeekOfYearField, FloatingTimeStampTruncYmd),
+      (FloatingTimeStampExtractWoy, FloatingTimeStampTruncYmd),
+      (FloatingTimestampIsoYearField, FloatingTimeStampTruncYmd),
+      (FloatingTimestampExtractIsoY, FloatingTimeStampTruncYmd),
+      // out of a YM timestamp truncation, we can further truncate
       (FloatingTimeStampTruncY, FloatingTimeStampTruncYm),
+      // .. or extract one of the fields
+      (FloatingTimestampYearField, FloatingTimeStampTruncYm),
+      (FloatingTimeStampExtractY, FloatingTimeStampTruncYmd),
+      (FloatingTimestampMonthField, FloatingTimeStampTruncYm),
+      (FloatingTimeStampExtractM, FloatingTimeStampTruncYmd),
+      // Out of a Y timestamp truncation, we can extract the year field
+      (FloatingTimestampYearField, FloatingTimeStampTruncY),
+      (FloatingTimeStampExtractY, FloatingTimeStampTruncYmd),
+      // Out of a YM date truncation, we can further truncate
+      (DateTruncY, DateTruncYm),
+      // ... or extract one of the fields
+      (DateYearField, DateTruncYm),
+      (DateMonthField, DateTruncYm),
+      // Out of a Y date truncation, we ca extract the year field
+      (DateYearField, DateTruncY),
+      // datez_trunc functions return _fixed_ timestamps...
       (FixedTimeStampZTruncY, FixedTimeStampZTruncYmd),
       (FixedTimeStampZTruncYm, FixedTimeStampZTruncYmd),
-      (FixedTimeStampZTruncY, FixedTimeStampZTruncYm),
+      (FixedTimeStampZTruncY, FixedTimeStampZTruncYm)
     ).map { case (a, b) =>
         (a.monomorphic.get.function.identity, b.monomorphic.get.function.identity) -> a.monomorphic.get
     }.toMap

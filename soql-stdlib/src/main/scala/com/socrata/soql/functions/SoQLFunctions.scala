@@ -612,6 +612,66 @@ object SoQLFunctions {
   val FloatingTimeStampTruncY = mf("floating timestamp trunc year", FunctionName("date_trunc_y"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLFloatingTimestamp)(
     "Truncate a date at the year threshold"
   )
+  val DateTruncYm = mf("date trunc month", FunctionName("date_trunc_ym"), Seq(SoQLDate), Seq.empty, SoQLDate)(
+    "Truncate a date at the year/month threshold"
+  )
+  val DateTruncY = mf("date trunc year", FunctionName("date_trunc_y"), Seq(SoQLDate), Seq.empty, SoQLDate)(
+    "Truncate a date at the year threshold"
+  )
+
+  val FloatingTimestampYearField = field(SoQLFloatingTimestamp, "year", SoQLNumber)
+  val FloatingTimestampMonthField = field(SoQLFloatingTimestamp, "month", SoQLNumber)
+  val FloatingTimestampDayField = field(SoQLFloatingTimestamp, "day", SoQLNumber)
+  val FloatingTimestampDayOfWeekField = field(SoQLFloatingTimestamp, "dow", SoQLNumber)
+  val FloatingTimestampWeekOfYearField = field(SoQLFloatingTimestamp, "woy", SoQLNumber)
+  val FloatingTimestampIsoYearField = field(SoQLFloatingTimestamp, "isoyear", SoQLNumber)
+  val DateYearField = field(SoQLDate, "year", SoQLNumber)
+  val DateMonthField = field(SoQLDate, "month", SoQLNumber)
+  val DateDayField = field(SoQLDate, "day", SoQLNumber)
+  val DateDayOfWeekField = field(SoQLDate, "dow", SoQLNumber)
+  val DateWeekOfYearField = field(SoQLDate, "woy", SoQLNumber)
+  val DateIsoYearField = field(SoQLDate, "isoyear", SoQLNumber)
+  val FloatingTimestampHourField = field(SoQLFloatingTimestamp, "hour", SoQLNumber)
+  val FloatingTimestampMinuteField = field(SoQLFloatingTimestamp, "minute", SoQLNumber)
+  val FloatingTimestampSecondField = field(SoQLFloatingTimestamp, "second", SoQLNumber)
+  val TimeHourField = field(SoQLTime, "hour", SoQLNumber)
+  val TimeMinuteField = field(SoQLTime, "minute", SoQLNumber)
+  val TimeSecondField = field(SoQLTime, "second", SoQLNumber)
+  val FloatingTimestampDateField = field(SoQLFloatingTimestamp, "date", SoQLDate)
+  val FloatingTimestampTimeField = field(SoQLFloatingTimestamp, "time", SoQLTime)
+
+  val DateTimeAdd = mf("date time add", SpecialFunctions.Operator("+"), Seq(SoQLDate, SoQLTime), Seq.empty, SoQLFloatingTimestamp)(
+    "Add a time to a date, producing a timestamp"
+  )
+  val TimeDateAdd = mf("time date add", SpecialFunctions.Operator("+"), Seq(SoQLTime, SoQLDate), Seq.empty, SoQLFloatingTimestamp)(
+    "Add a time to a date, producing a timestamp"
+  )
+
+  val TimeIntervalAdd = mf("time interval add", SpecialFunctions.Operator("+"), Seq(SoQLTime, SoQLInterval), Seq.empty, SoQLTime)(
+    "Add an interval to a time, producing a new time"
+  )
+  val IntervalTimeAdd = mf("interval time add", SpecialFunctions.Operator("+"), Seq(SoQLInterval, SoQLTime), Seq.empty, SoQLTime)(
+    "Add an interval to a time, producing a new time"
+  )
+  val TimeIntervalSub = mf("time interval sub", SpecialFunctions.Operator("-"), Seq(SoQLTime, SoQLInterval), Seq.empty, SoQLTime)(
+    "Subtract an interval from a time, producing a new time"
+  )
+  val TimeTimeSub = mf("time time sub", SpecialFunctions.Operator("+"), Seq(SoQLTime, SoQLTime), Seq.empty, SoQLInterval)(
+    "Subtract a time from a time, producing an interval"
+  )
+
+  val DateIntervalAdd = mf("date interval add", SpecialFunctions.Operator("+"), Seq(SoQLDate, SoQLInterval), Seq.empty, SoQLFloatingTimestamp)(
+    "Add an interval to a date, producing a new timestamp"
+  )
+  val IntervalDateAdd = mf("interval date add", SpecialFunctions.Operator("+"), Seq(SoQLInterval, SoQLDate), Seq.empty, SoQLFloatingTimestamp)(
+    "Add an interval to a date, producing a new timestamp"
+  )
+  val DateIntervalSub = mf("date interval sub", SpecialFunctions.Operator("-"), Seq(SoQLDate, SoQLInterval), Seq.empty, SoQLFloatingTimestamp)(
+    "Subtract an interval from a date, producing a new timestamp"
+  )
+  val DateDateSub = mf("date date sub", SpecialFunctions.Operator("-"), Seq(SoQLDate, SoQLDate), Seq.empty, SoQLNumber)(
+    "Subtract two dates, returning the difference in number of days"
+  )
 
   val FloatingTimeStampExtractY = mf("floating timestamp extract year", FunctionName("date_extract_y"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)(
     "Extract the year as an integer"
@@ -674,6 +734,11 @@ object SoQLFunctions {
     NoDocs
   )
 
+  // This does the same as subtracting two dates; it exists for symmetry with floating_timestamp
+  val DateDiffD = mf("date diff in days", FunctionName("date_diff_d"), Seq(SoQLDate, SoQLDate), Seq.empty, SoQLNumber)(
+    NoDocs
+  )
+
   val EpochSeconds = mf("epoch_seconds", FunctionName("epoch_seconds"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLNumber)(
     "Returns the number of seconds since the start of 1 January 1970 GMT.  Note that this includes millisecond precision"
   )
@@ -699,6 +764,22 @@ object SoQLFunctions {
     "Return the current date and time as a fixed timestamp displayed in Coordinated Universal Time (UTC+00:00).",
     Example("Get the current datetime (displayed as UTC+00:00)", "get_utc_date()", ""),
     Example("Get records of last month converted into US/Pacific time", "floating_date_column between date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'P1M' and date_trunc_ym(to_floating_timestamp(get_utc_date(), 'US/Pacific')) - 'PT1S'", "")
+  )
+
+  val FixedTimestampToText = mf("fixed timestamp to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLFixedTimestamp), Seq.empty, SoQLText)(
+    "Convert a fixed_timestamp to an ISO8601 string"
+  )
+  val FloatingTimestampToText = mf("floating timestamp to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLText)(
+    "Convert a floating_timestamp to an ISO8601 string"
+  )
+  val DateToText = mf("date to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLDate), Seq.empty, SoQLText)(
+    "Convert a date to an ISO8601 string"
+  )
+  val TimeToText = mf("time to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLTime), Seq.empty, SoQLText)(
+    "Convert a date to an ISO8601 string"
+  )
+  val IntervalToText = mf("interval to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLInterval), Seq.empty, SoQLText)(
+    "Convert an inteval to an ISO8601 string"
   )
 
   val castIdentitiesByType = OrderedMap() ++ SoQLType.typesByName.iterator.map { case (n, t) =>
@@ -836,6 +917,13 @@ object SoQLFunctions {
   val TextToRowVersion = mf("text to rowver", SpecialFunctions.Cast(SoQLVersion.name), Seq(SoQLText), Seq.empty, SoQLVersion)(
     NoDocs
   ).hidden // required by the old-sqlizer (not a real function, requires a string literal); not necessary in the new
+
+  val RowIdentifierToText = mf("rid to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLID), Seq.empty, SoQLText)(
+    NoDocs
+  ).hidden
+  val RowVersionToText = mf("rowver to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLVersion), Seq.empty, SoQLText)(
+    NoDocs
+  ).hidden
 
   val Iif = f("iif", FunctionName("iif"), Map.empty,
     Seq(FixedType(SoQLBoolean), VariableType("a"), VariableType("a")),
