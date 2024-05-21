@@ -52,7 +52,7 @@ trait SoQLRollupTestHelper extends FunSuite with MustMatchers with StatementUniv
       override def toProvenance(dtn: DatabaseTableName) = Provenance(dtn.name)
     })
 
-  val rewriter = new SoQLRollupExact[MT](Stringifier.simple)
+  val rollupExact = new SoQLRollupExact[MT](Stringifier.simple)
 
   class SoQLRollupInfo(
     val id: Int,

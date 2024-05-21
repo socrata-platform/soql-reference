@@ -511,11 +511,15 @@ class RollupExact[MT <: MetaTypes](
     }
 
     val groupBySubset =
-      select.groupBy.forall { sGroupBy =>
-        candidate.groupBy.exists { cGroupBy =>
-          sGroupBy.isIsomorphic(cGroupBy, rewriteInTerms.isoState)
-        } || candidate.groupBy.exists { cGroupBy =>
-          functionSubset(sGroupBy, cGroupBy, rewriteInTerms.isoState).isDefined
+      select.groupBy.iterator.map { e =>
+        e +: adHocRewriter(e)
+      }.forall { sGroupByPossibilities =>
+        sGroupByPossibilities.exists { sGroupBy =>
+          candidate.groupBy.exists { cGroupBy =>
+            sGroupBy.isIsomorphic(cGroupBy, rewriteInTerms.isoState)
+          } || candidate.groupBy.exists { cGroupBy =>
+            functionSubset(sGroupBy, cGroupBy, rewriteInTerms.isoState).isDefined
+          }
         }
       }
     if(!groupBySubset) {
