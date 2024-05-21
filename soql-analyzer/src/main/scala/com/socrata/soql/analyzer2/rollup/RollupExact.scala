@@ -819,7 +819,7 @@ class RollupExact[MT <: MetaTypes](
           functionSubset(sExpr, ne.expr, isoState).map((label, ne, _))
         }
       ) match {
-        case Some((selectedColumn, NamedExpr(rollupExpr@AggregateFunctionCall(func, args, false, None), _name, _hint, _isSynthetic), functionExtract)) if rollupContext.isCoarseningGroup =>
+        case Some((selectedColumn, rollupExpr@NamedExpr(AggregateFunctionCall(func, args, false, None), _name, _hint, _isSynthetic), functionExtract)) if rollupContext.isCoarseningGroup =>
           assert(rollupExpr.typ == sExpr.typ)
           semigroupRewriter(func).map { merger =>
             functionExtract(merger(PhysicalColumn[MT](newFrom.label, newFrom.tableName, columnLabelMap(selectedColumn), rollupExpr.typ)(sExpr.position.asAtomic)))
@@ -830,9 +830,10 @@ class RollupExact[MT <: MetaTypes](
         case Some((selectedColumn, NamedExpr(_ : WindowedFunctionCall, _name, _hint, _isSynthetic), _)) if rollupContext.isCoarseningGroup =>
           log.debug("can't rewrite, windowed function call")
           None
-        case Some((selectedColumn, ne, functionExtract)) =>
-          assert(ne.expr.typ == sExpr.typ)
-          Some(functionExtract(PhysicalColumn[MT](newFrom.label, newFrom.tableName, columnLabelMap(selectedColumn), sExpr.typ)(sExpr.position.asAtomic)))
+        case Some((selectedColumn, rollupExpr, functionExtract)) =>
+          val result = functionExtract(PhysicalColumn[MT](newFrom.label, newFrom.tableName, columnLabelMap(selectedColumn), rollupExpr.typ)(sExpr.position.asAtomic))
+          assert(result.typ == sExpr.typ)
+          Some(result)
         case None =>
           sExpr match {
             case lit: LiteralValue => Some(lit)

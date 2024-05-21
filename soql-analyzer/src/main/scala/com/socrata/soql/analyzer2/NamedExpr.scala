@@ -11,6 +11,8 @@ case class NamedExpr[MT <: MetaTypes](expr: Expr[MT], name: ColumnName, hint: Op
 
   private[analyzer2] def doRelabel(state: RelabelState) =
     copy(expr = expr.doRelabel(state))
+
+  def typ = expr.typ
 }
 
 object NamedExpr {
