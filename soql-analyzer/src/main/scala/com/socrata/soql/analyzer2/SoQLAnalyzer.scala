@@ -28,6 +28,43 @@ object SoQLAnalyzer {
   private val SingleRow = ResourceName("single_row")
 
   private val SpecialNames = Set(This, SingleRow)
+
+  // This is public and static because it's sometimes useful for other
+  // code to do alias-analysis.
+  def buildAliasAnalysisContext[MT <: MetaTypes](from: From[MT]): AliasAnalysis.AnalysisContext = {
+    def contextFrom(af: AtomicFrom[MT]): UntypedDatasetContext =
+      af match {
+        case _: FromSingleRow[MT] => new UntypedDatasetContext {
+          val columns = OrderedSet.empty
+        }
+        case t: FromTable[MT] => new UntypedDatasetContext {
+          val columns = OrderedSet() ++ t.columns.valuesIterator.map(_.name)
+        }
+        case s: FromStatement[MT] => new UntypedDatasetContext {
+          val columns = OrderedSet() ++ s.statement.schema.valuesIterator.map(_.name)
+        }
+      }
+
+    def augmentAcc(acc: Map[AliasAnalysis.Qualifier, UntypedDatasetContext], from: AtomicFrom[MT]) = {
+      from.alias match {
+        case None =>
+          acc + (TableName.PrimaryTable.qualifier -> contextFrom(from))
+        case Some(alias) =>
+          val acc1 =
+            if(acc.isEmpty) {
+              acc + (TableName.PrimaryTable.qualifier -> contextFrom(from))
+            } else {
+              acc
+            }
+          acc1 + (TableName.SodaFountainPrefix + alias.name -> contextFrom(from))
+      }
+    }
+
+    from.reduce[Map[AliasAnalysis.Qualifier, UntypedDatasetContext]](
+      augmentAcc(Map.empty, _),
+      { (acc, j) => augmentAcc(acc, j.right) }
+    )
+  }
 }
 
 class SoQLAnalyzer[MT <: MetaTypes] private (
@@ -584,7 +621,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       // Now that we know what we're selecting from, we'll give names to the selection...
       val aliasAnalysis =
         try {
-          AliasAnalysis(selection, from)(collectNamesForAnalysis(completeFrom))
+          AliasAnalysis(selection, from)(SoQLAnalyzer.buildAliasAnalysisContext(completeFrom))
         } catch {
           case e: AliasAnalysisException =>
             ctx.augmentAliasAnalysisException(e)
@@ -758,41 +795,6 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             FromStatement(filteredStmt, labelProvider.tableLabel(), None, None)
         }
       }
-    }
-
-    def collectNamesForAnalysis(from: From): AliasAnalysis.AnalysisContext = {
-      def contextFrom(af: AtomicFrom): UntypedDatasetContext =
-        af match {
-          case _: FromSingleRow => new UntypedDatasetContext {
-            val columns = OrderedSet.empty
-          }
-          case t: FromTable => new UntypedDatasetContext {
-            val columns = OrderedSet() ++ t.columns.valuesIterator.map(_.name)
-          }
-          case s: FromStatement => new UntypedDatasetContext {
-            val columns = OrderedSet() ++ s.statement.schema.valuesIterator.map(_.name)
-          }
-        }
-
-      def augmentAcc(acc: Map[AliasAnalysis.Qualifier, UntypedDatasetContext], from: AtomicFrom) = {
-        from.alias match {
-          case None =>
-            acc + (TableName.PrimaryTable.qualifier -> contextFrom(from))
-          case Some(alias) =>
-            val acc1 =
-              if(acc.isEmpty) {
-                acc + (TableName.PrimaryTable.qualifier -> contextFrom(from))
-              } else {
-                acc
-              }
-            acc1 + (TableName.SodaFountainPrefix + alias.name -> contextFrom(from))
-        }
-      }
-
-      from.reduce[Map[AliasAnalysis.Qualifier, UntypedDatasetContext]](
-        augmentAcc(Map.empty, _),
-        { (acc, j) => augmentAcc(acc, j.right) }
-      )
     }
 
     def queryInputSchema(ctx: Ctx, input: ImplicitFrom, from: Option[TableName], joins: Seq[ast.Join]): From = {
