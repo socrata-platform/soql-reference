@@ -466,38 +466,63 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             )
           analyzeStatement(ctx, right, ImplicitFrom.Required(analyzedLeft))
         case other: TrueOp[ast.Select] =>
-          val subCtx =
-            Ctx(
-              scope = ctx.scope,
-              scopedResourceName = None,
-              canonicalName = None,
-              primaryTableName = ctx.primaryTableName,
-              enclosingEnv = ctx.enclosingEnv,
-              udfParams = ctx.udfParams,
-              hiddenColumns = ctx.hiddenColumns,
-              outputColumnHints = ctx.outputColumnHints,
-              attemptToPreserveSystemColumns = false
-            )
+          analyzeTableOp(ctx, other, from0)
+      }
+    }
 
-          val lhsFrom = from0.optionalize(left = true)
-          val lhs = intoStatement(analyzeStatement(subCtx, other.left, lhsFrom))
-          val rhsFrom = from0.optionalize(left = false)
-          val rhs = intoStatement(analyzeStatement(subCtx.copy(primaryTableName = primaryTableName(ctx.scope, other.right)), other.right, rhsFrom))
+    def analyzeTableOp(ctx: Ctx, op: TrueOp[ast.Select], from0: ImplicitFrom): FromStatement = {
+      val subCtx =
+        Ctx(
+          scope = ctx.scope,
+          scopedResourceName = None,
+          canonicalName = None,
+          primaryTableName = ctx.primaryTableName,
+          enclosingEnv = ctx.enclosingEnv,
+          udfParams = ctx.udfParams,
+          hiddenColumns = Set.empty,
+          outputColumnHints = ctx.outputColumnHints,
+          attemptToPreserveSystemColumns = false
+        )
 
-          if(from0.isInstanceOf[ImplicitFrom.Required] && !lhsFrom.forced && !rhsFrom.forced) {
-            /* TODO: NEED POS INFO FROM AST - and what is the right position for saying "no one of these table-func'd subselects used the input query? */
-            ctx.chainWithFrom(NoPosition)
-          }
+      val lhsFrom = from0.optionalize(left = true)
+      val lhs = intoStatement(analyzeStatement(subCtx, op.left, lhsFrom))
+      val rhsFrom = from0.optionalize(left = false)
+      val rhs = intoStatement(analyzeStatement(subCtx.copy(primaryTableName = primaryTableName(ctx.scope, op.right)), op.right, rhsFrom))
 
-          if(lhs.schema.values.map(_.typ) != rhs.schema.values.map(_.typ)) {
-            ctx.tableOpTypeMismatch(
-              OrderedMap() ++ lhs.schema.valuesIterator.map { case Statement.SchemaEntry(name, typ, _hint, _isSynthetic) => name -> typ },
-              OrderedMap() ++ rhs.schema.valuesIterator.map { case Statement.SchemaEntry(name, typ, _hint, _isSynthetic) => name -> typ },
-              NoPosition /* TODO: NEED POS INFO FROM AST */
-            )
-          }
+      if(from0.isInstanceOf[ImplicitFrom.Required] && !lhsFrom.forced && !rhsFrom.forced) {
+        /* TODO: NEED POS INFO FROM AST - and what is the right position for saying "no one of these table-func'd subselects used the input query? */
+        ctx.chainWithFrom(NoPosition)
+      }
 
-          FromStatement(CombinedTables(opify(other), lhs, rhs), labelProvider.tableLabel(), ctx.scopedResourceName, None)
+      if(lhs.schema.values.map(_.typ) != rhs.schema.values.map(_.typ)) {
+        ctx.tableOpTypeMismatch(
+          OrderedMap() ++ lhs.schema.valuesIterator.map { case Statement.SchemaEntry(name, typ, _hint, _isSynthetic) => name -> typ },
+          OrderedMap() ++ rhs.schema.valuesIterator.map { case Statement.SchemaEntry(name, typ, _hint, _isSynthetic) => name -> typ },
+          NoPosition /* TODO: NEED POS INFO FROM AST */
+        )
+      }
+
+      val combined = CombinedTables(opify(op), lhs, rhs)
+      val fromCombined = FromStatement(combined, labelProvider.tableLabel(), ctx.scopedResourceName, None)
+      if(ctx.hiddenColumns.isEmpty) {
+        fromCombined
+      } else {
+        // need to remove hidden columns
+        val filteredStmt =
+          Select(
+            Distinctiveness.Indistinct(),
+            OrderedMap() ++ combined.schema.flatMap { case (label, Statement.SchemaEntry(name, typ, hint, isSynthetic)) =>
+              if(ctx.hiddenColumns(name)) {
+                None
+              } else {
+                Some(labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](fromCombined.label, label, typ)(AtomicPositionInfo.Synthetic), name, hint, isSynthetic))
+              }
+            },
+            fromCombined,
+            None, Nil, None, Nil, None, None, None, Set.empty
+          )
+
+        FromStatement(filteredStmt, labelProvider.tableLabel(), None, None)
       }
     }
 

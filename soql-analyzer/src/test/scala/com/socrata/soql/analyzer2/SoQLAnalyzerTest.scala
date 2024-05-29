@@ -886,6 +886,24 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 
+  test("Hidden columns - union") {
+    val tf1 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
+      (0, "bbbb-bbbb") -> D("n3" -> TestNumber, "n4" -> TestNumber, "n5" -> TestNumber),
+      (0, "q") -> Q(0, "aaaa-aaaa", "(select n1, n2, n1 + n2) union (select n3, n4, n5 from @bbbb-bbbb)").withHiddenColumns("n2")
+    )
+    val analysis1 = analyzeSaved(tf1, "q")
+
+    val tf2 = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
+      (0, "bbbb-bbbb") -> D("n3" -> TestNumber, "n4" -> TestNumber, "n5" -> TestNumber),
+      (0, "q") -> Q(0, "aaaa-aaaa", "(select n1, n2, n1 + n2) union (select n3, n4, n5 from @bbbb-bbbb) |> select n1, n1_n2")
+    )
+    val analysis2 = analyzeSaved(tf2, "q")
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
   test("fully distinct requires selected order by") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
