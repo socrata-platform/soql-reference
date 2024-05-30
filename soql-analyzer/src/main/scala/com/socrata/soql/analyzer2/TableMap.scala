@@ -37,6 +37,24 @@ class TableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[
 
   type Self[MT <: MetaTypes] = TableMap[MT]
 
+  lazy val byDatabaseTableName: Map[DatabaseTableName, NonEmptySeq[ScopedResourceName]] = {
+    underlying.foldLeft(Map.empty[DatabaseTableName, NonEmptySeq[ScopedResourceName]]) { case (acc, (scope, items)) =>
+      items.foldLeft(acc) { case (acc, (resourceName, tableDescription)) =>
+        tableDescription match {
+          case ds: TableDescription.Dataset[MT] =>
+            val srn = ScopedResourceName(scope, resourceName)
+            val prepended = acc.get(ds.name) match {
+              case Some(existing) => existing.prepend(srn)
+              case None => NonEmptySeq(srn, Nil)
+            }
+            acc + (ds.name -> prepended)
+          case _ =>
+            acc
+        }
+      }
+    }
+  }
+
   def asUnparsedTableMap: UnparsedTableMap[MT] =
     new UnparsedTableMap(underlying.iterator.map { case (rns, m) =>
       rns -> m.iterator.map { case (rn, ptd) =>
