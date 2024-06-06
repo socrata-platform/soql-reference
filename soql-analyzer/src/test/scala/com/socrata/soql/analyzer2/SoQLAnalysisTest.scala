@@ -567,6 +567,28 @@ select b, n |> select n join @udf(b) as @udf on true
     analysis.imposeOrdering(testTypeInfo.isOrdered).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("impose ordering - inherited PK is not selected") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withPrimaryKey(":id")
+    )
+
+    val analysis = analyze(tf, "twocol", "select text, sum(num) group by text |> select sum_num").imposeOrdering(testTypeInfo.isOrdered)
+    val expectedAnalysis = analyze(tf, "twocol", "select text, sum(num) group by text |> select sum_num order by text")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - nested group by") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withPrimaryKey("id")
+    )
+
+    val analysis = analyze(tf, "twocol", "select sum(num) group by text |> select sum_num").imposeOrdering(testTypeInfo.isOrdered)
+    val expectedAnalysis = analyze(tf, "twocol", "select sum(num), text group by text |> select sum_num order by text")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
   test("impose ordering - partial distinct on") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)

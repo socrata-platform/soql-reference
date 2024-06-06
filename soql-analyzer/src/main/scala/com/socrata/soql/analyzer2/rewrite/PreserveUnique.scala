@@ -46,11 +46,21 @@ class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends 
             created
           }
 
-          val newFrom = rewriteFrom(from)
+          // pull up un-selected unique columns from the FROM clause
+          // if we're un-aggregated, otherwise pull up un-selected
+          // columns from our GROUP BY clause
+          val newFrom =
+            if(select.isAggregated) from
+            else rewriteFrom(from)
+
           if(wantColumns) {
             var existingExprs = selectList.valuesIterator.map(_.expr).to(Set)
-            val additional = Vector.newBuilder[Column]
-            for(col <- newFrom.unique.flatten) {
+            val additional = Vector.newBuilder[Expr]
+            val newColumnSource =
+              if(select.isAggregated) groupBy
+              else newFrom.unique.flatten
+
+            for(col <- newColumnSource) {
               if(!existingExprs(col)) {
                 existingExprs += col
                 additional += col
