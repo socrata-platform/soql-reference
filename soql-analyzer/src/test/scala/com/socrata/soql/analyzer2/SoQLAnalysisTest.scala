@@ -451,8 +451,21 @@ select b, n |> select n join @udf(b) as @udf on true
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
+    // the "+1" prevents the remove-unused-order-by from saying "hey,
+    // this subselect is now completely trivial, delete it."
+    val analysis = analyze(tf, "twocol", "select text, num+1 order by text |> select text, num_1 order by num_1")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num+1 |> select text, num_1 order by num_1")
+
+    analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("remove unused order by - remove subselects that become trivial") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
     val analysis = analyze(tf, "twocol", "select text, num order by text |> select text, num order by num")
-    val expectedAnalysis = analyze(tf, "twocol", "select text, num |> select text, num order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num order by num")
 
     analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -506,8 +519,10 @@ select b, n |> select n join @udf(b) as @udf on true
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
-    val analysis = analyze(tf, "twocol", "select text, num order by text |> select text, num order by num")
-    val expectedAnalysis = analyze(tf, "twocol", "select text, num |> select text, num order by num, text")
+    // the "+1" prevents the remove-unused-order-by from saying "hey,
+    // this subselect is now completely trivial, delete it."
+    val analysis = analyze(tf, "twocol", "select text, num+1 order by text |> select text, num_1 order by num_1")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num+1 |> select text, num_1 order by num_1, text")
 
     analysis.preserveOrdering.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
