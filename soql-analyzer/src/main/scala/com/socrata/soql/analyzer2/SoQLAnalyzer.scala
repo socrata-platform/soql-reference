@@ -904,7 +904,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         }
 
         val augmentedFrom = envify(ctx, left.extendEnvironment(ctx.enclosingEnv), NoPosition /* TODO: NEED POS INFO FROM AST */)
-        val effectiveLateral = join.lateral || join.from.isInstanceOf[ast.JoinFunc]
+        val effectiveLateral = join.lateral || requiresLateral(join)
         val checkedRight =
           if(effectiveLateral) {
             analyzeJoinSelect(ctx.copy(enclosingEnv = augmentedFrom), join.from)
@@ -923,6 +923,27 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         Join(joinType, effectiveLateral, left, checkedRight, checkedOn)
       }
     }
+
+    def requiresLateral(join: ast.Join): Boolean =
+      join.from match {
+        case ast.JoinFunc(_, params) => params.exists(containsColumnRef)
+        case _ => false
+      }
+
+    def containsColumnRef(expr: ast.Expression): Boolean =
+      expr match {
+        case _ : ast.ColumnOrAliasRef => true
+        case _ : ast.Literal => false
+        case _ : ast.Hole.UDF => true // `?x` - becomes a column ref
+        case _ : ast.Hole.SavedQuery => false // `param` call - becomes a literal
+        case ast.FunctionCall(_, params, filter, windowFunctionInfo) =>
+          params.exists(containsColumnRef) ||
+            filter.exists(containsColumnRef) ||
+            windowFunctionInfo.fold(false) { case ast.WindowFunctionInfo(partitions, orderings, frames) =>
+              partitions.exists(containsColumnRef) ||
+                orderings.exists { ob => containsColumnRef(ob.expression) }
+            }
+      }
 
     def envify[T](ctx: Ctx, result: Either[AddScopeError, T], pos: Position): T =
       result match {
