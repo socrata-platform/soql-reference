@@ -379,7 +379,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analyze(tf, "aaaa-aaaa", "select distinct on (text, num) 5 order by num, text, num*2")
   }
 
-  test("UDF - simple") {
+  test("UDF - no parameter") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "bbbb-bbbb") -> D("user" -> TestText, "allowed" -> TestBoolean),
@@ -413,7 +413,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     select.from must equal (
       Join[TestMT](
         JoinType.Inner,
-        true,
+        false, // NOT implicitly lateral!
         FromTable[TestMT](
           dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
           OrderedMap(

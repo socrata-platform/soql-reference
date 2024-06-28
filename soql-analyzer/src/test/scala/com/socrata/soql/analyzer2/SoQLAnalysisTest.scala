@@ -885,6 +885,18 @@ select b, n |> select n join @udf(b) as @udf on true
     analysis.statement must be (isomorphicTo(expected.statement))
   }
 
+  test("inline parameters - no column refs") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "udf") -> U(0, "select 1 as one from @single_row where ?name is null and ?count = 5", "name" -> TestText, "count" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", "select *, @udf.one join @udf('gnu', 6) on true").inlineTrivialParameters(isLiteralTrue)
+    val expected = analyze(tf, "twocol", "select *, @udf.one join /* not lateral */ (select 1 as one from @single_row where 'gnu' is null and 6 = 5) as @udf on true")
+
+    analysis.statement must be (isomorphicTo(expected.statement))
+  }
+
   test("inline parameters - no complex and interior union") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
