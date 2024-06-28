@@ -403,4 +403,27 @@ class RollupExactTest extends FunSuite with MustMatchers with RollupTestHelper w
     // rollup that is not itself the result of an aggregation".
     TestRollupExact(select, rollup, analysis.labelProvider) must be (None)
   }
+
+  // This falls out of the way we do WHERE rewriting, but adding a
+  // test just to make sure it never gets accidentally broken.
+  test("Exact-equality filtering can be used to pick rows out of a group-by") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (1, "rollup") -> D("c1" -> TestText, "c2" -> TestNumber).withPrimaryKey("c1")
+    )
+
+    val rollup = TestRollupInfo(1, "rollup", tf, "select text, sum(num) from @twocol group by text")
+
+    val Right(foundTables) = tf.findTables(0, "select sum(num) from @twocol where text = 'hello'", Map.empty)
+    val Right(analysis) = analyzer(foundTables, UserParameters.empty)
+    val select = analysis.statement.asInstanceOf[Select]
+
+    val Some(result) = TestRollupExact(select, rollup, analysis.labelProvider)
+
+    locally {
+      val Right(expectedRollupFT) = tf.findTables(1, "select sum(c2) from @rollup where c1 = 'hello'", Map.empty)
+      val Right(expectedRollupAnalysis) = analyzer(expectedRollupFT, UserParameters.empty)
+      result must be (isomorphicTo(expectedRollupAnalysis.statement))
+    }
+  }
 }
