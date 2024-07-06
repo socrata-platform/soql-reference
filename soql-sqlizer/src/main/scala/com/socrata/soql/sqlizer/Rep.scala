@@ -1,5 +1,7 @@
 package com.socrata.soql.sqlizer
 
+import scala.{collection => sc}
+
 import java.io.Writer
 import java.sql.{ResultSet, PreparedStatement}
 
@@ -102,6 +104,7 @@ trait Rep[MT <: MetaTypes with MetaTypesExt] extends ExpressionUniverse[MT] {
   def ingressRep(table: DatabaseTableName, column: ColumnLabel): IngressRep[MT]
 
   def extractFrom(isExpanded: Boolean): (ResultSet, Int) => (Int, CV)
+  def extractFromCsv(isExpanded: Boolean): (sc.Seq[Option[String]], Int) => (Int, CV)
 }
 object Rep {
   trait Provider[MT <: MetaTypes with MetaTypesExt] extends SqlizerUniverse[MT] {
@@ -153,6 +156,12 @@ object Rep {
 
       protected def doExtractFrom(rs: ResultSet, dbCol: Int): CV
 
+      override def extractFromCsv(isExpanded: Boolean): (sc.Seq[Option[String]], Int) => (Int, CV) = { (row, dbCol) =>
+        (1, doExtractFromCsv(row(dbCol)))
+      }
+
+      protected def doExtractFromCsv(value: Option[String]): CV
+
       override def provenanceOf(e: LiteralValue) = Set.empty
     }
 
@@ -182,6 +191,17 @@ object Rep {
 
       protected def doExtractExpanded(rs: ResultSet, dbCol: Int): CV
       protected def doExtractCompressed(rs: ResultSet, dbCol: Int): CV
+
+      override def extractFromCsv(isExpanded: Boolean): (sc.Seq[Option[String]], Int) => (Int, CV) = {
+        if(isExpanded) { (row, dbCol) =>
+          (expandedColumnCount, doExtractExpandedFromCsv(row, dbCol))
+        } else { (row, dbCol) =>
+          (1, doExtractCompressedFromCsv(row(dbCol)))
+        }
+      }
+
+      protected def doExtractExpandedFromCsv(row: sc.Seq[Option[String]], dbCol: Int): CV
+      protected def doExtractCompressedFromCsv(value: Option[String]): CV
 
       override def provenanceOf(e: LiteralValue) = Set.empty
     }
@@ -250,6 +270,17 @@ object Rep {
 
       protected def doExtractExpanded(rs: ResultSet, dbCol: Int): CV
       protected def doExtractCompressed(rs: ResultSet, dbCol: Int): CV
+
+      override def extractFromCsv(isExpanded: Boolean): (sc.Seq[Option[String]], Int) => (Int, CV) = {
+        if(isExpanded) { (row, dbCol) =>
+          (expandedColumnCount, doExtractExpandedFromCsv(row, dbCol))
+        } else { (row, dbCol) =>
+          (1, doExtractCompressedFromCsv(row(dbCol)))
+        }
+      }
+
+      protected def doExtractExpandedFromCsv(row: sc.Seq[Option[String]], dbCol: Int): CV
+      protected def doExtractCompressedFromCsv(value: Option[String]): CV
     }
   }
 }
