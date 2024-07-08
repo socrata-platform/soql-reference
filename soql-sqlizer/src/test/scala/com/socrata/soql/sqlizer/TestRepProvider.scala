@@ -1,5 +1,7 @@
 package com.socrata.soql.sqlizer
 
+import scala.{collection => sc}
+
 import java.sql.ResultSet
 
 import com.rojoma.json.v3.ast.JString
@@ -69,6 +71,14 @@ class TestRepProvider(
         ???
       }
 
+      override protected def doExtractExpandedFromCsv(row: sc.Seq[Option[String]], dbCol: Int): CV = {
+        ???
+      }
+
+      override protected def doExtractCompressedFromCsv(value: Option[String]): CV = {
+        ???
+      }
+
       override def ingressRep(tableName: DatabaseTableName, label: ColumnLabel) = {
         ???
       }
@@ -82,6 +92,10 @@ class TestRepProvider(
       override def convertToText(e: ExprSql) = Some(e)
 
       override protected def doExtractFrom(rs: ResultSet, dbCol: Int): CV = {
+        ???
+      }
+
+      override protected def doExtractFromCsv(value: Option[String]): CV = {
         ???
       }
 
@@ -104,6 +118,10 @@ class TestRepProvider(
         ???
       }
 
+      override protected def doExtractFromCsv(value: Option[String]): CV = {
+        ???
+      }
+
       override def ingressRep(tableName: DatabaseTableName, label: ColumnLabel) = {
         ???
       }
@@ -117,6 +135,10 @@ class TestRepProvider(
       override def convertToText(e: ExprSql) = None
 
       override protected def doExtractFrom(rs: ResultSet, dbCol: Int): CV = {
+        ???
+      }
+
+      override protected def doExtractFromCsv(value: Option[String]): CV = {
         ???
       }
 
@@ -184,6 +206,14 @@ class TestRepProvider(
       }
 
       override protected def doExtractCompressed(rs: ResultSet, dbCol: Int): CV = {
+        ???
+      }
+
+      override protected def doExtractExpandedFromCsv(row: sc.Seq[Option[String]], dbCol: Int): CV = {
+        ???
+      }
+
+      override protected def doExtractCompressedFromCsv(value: Option[String]): CV = {
         ???
       }
 

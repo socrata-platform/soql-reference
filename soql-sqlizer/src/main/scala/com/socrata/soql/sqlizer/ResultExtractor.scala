@@ -1,5 +1,6 @@
 package com.socrata.soql.sqlizer
 
+import scala.{collection => sc}
 import scala.reflect.ClassTag
 
 import java.sql.ResultSet
@@ -14,6 +15,10 @@ class ResultExtractor[MT <: MetaTypes with MetaTypesExt](
     rep.extractFrom(isExpanded)
   }.toArray
 
+  private val csvExtractors = rawSchema.valuesIterator.map { case AugmentedType(rep, isExpanded) =>
+    rep.extractFromCsv(isExpanded)
+  }.toArray
+
   val schema: OrderedMap[ColumnLabel, CT] =
     OrderedMap() ++ rawSchema.iterator.map { case (c, AugmentedType(rep, v)) => c -> rep.typ }
 
@@ -25,6 +30,21 @@ class ResultExtractor[MT <: MetaTypes with MetaTypesExt](
     while(i != result.length) {
       val (width, value) = extractors(i)(rs, dbCol)
 
+      result(i) = value
+      i += 1
+      dbCol += width
+    }
+
+    result
+  }
+
+  def extractCsvRow(row: sc.Seq[Option[String]]): Array[CV] = {
+    val result = new Array[CV](extractors.length)
+
+    var i = 0
+    var dbCol = 0
+    while(i != result.length) {
+      val (width, value) = csvExtractors(i)(row, dbCol)
       result(i) = value
       i += 1
       dbCol += width
