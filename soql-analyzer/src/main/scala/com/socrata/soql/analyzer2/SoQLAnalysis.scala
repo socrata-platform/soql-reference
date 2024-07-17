@@ -79,6 +79,8 @@ class SoQLAnalysis[MT <: MetaTypes] private (
               current.limitIfUnlimited(limit)
             case Pass.RemoveTrivialJoins =>
               current.removeTrivialJoins(helpers.isLiteralTrue)
+            case Pass.RemoveSyntheticColumns =>
+              current.removeSyntheticColumns
             case DangerousPass.PreserveOrderingWithColumns =>
               current.dangerous.preserveOrderingWithColumns
           }
@@ -241,6 +243,18 @@ class SoQLAnalysis[MT <: MetaTypes] private (
     * these trivial joins. */
   def removeTrivialJoins(isLiteralTrue: Expr[MT] => Boolean) =
     copy(statement = rewrite.RemoveTrivialJoins(statement, isLiteralTrue))
+
+  /** Removes synthetic columns from the output schema of a query.  Best
+    * used in conjunction with "remove unused columns" as a later
+    * pass, as this only removes them from the outermost query. */
+  def removeSyntheticColumns =
+    withoutSelectListReferences { self =>
+      val nlp = self.labelProvider.clone()
+      self.copy(
+        labelProvider = nlp,
+        statement = rewrite.RemoveSyntheticColumns(nlp, self.statement)
+      )
+    }
 
   object dangerous {
     /** Like `preserveOrdering` but in addition it adds columns to the

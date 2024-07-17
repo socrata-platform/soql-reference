@@ -61,6 +61,7 @@ object Pass {
   case object RemoveOrderBy extends Pass
   case class LimitIfUnlimited(limit: NonNegativeBigInt) extends Pass
   case object RemoveTrivialJoins extends Pass
+  case object RemoveSyntheticColumns extends Pass
 
   private[rewrite] def passBuilder[T >: Pass <: AnyRef](builder: SimpleHierarchyCodecBuilder[T]): SimpleHierarchyCodecBuilder[T] =
     builder
@@ -77,6 +78,7 @@ object Pass {
       .singleton("remove_order_by", RemoveOrderBy)
       .branch[LimitIfUnlimited]("limit_if_unlimited")(AutomaticJsonEncodeBuilder[LimitIfUnlimited], AutomaticJsonDecodeBuilder[LimitIfUnlimited], implicitly)
       .singleton("remove_trivial_joins", RemoveTrivialJoins)
+      .singleton("remove_synthetic_columns", RemoveSyntheticColumns)
 
   implicit val jCodec = passBuilder(AnyPass.codecBase[Pass]).build
 
@@ -96,6 +98,7 @@ object Pass {
         case 10 => RemoveOrderBy
         case 11 => LimitIfUnlimited(buffer.read[NonNegativeBigInt]())
         case 12 => RemoveTrivialJoins
+        case 13 => RemoveSyntheticColumns
         case other => fail(s"Unknown rewrite pass type $other")
       }
 
@@ -126,6 +129,8 @@ object Pass {
           buffer.write(lim)
         case RemoveTrivialJoins =>
           buffer.write(12)
+        case RemoveSyntheticColumns =>
+          buffer.write(13)
       }
     }
   }
