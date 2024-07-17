@@ -1419,4 +1419,23 @@ select * where first = 'Tom'
     val expectedAnalysis = analyze(tf, "select @table1.text, @table1.num, @table2.mun from @table1 join @single_row on false join @table2 on @table1.text = @table2.txet")
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
+
+  test("remove synthetic columns") {
+    val tf = tableFinder(
+      (0, "table") -> D(
+        ":id" -> TestNumber,
+        "text" -> TestText,
+        "num" -> TestNumber
+      ),
+      (0, "query") -> Q(0, "table", "select text where num > 5")
+    )
+
+    val analysis = AnalysisBuilder.saved(tf, "query").withPreserveSystemColumns(true).finishAnalysis
+
+    // just a sanity check
+    analysis.statement must be (isomorphicTo(analyze(tf, "table", "select text, :id where num > 5").statement))
+
+    val expectedAnalysis = analyze(tf, "table", "select text where num > 5")
+    analysis.removeSyntheticColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
 }
