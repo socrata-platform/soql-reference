@@ -624,7 +624,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         }
 
         def typecheck(expr: ast.Expression, expectedType: Option[CT] = None) =
-          State.this.typecheck(ctx.copy(enclosingEnv = localEnv), expr, namedExprs, None)
+          State.this.typecheck(ctx.copy(enclosingEnv = localEnv), expr, namedExprs, expectedType)
       }
 
       val finalState = aliasAnalysis.evaluationOrder.foldLeft(new EvaluationState()) { (state, colName) =>
