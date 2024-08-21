@@ -739,6 +739,33 @@ object SoQLFunctions {
     NoDocs
   )
 
+  val FixedTimeStampDiffBusinessDays = mf("fixed_timestamp diff bd", FunctionName("date_diff_business_days"), Seq(SoQLFixedTimestamp, SoQLFixedTimestamp, SoQLText), Seq.empty, SoQLNumber)(
+    "Return the number of business days between two dates, _including_ the second.  Note that this function will always return a positive integer unless both dates fall on the same weekend, in which case it will return zero.  The function will perform the calculation in the given time zone.",
+    Example("The start and end of a week", "date_diff_business_days('2024-08-05T12:00:00.000Z','2024-08-09T12:00:00.000Z','UTC')", "5"),
+    Example("The end and start of a week", "date_diff_business_days('2024-08-09T12:00:00.000Z','2024-08-05T12:00:00.000Z','UTC')", "5"),
+    Example("A friday and the following monday", "date_diff_business_days('2024-08-09T12:00:00.000Z','2024-08-12T12:00:00.000Z','UTC')", "2"),
+    Example("The same weekday", "date_diff_business_days('2024-08-07T12:00:00.000Z','2024-08-07T12:00:00.000Z','UTC')", "1"),
+    Example("The same weekend", "date_diff_business_days('2024-08-03T12:00:00.000Z','2024-08-04T12:00:00.000Z','UTC')", "0")
+  )
+
+  val FloatingTimeStampDiffBusinessDays = mf("floating_timestamp diff bd", FunctionName("date_diff_business_days"), Seq(SoQLFloatingTimestamp, SoQLFloatingTimestamp), Seq.empty, SoQLNumber)(
+    "Return the number of business days between two dates, _including_ the second.  Note that this function will always return a positive integer unless both dates fall on the same weekend, in which case it will return zero.",
+    Example("The start and end of a week", "date_diff_business_days('2024-08-05T12:00:00.000','2024-08-09T12:00:00.000')", "5"),
+    Example("The end and start of a week", "date_diff_business_days('2024-08-09T12:00:00.000','2024-08-05T12:00:00.000')", "5"),
+    Example("A friday and the following monday", "date_diff_business_days('2024-08-09T12:00:00.000','2024-08-12T12:00:00.000')", "2"),
+    Example("The same weekday", "date_diff_business_days('2024-08-07T12:00:00.000','2024-08-07T12:00:00.000')", "1"),
+    Example("The same weekend", "date_diff_business_days('2024-08-03T12:00:00.000','2024-08-04T12:00:00.000')", "0")
+  )
+
+  val DateDiffBusinessDays = mf("date diff bd", FunctionName("date_diff_business_days"), Seq(SoQLDate, SoQLDate), Seq.empty, SoQLNumber)(
+    "Return the number of business days between two dates, _including_ the second.  Note that this function will always return a positive integer unless both dates fall on the same weekend, in which case it will return zero.",
+    Example("The start and end of a week", "date_diff_business_days('2024-08-05','2024-08-09')", "5"),
+    Example("The end and start of a week", "date_diff_business_days('2024-08-09','2024-08-05')", "5"),
+    Example("A friday and the following monday", "date_diff_business_days('2024-08-09','2024-08-12')", "2"),
+    Example("The same weekday", "date_diff_business_days('2024-08-07','2024-08-07')", "1"),
+    Example("The same weekend", "date_diff_business_days('2024-08-03','2024-08-04')", "0")
+  )
+
   val EpochSeconds = mf("epoch_seconds", FunctionName("epoch_seconds"), Seq(SoQLFixedTimestamp), Seq.empty, SoQLNumber)(
     "Returns the number of seconds since the start of 1 January 1970 GMT.  Note that this includes millisecond precision"
   )
