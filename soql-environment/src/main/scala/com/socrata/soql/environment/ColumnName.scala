@@ -4,6 +4,8 @@ import com.rojoma.json.v3.util.{WrapperJsonCodec, WrapperFieldCodec}
 
 final class ColumnName(name: String) extends AbstractName[ColumnName](name) {
   protected def hashCodeSeed = 0x342a3466
+
+  def isSystem = name.startsWith(":")
 }
 
 object ColumnName extends (String => ColumnName) {
