@@ -1438,4 +1438,41 @@ select * where first = 'Tom'
     val expectedAnalysis = analyze(tf, "table", "select text where num > 5")
     analysis.removeSyntheticColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
+
+  test("remove system columns - dataset") {
+    val tf = tableFinder(
+      (0, "table") -> D(
+        ":id" -> TestNumber,
+        "text" -> TestText,
+        "num" -> TestNumber
+      ),
+    )
+
+    val analysis = AnalysisBuilder.saved(tf, "table").finishAnalysis
+
+    // just a sanity check
+    analysis.statement must be (isomorphicTo(analyze(tf, "table", "select :id, text, num").statement))
+
+    val expectedAnalysis = analyze(tf, "table", "select text, num")
+    analysis.removeSystemColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("remove system columns - query") {
+    val tf = tableFinder(
+      (0, "table") -> D(
+        ":id" -> TestNumber,
+        "text" -> TestText,
+        "num" -> TestNumber
+      ),
+      (0, "query") -> Q(0, "table", "select :id, text")
+    )
+
+    val analysis = AnalysisBuilder.saved(tf, "query").finishAnalysis
+
+    // just a sanity check
+    analysis.statement must be (isomorphicTo(analyze(tf, "table", "select :id, text").statement))
+
+    val expectedAnalysis = analyze(tf, "table", "select text")
+    analysis.removeSystemColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
 }
