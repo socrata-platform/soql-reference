@@ -346,6 +346,25 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
     }
 
+    def completeAnalysis(j: PartialFrom[MT], ctx: Ctx, namedExprs: Map[ColumnName, Expr]): From = {
+      j match {
+        case PartialFrom.PartialJoin(joinType, lateral, left, right, on) =>
+          val checkedLeft = completeAnalysis(left, ctx, namedExprs)
+          val leftEnv = envify(ctx, checkedLeft.extendEnvironment(ctx.enclosingEnv), NoPosition /* TODO: NEED POS INFO FROM AST */)
+          val rightEnv = envify(ctx, right.addToEnvironment(leftEnv), NoPosition /* TODO: NEED POS INFO FROM AST */)
+          val checkedOn = typecheck(ctx.copy(enclosingEnv = rightEnv), on, namedExprs, Some(typeInfo.boolType))
+
+          if(!typeInfo.isBoolean(checkedOn.typ)) {
+            ctx.expectedBoolean(on, checkedOn.typ)
+          }
+
+          Join(joinType, lateral, checkedLeft, right, checkedOn)
+        case PartialFrom.Atomic(af) =>
+          af
+      }
+    }
+
+
     // This is the current ambient environment in which SoQL analysis
     // occurs.
     case class Ctx(
@@ -603,13 +622,13 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       // ok, first things first: establish the schema we're
       // operating in, which means rolling up "from" and "joins"
       // into a single From
-      val completeFrom = queryInputSchema(ctx, from0, from, joins)
-      val localEnv = envify(ctx, completeFrom.extendEnvironment(ctx.enclosingEnv), NoPosition /* TODO: NEED POS INFO FROM AST */)
+      val partialFrom = queryInputSchema(ctx, from0, from, joins)
+      val localEnv = envify(ctx, partialFrom.extendEnvironment(ctx.enclosingEnv), NoPosition /* TODO: NEED POS INFO FROM AST */)
 
       // Now that we know what we're selecting from, we'll give names to the selection...
       val aliasAnalysis =
         try {
-          AliasAnalysis(selection, from)(collectNamesForAnalysis(completeFrom))
+          AliasAnalysis(selection, from)(collectNamesForAnalysis(partialFrom))
         } catch {
           case e: AliasAnalysisException =>
             ctx.augmentAliasAnalysisException(e)
@@ -632,6 +651,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         val typed = state.typecheck(expression)
         state.update(colName, typed)
       }
+
+      val completeFrom = completeAnalysis(partialFrom, ctx, finalState.namedExprs)
 
       val checkedDistinct: Distinctiveness = distinct match {
         case ast.Indistinct => Distinctiveness.Indistinct()
@@ -785,7 +806,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
     }
 
-    def collectNamesForAnalysis(from: From): AliasAnalysis.AnalysisContext = {
+    def collectNamesForAnalysis(from: PartialFrom[MT]): AliasAnalysis.AnalysisContext = {
       def contextFrom(af: AtomicFrom): UntypedDatasetContext =
         af match {
           case _: FromSingleRow => new UntypedDatasetContext {
@@ -814,13 +835,12 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         }
       }
 
-      from.reduce[Map[AliasAnalysis.Qualifier, UntypedDatasetContext]](
-        augmentAcc(Map.empty, _),
-        { (acc, j) => augmentAcc(acc, j.right) }
-      )
+      from.listOfAtomics.foldLeft(Map.empty[AliasAnalysis.Qualifier, UntypedDatasetContext]) { (acc, af) =>
+        augmentAcc(acc, af)
+      }
     }
 
-    def queryInputSchema(ctx: Ctx, input: ImplicitFrom, from: Option[TableName], joins: Seq[ast.Join]): From = {
+    def queryInputSchema(ctx: Ctx, input: ImplicitFrom, from: Option[TableName], joins: Seq[ast.Join]): PartialFrom[MT] = {
       // Ok so:
       //  * @This is special only in From
       //  * It is an error if we have neither an input nor a from
@@ -895,7 +915,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           }
       }
 
-      joins.foldLeft[From](from0) { (left, join) =>
+      joins.foldLeft[PartialFrom[MT]](PartialFrom.Atomic(from0)) { (left, join) =>
         val joinType = join.typ match {
           case ast.InnerJoinType => JoinType.Inner
           case ast.LeftOuterJoinType => JoinType.LeftOuter
@@ -912,15 +932,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             analyzeJoinSelect(ctx, join.from)
           }
 
-        val checkedOn =
-          typecheck(ctx.copy(enclosingEnv = envify(ctx, checkedRight.addToEnvironment(augmentedFrom), NoPosition /* TODO: NEED POS INFO FROM AST */)),
-                    join.on, Map.empty, Some(typeInfo.boolType))
-
-        if(!typeInfo.isBoolean(checkedOn.typ)) {
-          ctx.expectedBoolean(join.on, checkedOn.typ)
-        }
-
-        Join(joinType, effectiveLateral, left, checkedRight, checkedOn)
+        PartialFrom.PartialJoin(joinType, effectiveLateral, left, checkedRight, join.on)
       }
     }
 

@@ -1290,4 +1290,32 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       case other => fail("Found an incorrect source: " + other)
     }
   }
+
+  test("Can refer to selected output columns in ON clauses") {
+    val tf = tableFinder(
+      (0, "ds1") -> D("text1" -> TestText, "num1" -> TestNumber),
+      (0, "ds2") -> D("text2" -> TestText, "num2" -> TestNumber)
+    )
+
+    val Right(ft) = tf.findTables(0, rn("ds1"), "select string_func(text1) as converted_text1, num1, string_func(@ds2.text2) as converted_text2, @ds2.num2 join @ds2 on converted_text1 = converted_text2", Map.empty)
+    val Right(analysis) = analyzer(ft, UserParameters.empty)
+
+    val Right(expectedFt) = tf.findTables(0, rn("ds1"), "select string_func(text1) as converted_text1, num1, string_func(@ds2.text2) as converted_text2, @ds2.num2 join @ds2 on string_func(text1) = string_func(@ds2.text2)", Map.empty)
+    val Right(expectedAnalysis) = analyzer(expectedFt, UserParameters.empty)
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("Referring to a future table in an ON clause gives a sensible error") {
+    val tf = tableFinder(
+      (0, "ds1") -> D("text1" -> TestText, "num1" -> TestNumber),
+      (0, "ds2") -> D("text2" -> TestText, "num2" -> TestNumber),
+      (0, "ds3") -> D("text3" -> TestText, "num3" -> TestNumber),
+    )
+
+    val Right(ft) = tf.findTables(0, rn("ds1"), "select text1, num1, @ds2.text2, @ds2.num2, @ds3.text3 as t3, @ds3.num3 join @ds2 on text1 = t3 join @ds3 on text1 = t3", Map.empty)
+    val Right(analysis) = analyzer(ft, UserParameters.empty)
+
+    println(analysis.statement.debugStr)
+  }
 }
