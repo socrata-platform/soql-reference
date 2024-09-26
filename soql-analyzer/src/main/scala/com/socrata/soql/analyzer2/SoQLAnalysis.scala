@@ -81,6 +81,8 @@ class SoQLAnalysis[MT <: MetaTypes] private (
               current.removeTrivialJoins(helpers.isLiteralTrue)
             case Pass.RemoveSyntheticColumns =>
               current.removeSyntheticColumns
+            case Pass.RemoveSystemColumns =>
+              current.removeSystemColumns
             case DangerousPass.PreserveOrderingWithColumns =>
               current.dangerous.preserveOrderingWithColumns
           }
@@ -253,6 +255,18 @@ class SoQLAnalysis[MT <: MetaTypes] private (
       self.copy(
         labelProvider = nlp,
         statement = rewrite.RemoveSyntheticColumns(nlp, self.statement)
+      )
+    }
+
+  /** Removes system columns from the output schema of a query.  Best
+    * used in conjunction with "remove unused columns" as a later
+    * pass, as this only removes them from the outermost query. */
+  def removeSystemColumns =
+    withoutSelectListReferences { self =>
+      val nlp = self.labelProvider.clone()
+      self.copy(
+        labelProvider = nlp,
+        statement = rewrite.RemoveSystemColumns(nlp, self.statement)
       )
     }
 
