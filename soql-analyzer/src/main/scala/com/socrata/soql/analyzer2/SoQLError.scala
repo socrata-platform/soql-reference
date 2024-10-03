@@ -821,7 +821,7 @@ object SoQLAnalyzerError {
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[NoSuchColumn[RNS]] {
         override val code = tag
         def encode(err: NoSuchColumn[RNS]) =
-          result(Fields(err.qualifier, err.name), s"No such column ${err.qualifier.fold("")("@" + _ + ".")}${err.name}", err.source)
+          result(Fields(err.qualifier, err.name), s"No such column `${err.qualifier.fold("")("@" + _ + ".")}${err.name}'", err.source)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[NoSuchColumn[RNS]] {
@@ -849,7 +849,7 @@ object SoQLAnalyzerError {
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[UnknownUDFParameter[RNS]] {
         override val code = tag
         def encode(err: UnknownUDFParameter[RNS]) =
-          result(Fields(err.name), s"No such UDF parameter ${err.name}", err.source)
+          result(Fields(err.name), s"No such UDF parameter `${err.name}'", err.source)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[UnknownUDFParameter[RNS]] {
@@ -878,7 +878,7 @@ object SoQLAnalyzerError {
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[UnknownUserParameter[RNS]] {
         override val code = tag
         def encode(err: UnknownUserParameter[RNS]) =
-          result(Fields(err.view, err.name), s"No such user parameter ${err.view.fold("")(_.name + "/")}${err.name}", err.source)
+          result(Fields(err.view, err.name), s"No such user parameter `${err.view.fold("")(_.name + "/")}${err.name}'", err.source)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[UnknownUserParameter[RNS]] {
@@ -907,7 +907,7 @@ object SoQLAnalyzerError {
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[NoSuchFunction[RNS]] {
         override val code = tag
         def encode(err: NoSuchFunction[RNS]) =
-          result(Fields(err.name, err.arity), s"No such function ${err.name}/${err.arity}", err.source)
+          result(Fields(err.name, err.arity), s"No such function `${err.name}/${err.arity}'", err.source)
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[NoSuchFunction[RNS]] {
@@ -936,7 +936,18 @@ object SoQLAnalyzerError {
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[TypeMismatch[RNS]] {
         override val code = tag
         def encode(err: TypeMismatch[RNS]) =
-          result(Fields(err.expected, err.found), s"Type mismatch: found ${err.found}", err.source)
+          result(Fields(err.expected, err.found), s"Type mismatch: expected ${oneOf(err.expected)}, but found ${err.found}", err.source)
+
+        private def oneOf(expected: Set[TypeName]) =
+          expected.size match {
+            case 0 => "nothing" // I can't think of any reason this would ever happen
+            case 1 => expected.head
+            case 2 => expected.mkString(" or ")
+            case _ =>
+              val items = expected.toSeq
+              items.dropRight(1).mkString("", ", ", ", or " + items.last)
+          }
+
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[TypeMismatch[RNS]] {
