@@ -36,7 +36,7 @@ package object jsonutils {
           Right(NoPosition)
         case other =>
           pattern.matches(v).map { results =>
-            SoQLPosition(row(results), col(results), text(results), col(results))
+            SoQLPosition(row(results), col(results), text(results), col(results) - 1)
           }
       }
   }
