@@ -55,7 +55,14 @@ class SoQLSemigroupRewriter[MT <: MetaTypes with ({type ColumnType = SoQLType; t
       func.identity -> rewriter
   }.toMap
 
+  private val semilattices = Seq[Function[CT]](
+    SoQLFunctions.Max,
+    SoQLFunctions.Min
+  ).map(_.identity).toSet
 
   override def apply(f: MonomorphicFunction): Option[Expr => Expr] =
     semigroupMap.get(f.function.identity)
+
+  override def isSemilattice(f: MonomorphicFunction): Boolean =
+    semilattices(f.function.identity)
 }

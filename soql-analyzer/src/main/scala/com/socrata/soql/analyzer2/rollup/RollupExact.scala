@@ -10,7 +10,7 @@ import com.socrata.soql.collection.{OrderedMap, NonEmptySeq}
 object RollupExact {
   private val log = LoggerFactory.getLogger(classOf[RollupExact[_]])
 
-  private sealed abstract class MergeContext(
+  private final case class MergeContext(
     val isNonAggregate: Boolean,
     val isCoarseningGroup: Boolean,
     val isFirstAggregate: Boolean
@@ -19,10 +19,10 @@ object RollupExact {
       assert(!isNonAggregate)
     }
   }
-  private case object NonAggregatedOnNonAggregated extends MergeContext(isNonAggregate = true, isCoarseningGroup = false, isFirstAggregate = false)
-  private case object AggregatedOnNonAggregated extends MergeContext(isNonAggregate = false, isCoarseningGroup = true, isFirstAggregate = true)
-  private case object AggregatedOnSameGroup extends MergeContext(isNonAggregate = false, isCoarseningGroup = false, isFirstAggregate = false)
-  private case object AggregatedOnDifferentGroup extends MergeContext(isNonAggregate = false, isCoarseningGroup = true, isFirstAggregate = false)
+  private val NonAggregatedOnNonAggregated = MergeContext(isNonAggregate = true, isCoarseningGroup = false, isFirstAggregate = false)
+  private val AggregatedOnNonAggregated = MergeContext(isNonAggregate = false, isCoarseningGroup = true, isFirstAggregate = true)
+  private val AggregatedOnSameGroup = MergeContext(isNonAggregate = false, isCoarseningGroup = false, isFirstAggregate = false)
+  private val AggregatedOnDifferentGroup = MergeContext(isNonAggregate = false, isCoarseningGroup = true, isFirstAggregate = false)
 }
 
 class RollupExact[MT <: MetaTypes](
@@ -851,6 +851,14 @@ class RollupExact[MT <: MetaTypes](
               for {
                 newArgs <- args.mapFallibly(rewrite(_, rollupContext))
                 newFilter <- filter.mapFallibly(rewrite(_, rollupContext))
+              } yield {
+                AggregateFunctionCall(func, newArgs, distinct, newFilter)(afc.position)
+              }
+            case afc@AggregateFunctionCall(func, args, distinct, filter) if semigroupRewriter.isSemilattice(func) =>
+              val newContext = rollupContext.copy(isCoarseningGroup = false)
+              for {
+                newArgs <- args.mapFallibly(rewrite(_, newContext))
+                newFilter <- filter.mapFallibly(rewrite(_, newContext))
               } yield {
                 AggregateFunctionCall(func, newArgs, distinct, newFilter)(afc.position)
               }

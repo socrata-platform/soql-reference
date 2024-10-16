@@ -26,6 +26,13 @@ trait RollupTestHelper extends TestHelper { this: Assertions =>
           None
       }
     }
+
+    override def isSemilattice(f: MonomorphicFunction): Boolean = {
+      f.function.identity match {
+        case Max => true
+        case _ => false
+      }
+    }
   }
 
   object TestFunctionSubset extends SimpleFunctionSubset[TestMT] {
