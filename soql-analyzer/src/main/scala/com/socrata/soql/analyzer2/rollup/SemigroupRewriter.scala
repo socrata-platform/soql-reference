@@ -11,4 +11,11 @@ trait SemigroupRewriter[MT <: MetaTypes]
   //   count(x) => coalesce(sum(count_x), 0)
   //   max(x) => max(max_x)
   override def apply(f: MonomorphicFunction): Option[Expr => Expr]
+
+  // tests whether an aggregate function is a semilattice (which for
+  // our purposes means that f(f(x)) == f(x), which in turn means we
+  // can rewrite `f(x)` by using `select x group by x`, since we don't
+  // care that each row of "x" might actually consist of multiple
+  // source rows.
+  def isSemilattice(f: MonomorphicFunction): Boolean
 }

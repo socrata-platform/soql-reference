@@ -426,4 +426,40 @@ class RollupExactTest extends FunSuite with MustMatchers with RollupTestHelper w
       result must be (isomorphicTo(expectedRollupAnalysis.statement))
     }
   }
+
+  test("Non-semilattice aggregates don't use raw output columns") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (1, "rollup") -> D("c1" -> TestText, "c2" -> TestNumber).withPrimaryKey("c1", "c2")
+    )
+
+    val rollup = TestRollupInfo(1, "rollup", tf, "select text, num from @twocol group by text, num")
+
+    val Right(foundTables) = tf.findTables(0, "select sum(num) from @twocol", Map.empty)
+    val Right(analysis) = analyzer(foundTables, UserParameters.empty)
+    val select = analysis.statement.asInstanceOf[Select]
+
+    TestRollupExact(select, rollup, analysis.labelProvider) must be (None)
+  }
+
+  test("Semilattice aggregates do use raw output columns") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber),
+      (1, "rollup") -> D("c1" -> TestText, "c2" -> TestNumber).withPrimaryKey("c1", "c2")
+    )
+
+    val rollup = TestRollupInfo(1, "rollup", tf, "select text, num from @twocol group by text, num")
+
+    val Right(foundTables) = tf.findTables(0, "select max(num) from @twocol", Map.empty)
+    val Right(analysis) = analyzer(foundTables, UserParameters.empty)
+    val select = analysis.statement.asInstanceOf[Select]
+
+    val Some(result) = TestRollupExact(select, rollup, analysis.labelProvider)
+
+    locally {
+      val Right(expectedRollupFT) = tf.findTables(1, "select max(c2) from @rollup", Map.empty)
+      val Right(expectedRollupAnalysis) = analyzer(expectedRollupFT, UserParameters.empty)
+      result must be (isomorphicTo(expectedRollupAnalysis.statement))
+    }
+  }
 }

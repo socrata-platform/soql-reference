@@ -33,6 +33,8 @@ object TestFunctions {
 
   val BinaryPlus = f("+", SpecialFunctions.Operator("+"), Map("a" -> Concatable), Seq(VariableType("a"), VariableType("a")), Seq.empty, VariableType("a"))
 
+  val Concat = f("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(TestText))
+
   val UnaryMinus = mf("-", SpecialFunctions.Operator("-"), Seq(TestNumber), Seq.empty, TestNumber)
 
   val Times = mf("*", SpecialFunctions.Operator("*"), Seq(TestNumber, TestNumber), Seq.empty, TestNumber)
