@@ -83,7 +83,7 @@ class Typechecker[MT <: MetaTypes](
       }
     }
 
-    Right(acc.valuesIterator.toSeq)
+    Right(acc.valuesIterator.toVector)
   }
 
   private def check(expr: ast.Expression): Either[Error, Seq[Expr]] = {
