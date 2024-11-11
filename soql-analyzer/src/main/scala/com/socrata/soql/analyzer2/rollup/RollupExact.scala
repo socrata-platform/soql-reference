@@ -474,8 +474,8 @@ class RollupExact[MT <: MetaTypes](
   }
 
   private def rewriteAggregatedOnAggregatedDifferentGroupBy(select: Select, candidate: Select, rewriteInTerms: RewriteInTerms): Option[Select] = {
-    // * the expressions in the select's GROUP BY must be a               ✓
-    //   subset of the candidate's
+    // * the expressions in the select's GROUP BY must be expressible     ✓
+    //   in terms of the output columns of the candidate¹
     // * WHERE must be more restrictive than the candidate's WHERE        ✓
     //   and it must be expressible in terms of the output columns
     //   of candidate
@@ -486,6 +486,17 @@ class RollupExact[MT <: MetaTypes](
     // * SEARCH must not exist on either select                           ✓
     // * Neither LIMIT nor OFFSET may exist on the candidate              ✓
     // * candidate must not have a DISTINCT or DISTINCT ON                ✓
+    //
+    // ¹ This works because in order to be a GROUP BY expression it
+    // must not itself contain any aggregate or window functions.
+    // Therefore, any expressions which we _can_ rewrite do so in
+    // terms of non-aggregate/window select columns - which means
+    // they're either constant² or the grouped epxressions themselves.
+    // ² This absolutely depends on rollups being forbidden from
+    // being defined in terms of impure functions!  Currently our only
+    // impure functions are get_context and get_utc_date, both of
+    // which are forbidden in rollups, but this is a point of fragility
+    // which must be kept in mind while adding functions.
 
     if(select.search.isDefined || candidate.search.isDefined) {
       log.debug("Bailing because SEARCH makes rollups bad")
@@ -507,23 +518,6 @@ class RollupExact[MT <: MetaTypes](
 
     if(candidate.having.isDefined) {
       log.debug("Bailing because the candidate has a HAVING")
-      return None
-    }
-
-    val groupBySubset =
-      select.groupBy.iterator.map { e =>
-        e +: adHocRewriter(e)
-      }.forall { sGroupByPossibilities =>
-        sGroupByPossibilities.exists { sGroupBy =>
-          candidate.groupBy.exists { cGroupBy =>
-            sGroupBy.isIsomorphic(cGroupBy, rewriteInTerms.isoState)
-          } || candidate.groupBy.exists { cGroupBy =>
-            functionSubset(sGroupBy, cGroupBy, rewriteInTerms.isoState).isDefined
-          }
-        }
-      }
-    if(!groupBySubset) {
-      log.debug("Bailing because the query's GROUP BY was not a subset of the candidate's")
       return None
     }
 

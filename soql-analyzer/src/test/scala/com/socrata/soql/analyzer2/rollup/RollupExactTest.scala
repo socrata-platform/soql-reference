@@ -462,4 +462,25 @@ class RollupExactTest extends FunSuite with MustMatchers with RollupTestHelper w
       result must be (isomorphicTo(expectedRollupAnalysis.statement))
     }
   }
+
+  test("You can group by a function of grouping columns and still use the rollup") {
+    val tf = tableFinder(
+      (0, "names") -> D("first_name" -> TestText, "last_name" -> TestText, "count" -> TestNumber),
+      (1, "rollup") -> D("c1" -> TestText, "c2" -> TestText, "c3" -> TestNumber).withPrimaryKey("c1", "c2")
+    )
+
+    val rollup = TestRollupInfo(1, "rollup", tf, "select first_name, last_name, sum(count) from @names group by first_name, last_name")
+
+    val Right(foundTables) = tf.findTables(0, "select string_func(first_name + ' ' + last_name) as name, sum(count) from @names group by name", Map.empty)
+    val Right(analysis) = analyzer(foundTables, UserParameters.empty)
+    val select = analysis.statement.asInstanceOf[Select]
+
+    val Some(result) = TestRollupExact(select, rollup, analysis.labelProvider)
+
+    locally {
+      val Right(expectedRollupFT) = tf.findTables(1, "select string_func(c1 + ' ' + c2) as n, sum(c3) from @rollup group by n", Map.empty)
+      val Right(expectedRollupAnalysis) = analyzer(expectedRollupFT, UserParameters.empty)
+      result must be (isomorphicTo(expectedRollupAnalysis.statement))
+    }
+  }
 }
