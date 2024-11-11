@@ -483,4 +483,40 @@ class RollupExactTest extends FunSuite with MustMatchers with RollupTestHelper w
       result must be (isomorphicTo(expectedRollupAnalysis.statement))
     }
   }
+
+  test("Coarsening a compound expression requires the ability to recurse into it") {
+    val tf = tableFinder(
+      (0, "table") -> D("x" -> TestText, "y" -> TestText, "a" -> TestNumber, "b" -> TestNumber, "c" -> TestNumber),
+      (1, "rollup") -> D("c1" -> TestText, "c2" -> TestText, "c3" -> TestNumber).withPrimaryKey("c1", "c2")
+    )
+
+    val rollup = TestRollupInfo(1, "rollup", tf, "select x, y, sum(a) + sum(b) + sum(c) from @table group by x, y")
+
+    val Right(foundTables) = tf.findTables(0, "select sum(a) + sum(b) + sum(c) from @table group by x", Map.empty)
+    val Right(analysis) = analyzer(foundTables, UserParameters.empty)
+    val select = analysis.statement.asInstanceOf[Select]
+
+    TestRollupExact(select, rollup, analysis.labelProvider) must be (None)
+  }
+
+  test("Non-coarsing a compound expression does not require the ability to recurse into it") {
+    val tf = tableFinder(
+      (0, "table") -> D("x" -> TestText, "a" -> TestNumber, "b" -> TestNumber, "c" -> TestNumber),
+      (1, "rollup") -> D("c1" -> TestText, "c2" -> TestNumber).withPrimaryKey("c1")
+    )
+
+    val rollup = TestRollupInfo(1, "rollup", tf, "select x, sum(a) + sum(b) + sum(c) from @table group by x")
+
+    val Right(foundTables) = tf.findTables(0, "select sum(a) + sum(b) + sum(c) from @table group by x", Map.empty)
+    val Right(analysis) = analyzer(foundTables, UserParameters.empty)
+    val select = analysis.statement.asInstanceOf[Select]
+
+    val Some(result) = TestRollupExact(select, rollup, analysis.labelProvider)
+
+    locally {
+      val Right(expectedRollupFT) = tf.findTables(1, "select c2 from @rollup", Map.empty)
+      val Right(expectedRollupAnalysis) = analyzer(expectedRollupFT, UserParameters.empty)
+      result must be (isomorphicTo(expectedRollupAnalysis.statement))
+    }
+  }
 }
