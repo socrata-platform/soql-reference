@@ -539,13 +539,7 @@ class RollupExact[MT <: MetaTypes](
       }
 
     val newGroupBy =
-      select.groupBy.iterator.map { e =>
-        e +: adHocRewriter(e)
-      }.mapFallibly { sGroupByPossibilities =>
-        sGroupByPossibilities.iterator.flatMap { sGroupBy =>
-          rewriteInTerms.rewrite(sGroupBy, rollupContext = AggregatedOnDifferentGroup)
-        }.nextOption()
-      }.getOrElse {
+      select.groupBy.mapFallibly(rewriteInTerms.rewrite(_, rollupContext = AggregatedOnDifferentGroup)).getOrElse {
         log.debug("Bailing because unable to rewrite the GROUP BY in terms of the candidate's output columns")
         return None
       }
