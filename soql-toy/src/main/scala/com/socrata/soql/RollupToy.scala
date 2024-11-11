@@ -75,8 +75,8 @@ object RollupToy extends (Array[String] => Unit) {
         new RollupInfo[MT, String] {
           override val id = name
           override val statement = analysis.statement
-          override val resourceName = ScopedResourceName((), ResourceName("table"))
-          override val databaseName = DatabaseTableName("table")
+          override val resourceName = ScopedResourceName((), ResourceName(s"rollup:$name"))
+          override val databaseName = DatabaseTableName(name)
           override def databaseColumnNameOfIndex(idx: Int) = DatabaseColumnName("c" + idx)
         }
       }.toVector
@@ -99,7 +99,7 @@ object RollupToy extends (Array[String] => Unit) {
 
       println("Found rollups:")
       for((stmt, rids) <- rollupRewriter.rollup(analysis.statement)) {
-        println(s"${stmt.debugDoc} - ${rids.mkString(", ")}")
+        println(s"${stmt.debugDoc} -- ${rids.mkString(", ")}")
       }
     }
   }

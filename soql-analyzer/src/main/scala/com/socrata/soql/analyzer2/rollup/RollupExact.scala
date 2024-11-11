@@ -828,6 +828,9 @@ class RollupExact[MT <: MetaTypes](
         case Some((selectedColumn, NamedExpr(_ : WindowedFunctionCall, _name, _hint, _isSynthetic), _)) if rollupContext.isCoarseningGroup =>
           log.debug("can't rewrite, windowed function call")
           None
+        case Some((selectedColumn, NamedExpr(funcall : FunctionCall, _name, _hint, _isSynthetic), _)) if funcall.isAggregated && rollupContext.isCoarseningGroup =>
+          log.debug("can't rewrite, nontrivial nested aggregate")
+          None
         case Some((selectedColumn, rollupExpr, functionExtract)) =>
           val result = functionExtract(PhysicalColumn[MT](newFrom.label, newFrom.tableName, columnLabelMap(selectedColumn), rollupExpr.typ)(sExpr.position.asAtomic))
           assert(result.typ == sExpr.typ)
