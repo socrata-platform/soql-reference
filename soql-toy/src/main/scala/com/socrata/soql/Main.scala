@@ -7,10 +7,16 @@ object Main extends App {
   }
 
   if(args.length == 0) {
-    fail("Usage: soqltoy {parse|alias|soql} ARGS...")
+    fail("Usage: soqltoy [-v] {parse|alias|soql} ARGS...")
   }
 
-  val op = args(0) match {
+  var a = args
+  if(a.head == "-v") {
+    System.setProperty("org.slf4j.simpleLogger.log.com.socrata.soql.analyzer2", "debug")
+    a = a.tail
+  }
+
+  val op = a(0) match {
     case "parse" =>
       ParserToy
     case "alias" =>
@@ -29,5 +35,5 @@ object Main extends App {
       fail("soqltoy: unknown command " + other)
   }
 
-  op(args.drop(1))
+  op(a.drop(1))
 }
