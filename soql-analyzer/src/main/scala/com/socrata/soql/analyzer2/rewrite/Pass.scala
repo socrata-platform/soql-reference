@@ -21,9 +21,21 @@ import com.socrata.soql.jsonutils.HierarchyImplicits._
 // PreserveOrderingWithColumns, which, when possible, rewrites the
 // query in such a way that any expressions used in the ORDER BY
 // clause get added to the select-list if they're not already there.
-sealed abstract class AnyPass
-sealed abstract class Pass extends AnyPass
-sealed abstract class DangerousPass extends AnyPass
+//
+// A pass is "semantics preserving" if applying it does not affect the
+// output of the query up to the queries specified constraints - for
+// example, a semantics-preserving pass applied to a query without an
+// order-by is allowed to change the order of the rows - and does not
+// explicitly impose additional constraints (like PreserveOrdering and
+// ImposeOrdering do).
+//
+// A "deep" pass requires looking into the query's source table.
+//
+// These is important for rollups, which have to be applied _after_
+// any non-semantics-preserving deep passes.
+sealed abstract class AnyPass(val semanticsPreserving: Boolean, val deep: Boolean)
+sealed abstract class Pass(semanticsPreserving: Boolean, deep: Boolean) extends AnyPass(semanticsPreserving, deep)
+sealed abstract class DangerousPass(semanticsPreserving: Boolean, deep: Boolean) extends AnyPass(semanticsPreserving, deep)
 
 object AnyPass {
   private[rewrite] def codecBase[T <: AnyPass] = SimpleHierarchyCodecBuilder[T](InternalTag("pass"))
@@ -48,21 +60,21 @@ object AnyPass {
 }
 
 object Pass {
-  case object InlineTrivialParameters extends Pass
-  case object PreserveOrdering extends Pass
-  case object RemoveTrivialSelects extends Pass
-  case object ImposeOrdering extends Pass
-  case object Merge extends Pass
-  case object RemoveUnusedColumns extends Pass
-  case object RemoveUnusedOrderBy extends Pass
-  case object UseSelectListReferences extends Pass
-  case class Page(size: NonNegativeBigInt, offset: NonNegativeBigInt) extends Pass
-  case class AddLimitOffset(limit: Option[NonNegativeBigInt], offset: Option[NonNegativeBigInt]) extends Pass
-  case object RemoveOrderBy extends Pass
-  case class LimitIfUnlimited(limit: NonNegativeBigInt) extends Pass
-  case object RemoveTrivialJoins extends Pass
-  case object RemoveSyntheticColumns extends Pass
-  case object RemoveSystemColumns extends Pass
+  case object InlineTrivialParameters extends Pass(semanticsPreserving = true, deep = true)
+  case object PreserveOrdering extends Pass(semanticsPreserving = false, deep = true)
+  case object RemoveTrivialSelects extends Pass(semanticsPreserving = true, deep = true)
+  case object ImposeOrdering extends Pass(semanticsPreserving = false, deep = true)
+  case object Merge extends Pass(semanticsPreserving = true, deep = true)
+  case object RemoveUnusedColumns extends Pass(semanticsPreserving = true, deep = true)
+  case object RemoveUnusedOrderBy extends Pass(semanticsPreserving = true, deep = true)
+  case object UseSelectListReferences extends Pass(semanticsPreserving = true, deep = false)
+  case class Page(size: NonNegativeBigInt, offset: NonNegativeBigInt) extends Pass(semanticsPreserving = false, deep = false)
+  case class AddLimitOffset(limit: Option[NonNegativeBigInt], offset: Option[NonNegativeBigInt]) extends Pass(semanticsPreserving = false, deep = false)
+  case object RemoveOrderBy extends Pass(semanticsPreserving = false, deep = true)
+  case class LimitIfUnlimited(limit: NonNegativeBigInt) extends Pass(semanticsPreserving = false, deep = false)
+  case object RemoveTrivialJoins extends Pass(semanticsPreserving = true, deep = true)
+  case object RemoveSyntheticColumns extends Pass(semanticsPreserving = false, deep = false)
+  case object RemoveSystemColumns extends Pass(semanticsPreserving = false, deep = false)
 
   private[rewrite] def passBuilder[T >: Pass <: AnyRef](builder: SimpleHierarchyCodecBuilder[T]): SimpleHierarchyCodecBuilder[T] =
     builder
@@ -142,7 +154,7 @@ object Pass {
 }
 
 object DangerousPass {
-  case object PreserveOrderingWithColumns extends DangerousPass
+  case object PreserveOrderingWithColumns extends DangerousPass(semanticsPreserving = false, deep = true)
 
   private[rewrite] def passBuilder[T >: DangerousPass <: AnyRef](builder: SimpleHierarchyCodecBuilder[T]): SimpleHierarchyCodecBuilder[T] =
     builder
