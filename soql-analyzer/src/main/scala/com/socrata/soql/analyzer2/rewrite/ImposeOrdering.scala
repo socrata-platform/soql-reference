@@ -63,9 +63,17 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
         v
 
       case select@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
-        val allUnique =
+        val allUnique: Seq[Seq[Expr]] =
           if(select.isAggregated) {
-            select.unique.map(_.map(selectList(_).expr))
+            if(select.groupBy.isEmpty) {
+              return select // no group by: we're producing a single row and so don't need to change anything at all
+            } else {
+              // `select.unique` will include group-by exprs _if
+              // they're all selected_, but we can usefully order by
+              // them even if they're not, so prepend that to the
+              // list of things to try.
+              Seq(groupBy) ++ select.unique.map(_.map(selectList(_).expr))
+            }
           } else {
             from.unique
           }
