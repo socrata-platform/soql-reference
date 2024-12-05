@@ -593,6 +593,28 @@ select b, n |> select n join @udf(b) as @udf on true
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("impose ordering - group is not selected but is still ordered by") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withPrimaryKey(":id")
+    )
+
+    val analysis = analyze(tf, "twocol", "select sum(num) group by text").imposeOrdering(testTypeInfo.isOrdered)
+    val expectedAnalysis = analyze(tf, "twocol", "select sum(num) group by text order by text")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("impose ordering - ungrouped aggregate causes no ordering") {
+    val tf = tableFinder(
+      (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withPrimaryKey(":id")
+    )
+
+    val analysis = analyze(tf, "twocol", "select sum(num)").imposeOrdering(testTypeInfo.isOrdered)
+    val expectedAnalysis = analyze(tf, "twocol", "select sum(num)")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
   test("impose ordering - nested group by") {
     val tf = tableFinder(
       (0, "twocol") -> D("id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withPrimaryKey("id")
