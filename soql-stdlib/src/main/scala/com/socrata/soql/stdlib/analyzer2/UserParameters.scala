@@ -25,6 +25,7 @@ object UserParameters {
 
     private implicit val textCodec = fromCJson(SoQLText.cjsonRep)
     private implicit val numCodec = fromCJson(SoQLNumber.cjsonRep)
+    // Revert this commit when soda2 is gone
     private implicit val booleanCodec = new JsonEncode[SoQLBoolean] with JsonDecode[SoQLBoolean] {
       val cjsonCodec = fromCJson(SoQLBoolean.cjsonRep)
       override def encode(v: SoQLBoolean) = cjsonCodec.encode(v)
