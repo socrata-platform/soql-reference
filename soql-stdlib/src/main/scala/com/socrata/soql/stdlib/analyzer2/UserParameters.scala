@@ -1,6 +1,6 @@
 package com.socrata.soql.stdlib.analyzer2
 
-import com.rojoma.json.v3.ast.JValue
+import com.rojoma.json.v3.ast._
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode}
 import com.rojoma.json.v3.util.{AutomaticJsonCodec, SimpleHierarchyCodecBuilder, InternalTag, NullForNone, AllowMissing}
 
@@ -25,7 +25,14 @@ object UserParameters {
 
     private implicit val textCodec = fromCJson(SoQLText.cjsonRep)
     private implicit val numCodec = fromCJson(SoQLNumber.cjsonRep)
-    private implicit val booleanCodec = fromCJson(SoQLBoolean.cjsonRep)
+    private implicit val booleanCodec = new JsonEncode[SoQLBoolean] with JsonDecode[SoQLBoolean] {
+      val cjsonCodec = fromCJson(SoQLBoolean.cjsonRep)
+      override def encode(v: SoQLBoolean) = cjsonCodec.encode(v)
+      override def decode(v: JValue) = v match {
+        case JString("true") => Right(SoQLBoolean(true))
+        case JString("false") => Right(SoQLBoolean(false))
+        case other => cjsonCodec.decode(other)
+      }}
     private implicit val fixedTimestampCodec = fromCJson(SoQLFixedTimestamp.cjsonRep)
     private implicit val floatingTimestampCodec = fromCJson(SoQLFloatingTimestamp.cjsonRep)
 
