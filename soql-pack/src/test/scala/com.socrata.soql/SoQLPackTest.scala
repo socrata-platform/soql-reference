@@ -22,12 +22,12 @@ class SoQLPackTest extends FunSuite with MustMatchers {
   )
 
   val schema2 = Seq("num" -> SoQLNumber,
-                    "$" -> SoQLMoney,
+                    "$" -> SoQLNumber,
                     "dbl" -> SoQLDouble)
 
   val data2: Seq[Array[SoQLValue]] = Seq(
-    Array(SoQLNumber(new BD(12345678901L)), SoQLMoney(new BD(9999)), SoQLDouble(0.1)),
-    Array(SoQLNumber(new BD(-123.456)),     SoQLMoney(new BD(9.99)), SoQLDouble(-99.0))
+    Array(SoQLNumber(new BD(12345678901L)), SoQLNumber(new BD(9999)), SoQLDouble(0.1)),
+    Array(SoQLNumber(new BD(-123.456)),     SoQLNumber(new BD(9.99)), SoQLDouble(-99.0))
   )
 
   def writeThenRead(writer: java.io.OutputStream => Unit)(reader: java.io.DataInputStream => Unit): Unit = {
@@ -110,13 +110,13 @@ class SoQLPackTest extends FunSuite with MustMatchers {
 
   import com.rojoma.json.v3.interpolation._
 
-  val schemaJson = Seq("jobj" -> SoQLObject,
-                       "jarray" -> SoQLArray,
+  val schemaJson = Seq("jobj" -> SoQLJson,
+                       "jarray" -> SoQLJson,
                        "json" -> SoQLJson)
 
   val dataJson: Seq[Array[SoQLValue]] = Seq(
-    Array(SoQLObject(j"""{"apple": 5, "bananas": [456, "Chiquitos"]}"""),
-          SoQLArray (j"""[1, true, null, "not really"]"""),
+    Array(SoQLJson(j"""{"apple": 5, "bananas": [456, "Chiquitos"]}"""),
+          SoQLJson (j"""[1, true, null, "not really"]"""),
           SoQLJson  (j"""56.7890"""))
   )
 

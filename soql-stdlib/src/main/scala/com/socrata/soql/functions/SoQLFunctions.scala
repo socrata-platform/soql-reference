@@ -97,9 +97,6 @@ object SoQLFunctions {
   val TextToLocation = mf("text to location", SpecialFunctions.Cast(SoQLLocation.name), Seq(SoQLText), Seq.empty, SoQLLocation)(
     NoDocs
   ).hidden // Required by the old sqlizer (not a real function, requires a string literal); implemented fully in the new-sqlizer
-  val TextToPhone = mf("text to phone", SpecialFunctions.Cast(SoQLPhone.name), Seq(SoQLText), Seq.empty, SoQLPhone)(
-    NoDocs
-  ).hidden // Required by the old sqlizer (not a real function, requires a string literal); not necessary in the new-sqlizer
   val TextToUrl = mf("text to url", SpecialFunctions.Cast(SoQLUrl.name), Seq(SoQLText), Seq.empty, SoQLUrl)(
     NoDocs
   ).hidden // Required by the old sqlizer (not a real function, requires a string literal); not necessary in the new-sqlizer
@@ -411,12 +408,6 @@ object SoQLFunctions {
   val TimesDoubleDouble = mf("*DD", SpecialFunctions.Operator("*"), Seq(SoQLDouble, SoQLDouble), Seq.empty, SoQLDouble)(
     "Multiply two numbers together"
   )
-  val TimesNumMoney = mf("*NM", SpecialFunctions.Operator("*"), Seq(SoQLNumber, SoQLMoney), Seq.empty, SoQLMoney)(
-    "Multiply two numbers together"
-  ).deprecated // money is not a type we support
-  val TimesMoneyNum = mf("*MN", SpecialFunctions.Operator("*"), Seq(SoQLMoney, SoQLNumber), Seq.empty, SoQLMoney)(
-    "Multiply two numbers together"
-  ).deprecated // money is not a type we support
 
   val DivNumNum = mf("/NN", SpecialFunctions.Operator("/"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber)(
     "Divide a number by another"
@@ -424,12 +415,6 @@ object SoQLFunctions {
   val DivDoubleDouble = mf("/DD", SpecialFunctions.Operator("/"), Seq(SoQLDouble, SoQLDouble), Seq.empty, SoQLDouble)(
     "Divide a number by another"
   )
-  val DivMoneyNum = mf("/MN", SpecialFunctions.Operator("/"), Seq(SoQLMoney, SoQLNumber), Seq.empty, SoQLMoney)(
-    "Divide a number by another"
-  ).deprecated // money is not a type we support
-  val DivMoneyMoney = mf("/MM", SpecialFunctions.Operator("/"), Seq(SoQLMoney, SoQLMoney), Seq.empty, SoQLNumber)(
-    "Divide a number by another"
-  ).deprecated // money is not a type we support
 
   val ExpNumNum = mf("^NN", SpecialFunctions.Operator("^"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber)(
     "Return the value of one number raised to the power of another number"
@@ -444,12 +429,6 @@ object SoQLFunctions {
   val ModDoubleDouble = mf("%DD", SpecialFunctions.Operator("%"), Seq(SoQLDouble, SoQLDouble), Seq.empty, SoQLDouble)(
     "Find the remainder(modulus) of one number divided by another"
   )
-  val ModMoneyNum = mf("%MN", SpecialFunctions.Operator("%"), Seq(SoQLMoney, SoQLNumber), Seq.empty, SoQLMoney)(
-    "Find the remainder(modulus) of one number divided by another"
-  ).deprecated // money is not a type we support
-  val ModMoneyMoney = mf("%MM", SpecialFunctions.Operator("%"), Seq(SoQLMoney, SoQLMoney), Seq.empty, SoQLNumber)(
-    "Find the remainder(modulus) of one number divided by another"
-  ).deprecated // money is not a type we support
 
   val NaturalLog = f("ln", FunctionName("ln"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"))(
     "Return the natural log of a number"
@@ -467,9 +446,6 @@ object SoQLFunctions {
     "Round a number to a specified decimal point, example: round(10.3012, 3) => 10.301; round(25, -1) => 30"
   )
 
-  val NumberToMoney = mf("number to money", SpecialFunctions.Cast(SoQLMoney.name), Seq(SoQLNumber), Seq.empty, SoQLMoney)(
-    NoDocs
-  ).deprecated // money is not a type we support
   val NumberToDouble = mf("number to double", SpecialFunctions.Cast(SoQLDouble.name), Seq(SoQLNumber), Seq.empty, SoQLDouble)(
     NoDocs
   )
@@ -827,10 +803,6 @@ object SoQLFunctions {
     NoDocs
   )
 
-  val TextToMoney = mf("text to money", SpecialFunctions.Cast(SoQLMoney.name), Seq(SoQLText), Seq.empty, SoQLMoney)(
-    NoDocs
-  ).deprecated // money is not a type we support
-
   val TextToBool = mf("text to boolean", SpecialFunctions.Cast(SoQLBoolean.name), Seq(SoQLText), Seq.empty, SoQLBoolean)(
     NoDocs
   )
@@ -838,12 +810,6 @@ object SoQLFunctions {
     NoDocs
   )
 
-  val Prop = mf(".", SpecialFunctions.Subscript, Seq(SoQLObject, SoQLText), Seq.empty, SoQLJson)(
-    NoDocs
-  )
-  val Index = mf("[]", SpecialFunctions.Subscript, Seq(SoQLArray, SoQLNumber), Seq.empty, SoQLJson)(
-    NoDocs
-  )
   val JsonProp = mf(".J", SpecialFunctions.Subscript, Seq(SoQLJson, SoQLText), Seq.empty, SoQLJson)(
     NoDocs
   )
@@ -900,15 +866,6 @@ object SoQLFunctions {
   val PointToLatitude = field(SoQLPoint, "latitude", SoQLNumber)
   val PointToLongitude = field(SoQLPoint, "longitude", SoQLNumber)
 
-  val PhoneToPhoneNumber = field(SoQLPhone, "phone_number", SoQLText)
-  val PhoneToPhoneType = field(SoQLPhone, "phone_type", SoQLText)
-
-  val Phone = f("phone", FunctionName("phone"), Map.empty,
-    Seq(FixedType(SoQLText), FixedType(SoQLText)), Seq.empty,
-    FixedType(SoQLPhone))(
-    NoDocs
-  )
-
   val UrlToUrl = field(SoQLUrl, "url", SoQLText)
   val UrlToDescription = field(SoQLUrl, "description", SoQLText)
 
@@ -929,12 +886,6 @@ object SoQLFunctions {
     NoDocs
   ).deprecated // not implemented; if implemented it would be fundamentally different from json to text
   val JsonToBool = mf("json to bool", SpecialFunctions.Cast(SoQLBoolean.name), Seq(SoQLJson), Seq.empty, SoQLBoolean)(
-    NoDocs
-  ).deprecated // not implemented; if implemented it would be fundamentally different from json to text
-  val JsonToObject = mf("json to obj", SpecialFunctions.Cast(SoQLObject.name), Seq(SoQLJson), Seq.empty, SoQLObject)(
-    NoDocs
-  ).deprecated // not implemented; if implemented it would be fundamentally different from json to text
-  val JsonToArray = mf("json to array", SpecialFunctions.Cast(SoQLArray.name), Seq(SoQLJson), Seq.empty, SoQLArray)(
     NoDocs
   ).deprecated // not implemented; if implemented it would be fundamentally different from json to text
 

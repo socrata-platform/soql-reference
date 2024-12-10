@@ -29,11 +29,11 @@ object SoqlToy extends (Array[String] => Unit) {
                       ColumnName("visits") -> SoQLNumber,
                       ColumnName("last_visit") -> SoQLFixedTimestamp,
                       ColumnName("address") -> SoQLLocation,
-                      ColumnName("balance") -> SoQLMoney,
-                      ColumnName("object") -> SoQLObject,
-                      ColumnName("array") -> SoQLArray,
+                      ColumnName("balance") -> SoQLNumber,
+                      ColumnName("object") -> SoQLJson,
+                      ColumnName("array") -> SoQLJson,
                       ColumnName("dbl") -> SoQLDouble,
-                      ColumnName(":@meta") -> SoQLObject
+                      ColumnName(":@meta") -> SoQLJson
                     )
                   }),
       parameters = ParameterSpec(

@@ -122,10 +122,10 @@ sealed trait NonObfuscatedType { self: SoQLType =>
 
 object SoQLType {
   val allTypes = Set( // note: this deliberately does not include SoQLNull!
-    SoQLID, SoQLVersion, SoQLText, SoQLBoolean, SoQLNumber, SoQLMoney, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
-    SoQLDate, SoQLTime, SoQLInterval, SoQLObject, SoQLArray, SoQLJson, SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine,
+    SoQLID, SoQLVersion, SoQLText, SoQLBoolean, SoQLNumber, SoQLDouble, SoQLFixedTimestamp, SoQLFloatingTimestamp,
+    SoQLDate, SoQLTime, SoQLInterval, SoQLJson, SoQLPoint, SoQLMultiPoint, SoQLLine, SoQLMultiLine,
     SoQLPolygon, SoQLMultiPolygon, SoQLBlob,
-    SoQLPhone, SoQLLocation, SoQLUrl, SoQLDocument, SoQLPhoto
+    SoQLLocation, SoQLUrl, SoQLDocument, SoQLPhoto
   )
   val typesByName = allTypes.iterator.foldLeft(Map.empty[TypeName, SoQLType]) { (acc, typ) =>
     acc + (typ.name -> typ)
@@ -137,7 +137,6 @@ object SoQLType {
     SoQLText,
     SoQLNumber,
     SoQLDouble,
-    SoQLMoney,
     SoQLBoolean,
     SoQLFixedTimestamp,
     SoQLFloatingTimestamp,
@@ -150,11 +149,8 @@ object SoQLType {
     SoQLMultiLine,
     SoQLPolygon,
     SoQLMultiPolygon,
-    SoQLPhone,
     SoQLLocation,
     SoQLUrl,
-    SoQLObject,
-    SoQLArray,
     SoQLID,
     SoQLVersion,
     SoQLJson,
@@ -493,33 +489,6 @@ case object SoQLNumber extends SoQLType("number") with NonObfuscatedType {
   }
 }
 
-case class SoQLMoney(value: JBigDecimal) extends SoQLValue {
-  def typ = SoQLMoney
-  def doc(cryptProvider: CryptProvider) =
-    Doc(value.toString)
-
-  override def writeContentsTo(buffer: WriteBuffer) = {
-    buffer.write(JsonUtil.renderJson(value))
-  }
-}
-case object SoQLMoney extends SoQLType("money") with NonObfuscatedType {
-  type Self = SoQLMoney
-
-  val cjsonRep: CJsonRep[SoQLMoney, SoQLValue] = new NumberLikeRep[SoQLMoney, JBigDecimal] {
-    override def wrapper(v: JBigDecimal) = SoQLMoney(v)
-    override def unwrapper(v: SoQLMoney) = v.value
-    override def downcast(v: SoQLValue) = v match {
-      case n: SoQLMoney => Some(n)
-      case _ => None
-    }
-  }
-  override def cjsonRep(cryptProvider: CryptProvider, obfuscateIds: Boolean) = cjsonRep
-
-  override def readContentsFrom(buffer: ReadBuffer) = {
-    SoQLMoney(readContentsJson[java.math.BigDecimal](buffer))
-  }
-}
-
 case class SoQLDouble(value: Double) extends SoQLValue {
   def typ = SoQLDouble
   def doc(cryptProvider: CryptProvider) =
@@ -817,60 +786,6 @@ case object SoQLInterval extends SoQLType("interval") with NonObfuscatedType {
         throw new IOException("Bad interval")
       }
     )
-  }
-}
-
-case class SoQLObject(value: JObject) extends SoQLValue {
-  def typ = SoQLObject
-  def doc(cryptProvider: CryptProvider) =
-    Doc(value.toString)
-
-  override def writeContentsTo(buffer: WriteBuffer) = {
-    buffer.write(JsonUtil.renderJson(value, pretty=false))
-  }
-}
-case object SoQLObject extends SoQLType("object") with NonObfuscatedType {
-  type Self = SoQLObject
-
-  val cjsonRep: CJsonRep[SoQLObject, SoQLValue] = new CodecCJsonRep[SoQLObject, JObject] {
-    override def wrapper(v: JObject) = SoQLObject(v)
-    override def unwrapper(v: SoQLObject) = v.value
-    override def downcast(v: SoQLValue) = v match {
-      case o: SoQLObject => Some(o)
-      case _ => None
-    }
-  }
-  override def cjsonRep(cryptProvider: CryptProvider, obfuscateIds: Boolean) = cjsonRep
-
-  override def readContentsFrom(buffer: ReadBuffer) = {
-    SoQLObject(readContentsJson[JObject](buffer))
-  }
-}
-
-case class SoQLArray(value: JArray) extends SoQLValue {
-  def typ = SoQLArray
-  def doc(cryptProvider: CryptProvider) =
-    Doc(value.toString)
-
-  override def writeContentsTo(buffer: WriteBuffer) = {
-    buffer.write(JsonUtil.renderJson(value, pretty=false))
-  }
-}
-case object SoQLArray extends SoQLType("array") with NonObfuscatedType {
-  type Self = SoQLArray
-
-  val cjsonRep: CJsonRep[SoQLArray, SoQLValue] = new CodecCJsonRep[SoQLArray, JArray] {
-    override def wrapper(v: JArray) = SoQLArray(v)
-    override def unwrapper(v: SoQLArray) = v.value
-    override def downcast(v: SoQLValue) = v match {
-      case a: SoQLArray => Some(a)
-      case _ => None
-    }
-  }
-  override def cjsonRep(cryptProvider: CryptProvider, obfuscateIds: Boolean) = cjsonRep
-
-  override def readContentsFrom(buffer: ReadBuffer) = {
-    SoQLArray(readContentsJson[JArray](buffer))
   }
 }
 
@@ -1221,56 +1136,6 @@ case object SoQLNull extends SoQLType("null") with SoQLValue with NonObfuscatedT
 
   override def readContentsFrom(buffer: ReadBuffer) = {
     SoQLNull
-  }
-}
-
-case class SoQLPhone(@JsonKey("phone_number") phoneNumber: Option[String],
-                     @JsonKey("phone_type") phoneType: Option[String]) extends SoQLValue {
-  def typ = SoQLPhone
-  def doc(cryptProvider: CryptProvider) =
-    Doc(JString(SoQLPhone.jCodec.encode(this).toString).toString)
-
-  override def writeContentsTo(buffer: WriteBuffer) = {
-    buffer.write(JsonUtil.renderJson(this, pretty=false)(typ.jCodec))
-  }
-}
-
-case object SoQLPhone extends SoQLType("phone") with NonObfuscatedType {
-  type Self = SoQLPhone
-
-  implicit val jCodec: JsonEncode[SoQLPhone] with JsonDecode[SoQLPhone] = AutomaticJsonCodecBuilder[SoQLPhone]
-
-  val cjsonRep: CJsonRep[SoQLPhone, SoQLValue] = new CodecCJsonRep[SoQLPhone, SoQLPhone] {
-    override def wrapper(v: SoQLPhone) = v
-    override def unwrapper(v: SoQLPhone) = v
-    override def downcast(v: SoQLValue) = v match {
-      case p: SoQLPhone => Some(p)
-      case _ => None
-    }
-  }
-  override def cjsonRep(cryptProvider: CryptProvider, obfuscateIds: Boolean) = cjsonRep
-
-  // Phone number can take almost anything.  But it does not take :, {, } to avoid confusion with phone type and json
-  val phoneRx = "((?i)Home|Cell|Work|Fax|Other)?(: ?)?([^:{}]+)?".r
-
-  def parsePhone(s: String): Option[SoQLPhone] =
-    s match {
-      case phoneRx(pt, sep, pn) if Option(pt).nonEmpty || Option(pn).nonEmpty =>
-        Some(SoQLPhone(Option(pt).map(_.toLowerCase.capitalize), Option(pn)))
-      case _ =>
-        try {
-          JsonUtil.parseJson[SoQLPhone](s).toOption
-        } catch {
-          case ex: JsonReaderException => None
-        }
-    }
-
-  def isPossible(s: String): Boolean = parsePhone(s).isDefined
-
-  def isPossible(s: CaseInsensitiveString): Boolean = isPossible(s.getString)
-
-  override def readContentsFrom(buffer: ReadBuffer) = {
-    readContentsJson[SoQLPhone](buffer)
   }
 }
 

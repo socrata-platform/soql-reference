@@ -8,7 +8,6 @@ object SoQLTypeClasses {
     SoQLText,
     SoQLNumber,
     SoQLDouble,
-    SoQLMoney,
     SoQLBoolean,
     SoQLFixedTimestamp,
     SoQLFloatingTimestamp,
@@ -27,14 +26,13 @@ object SoQLTypeClasses {
 
   val Equatable = Ordered ++ GeospatialLike ++ Set[SoQLType](
     SoQLBlob,
-    SoQLPhone,
     SoQLPhoto,
     SoQLLocation,
     SoQLUrl,
     SoQLJson
   )
 
-  val NumLike = CovariantSet[SoQLType](SoQLNumber, SoQLDouble, SoQLMoney)
+  val NumLike = CovariantSet[SoQLType](SoQLNumber, SoQLDouble)
   val RealNumLike = CovariantSet[SoQLType](SoQLNumber, SoQLDouble)
   val TimestampLike = CovariantSet[SoQLType](SoQLFixedTimestamp, SoQLFloatingTimestamp)
 }

@@ -21,9 +21,9 @@ class SoQLTypeAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPro
       ColumnName("visits") -> SoQLNumber,
       ColumnName("last_visit") -> SoQLFixedTimestamp,
       ColumnName("address") -> SoQLLocation,
-      ColumnName("balance") -> SoQLMoney,
-      ColumnName("object") -> SoQLObject,
-      ColumnName("array") -> SoQLArray
+      ColumnName("balance") -> SoQLNumber,
+      ColumnName("object") -> SoQLJson,
+      ColumnName("array") -> SoQLJson
     )
   }
 
