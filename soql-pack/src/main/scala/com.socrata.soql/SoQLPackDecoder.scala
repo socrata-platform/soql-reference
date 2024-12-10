@@ -28,7 +28,6 @@ object SoQLPackDecoder {
     SoQLID           -> (x => decodeLong(x).map(SoQLID(_))),
     SoQLVersion      -> (x => decodeLong(x).map(SoQLVersion(_))),
     SoQLNumber       -> (x => decodeBigDecimal(x).map(SoQLNumber(_))),
-    SoQLMoney        -> (x => decodeBigDecimal(x).map(SoQLMoney(_))),
     SoQLDouble       -> (x => x match {
                            case d: java.lang.Double if d != null  => Some(SoQLDouble(d))
                            case _: Any => None
@@ -37,8 +36,6 @@ object SoQLPackDecoder {
     SoQLFloatingTimestamp -> (x => decodeDateTime(x).map(t => SoQLFloatingTimestamp(new LocalDateTime(t)))),
     SoQLDate         -> (x => decodeDateTime(x).map(t => SoQLDate(new LocalDate(t)))),
     SoQLTime         -> (x => decodeLong(x).map(t => SoQLTime(LocalTime.fromMillisOfDay(t.toInt)))),
-    SoQLObject       -> (x => decodeJson[JObject](x).map(SoQLObject(_))),
-    SoQLArray        -> (x => decodeJson[JArray](x).map(SoQLArray(_))),
     SoQLJson         -> (x => decodeJson[JValue](x).map(SoQLJson(_))),
     SoQLBlob         -> decodeBlobId _,
     SoQLPhoto        -> decodePhoto _,

@@ -45,7 +45,6 @@ final class SoQLTypeInfo2[MT <: analyzer2.MetaTypes with ({ type ColumnType = So
         val baseNumber = analyzer2.LiteralValue[MT](SoQLNumber(n.bigDecimal))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, l.position)))
         Seq(
           baseNumber,
-          analyzer2.FunctionCall[MT](SoQLTypeInfo.numberToMoneyFunc, Seq(baseNumber))(new analyzer2.FuncallPositionInfo(Source.Synthetic, NoPosition)),
           analyzer2.FunctionCall[MT](SoQLTypeInfo.numberToDoubleFunc, Seq(baseNumber))(new analyzer2.FuncallPositionInfo(Source.Synthetic, NoPosition))
         )
       case ast.StringLiteral(s) =>
@@ -115,10 +114,6 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with SoQLTypeInfoCommo
       analyzer2.LiteralValue[MT](SoQLInterval(p))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToNumberExpr(s: SoQLText, sourceName: Option[ScopedResourceName], pos: Position) =
       analyzer2.LiteralValue[MT](SoQLNumber(new java.math.BigDecimal(s.value)))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
-    def textToMoneyExpr(s: SoQLText, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](SoQLMoney(new java.math.BigDecimal(s.value)))(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
-    def textToPhoneExpr(phone: SoQLPhone, sourceName: Option[ScopedResourceName], pos: Position) =
-      analyzer2.LiteralValue[MT](phone)(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToUrlExpr(url: SoQLUrl, sourceName: Option[ScopedResourceName], pos: Position) =
       analyzer2.LiteralValue[MT](url)(new analyzer2.AtomicPositionInfo(Source.nonSynthetic(sourceName, pos)))
     def textToPointExpr(p: Point, sourceName: Option[ScopedResourceName], pos: Position) =
@@ -150,12 +145,10 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with SoQLTypeInfoCommo
   private val textToDateFunc = getMonomorphically(SoQLFunctions.TextToDate)
   private val textToTimeFunc = getMonomorphically(SoQLFunctions.TextToTime)
   private val textToIntervalFunc = getMonomorphically(SoQLFunctions.TextToInterval)
-  private[functions] val numberToMoneyFunc = getMonomorphically(SoQLFunctions.NumberToMoney)
   private[functions] val numberToDoubleFunc = getMonomorphically(SoQLFunctions.NumberToDouble)
   private val textToRowIdFunc = getMonomorphically(SoQLFunctions.TextToRowIdentifier)
   private val textToRowVersionFunc = getMonomorphically(SoQLFunctions.TextToRowVersion)
   private val textToNumberFunc = getMonomorphically(SoQLFunctions.TextToNumber)
-  private val textToMoneyFunc = getMonomorphically(SoQLFunctions.TextToMoney)
   private val textToPointFunc = getMonomorphically(SoQLFunctions.TextToPoint)
   private val textToMultiPointFunc = getMonomorphically(SoQLFunctions.TextToMultiPoint)
   private val textToLineFunc = getMonomorphically(SoQLFunctions.TextToLine)
@@ -164,7 +157,6 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with SoQLTypeInfoCommo
   private val textToMultiPolygonFunc = getMonomorphically(SoQLFunctions.TextToMultiPolygon)
   private[functions] val textToBlobFunc = getMonomorphically(SoQLFunctions.TextToBlob)
   private[functions] val textToPhotoFunc = getMonomorphically(SoQLFunctions.TextToPhoto)
-  private val textToPhoneFunc = getMonomorphically(SoQLFunctions.TextToPhone)
   private val textToUrlFunc = getMonomorphically(SoQLFunctions.TextToUrl)
   private val textToLocationFunc = getMonomorphically(SoQLFunctions.TextToLocation)
   private val textToBooleanFunc = getMonomorphically(SoQLFunctions.TextToBool)
@@ -292,10 +284,10 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with SoQLTypeInfoCommo
     },
     new Conversions.Simple {
       override def tst(s: String) = isNumberLiteral(s)
-      override val functions = Seq(textToNumberFunc, textToMoneyFunc)
+      override val functions = Seq(textToNumberFunc)
       override def es[MT <: analyzer2.MetaTypes with ({type ColumnType = SoQLType; type ColumnValue = SoQLValue})] = {
         val eh = new ExprHelper[MT]
-        Seq(eh.textToNumberExpr _, eh.textToMoneyExpr _)
+        Seq(eh.textToNumberExpr _)
       }
     },
     new Conversions.Unprovenanced[Point] {
@@ -327,11 +319,6 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with SoQLTypeInfoCommo
       override def test(s: String) = SoQLMultiPolygon.WktRep.unapply(s)
       override val functions = Seq(textToMultiPolygonFunc)
       override def es[MT <: analyzer2.MetaTypes with ({type ColumnType = SoQLType; type ColumnValue = SoQLValue})] = Seq(new ExprHelper[MT].textToMultiPolygonExpr _)
-    },
-    new Conversions.Unprovenanced[SoQLPhone] {
-      override def test(s: String) = SoQLPhone.parsePhone(s)
-      override val functions = Seq(textToPhoneFunc)
-      override def es[MT <: analyzer2.MetaTypes with ({type ColumnType = SoQLType; type ColumnValue = SoQLValue})] = Seq(new ExprHelper[MT].textToPhoneExpr _)
     },
     new Conversions.Unprovenanced[SoQLUrl] {
       override def test(s: String) = SoQLUrl.parseUrl(s)
@@ -368,7 +355,6 @@ object SoQLTypeInfo extends TypeInfo[SoQLType, SoQLValue] with SoQLTypeInfoCommo
     val baseNumber = typed.NumberLiteral(n, SoQLNumber.t)(pos)
     Seq(
       baseNumber,
-      typed.FunctionCall(numberToMoneyFunc, Seq(baseNumber), None, None)(pos, pos),
       typed.FunctionCall(numberToDoubleFunc, Seq(baseNumber), None, None)(pos, pos)
     )
   }

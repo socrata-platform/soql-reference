@@ -24,7 +24,6 @@ class SoQLGeoRow(underlying: Array[SoQLValue], parent: SoQLPackIterator)
       val jVal = v match {
         case SoQLText(str)   => JString(str)
         case SoQLNumber(bd)  => JNumber(bd)
-        case SoQLMoney(bd)   => JNumber(bd)
         case SoQLDouble(dbl) => JNumber(dbl)
         case SoQLBoolean(b)  => JBoolean(b)
         case SoQLFixedTimestamp(dt) => JString(SoQLFixedTimestamp.StringRep(dt))
