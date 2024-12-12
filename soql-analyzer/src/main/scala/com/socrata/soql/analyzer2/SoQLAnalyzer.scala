@@ -862,8 +862,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         val (realLeft, env0) = left.doTypecheckOnClauses(ctx, nextSelectList)
 
         // Because we're re-building the unitary join environment, we
-        // want to add to the exting scope rather than extending the
-        // environment here.  It has already been extended by the left.
+        // want to add a scope to th existing environment rather than
+        // adding a new sub-environment here.  It has already been
+        // extended by the leftmost part of the join.
         val env = envify(ctx, right.addToEnvironment(env0), NoPosition /* TODO: NEED POS INFO FROM AST */)
 
         val checkedOn =
