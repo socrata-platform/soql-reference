@@ -609,7 +609,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       // Now that we know what we're selecting from, we'll give names to the selection...
       val aliasAnalysis =
         try {
-          AliasAnalysis(selection, from)(collectNamesForAnalysis(completeFrom.intoFakeRealFrom /* don't need real ON clauses for this */))
+          AliasAnalysis(selection, from)(collectNamesForAnalysis(completeFrom))
         } catch {
           case e: AliasAnalysisException =>
             ctx.augmentAliasAnalysisException(e)
@@ -787,7 +787,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
     }
 
-    def collectNamesForAnalysis(from: From): AliasAnalysis.AnalysisContext = {
+    def collectNamesForAnalysis(from: FakeFrom): AliasAnalysis.AnalysisContext = {
       def contextFrom(af: AtomicFrom): UntypedDatasetContext =
         af match {
           case _: FromSingleRow => new UntypedDatasetContext {
@@ -818,7 +818,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
 
       from.reduce[Map[AliasAnalysis.Qualifier, UntypedDatasetContext]](
         augmentAcc(Map.empty, _),
-        { (acc, j) => augmentAcc(acc, j.right) }
+        { (acc, right) => augmentAcc(acc, right) }
       )
     }
 
@@ -832,6 +832,11 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         doTypecheckOnClauses(ctx, selectList)._1
 
       def doTypecheckOnClauses(ctx: Ctx, availableSelectList: Map[ColumnName, Expr]): (From, Environment[MT])
+
+      final def reduce[S](
+        base: AtomicFrom => S,
+        combine: (S, AtomicFrom) => S
+      ): S = intoFakeRealFrom.reduce[S](base, { (s, join) => combine(s, join.right) })
     }
     case class FakeAtomicFrom(atomicFrom: AtomicFrom) extends FakeFrom {
       override def intoFakeRealFrom = atomicFrom
