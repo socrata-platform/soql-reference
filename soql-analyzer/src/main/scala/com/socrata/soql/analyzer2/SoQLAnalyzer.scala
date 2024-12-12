@@ -844,7 +844,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       override def doTypecheckOnClauses(ctx: Ctx, availableSelectList: Map[ColumnName, Expr]) =
         // This extendEnvironment should not fail, as we already did
         // this extension once in queryInputSchema.
-        (atomicFrom, envify(ctx, extendEnvironment(ctx.enclosingEnv), NoPosition /* TODO: NEED POS INFO FROM AST */))
+        (atomicFrom, envify(ctx, atomicFrom.extendEnvironment(ctx.enclosingEnv), NoPosition /* TODO: NEED POS INFO FROM AST */))
     }
     case class FakeJoin(joinType: JoinType, lateral: Boolean, left: FakeFrom, right: AtomicFrom, on: ast.Expression) extends FakeFrom {
       override val intoFakeRealFrom =
@@ -861,9 +861,10 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
 
         val (realLeft, env0) = left.doTypecheckOnClauses(ctx, nextSelectList)
 
-        // This extendEnvironment should not fail, as we already did
-        // this extension once in queryInputSchema.
-        val env = envify(ctx, right.extendEnvironment(env0), NoPosition /* TODO: NEED POS INFO FROM AST */)
+        // Because we're re-building the unitary join environment, we
+        // want to add to the exting scope rather than extending the
+        // environment here.  It has already been extended by the left.
+        val env = envify(ctx, right.addToEnvironment(env0), NoPosition /* TODO: NEED POS INFO FROM AST */)
 
         val checkedOn =
           typecheck(ctx.copy(enclosingEnv = env), on, availableSelectList, Some(typeInfo.boolType))
