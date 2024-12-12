@@ -22,7 +22,7 @@ trait WindowedFunctionCallImpl[MT <: MetaTypes] { this: WindowedFunctionCall[MT]
   val isAggregated = args.exists(_.isAggregated) || partitionBy.exists(_.isAggregated) || orderBy.exists(_.expr.isAggregated)
   def isWindowed = true
 
-  private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = {
+  private[analyzer2] lazy val columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = {
     var refs =
       args.foldLeft(Map.empty[AutoTableLabel, Set[ColumnLabel]]) { (acc, arg) =>
         acc.mergeWith(arg.columnReferences)(_ ++ _)
