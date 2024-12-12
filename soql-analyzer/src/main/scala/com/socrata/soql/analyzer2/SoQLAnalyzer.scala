@@ -842,6 +842,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       override def intoFakeRealFrom = atomicFrom
 
       override def doTypecheckOnClauses(ctx: Ctx, availableSelectList: Map[ColumnName, Expr]) =
+        // This extendEnvironment should not fail, as we already did
+        // this extension once in queryInputSchema.
         (atomicFrom, envify(ctx, extendEnvironment(ctx.enclosingEnv), NoPosition /* TODO: NEED POS INFO FROM AST */))
     }
     case class FakeJoin(joinType: JoinType, lateral: Boolean, left: FakeFrom, right: AtomicFrom, on: ast.Expression) extends FakeFrom {
