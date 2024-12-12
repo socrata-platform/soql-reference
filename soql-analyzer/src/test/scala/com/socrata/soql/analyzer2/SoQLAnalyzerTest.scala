@@ -1290,4 +1290,27 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       case other => fail("Found an incorrect source: " + other)
     }
   }
+
+  test("An ON clause can reference output columns which only include references to tables here or left of here") {
+    val tf = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "ds2") -> D("hello" -> TestText, "world" -> TestNumber),
+      (0, "ds3") -> D("smiling" -> TestText, "gnus" -> TestNumber)
+    )
+
+    val Right(ft) = tf.findTables(0, rn("ds1"), "select text + text as tt join @ds2 on tt = @ds2.hello join @ds3 on @ds2.hello = @ds3.smiling", Map.empty)
+    val Right(_) = analyzer(ft, UserParameters.empty)
+  }
+
+  test("An ON clause can NOT reference output columns which include references to tables right of here") {
+    val tf = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "ds2") -> D("hello" -> TestText, "world" -> TestNumber),
+      (0, "ds3") -> D("smiling" -> TestText, "gnus" -> TestNumber)
+    )
+
+    val Right(ft) = tf.findTables(0, rn("ds1"), "select @ds3.gnus + num as t join @ds2 on t = @ds2.world join @ds3 on true", Map.empty)
+    val Left(SoQLAnalyzerError.TypecheckError.NoSuchColumn(_, None, badColName)) = analyzer(ft, UserParameters.empty)
+    badColName must equal(cn("t"))
+  }
 }

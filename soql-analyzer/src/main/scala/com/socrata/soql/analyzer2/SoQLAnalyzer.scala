@@ -699,13 +699,15 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           // all well
       }
 
+      val selectList = OrderedMap() ++ aliasAnalysis.expressions.keysIterator.map { cn =>
+        val expr = finalState.namedExprs(cn)
+        labelProvider.columnLabel() -> NamedExpr(expr, cn, ctx.outputColumnHints.get(cn), isSynthetic = false)
+      }
+
       val stmt = addSystemColumnsIfDesired(Select(
         checkedDistinct,
-        OrderedMap() ++ aliasAnalysis.expressions.keysIterator.map { cn =>
-          val expr = finalState.namedExprs(cn)
-          labelProvider.columnLabel() -> NamedExpr(expr, cn, ctx.outputColumnHints.get(cn), isSynthetic = false)
-        },
-        completeFrom,
+        selectList,
+        completeFrom.typecheckOnClauses(ctx, finalState.namedExprs),
         checkedWhere,
         checkedGroupBys,
         checkedHaving,
@@ -785,7 +787,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
     }
 
-    def collectNamesForAnalysis(from: From): AliasAnalysis.AnalysisContext = {
+    def collectNamesForAnalysis(from: FakeFrom): AliasAnalysis.AnalysisContext = {
       def contextFrom(af: AtomicFrom): UntypedDatasetContext =
         af match {
           case _: FromSingleRow => new UntypedDatasetContext {
@@ -816,11 +818,68 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
 
       from.reduce[Map[AliasAnalysis.Qualifier, UntypedDatasetContext]](
         augmentAcc(Map.empty, _),
-        { (acc, j) => augmentAcc(acc, j.right) }
+        { (acc, right) => augmentAcc(acc, right) }
       )
     }
 
-    def queryInputSchema(ctx: Ctx, input: ImplicitFrom, from: Option[TableName], joins: Seq[ast.Join]): From = {
+    sealed abstract class FakeFrom {
+      // This is a real From where the ON clauses are all `true`
+      def intoFakeRealFrom: From
+
+      final def extendEnvironment(base: Environment[MT]): Either[AddScopeError, Environment[MT]] =
+        intoFakeRealFrom.extendEnvironment(base)
+      final def typecheckOnClauses(ctx: Ctx, selectList: Map[ColumnName, Expr]): From =
+        doTypecheckOnClauses(ctx, selectList)._1
+
+      def doTypecheckOnClauses(ctx: Ctx, availableSelectList: Map[ColumnName, Expr]): (From, Environment[MT])
+
+      final def reduce[S](
+        base: AtomicFrom => S,
+        combine: (S, AtomicFrom) => S
+      ): S = intoFakeRealFrom.reduce[S](base, { (s, join) => combine(s, join.right) })
+    }
+    case class FakeAtomicFrom(atomicFrom: AtomicFrom) extends FakeFrom {
+      override def intoFakeRealFrom = atomicFrom
+
+      override def doTypecheckOnClauses(ctx: Ctx, availableSelectList: Map[ColumnName, Expr]) =
+        // This extendEnvironment should not fail, as we already did
+        // this extension once in queryInputSchema.
+        (atomicFrom, envify(ctx, atomicFrom.extendEnvironment(ctx.enclosingEnv), NoPosition /* TODO: NEED POS INFO FROM AST */))
+    }
+    case class FakeJoin(joinType: JoinType, lateral: Boolean, left: FakeFrom, right: AtomicFrom, on: ast.Expression) extends FakeFrom {
+      override val intoFakeRealFrom =
+        Join(joinType, lateral, left.intoFakeRealFrom, right, typeInfo.literalBoolean(true, Source.Synthetic))
+
+      override def doTypecheckOnClauses(ctx: Ctx, availableSelectList: Map[ColumnName, Expr]) = {
+
+        // for things to the left of us, remove any columns that
+        // reference the right side of this JOIN.
+        val nextSelectList: Map[ColumnName, Expr] =
+          availableSelectList.filterNot { case (_, e) =>
+            e.columnReferences.contains(right.label)
+          }
+
+        val (realLeft, env0) = left.doTypecheckOnClauses(ctx, nextSelectList)
+
+        // Because we're re-building the unitary join environment, we
+        // want to add a scope to th existing environment rather than
+        // adding a new sub-environment here.  It has already been
+        // extended by the leftmost part of the join.
+        val env = envify(ctx, right.addToEnvironment(env0), NoPosition /* TODO: NEED POS INFO FROM AST */)
+
+        val checkedOn =
+          typecheck(ctx.copy(enclosingEnv = env), on, availableSelectList, Some(typeInfo.boolType))
+
+        if(!typeInfo.isBoolean(checkedOn.typ)) {
+          ctx.expectedBoolean(on, checkedOn.typ)
+        }
+
+        (Join(joinType, lateral, realLeft, right, checkedOn), env)
+      }
+    }
+
+
+    def queryInputSchema(ctx: Ctx, input: ImplicitFrom, from: Option[TableName], joins: Seq[ast.Join]): FakeFrom = {
       // Ok so:
       //  * @This is special only in From
       //  * It is an error if we have neither an input nor a from
@@ -895,7 +954,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           }
       }
 
-      joins.foldLeft[From](from0) { (left, join) =>
+      joins.foldLeft[FakeFrom](FakeAtomicFrom(from0)) { (left, join) =>
         val joinType = join.typ match {
           case ast.InnerJoinType => JoinType.Inner
           case ast.LeftOuterJoinType => JoinType.LeftOuter
@@ -912,15 +971,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             analyzeJoinSelect(ctx, join.from)
           }
 
-        val checkedOn =
-          typecheck(ctx.copy(enclosingEnv = envify(ctx, checkedRight.addToEnvironment(augmentedFrom), NoPosition /* TODO: NEED POS INFO FROM AST */)),
-                    join.on, Map.empty, Some(typeInfo.boolType))
-
-        if(!typeInfo.isBoolean(checkedOn.typ)) {
-          ctx.expectedBoolean(join.on, checkedOn.typ)
-        }
-
-        Join(joinType, effectiveLateral, left, checkedRight, checkedOn)
+        FakeJoin(joinType, effectiveLateral, left, checkedRight, join.on)
       }
     }
 
