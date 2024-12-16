@@ -12,7 +12,7 @@ trait LiteralValueImpl[MT <: MetaTypes] { this: LiteralValue[MT] =>
 
   val size = 1
 
-  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) = ev.cv.docOf(value)
+  protected def doDebugDoc(implicit ev: StatementDocProvider[MT]) = ev.cv.docOf(value)
 
   def doRelabel(state: RelabelState) = this
   def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) = {

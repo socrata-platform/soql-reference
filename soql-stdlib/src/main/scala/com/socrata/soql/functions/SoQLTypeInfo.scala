@@ -30,6 +30,7 @@ sealed trait SoQLTypeInfoCommon extends TypeInfoCommon[SoQLType, SoQLValue] {
   override final def isOrdered(typ: SoQLType): Boolean = SoQLTypeClasses.Ordered(typ)
   override final def isBoolean(typ: SoQLType): Boolean = typ == SoQLBoolean
   override final def isGroupable(typ: SoQLType): Boolean = SoQLTypeClasses.Equatable(typ)
+  override final def isEquatable(typ: SoQLType): Boolean = SoQLTypeClasses.Equatable(typ)
 
   // It's useful enough to say "SoQLTypeInfo.hasType" without needing
   // to fully instantiate a SoQLTypeInfo2 that I'm putting this here

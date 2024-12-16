@@ -7,6 +7,7 @@ import scala.collection.immutable.VectorBuilder
 
 import com.rojoma.json.v3.ast.JString
 
+import com.socrata.soql.BinaryTree
 import com.socrata.soql.environment.{ColumnName, FunctionName, HoleName, TableName, TypeName}
 import com.socrata.prettyprint.prelude._
 import com.socrata.soql.parsing.RecursiveDescentParser
@@ -476,4 +477,12 @@ object Hole {
     def doc = (view.toSeq.map { table => d"@$table" } :+ StringLiteral(name.name)(NoPosition).doc).
       encloseNesting(d"param(", Doc.Symbols.comma, d")")
   }
+}
+
+final case class InSubselect(scrutinee: Expression, subselect: BinaryTree[Select])(val position: Position, val functionNamePosition: Position) extends Expression {
+  def allColumnRefs: Set[ColumnOrAliasRef] = ???
+  def collectHoles(f: PartialFunction[Hole,Expression]): Expression = ???
+  def doc: Doc[Nothing] = ???
+  def removeSyntacticParens: Expression = ???
+  def replaceHoles(f: Hole => Expression): Expression = ???
 }

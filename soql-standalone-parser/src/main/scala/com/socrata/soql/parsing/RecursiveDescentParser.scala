@@ -1614,9 +1614,37 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   private def parseIn(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader): ParseResult[Expression] = {
     reader.first match {
       case LPAREN() =>
-        parseArgList(reader.rest, arg0 = Some(scrutinee), allowEmpty = false).map { args =>
-          FunctionCall(name, args, None)(scrutinee.position, op.position)
+        // this is either a subselect or a list of expressions; we
+        // have to decide which it is.  The trickiest part of this is
+        // deciding what to do in case of error!
+        try {
+          parseArgList(reader.rest, arg0 = Some(scrutinee), allowEmpty = false).map { args =>
+            FunctionCall(name, args, None)(scrutinee.position, op.position)
+          }
+        } catch {
+          case expressionListError: ParseException =>
+            try {
+              // TODO: NOT IN
+              compoundSelect(reader).map(InSubselect(scrutinee, _)(scrutinee.position, op.position))
+            } catch {
+              case selectError: ParseException =>
+                val later =
+                  expressionListError.position.line.compareTo(selectError.position.line) match {
+                    case n if n < 0 =>
+                      selectError
+                    case 0 =>
+                      if(expressionListError.position.column >= selectError.position.column) {
+                        expressionListError
+                      } else {
+                        selectError
+                      }
+                    case _ =>
+                      expressionListError
+                  }
+                throw later
+            }
         }
+
       case _ =>
         fail(reader, LPAREN())
     }

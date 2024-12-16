@@ -24,6 +24,7 @@ trait TypeInfoCommon[Type, Value] {
   def isOrdered(typ: Type): Boolean
   def isBoolean(typ: Type): Boolean
   def isGroupable(typ: Type): Boolean
+  def isEquatable(typ: Type): Boolean
 }
 
 trait TypeInfo[Type, Value] extends TypeInfoCommon[Type, Value] {

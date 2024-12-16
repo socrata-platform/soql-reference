@@ -53,13 +53,13 @@ sealed abstract class Expr[MT <: MetaTypes] extends Product with LabelUniverse[M
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
 
-  final def debugStr(implicit ev: HasDoc[CV], ev2: HasDoc[MT#DatabaseColumnNameImpl]): String = debugStr(new StringBuilder).toString
-  final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV], ev2: HasDoc[MT#DatabaseColumnNameImpl]): StringBuilder = debugDoc(ev, ev2).layoutSmart().toStringBuilder(sb)
-  final def debugDoc(implicit ev: HasDoc[CV], ev2: HasDoc[MT#DatabaseColumnNameImpl]): Doc[Annotation[MT]] =
-    debugDoc(new ExprDocProvider(ev, ev2))
-  private[analyzer2] final def debugDoc(implicit ev: ExprDocProvider[MT]): Doc[Annotation[MT]] =
+  final def debugStr(implicit ev: HasDoc[CV], ev2: HasDoc[MT#DatabaseTableNameImpl], ev3: HasDoc[MT#DatabaseColumnNameImpl]): String = debugStr(new StringBuilder).toString
+  final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV], ev2: HasDoc[MT#DatabaseTableNameImpl], ev3: HasDoc[MT#DatabaseColumnNameImpl]): StringBuilder = debugDoc(ev, ev2, ev3).layoutSmart().toStringBuilder(sb)
+  final def debugDoc(implicit ev: HasDoc[CV], ev2: HasDoc[MT#DatabaseTableNameImpl], ev3: HasDoc[MT#DatabaseColumnNameImpl]): Doc[Annotation[MT]] =
+    debugDoc(new StatementDocProvider(ev, ev2, ev3))
+  private[analyzer2] final def debugDoc(implicit ev: StatementDocProvider[MT]): Doc[Annotation[MT]] =
     doDebugDoc.annotate(Annotation.Typed(typ))
-  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]): Doc[Annotation[MT]]
+  protected def doDebugDoc(implicit ev: StatementDocProvider[MT]): Doc[Annotation[MT]]
 
   def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]]
 
@@ -265,3 +265,16 @@ final case class WindowedFunctionCall[MT <: MetaTypes](
 }
 
 object WindowedFunctionCall extends expression.OWindowedFunctionCallImpl
+
+final case class InSubselect[MT <: MetaTypes](
+  scrutinee: Expr[MT],
+  substatement: Statement[MT],
+  typ: MT#ColumnType
+)(
+  val position: FuncallPositionInfo[MT#ResourceNameScope]
+) extends
+    Expr[MT]
+    with expression.InSubselectImpl[MT]
+    with HashedExpr
+
+object InSubselect extends expression.OInSubselectImpl

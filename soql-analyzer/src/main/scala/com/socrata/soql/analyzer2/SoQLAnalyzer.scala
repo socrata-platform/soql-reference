@@ -1143,7 +1143,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       namedExprs: Map[ColumnName, Expr],
       expectedType: Option[CT]
     ): Expr = {
-      val tc = new Typechecker(ctx.scopedResourceName, ctx.canonicalName, ctx.primaryTableName, ctx.enclosingEnv, namedExprs, ctx.udfParams, userParameters, typeInfo, functionInfo)
+      val tc = new Typechecker(ctx.scopedResourceName, ctx.canonicalName, ctx.primaryTableName, ctx.enclosingEnv, namedExprs, ctx.udfParams, userParameters, typeInfo, functionInfo, { stmt =>
+                                 new SoQLAnalysis[MT](labelProvider, intoStatement(analyzeStatement(ctx, stmt, ImplicitFrom.None)))
+                               })
       tc(expr, expectedType) match {
         case Right(e) => e
         case Left(err) => augmentTypecheckException(err)

@@ -81,7 +81,7 @@ trait WindowedFunctionCallImpl[MT <: MetaTypes] { this: WindowedFunctionCall[MT]
          partitionBy = partitionBy.map(_.doRelabel(state)),
          orderBy = orderBy.map(_.doRelabel(state)))(position)
 
-  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) = {
+  protected def doDebugDoc(implicit ev: StatementDocProvider[MT]) = {
     val preArgs: Doc[Nothing] = Doc(function.name.name) ++ d"("
     val windowParts: Doc[Annotation[MT]] =
       Seq[Option[Doc[Annotation[MT]]]](

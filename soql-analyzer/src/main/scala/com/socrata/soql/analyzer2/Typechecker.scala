@@ -3,6 +3,7 @@ package com.socrata.soql.analyzer2
 import scala.util.control.NoStackTrace
 import scala.util.parsing.input.{Position, NoPosition}
 
+import com.socrata.soql.BinaryTree
 import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, CovariantSet}
 import com.socrata.soql.environment.{ColumnName, HoleName, ResourceName, Source, TableName, FunctionName, Provenance}
@@ -18,7 +19,8 @@ class Typechecker[MT <: MetaTypes](
   udfParams: Map[HoleName, (Option[types.ScopedResourceName[MT]], Position) => Expr[MT]],
   userParameters: UserParameters[MT#ColumnType, MT#ColumnValue],
   typeInfo: TypeInfo2[MT],
-  functionInfo: FunctionInfo[MT#ColumnType]
+  functionInfo: FunctionInfo[MT#ColumnType],
+  analyzeSubselect: BinaryTree[ast.Select] => SoQLAnalysis[MT]
 ) extends ExpressionUniverse[MT] {
   type Error = TypecheckError[RNS]
   private val TypecheckError = SoQLAnalyzerError.TypecheckError
@@ -181,6 +183,19 @@ class Typechecker[MT <: MetaTypes](
         }
       case hole@ast.Hole.SavedQuery(name, view) =>
         userParameter(view.map(CanonicalName), name, hole.position)
+      case in@ast.InSubselect(scrutinee, subselect) =>
+        val analysis = analyzeSubselect(subselect)
+        val substatement = rewrite.RemoveSyntheticColumns(analysis.labelProvider, analysis.statement)
+        if(substatement.schema.size != 1) {
+          // TODO: Error
+        }
+        val (_, schemaEntry) = substatement.schema.head
+        if(!typeInfo.isEquatable(schemaEntry.typ)) {
+          // TODO: Error
+        }
+        apply(scrutinee, Some(schemaEntry.typ)).map { typecheckedScrutinee =>
+          Seq(InSubselect(typecheckedScrutinee, substatement, typeInfo.boolType)(new FuncallPositionInfo(Source.nonSynthetic(sourceName, in.position), in.functionNamePosition)))
+        }
     }
   }
 

@@ -46,6 +46,7 @@ class TestTypeInfo[MT <: MetaTypes with ({ type ColumnType = TestType; type Colu
   def typeParameterUniverse = TestTypeInfo.typeParameterUniverse
   def isBoolean(typ: TestType): Boolean = typ == TestBoolean
   def isGroupable(typ: TestType): Boolean = true
+  def isEquatable(typ: TestType): Boolean = true
   def isOrdered(typ: TestType): Boolean = typ.isOrdered
   def typeFor(name: TypeName): Option[TestType] = TestType.typesByName.get(name)
   def typeNameFor(typ: TestType): TypeName = typ.name

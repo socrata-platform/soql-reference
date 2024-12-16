@@ -65,7 +65,7 @@ trait AggregateFunctionCallImpl[MT <: MetaTypes] { this: AggregateFunctionCall[M
     copy(args = args.map(_.doRelabel(state)),
          filter = filter.map(_.doRelabel(state)))(position)
 
-  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) = {
+  protected def doDebugDoc(implicit ev: StatementDocProvider[MT]) = {
     val preArgs = Seq(
       Some(Doc(function.name.name)),
       Some(d"("),
