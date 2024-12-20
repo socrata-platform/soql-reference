@@ -7,7 +7,6 @@ import environment.{ColumnName, DatasetContext, TableName, HoleName}
 import com.socrata.soql.functions.{SoQLFunctionInfo, SoQLTypeInfo}
 import com.rojoma.json.v3.util.JsonUtil
 import com.socrata.soql.parsing.{Parser, AbstractParser}
-import scala.io.StdIn.readLine
 
 object SoqlToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -68,8 +67,9 @@ object SoqlToy extends (Array[String] => Unit) {
     )
 
     while(true) {
-      val selection = readLine("> ")
-      if(selection == null) return;
+      val selection = Readline("> ").getOrElse {
+        return
+      }
       if(selection == "?") {
         menu()
       } else if(selection == "exit" || selection == "quit") {
