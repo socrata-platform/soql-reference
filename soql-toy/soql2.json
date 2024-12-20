@@ -1,0 +1,74 @@
+// A sample config file for the "soql2" toy
+{
+    // a list of rewrite pass descriptors.  Most of these are just
+    // "pass": "name of the pass", but some have additional
+    // parameters.  Optional, defaults to "merge"
+    "rewritePasses": [
+        {"pass": "inline_trivial_parameters"},
+        {"pass": "merge"}
+    ],
+    // The universe of tables, views, and UDFs in which to evaluate
+    // provided SoQL.  Optional, defaults to the table defined in
+    // SoQL2Toy.scala.
+    "tables": {
+        // All names live in a "scope", which roughly corresponds to a
+        // customer domain.  For soql-toy's purposes, scopes are just
+        // integers, and the default scope is 0.
+        "0": {
+            "ds": {
+                "type": "dataset",
+                // A _sequence_ of [column name, column type] lists,
+                // because columns are ordered in SoQL.
+                "schema": [[ "name", "text" ]],
+                // List of [column name, ascending?, nulls_last?]
+                // triples.  Optional, defaults to []
+                "orderings": [],
+                // List of column names to treat as hidden.  Optional,
+                // defaults to []
+                "hiddenColumns": [],
+                // List of _lists_ of columns names that act as
+                // (multi-column) unique keys.  Optional, defaults to
+                // [].
+                "primaryKeys": []
+            },
+            "q": {
+                "type": "saved query",
+                // The scope in which to look up any datasets
+                // referenced from this query, including the parent
+                "scope": 0,
+                "parent": "ds",
+                "soql": "select *",
+                // Map of parameter-name to parameter-type
+                "params": {},
+                // The "canonical name" of this query, which is used
+                // both for recursion-detection and to look up
+                // qualified `param()` calls.  Optional, defaults to
+                // the saved query's name, but note that this is
+                // assumed to be unique across _all_ scopes!
+                "canonicalName": "q",
+                // List of names of columns to be treated as hidden.
+                // Optional, defaults to []
+                "hiddenColumns": []
+            },
+            "u": {
+                "type": "udf",
+                // The scope in which to look up any datasets
+                // referenced from this query
+                "scope": 0,
+                "soql": "select * from @ds where name = ?n",
+                // A _sequence_ of [parameter_name, parameter_type]
+                // lists, because UDF parameters are ordered.
+                "params": [[ "n", "text" ]],
+                // The "canonical name" of this query, which is used
+                // both for recursion-detection and to look up
+                // qualified `param()` calls.  Optional, defaults to
+                // the saved query's name, but note that this is
+                // assumed to be unique across _all_ scopes!
+                "canonicalName": "u",
+                // List of names of columns to be treated as hidden.
+                // Optional, defaults to []
+                "hiddenColumns": []
+            }
+        }
+    }
+}
