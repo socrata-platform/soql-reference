@@ -5,11 +5,11 @@ import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, Hole
 import com.socrata.soql.functions.{SoQLFunctionInfo, SoQLTypeInfo, SoQLFunctions, MonomorphicFunction}
 import com.rojoma.json.v3.util.JsonUtil
 import com.socrata.soql.parsing.{Parser, AbstractParser}
-import scala.io.StdIn.readLine
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.analyzer2.mocktablefinder._
 import com.socrata.soql.types.obfuscation.CryptProvider
 import com.socrata.soql.stdlib.analyzer2.SoQLRewritePassHelpers
+import com.socrata.soql.Readline
 
 trait Soql2Toy extends MetaTypes {
   type ResourceNameScope = Int
@@ -67,9 +67,10 @@ object Soql2Toy extends (Array[String] => Unit) with StatementUniverse[Soql2Toy]
       }
 
     while(true) {
-      val selection = readLine("> ")
-      if(selection == null) return;
-      else if(selection == "exit" || selection == "quit") {
+      val selection = Readline("> ").getOrElse {
+        return
+      }
+      if(selection == "exit" || selection == "quit") {
         return
       } else {
         tf.findTables(0, selection, Map.empty) match {

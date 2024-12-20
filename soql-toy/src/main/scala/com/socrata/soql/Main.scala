@@ -7,7 +7,7 @@ object Main extends App {
   }
 
   if(args.length == 0) {
-    fail("Usage: soqltoy [-v] {parse|alias|soql} ARGS...")
+    fail("Usage: soqltoy [-v] {parse|alias|soql|soql2|rollup} ARGS...")
   }
 
   var a = args

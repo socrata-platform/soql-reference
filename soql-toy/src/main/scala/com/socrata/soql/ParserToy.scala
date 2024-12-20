@@ -6,7 +6,6 @@ import com.ibm.icu.util.ULocale
 
 import com.socrata.soql.exceptions.SoQLException
 import com.socrata.soql.parsing.Parser
-import scala.io.StdIn.readLine
 
 object ParserToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -28,8 +27,9 @@ object ParserToy extends (Array[String] => Unit) {
     menu()
     val p = new Parser
     while(true) {
-      val cmd = readLine("> ")
-      if(cmd == null) return;
+      val cmd = Readline("> ").getOrElse {
+        return
+      }
       breakable {
         val f = cmd match {
           case "1" => p.selectStatement _
@@ -42,8 +42,9 @@ object ParserToy extends (Array[String] => Unit) {
           case "?" => menu(); break(); sys.error("can't get here")
           case other => println("bad command"); break(); sys.error("can't get here")
         }
-        val input = readLine("... ")
-        if(input == null) return;
+        val input = Readline("... ").getOrElse {
+          break()
+        }
         try {
           println(f(input))
         } catch {

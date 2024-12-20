@@ -5,7 +5,6 @@ import com.socrata.soql.aliases._
 import com.socrata.soql.parsing.Parser
 import com.socrata.soql.exceptions.SoQLException
 import environment.{ColumnName, TableName, UntypedDatasetContext}
-import scala.io.StdIn.readLine
 
 object AliasToy extends (Array[String] => Unit) {
   def fail(msg: String) = {
@@ -27,8 +26,9 @@ object AliasToy extends (Array[String] => Unit) {
     menu()
     val p = new Parser
     while(true) {
-      val selection = readLine("> ")
-      if(selection == null) return;
+      val selection = Readline("> ").getOrElse {
+        return
+      }
       try {
         val analysis = AliasAnalysis(p.selection(selection), None)
         println("Resulting aliases:")
