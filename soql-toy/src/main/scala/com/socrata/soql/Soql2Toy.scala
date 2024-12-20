@@ -1,9 +1,11 @@
 package com.socrata.soql.analyzer2
 
+import java.nio.charset.StandardCharsets
+
 import com.socrata.soql.types._
 import com.socrata.soql.environment.{ColumnName, DatasetContext, TableName, HoleName, Provenance}
 import com.socrata.soql.functions.{SoQLFunctionInfo, SoQLTypeInfo, SoQLFunctions, MonomorphicFunction}
-import com.rojoma.json.v3.util.JsonUtil
+import com.rojoma.json.v3.util.{JsonUtil, AutomaticJsonDecodeBuilder, AllowMissing}
 import com.socrata.soql.parsing.{Parser, AbstractParser}
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.analyzer2.mocktablefinder._
@@ -25,7 +27,7 @@ object Soql2Toy extends (Array[String] => Unit) with StatementUniverse[Soql2Toy]
     sys.exit(1)
   }
 
-  val tf = MockTableFinder[Soql2Toy](
+  val defaultTF = MockTableFinder[Soql2Toy](
     (0, "ds") -> D(
       ":id" -> SoQLID,
       ":created_at" -> SoQLFixedTimestamp,
@@ -41,7 +43,7 @@ object Soql2Toy extends (Array[String] => Unit) with StatementUniverse[Soql2Toy]
     (0, "udf") -> U(0, "select * from @ds where last_visit > ?a", "a" -> SoQLFixedTimestamp)
   )
 
-  val rewritePasses = Seq(
+  val defaultRewritePasses = Seq(
     rewrite.Pass.Merge
   )
 
@@ -52,7 +54,29 @@ object Soql2Toy extends (Array[String] => Unit) with StatementUniverse[Soql2Toy]
 
   val rewritePassHelpers = new SoQLRewritePassHelpers[Soql2Toy]
 
+  case class Config(
+    @AllowMissing("defaultTF")
+    tables: MockTableFinder[Soql2Toy],
+    @AllowMissing("defaultRewritePasses")
+    rewritePasses: Seq[rewrite.Pass]
+  )
+  object Config {
+    implicit val jDecode = AutomaticJsonDecodeBuilder[Config]
+  }
+
   def apply(args: Array[String]): Unit = {
+    val (tf, rewritePasses) =
+      args match {
+        case Array() => (defaultTF, defaultRewritePasses)
+        case Array(filename) =>
+          JsonUtil.readJsonFile[Config](filename, StandardCharsets.UTF_8) match {
+            case Right(Config(tf, rp)) => (tf, rp)
+            case Left(err) => throw new Exception("Parsing tablefinder: " + err.english)
+          }
+        case _ =>
+          throw new Exception("Too many arguments to soql2toy")
+      }
+
     implicit object hasDoc extends HasDoc[CV] {
       def docOf(cv: CV) = cv.doc(CryptProvider.zeros)
     }
