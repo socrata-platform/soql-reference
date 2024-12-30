@@ -101,6 +101,7 @@ trait TableFinder[MT <: MetaTypes] {
   //  This is a callstack _excluding_ the current query, and as a
   //  result it may be empty.
   private sealed trait CallerStack {
+    def callstackSet: Set[CanonicalName]
     def callstack: Seq[CanonicalName]
     // This is the point in the Caller's source that made the call to
     // the current query.
@@ -111,12 +112,14 @@ trait TableFinder[MT <: MetaTypes] {
   }
   private object CallerStack {
     case object Empty extends CallerStack {
+      def callstackSet: Set[CanonicalName] = Set.empty
       def callstack: Seq[CanonicalName] = Nil
       def callerSource = None
       def loopSource(canonicalName: CanonicalName): Option[Source[ResourceNameScope]] = None
     }
     // This caller explicity named its callee
     case class Explicit(stack: CallStack, reference: Position) extends CallerStack {
+      def callstackSet: Set[CanonicalName] = stack.callstackSet
       def callstack: Seq[CanonicalName] = stack.callstack
       def callerSource = Some(stack.source(reference))
       def loopSource(canonicalName: CanonicalName) = stack.loopSource(canonicalName, reference)
@@ -124,6 +127,7 @@ trait TableFinder[MT <: MetaTypes] {
     // This caller implicitly named its callee (i.e., it was a query
     // on a saved query or dataset)
     case class Implicit(stack: CallStack) extends CallerStack {
+      def callstackSet: Set[CanonicalName] = stack.callstackSet
       def callstack: Seq[CanonicalName] = stack.callstack
       // This is a little weird, and I'm not 100% sure I like it?  It
       // defines the source of an implicit reference to a parent to be
@@ -138,6 +142,7 @@ trait TableFinder[MT <: MetaTypes] {
   // result it is never "empty")
   private sealed trait CallStack {
     def caller: CallerStack
+    def callstackSet: Set[CanonicalName]
     def callstack: Seq[CanonicalName]
     def source(pos: Position): Source[ResourceNameScope]
     def loopSource(canonicalName: CanonicalName, pos: Position): Option[Source[ResourceNameScope]]
@@ -145,6 +150,7 @@ trait TableFinder[MT <: MetaTypes] {
   private object CallStack {
     case class Anonymous(impersonating: Option[CanonicalName]) extends CallStack {
       override def caller = CallerStack.Empty
+      override def callstackSet = impersonating.toSet
       override def callstack = impersonating.toSeq
       override def source(pos: Position) = Source.Anonymous(pos)
       override def loopSource(canonicalName: CanonicalName, pos: Position): Option[Source[ResourceNameScope]] =
@@ -154,6 +160,7 @@ trait TableFinder[MT <: MetaTypes] {
         }
     }
     case class Saved(srn: ScopedResourceName, canonicalName: CanonicalName, caller: CallerStack) extends CallStack {
+      override val callstackSet = caller.callstackSet + canonicalName
       override def callstack = {
         val result = Vector.newBuilder[CanonicalName]
         @tailrec
@@ -179,8 +186,10 @@ trait TableFinder[MT <: MetaTypes] {
       override def loopSource(canonicalName: CanonicalName, pos: Position) = {
         if(this.canonicalName == canonicalName) {
           Some(source(pos))
-        } else {
+        } else if(caller.callstackSet.contains(canonicalName)) {
           caller.loopSource(canonicalName)
+        } else {
+          None
         }
       }
     }
