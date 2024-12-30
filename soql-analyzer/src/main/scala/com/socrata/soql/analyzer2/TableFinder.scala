@@ -102,61 +102,55 @@ trait TableFinder[MT <: MetaTypes] {
   //  result it may be empty.
   private sealed trait CallerStack {
     def callstack: Seq[CanonicalName]
-    def contains(canonicalName: CanonicalName): Boolean
-
     // This is the point in the Caller's source that made the call to
     // the current query.
     def callerSource: Option[Source[ResourceNameScope]]
+
+    // This is the topmost point in the callstack where the loop started
+    def loopSource(canonicalName: CanonicalName): Option[Source[ResourceNameScope]]
   }
   private object CallerStack {
     case object Empty extends CallerStack {
       def callstack: Seq[CanonicalName] = Nil
-      def contains(canonicalName: CanonicalName): Boolean = false
       def callerSource = None
+      def loopSource(canonicalName: CanonicalName): Option[Source[ResourceNameScope]] = None
     }
     // This caller explicity named its callee
     case class Explicit(stack: CallStack, reference: Position) extends CallerStack {
       def callstack: Seq[CanonicalName] = stack.callstack
-      def contains(canonicalName: CanonicalName): Boolean = stack.contains(canonicalName)
-      def callerSource = stack match {
-        case CallStack.Anonymous(_) => Some(Source.Anonymous(reference))
-        case CallStack.Saved(srn, _, _) => Some(Source.Saved(srn, reference))
-      }
+      def callerSource = Some(stack.source(reference))
+      def loopSource(canonicalName: CanonicalName) = stack.loopSource(canonicalName, reference)
     }
     // This caller implicitly named its callee (i.e., it was a query
     // on a saved query or dataset)
     case class Implicit(stack: CallStack) extends CallerStack {
       def callstack: Seq[CanonicalName] = stack.callstack
-      def contains(canonicalName: CanonicalName): Boolean = stack.contains(canonicalName)
-
       // This is a little weird, and I'm not 100% sure I like it?  It
       // defines the source of an implicit reference to a parent to be
       // "the child, but no position", which is reasonable but doesn't
       // sit well?  The obvious alternative ("no source") also doesn't
-      // sst very well...
-      def callerSource = stack match {
-        case CallStack.Anonymous(_) => Some(Source.Anonymous(NoPosition))
-        case CallStack.Saved(srn, _, _) => Some(Source.Saved(srn, NoPosition))
-      }
+      // sit very well
+      def callerSource = Some(stack.source(NoPosition))
+      def loopSource(canonicalName: CanonicalName) = stack.loopSource(canonicalName, NoPosition)
     }
   }
   // This is a callstack _including_ the current query (and as a
   // result it is never "empty")
   private sealed trait CallStack {
     def caller: CallerStack
-    def source(pos: Position): Source[ResourceNameScope]
     def callstack: Seq[CanonicalName]
-    def contains(canonicalName: CanonicalName): Boolean
+    def source(pos: Position): Source[ResourceNameScope]
+    def loopSource(canonicalName: CanonicalName, pos: Position): Option[Source[ResourceNameScope]]
   }
   private object CallStack {
     case class Anonymous(impersonating: Option[CanonicalName]) extends CallStack {
       override def caller = CallerStack.Empty
       override def callstack = impersonating.toSeq
       override def source(pos: Position) = Source.Anonymous(pos)
-      override def contains(canonicalName: CanonicalName): Boolean =
+      override def loopSource(canonicalName: CanonicalName, pos: Position): Option[Source[ResourceNameScope]] =
         impersonating match {
-          case Some(i) => i == canonicalName
-          case None => false
+          case Some(i) if i == canonicalName => Some(source(pos))
+          case _ => None
         }
     }
     case class Saved(srn: ScopedResourceName, canonicalName: CanonicalName, caller: CallerStack) extends CallStack {
@@ -182,28 +176,12 @@ trait TableFinder[MT <: MetaTypes] {
         result.result()
       }
       override def source(pos: Position) = Source.Saved(srn, pos)
-      override def contains(canonicalName: CanonicalName): Boolean = {
-        @tailrec
-        def loop(ptr: CallStack): Boolean =
-          ptr match {
-            case Saved(_, cn, tail) =>
-              if(cn == canonicalName) {
-                true
-              } else {
-                tail match {
-                  case CallerStack.Implicit(stack) =>
-                    loop(stack)
-                  case CallerStack.Explicit(stack, _) =>
-                    loop(stack)
-                  case CallerStack.Empty =>
-                    false
-                }
-              }
-            case other =>
-              other.contains(canonicalName)
-          }
-
-        loop(this)
+      override def loopSource(canonicalName: CanonicalName, pos: Position) = {
+        if(this.canonicalName == canonicalName) {
+          Some(source(pos))
+        } else {
+          caller.loopSource(canonicalName)
+        }
       }
     }
   }
@@ -267,11 +245,11 @@ trait TableFinder[MT <: MetaTypes] {
   private def walkFromName(scopedName: ScopedResourceName, acc: TableMap, callerStack: CallerStack): Result[TableMap] = {
     acc.get(scopedName) match {
       case Some(desc) =>
-        if(callerStack.contains(desc.canonicalName)) {
-          // if we have a stack, then we'd better have a caller too...
-          Left(TableFinderError.RecursiveQuery(callerStack.callerSource.get, desc.canonicalName +: callerStack.callstack))
-        } else {
-          Right(acc)
+        callerStack.loopSource(desc.canonicalName) match {
+          case Some(source) =>
+            Left(TableFinderError.RecursiveQuery(source, desc.canonicalName +: callerStack.callstack))
+          case None =>
+            Right(acc)
         }
       case None =>
         if(Util.isSpecialTableName(scopedName)) {
@@ -279,11 +257,12 @@ trait TableFinder[MT <: MetaTypes] {
         } else {
           doLookup(scopedName, callerStack.callerSource) match {
             case Right(desc) =>
-              if(callerStack.contains(desc.canonicalName)) {
-                Left(TableFinderError.RecursiveQuery(callerStack.callerSource.get, desc.canonicalName +: callerStack.callstack))
-              } else {
-                val newStack = CallStack.Saved(scopedName, desc.canonicalName, callerStack)
-                walkDesc(scopedName, desc, acc + (scopedName -> desc), newStack)
+              callerStack.loopSource(desc.canonicalName) match {
+                case Some(source) =>
+                  Left(TableFinderError.RecursiveQuery(source, desc.canonicalName +: callerStack.callstack))
+                case None =>
+                  val newStack = CallStack.Saved(scopedName, desc.canonicalName, callerStack)
+                  walkDesc(scopedName, desc, acc + (scopedName -> desc), newStack)
               }
             case Left(err) =>
               Left(err)

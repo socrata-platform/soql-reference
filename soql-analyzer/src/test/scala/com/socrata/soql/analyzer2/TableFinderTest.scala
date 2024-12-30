@@ -45,6 +45,11 @@ class TableFinderTest extends FunSuite with MustMatchers {
       (0, "bad_four") -> Q(0, "t1", "select * join @bad_three on true"),
       (0, "bad_five") -> Q(0, "t1", "select * join @bad_six on true"),
       (0, "bad_six") -> Q(0, "bad_five", "select *"),
+      (0, "bad_deep_one") -> Q(0, "bad_deep_four", "select *"),   // \
+      (0, "bad_deep_two") -> Q(0, "bad_deep_one", "select *"),    //  \ these form
+      (0, "bad_deep_three") -> Q(0, "bad_deep_two", "select *"),  //  / a loop
+      (0, "bad_deep_four") -> Q(0, "bad_deep_three", "select *"), // /
+      (0, "bad_deep_five") -> Q(0, "bad_deep_four", "select *"),  // this one just calls into that loop
       (1, "t1") -> D(),
 
       (0, "graph_root") -> Q(0, "graph_parent_1", "select * join @graph_parent_2 on true"),
@@ -112,15 +117,20 @@ class TableFinderTest extends FunSuite with MustMatchers {
   }
 
   test("will reject mutually recursive queries - context") {
-    tables.findTables(0, ResourceName("bad_one")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_two"))), None, "bad_one","bad_two","bad_one"))
+    tables.findTables(0, ResourceName("bad_one")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_one"))), None, "bad_one","bad_two","bad_one"))
   }
 
   test("will reject mutually recursive queries - from") {
-    tables.findTables(0, ResourceName("bad_three")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_four"))), None, "bad_three","bad_four","bad_three"))
+    tables.findTables(0, ResourceName("bad_three")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_three"))), None, "bad_three","bad_four","bad_three"))
   }
 
   test("will reject mutually recursive queries - mixed") {
-    tables.findTables(0, ResourceName("bad_five")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_six"))), None, "bad_five","bad_six","bad_five"))
+    tables.findTables(0, ResourceName("bad_five")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_five"))), None, "bad_five","bad_six","bad_five"))
+  }
+
+  test("will reject mutually recursive queries - deep") {
+    // this is checking that the Source in the error is the top of the loop
+    tables.findTables(0, ResourceName("bad_deep_five")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_deep_four"))), None, "bad_deep_four","bad_deep_one","bad_deep_two","bad_deep_three","bad_deep_four","bad_deep_five"))
   }
 
   test("will reject self-recursive queries when impersonating") {
