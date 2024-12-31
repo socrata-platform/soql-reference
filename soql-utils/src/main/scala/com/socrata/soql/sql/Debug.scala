@@ -4,13 +4,15 @@ import com.rojoma.json.v3.ast.{JString, JValue}
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 import com.rojoma.json.v3.util.{AutomaticJsonCodecBuilder, AllowMissing}
 
-import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer, Version}
 
 case class Debug(
   sql: Option[Debug.Sql.Format],
   explain: Option[Debug.Explain],
   @AllowMissing("false")
-  inhibitRun: Boolean
+  inhibitRun: Boolean,
+  @AllowMissing("true")
+  useCache: Boolean
 )
 
 object Debug {
@@ -149,19 +151,32 @@ object Debug {
       val Debug(
         sql,
         explain,
-        inhibitRun
+        inhibitRun,
+        useCache
       ) = t
 
       buffer.write(sql)
       buffer.write(explain)
       buffer.write(inhibitRun)
+      buffer.write(useCache)
     }
 
     def readFrom(buffer: ReadBuffer): Debug =
-      Debug(
-        sql = buffer.read[Option[Sql.Format]](),
-        explain = buffer.read[Option[Explain]](),
-        inhibitRun = buffer.read[Boolean]()
-      )
+      buffer.version match {
+        case Version.V0 | Version.V1 | Version.V2 =>
+          Debug(
+            sql = buffer.read[Option[Sql.Format]](),
+            explain = buffer.read[Option[Explain]](),
+            inhibitRun = buffer.read[Boolean](),
+            useCache = true
+          )
+        case Version.V3 =>
+          Debug(
+            sql = buffer.read[Option[Sql.Format]](),
+            explain = buffer.read[Option[Explain]](),
+            inhibitRun = buffer.read[Boolean](),
+            useCache = buffer.read[Boolean]()
+          )
+      }
   }
 }

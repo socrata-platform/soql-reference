@@ -35,7 +35,7 @@ object NamedExpr {
             isSynthetic = buffer.read[Boolean](),
             hint = None
           )
-        case Version.V2 =>
+        case Version.V2 | Version.V3 =>
           NamedExpr(
             expr = buffer.read[Expr[MT]](),
             name = buffer.read[ColumnName](),
