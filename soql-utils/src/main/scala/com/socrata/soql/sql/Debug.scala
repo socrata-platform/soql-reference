@@ -9,13 +9,22 @@ import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer, 
 case class Debug(
   sql: Option[Debug.Sql.Format],
   explain: Option[Debug.Explain],
-  @AllowMissing("false")
+  @AllowMissing("Debug.default.inhibitRun")
   inhibitRun: Boolean,
-  @AllowMissing("true")
+  @AllowMissing("Debug.default.useCache")
   useCache: Boolean
 )
 
 object Debug {
+  // An "empty" set of debugging configurations; using this should be
+  // equivalent to not requesting debug info at all.
+  val default = Debug(
+    None,
+    None,
+    inhibitRun = false,
+    useCache = true
+  )
+
   object Sql {
     sealed abstract class Format
     object Format {
