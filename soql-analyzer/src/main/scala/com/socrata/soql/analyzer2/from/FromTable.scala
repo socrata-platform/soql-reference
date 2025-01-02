@@ -162,7 +162,7 @@ trait OFromTableImpl { this: FromTable.type =>
             },
             primaryKeys = buffer.read[Seq[Seq[DatabaseColumnName]]]()
           )
-        case Version.V2 =>
+        case Version.V2 | Version.V3 =>
           FromTable(
             tableName = buffer.read[DatabaseTableName](),
             definiteResourceName = buffer.read[ScopedResourceName](),
