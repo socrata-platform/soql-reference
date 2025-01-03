@@ -74,6 +74,8 @@ object Expression {
       Vector("param", name.name)
     case Hole.SavedQuery(name, Some(v)) =>
       Vector("param", foldDashes(v), name.name)
+    case InSubselect(scrutinee, subquery) =>
+      findIdentsAndLiterals(scrutinee) ++ Vector("in") ++ ??? /* need to FIaL of the subselect */
   }
 
   private def findIdentsAndLiterals(windowFunctionInfo: Option[WindowFunctionInfo]): Seq[String] =  {
@@ -87,6 +89,15 @@ object Expression {
         frames.flatMap(findIdentsAndLiterals)
     }.flatten
   }
+
+  private[ast] def maybeParens(e: Expression) =
+    e match {
+      case FunctionCall(SpecialFunctions.Parens | SpecialFunctions.Subscript, _, _, _) => e.doc
+      case FunctionCall(SpecialFunctions.Operator(_), _, _, _) =>
+        val edoc = e.doc
+        ((d"(" ++ edoc ++ d")") flatAlt edoc).group
+      case other => other.doc
+    }
 }
 
 object SpecialFunctions {
@@ -241,15 +252,6 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
     }
   }
 
-  private def maybeParens(e: Expression) =
-    e match {
-      case FunctionCall(SpecialFunctions.Parens | SpecialFunctions.Subscript, _, _, _) => e.doc
-      case FunctionCall(SpecialFunctions.Operator(_), _, _, _) =>
-        val edoc = e.doc
-        ((d"(" ++ edoc ++ d")") flatAlt edoc).group
-      case other => other.doc
-    }
-
   private def parenify(e: Expression) =
     d"(" ++ e.doc ++ d")"
 
@@ -281,13 +283,13 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
                   } else if(thatPrec == myPrec && !parenLowerOnly) {
                     parenify(op)
                   } else {
-                    maybeParens(op)
+                    Expression.maybeParens(op)
                   }
                 case None =>
-                  maybeParens(op)
+                  Expression.maybeParens(op)
               }
             case None =>
-              maybeParens(op)
+              Expression.maybeParens(op)
           }
         case _ =>
           op.doc
@@ -482,7 +484,22 @@ object Hole {
 final case class InSubselect(scrutinee: Expression, subselect: BinaryTree[Select])(val position: Position, val functionNamePosition: Position) extends Expression {
   def allColumnRefs: Set[ColumnOrAliasRef] = ???
   def collectHoles(f: PartialFunction[Hole,Expression]): Expression = ???
-  def doc: Doc[Nothing] = ???
+  def doc: Doc[Nothing] = {
+    val scrutineeDoc =
+      scrutinee match {
+        case fc: FunctionCall =>
+          RecursiveDescentParser.precedenceOf(fc) match {
+            case Some(thatPrec) if thatPrec < RecursiveDescentParser.precedenceOfIn =>
+              d"(" ++ fc.doc ++ d")"
+            case _ =>
+              Expression.maybeParens(fc)
+          }
+        case other =>
+          Expression.maybeParens(other)
+      }
+    Seq(Select.toDoc(subselect)).encloseNesting(scrutineeDoc +#+ d"IN (", d"", d")")
+  }
+
   def removeSyntacticParens: Expression = ???
   def replaceHoles(f: Hole => Expression): Expression = ???
 }

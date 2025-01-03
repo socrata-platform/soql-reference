@@ -367,6 +367,8 @@ object RecursiveDescentParser {
   def associativityOf(node: FunctionCall): Option[Associativity] = {
     simpleAssociativities.get((node.functionName, node.parameters.length))
   }
+
+  val precedenceOfIn = precedenceTable.indexWhere(_ eq OperatorClass.SqlishMultitoken)
 }
 
 abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = AbstractParser.defaultParameters) extends AbstractParser with RecursiveDescentHintParser {
