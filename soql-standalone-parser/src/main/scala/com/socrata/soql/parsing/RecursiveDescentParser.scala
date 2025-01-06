@@ -1626,8 +1626,11 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
         } catch {
           case expressionListError: ParseException =>
             try {
-              // TODO: NOT IN
-              compoundSelect(reader).map(InSubselect(scrutinee, _)(scrutinee.position, op.position))
+              val not = op match {
+                case NOT() => true
+                case _ => false
+              }
+              compoundSelect(reader).map(InSubselect(scrutinee, not, _)(scrutinee.position, op.position))
             } catch {
               case selectError: ParseException =>
                 val later =

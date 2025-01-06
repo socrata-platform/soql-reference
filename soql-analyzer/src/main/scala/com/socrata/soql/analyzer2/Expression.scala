@@ -94,6 +94,9 @@ object Expr {
         case wfc: WindowedFunctionCall =>
           buffer.write(7)
           buffer.write(wfc)
+        case is: InSubselect =>
+          buffer.write(8)
+          buffer.write(is)
       }
   }
 
@@ -268,6 +271,7 @@ object WindowedFunctionCall extends expression.OWindowedFunctionCallImpl
 
 final case class InSubselect[MT <: MetaTypes](
   scrutinee: Expr[MT],
+  not: Boolean,
   substatement: Statement[MT],
   typ: MT#ColumnType
 )(

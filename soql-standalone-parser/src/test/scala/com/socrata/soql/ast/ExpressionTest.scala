@@ -18,6 +18,7 @@ class ExpressionTest extends FunSuite with MustMatchers {
             NullLiteral()(NoPosition)
           )
         )(NoPosition, NoPosition),
+        false,
         new StandaloneParser().binaryTreeSelect("select 1")
       )(NoPosition, NoPosition)
 
@@ -34,6 +35,7 @@ class ExpressionTest extends FunSuite with MustMatchers {
             NullLiteral()(NoPosition)
           )
         )(NoPosition, NoPosition),
+        false,
         new StandaloneParser().binaryTreeSelect("select 1")
       )(NoPosition, NoPosition)
 
@@ -50,6 +52,7 @@ class ExpressionTest extends FunSuite with MustMatchers {
             NullLiteral()(NoPosition)
           )
         )(NoPosition, NoPosition),
+        false,
         new StandaloneParser().binaryTreeSelect("select 1")
       )(NoPosition, NoPosition)
 

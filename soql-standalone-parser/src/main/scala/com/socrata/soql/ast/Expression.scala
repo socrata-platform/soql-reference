@@ -74,8 +74,11 @@ object Expression {
       Vector("param", name.name)
     case Hole.SavedQuery(name, Some(v)) =>
       Vector("param", foldDashes(v), name.name)
-    case InSubselect(scrutinee, subquery) =>
-      findIdentsAndLiterals(scrutinee) ++ Vector("in") ++ ??? /* need to FIaL of the subselect */
+    case InSubselect(scrutinee, not, subquery) =>
+      val op =
+        if(not) Vector("not", "in")
+        else Vector("in")
+      findIdentsAndLiterals(scrutinee) ++ op ++ ??? /* need to FIaL of the subselect */
   }
 
   private def findIdentsAndLiterals(windowFunctionInfo: Option[WindowFunctionInfo]): Seq[String] =  {
@@ -481,7 +484,7 @@ object Hole {
   }
 }
 
-final case class InSubselect(scrutinee: Expression, subselect: BinaryTree[Select])(val position: Position, val functionNamePosition: Position) extends Expression {
+final case class InSubselect(scrutinee: Expression, not: Boolean, subselect: BinaryTree[Select])(val position: Position, val functionNamePosition: Position) extends Expression {
   def allColumnRefs: Set[ColumnOrAliasRef] = ???
   def collectHoles(f: PartialFunction[Hole,Expression]): Expression = ???
   def doc: Doc[Nothing] = {
@@ -497,7 +500,10 @@ final case class InSubselect(scrutinee: Expression, subselect: BinaryTree[Select
         case other =>
           Expression.maybeParens(other)
       }
-    Seq(Select.toDoc(subselect)).encloseNesting(scrutineeDoc +#+ d"IN (", d"", d")")
+    val op =
+      if(not) d"NOT IN"
+      else d"IN"
+    Seq(Select.toDoc(subselect)).encloseNesting(scrutineeDoc +#+ op +#+ d"(", d"", d")")
   }
 
   def removeSyntacticParens: Expression = ???

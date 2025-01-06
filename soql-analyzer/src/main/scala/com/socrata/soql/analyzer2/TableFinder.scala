@@ -328,7 +328,7 @@ trait TableFinder[MT <: MetaTypes] {
 
   private def walkExpr(scope: ResourceNameScope, selectName: Option[ScopedResourceName], expr: ast.Expression, acc: TableMap, stack: CallStack): Result[TableMap] = {
     expr match {
-      case ast.InSubselect(scrutinee, subselect) =>
+      case ast.InSubselect(scrutinee, _not, subselect) =>
         for {
           acc <- walkExpr(scope, selectName, scrutinee, acc, stack)
           acc <- walkTree(scope, selectName, subselect, acc, stack)

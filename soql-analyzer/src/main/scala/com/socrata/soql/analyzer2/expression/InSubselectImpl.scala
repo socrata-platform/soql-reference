@@ -3,6 +3,7 @@ package com.socrata.soql.analyzer2.expression
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 
 trait InSubselectImpl[MT <: MetaTypes] { this: InSubselect[MT] =>
   type Self[MT2 <: MetaTypes] = InSubselect[MT2]
@@ -21,4 +22,20 @@ trait InSubselectImpl[MT <: MetaTypes] { this: InSubselect[MT] =>
 }
 
 trait OInSubselectImpl { this: InSubselect.type =>
+  implicit def serialize[MT <: MetaTypes](implicit writableExpr: Writable[Expr[MT]]): Writable[InSubselect[MT]] = new Writable[InSubselect[MT]] with ExpressionUniverse[MT] {
+    def writeTo(buffer: WriteBuffer, fc: InSubselect): Unit = {
+      buffer.write(fc.scrutinee)
+      buffer.write(fc.not)
+      // buffer.write(fc.subselect)
+    }
+  }
+
+  implicit def deserialize[MT <: MetaTypes](implicit readableExpr: Readable[Expr[MT]]): Readable[InSubselect[MT]] = new Readable[InSubselect[MT]] with ExpressionUniverse[MT] {
+    def readFrom(buffer: ReadBuffer): InSubselect = {
+      val scrutinee = buffer.read[Expr]()
+      val not = buffer.read[Boolean]()
+      // val subselect = buffer.read[Statement]()
+      ???
+    }
+  }
 }

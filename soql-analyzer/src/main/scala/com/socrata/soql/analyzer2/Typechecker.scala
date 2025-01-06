@@ -183,7 +183,7 @@ class Typechecker[MT <: MetaTypes](
         }
       case hole@ast.Hole.SavedQuery(name, view) =>
         userParameter(view.map(CanonicalName), name, hole.position)
-      case in@ast.InSubselect(scrutinee, subselect) =>
+      case in@ast.InSubselect(scrutinee, not, subselect) =>
         val analysis = analyzeSubselect(subselect)
         val substatement = rewrite.RemoveSyntheticColumns(analysis.labelProvider, analysis.statement)
         if(substatement.schema.size != 1) {
@@ -194,7 +194,7 @@ class Typechecker[MT <: MetaTypes](
           // TODO: Error
         }
         apply(scrutinee, Some(schemaEntry.typ)).map { typecheckedScrutinee =>
-          Seq(InSubselect(typecheckedScrutinee, substatement, typeInfo.boolType)(new FuncallPositionInfo(Source.nonSynthetic(sourceName, in.position), in.functionNamePosition)))
+          Seq(InSubselect(typecheckedScrutinee, not, substatement, typeInfo.boolType)(new FuncallPositionInfo(Source.nonSynthetic(sourceName, in.position), in.functionNamePosition)))
         }
     }
   }
