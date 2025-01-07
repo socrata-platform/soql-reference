@@ -192,6 +192,9 @@ object ProvenanceTracker {
             }
           case SelectListReference(i, _, _, _) =>
             selectList(i - 1)
+          case InSubselect(_, _, _, _) =>
+            // this just returns a boolean, which has no provenance
+            Known(Set.empty)
         }
 
       exprs(e) = prov

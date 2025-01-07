@@ -15,7 +15,6 @@ class ExprSqlizer[MT <: MetaTypes with MetaTypesExt](
   val exprSqlFactory: ExprSqlFactory[MT]
 ) extends SqlizerUniverse[MT] {
   protected class DefaultContextedExprSqlizer(
-    availableSchemas: AvailableSchemas,
     selectListIndices: IndexedSeq[SelectListIndex],
     sqlizerCtx: Sqlizer.DynamicContext[MT]
   ) extends ExprSqlizer.Contexted[MT] {
@@ -64,12 +63,12 @@ class ExprSqlizer[MT <: MetaTypes with MetaTypesExt](
     override def sqlize(e: Expr): ExprSql = {
       e match {
         case pc@PhysicalColumn(tbl, _tableName, col, typ) =>
-          val trueType = availableSchemas(tbl)(col)
+          val trueType = sqlizerCtx.availableSchemas(tbl)(col)
           assert(trueType.typ == typ)
           assert(trueType.isExpanded)
           sqlizerCtx.repFor(typ).physicalColumnRef(pc)
         case vc@VirtualColumn(tbl, col, typ) =>
-          val trueType = availableSchemas(tbl)(col)
+          val trueType = sqlizerCtx.availableSchemas(tbl)(col)
           assert(trueType.typ == typ)
           sqlizerCtx.repFor(typ).virtualColumnRef(vc, isExpanded = trueType.isExpanded)
         case nl@NullLiteral(typ) =>
@@ -97,14 +96,22 @@ class ExprSqlizer[MT <: MetaTypes with MetaTypesExt](
             orderBy.map(sqlizeOrderBy),
             sqlizerCtx
           )
+        case is@InSubselect(scrutinee, not, subselect, typ) =>
+          val scrutineeSql = sqlize(scrutinee).compressed
+          val (subselectSql, augmentedSchema) = sqlizerCtx.sqlizeSubquery(subselect, ensureCompressed = true)
+          assert(augmentedSchema.size == 1) // this is guaranteed by the analyzer
+          val op = if(not) d"NOT IN" else d"IN"
+          exprSqlFactory(
+            scrutineeSql.sql.parenthesized +#+ op +#+ subselectSql.parenthesized,
+            is
+          )
       }
     }
   }
 
   def withContext(
-    availableSchemas: AvailableSchemas,
     selectListIndices: IndexedSeq[SelectListIndex],
     sqlizerCtx: Sqlizer.DynamicContext[MT]
   ): ExprSqlizer.Contexted[MT] =
-    new DefaultContextedExprSqlizer(availableSchemas, selectListIndices, sqlizerCtx)
+    new DefaultContextedExprSqlizer(selectListIndices, sqlizerCtx)
 }

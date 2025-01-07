@@ -306,4 +306,34 @@ class SqlizerTest extends FunSuite with MustMatchers with TestHelper with Sqlize
     // and in particular _not_ "select "c a", "c b" order by compress(1, 2)"...
     sqlish must equal ("""SELECT "column a" AS i1_a, "column b" AS i1_b ORDER BY test_soql_compress_compound("column a", "column b") ASC NULLS LAST""")
   }
+
+  test("in (simple column)") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "txt" -> TestText
+      ),
+      (0, "categories") -> D(
+        "category" -> TestText
+      )
+    )
+    val soql = "select * from @table1 where txt in (select category from @categories)"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+
+    sqlish must equal ("""SELECT x1.txt AS i2 FROM table1 AS x1 WHERE (x1.txt) IN (SELECT x2.category AS i1 FROM categories AS x2)""")
+  }
+
+  test("in (compound column)") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "compound" -> TestCompound
+      ),
+      (0, "categories") -> D(
+        "category" -> TestCompound
+      )
+    )
+    val soql = "select * from @table1 where compound in (select category from @categories)"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+
+    sqlish must equal ("""SELECT x1.compound_a AS i2_a, x1.compound_b AS i2_b FROM table1 AS x1 WHERE (test_soql_compress_compound(x1.compound_a, x1.compound_b)) IN (SELECT test_soql_compress_compound(x2.category_a, x2.category_b) AS i1 FROM categories AS x2)""")
+  }
 }
