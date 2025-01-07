@@ -49,7 +49,7 @@ trait FunctionCallImpl[MT <: MetaTypes] { this: FunctionCall[MT] =>
   private[analyzer2] def doRelabel(state: RelabelState) =
     copy(args = args.map(_.doRelabel(state)))(position)
 
-  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) =
+  protected def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
     args.map(_.debugDoc(ev)).encloseHanging(Doc(function.name.name) ++ d"(", d",", d")")
 
   private[analyzer2] def reReference(reference: Source): Self[MT] =

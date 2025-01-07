@@ -953,7 +953,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       case LPAREN() =>
         parenSelect(reader.rest)
       case _ =>
-        reader.addAlternates(LPAREN_SET)
+        reader.addAlternates(LPAREN_SET) // error handling `we would have accepted a left parenthesis here`
         select(reader).map(Leaf(_))
     }
   }
@@ -1611,12 +1611,41 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
     }
   }
 
+  def alternative[T](first: => ParseResult[T])(second: => ParseResult[T]): ParseResult[T] = {
+    try {
+      first
+    } catch {
+      case outer: ParseException => {
+        try {
+          second
+        } catch {
+          case inner: ParseException => {
+            outer.position.line.compareTo(inner.position.line) match {
+              case n if n < 0 =>
+                throw inner
+              case 0 =>
+                if(outer.position.column >= inner.position.column) {
+                  throw outer
+                } else {
+                  throw inner
+                }
+              case _ =>
+                throw outer
+            }
+          }
+        }
+      }
+    }
+  }
+
   private def parseIn(name: FunctionName, scrutinee: Expression, op: Token, reader: Reader): ParseResult[Expression] = {
     reader.first match {
       case LPAREN() =>
-        parseArgList(reader.rest, arg0 = Some(scrutinee), allowEmpty = false).map { args =>
-          FunctionCall(name, args, None)(scrutinee.position, op.position)
-        }
+        alternative[Expression](
+          parseArgList(reader.rest, arg0 = Some(scrutinee), allowEmpty = false).map { args =>
+            FunctionCall(name, args, None)(scrutinee.position, op.position)
+          }
+        )(compoundSelect(reader).map(InSubSelect(scrutinee, _)(scrutinee.position)))
       case _ =>
         fail(reader, LPAREN())
     }
@@ -1762,9 +1791,9 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   }
 
   protected def topLevelExpr(reader: Reader): ParseResult[Expression] = {
-    val r = precedented(reader, 0)
-    r.reader.resetAlternates()
-    r
+    val parseResult = precedented(reader, 0)
+    parseResult.reader.resetAlternates()
+    parseResult
   }
 
   // The remainder of these parsers aren't used here but may be useful

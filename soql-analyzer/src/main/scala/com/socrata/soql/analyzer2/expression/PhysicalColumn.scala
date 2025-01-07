@@ -40,7 +40,7 @@ trait PhysicalColumnImpl[MT <: MetaTypes] extends LabelUniverse[MT] { this: Phys
 
   val size = 1
 
-  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) =
+  protected def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
     (table.debugDoc ++ d"." ++ column.debugDoc(ev.columnNameImpl)).
       annotate(Annotation.ColumnRef(table, column))
 

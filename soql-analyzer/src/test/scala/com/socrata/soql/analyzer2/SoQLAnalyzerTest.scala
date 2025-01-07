@@ -1313,4 +1313,17 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val Left(SoQLAnalyzerError.TypecheckError.NoSuchColumn(_, None, badColName)) = analyzer(ft, UserParameters.empty)
     badColName must equal(cn("t"))
   }
+
+  test("IN (subselect)") {
+    val tf = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "ds2") -> D("hello" -> TestText, "world" -> TestNumber),
+      (0, "ds3") -> D("smiling" -> TestText, "gnus" -> TestNumber)
+    )
+
+    val Right(ft) = tf.findTables(0, rn("ds1"), "select * where text in (select hello from @ds2)", Map.empty)
+    val Right(analysis) = analyzer(ft, UserParameters.empty)
+    println(analysis.statement.debugDoc)
+  }
+
 }

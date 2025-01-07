@@ -7,6 +7,7 @@ import scala.collection.immutable.VectorBuilder
 
 import com.rojoma.json.v3.ast.JString
 
+import com.socrata.soql.BinaryTree
 import com.socrata.soql.environment.{ColumnName, FunctionName, HoleName, TableName, TypeName}
 import com.socrata.prettyprint.prelude._
 import com.socrata.soql.parsing.RecursiveDescentParser
@@ -171,6 +172,18 @@ object SpecialFunctions {
     val Regex = """^cast\$(.*)$""".r
   }
 }
+
+// foo[thing] IN (...)[expression]
+case class InSubSelect(thing : Expression, query: BinaryTree[Select])(val position: Position) extends Expression {
+  override def allColumnRefs: Set[com.socrata.soql.ast.ColumnOrAliasRef] = ???
+  override def collectHoles(f: PartialFunction[com.socrata.soql.ast.Hole,com.socrata.soql.ast.Expression]): com.socrata.soql.ast.Expression = ???
+  override def doc: com.socrata.prettyprint.prelude.Doc[Nothing] =
+    Seq(Select.toDoc(query)).encloseHanging(thing.doc +#+ d" IN (", d"", d")")
+
+  override def removeSyntacticParens: com.socrata.soql.ast.Expression = ???
+  override def replaceHoles(f: com.socrata.soql.ast.Hole => com.socrata.soql.ast.Expression): com.socrata.soql.ast.Expression = ???
+}
+
 
 case class ColumnOrAliasRef(qualifier: Option[String], column: ColumnName)(val position: Position) extends Expression {
 
@@ -414,6 +427,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
   }
 }
 
+// the type of frames is a lie -- not really expressions. Actually a StringLiteral or NumberLiteral (identifiers, or numbers)
 case class WindowFunctionInfo(partitions: Seq[Expression], orderings: Seq[OrderBy], frames: Seq[Expression]) {
   def removeSyntacticParens =
     WindowFunctionInfo(
@@ -458,6 +472,9 @@ case class WindowFunctionInfo(partitions: Seq[Expression], orderings: Seq[OrderB
     WindowFunctionInfo(partitions.map(_.collectHoles(f)), orderings.map(_.collectHoles(f)), frames.map(_.collectHoles(f)))
   }
 }
+
+// A parameter for a UDF.
+// it does not contain other expressions
 
 sealed abstract class Hole extends Expression {
   val name: HoleName

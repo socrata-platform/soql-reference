@@ -124,6 +124,7 @@ trait ExpressionUniverse[MT <: MetaTypes] extends LabelUniverse[MT] {
   type FunctionCall = analyzer2.FunctionCall[MT]
   type AggregateFunctionCall = analyzer2.AggregateFunctionCall[MT]
   type WindowedFunctionCall = analyzer2.WindowedFunctionCall[MT]
+  type InSubselect = analyzer2.InSubselect[MT]
 
   type OrderBy = analyzer2.OrderBy[MT] // this is here because it can occur in windowed function calls
   type MonomorphicFunction = functions.MonomorphicFunction[CT]

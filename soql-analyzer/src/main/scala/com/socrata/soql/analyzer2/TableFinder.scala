@@ -12,6 +12,11 @@ import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.{BinaryTree, Leaf, Compound}
 
+/*
+ select (x in (A)) where y in (B)
+ */
+
+
 trait TableFinder[MT <: MetaTypes] {
   // These are the things that need to be implemented by subclasses.
   // The "TableMap" representation will have to become more complex if
@@ -117,6 +122,13 @@ trait TableFinder[MT <: MetaTypes] {
       def callerSource = None
       def loopSource(canonicalName: CanonicalName): Option[Source[ResourceNameScope]] = None
     }
+
+    //implicit
+    // V1: select x, y, z
+    // V2 < V1: select z
+
+
+
     // This caller explicity named its callee
     case class Explicit(stack: CallStack, reference: Position) extends CallerStack {
       def callstackSet: Set[CanonicalName] = stack.callstackSet
@@ -228,6 +240,8 @@ trait TableFinder[MT <: MetaTypes] {
     }
   }
 
+  // come back to this
+
   // A helper that lifts the abstract function into the Result world
   private def doLookup(
     scopedName: ScopedResourceName, // the name of the thing we're looking up
@@ -253,6 +267,8 @@ trait TableFinder[MT <: MetaTypes] {
 
   private def walkFromName(scopedName: ScopedResourceName, acc: TableMap, callerStack: CallerStack): Result[TableMap] = {
     acc.get(scopedName) match {
+      // scoped names can be used more than once, just not recursively.
+      // check if the scoped name is used recursively. Fail if it is.
       case Some(desc) =>
         callerStack.loopSource(desc.canonicalName) match {
           case Some(source) =>
@@ -260,6 +276,7 @@ trait TableFinder[MT <: MetaTypes] {
           case None =>
             Right(acc)
         }
+        // I have not seen this scoped resource name before.
       case None =>
         if(Util.isSpecialTableName(scopedName)) {
           Right(acc)
@@ -314,16 +331,55 @@ trait TableFinder[MT <: MetaTypes] {
     }
   }
 
+  private def walkOrderBy(scope: ResourceNameScope, selectName: Option[ScopedResourceName], s: ast.OrderBy, acc0: TableMap, stack: CallStack): Result[TableMap] = {
+    walkExpression(scope, selectName, s.expression, acc0, stack)
+  }
+
+  private def walkExpression(scope: ResourceNameScope, selectName: Option[ScopedResourceName], s: ast.Expression, acc0: TableMap, stack: 
+CallStack): Result[TableMap] = {
+    s match {
+      case ast.InSubSelect(thing, query) =>
+        for {
+          acc1 <- walkExpression(scope, selectName, thing, acc0, stack)
+          acc2 <- walkTree(scope, selectName, query, acc1, stack)
+        } yield acc2
+      case _: ast.ColumnOrAliasRef => Right(acc0)
+      case _: ast.Literal => Right(acc0)
+      case ast.FunctionCall(_name, params, filter, windowInfo) =>
+        val extract = { (r: Result[TableMap]) =>
+          r match {
+            case Right(a) => a
+            case Left(e) => return Left(e)
+          }
+        }
+        val acc1: TableMap = filter match {
+          case None => acc0
+          case Some(expr) => extract(walkExpression(scope, selectName, expr, acc0, stack))
+        }
+        val acc2 = params.foldLeft(acc1) { (accN, expr) => extract(walkExpression(scope, selectName, expr, accN, stack))}
+        windowInfo match {
+          case Some(ast.WindowFunctionInfo(partitions, orderings, _)) => {
+            val acc3 = partitions.foldLeft(acc2) { (accN, expr) => extract(walkExpression(scope, selectName, expr, accN, stack))}
+            val acc4 = orderings.foldLeft(acc3) { (accN, orderBy) => extract(walkOrderBy(scope, selectName, orderBy, accN, stack)) }
+            Right(acc4)
+          }
+
+          case None => Right(acc2)
+        }
+      case _ => Right(acc0)
+
+    }
+  }
   private def walkSelect(scope: ResourceNameScope, selectName: Option[ScopedResourceName], s: ast.Select, acc0: TableMap, stack: CallStack): Result[TableMap] = {
     val ast.Select(
-      _distinct,
-      _selection,
+      distinct,
+      selection,
       from,
       joins,
-      _where,
-      _groupBys,
-      _having,
-      _orderBys,
+      where,
+      groupBys,
+      having,
+      orderBys,
       _limit,
       _offset,
       _search,
@@ -332,21 +388,33 @@ trait TableFinder[MT <: MetaTypes] {
 
     var acc = acc0
 
-    def effectiveSource(pos: Position) =
-      Some(Source.nonSynthetic(selectName, pos))
-
-    for(tn <- from) {
-      val scopedName = ScopedResourceName(scope, ResourceName(tn.nameWithoutPrefix))
-      walkFromName(scopedName, acc, CallerStack.Explicit(stack, NoPosition /* TODO: need position info from AST */)) match {
-        case Right(newAcc) =>
-          acc = newAcc
-        case Left(err) =>
-          return Left(err)
+    val extract = { (r: Result[TableMap]) =>
+      r match {
+        case Right(a) => a
+        case Left(e) => return Left(e)
       }
     }
 
-    for(join <- joins) {
-      val newAcc =
+    acc = distinct match {
+      case ast.DistinctOn(exprs) =>
+        exprs.foldLeft(acc) { (acc, expr) =>
+          extract(walkExpression(scope, selectName, expr, acc, stack))
+        }
+      case ast.Indistinct | ast.FullyDistinct =>
+        acc
+    }
+
+    acc = selection.expressions.foldLeft(acc) { (acc, namedExpr) =>
+      extract(walkExpression(scope, selectName, namedExpr.expression, acc, stack))
+    }
+
+    acc = from.foldLeft(acc) { (acc, tableName) =>
+      val scopedName = ScopedResourceName(scope, ResourceName(tableName.nameWithoutPrefix))
+      extract(walkFromName(scopedName, acc, CallerStack.Explicit(stack, NoPosition /* TODO: need position info from AST */)))
+    }
+
+    acc = joins.foldLeft(acc) { (acc, join) =>
+      val joinAcc = extract {
         join.from match {
           case ast.JoinTable(tn) =>
             walkFromName(ScopedResourceName(scope, ResourceName(tn.nameWithoutPrefix)), acc, CallerStack.Explicit(stack, NoPosition /* TODO: need position info from AST */))
@@ -355,15 +423,28 @@ trait TableFinder[MT <: MetaTypes] {
           case ast.JoinFunc(f, _) =>
             walkFromName(ScopedResourceName(scope, ResourceName(f.nameWithoutPrefix)), acc, CallerStack.Explicit(stack, NoPosition /* TODO: need position info from AST */))
         }
-
-      newAcc match {
-        case Right(newAcc) =>
-          acc = newAcc
-        case Left(e) =>
-          return Left(e)
       }
+
+      extract(walkExpression(scope, selectName, join.on, joinAcc, stack))
+    }
+
+    acc = where.foldLeft(acc) { (acc, expr) =>
+      extract(walkExpression(scope, selectName, expr, acc, stack))
+    }
+
+    acc = groupBys.foldLeft(acc) { (acc, expr) =>
+      extract(walkExpression(scope, selectName, expr, acc, stack))
+    }
+
+    acc = having.foldLeft(acc) { (acc, expr) =>
+      extract(walkExpression(scope, selectName, expr, acc, stack))
+    }
+
+    acc = orderBys.foldLeft(acc) { (acc, ob) =>
+      extract(walkExpression(scope, selectName, ob.expression, acc, stack))
     }
 
     Right(acc)
   }
+
 }

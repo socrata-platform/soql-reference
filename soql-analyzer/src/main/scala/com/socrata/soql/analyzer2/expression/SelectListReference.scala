@@ -25,7 +25,7 @@ trait SelectListReferenceImpl[MT <: MetaTypes] { this: SelectListReference[MT] =
     this == that
   }
 
-  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]) =
+  protected def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
     Doc(index).annotate(Annotation.SelectListReference[MT](index))
 
   private[analyzer2] def reReference(reference: Source): Self[MT] =

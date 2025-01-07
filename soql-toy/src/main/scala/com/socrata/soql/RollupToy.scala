@@ -59,7 +59,7 @@ object RollupToy extends (Array[String] => Unit) {
   val stringifier = new Stringifier[MT] {
     def statement(stmt: Statement) = LazyToString(stmt.debugDoc)
     def from(from: From) = LazyToString(from.debugDoc)
-    def expr(expr: Expr) = LazyToString(expr.debugDoc(implicitly, implicitly))
+    def expr(expr: Expr) = LazyToString(expr.debugDoc(implicitly, implicitly, implicitly))
   }
 
   val rollupExact = new SoQLRollupExact[MT](stringifier)

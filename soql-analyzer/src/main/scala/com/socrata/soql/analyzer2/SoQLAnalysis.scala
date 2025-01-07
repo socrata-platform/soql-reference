@@ -9,7 +9,7 @@ import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer, Readable, Writable}
 // rewrite/Pass.scala too!
 
 class SoQLAnalysis[MT <: MetaTypes] private (
-  val labelProvider: LabelProvider,
+  val labelProvider: LabelProvider, // a label is the name a column and table is referred to after type checking
   val statement: Statement[MT],
   private val usesSelectListReferences: Boolean
 ) extends LabelUniverse[MT] {

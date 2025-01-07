@@ -176,6 +176,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
     }
 
+    // Statement is the typechecked form of a BT[Select]
     def analyze(scope: RNS, query: FoundTables.Query[MT]): Statement = {
       val ctx = Ctx(scope, None, None, primaryTableName(scope, query), Environment.empty, Map.empty, Set.empty, Map.empty, preserveSystemColumnsRequested)
       val from =
@@ -1143,7 +1144,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       namedExprs: Map[ColumnName, Expr],
       expectedType: Option[CT]
     ): Expr = {
-      val tc = new Typechecker(ctx.scopedResourceName, ctx.canonicalName, ctx.primaryTableName, ctx.enclosingEnv, namedExprs, ctx.udfParams, userParameters, typeInfo, functionInfo)
+      val typecheckStatement: BinaryTree[ast.Select] => SoQLAnalysis[MT] = tree => new SoQLAnalysis(labelProvider, intoStatement(analyzeStatement(ctx, tree, ImplicitFrom.None)))
+
+      val tc = new Typechecker(ctx.scopedResourceName, ctx.canonicalName, ctx.primaryTableName, ctx.enclosingEnv, namedExprs, ctx.udfParams, userParameters, typeInfo, functionInfo, typecheckStatement)
       tc(expr, expectedType) match {
         case Right(e) => e
         case Left(err) => augmentTypecheckException(err)

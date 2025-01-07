@@ -29,7 +29,7 @@ case class OrderBy[MT <: MetaTypes](expr: Expr[MT], ascending: Boolean, nullLast
       this.nullLast == that.nullLast &&
       this.expr.findIsomorphism(state, that.expr)
 
-  private[analyzer2] def debugDoc(implicit ev: ExprDocProvider[MT]) =
+  private[analyzer2] def debugDoc(implicit ev: StatementDocProvider[MT]) =
     Seq(
       expr.debugDoc(ev),
       Seq(

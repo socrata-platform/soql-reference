@@ -18,6 +18,8 @@ private[analyzer2] trait HashedExpr { this: Product =>
   // than recomputing, as these trees can be quite deep.  This is a
   // mixin so it can be computed after the various case classes are
   // fully constructed.
+
+  // eagerly compute the hash instead of waiting for it to be demanded (which is fine since it's immutable)
   override final val hashCode: Int = scala.runtime.ScalaRunTime._hashCode(this)
 }
 
@@ -53,13 +55,13 @@ sealed abstract class Expr[MT <: MetaTypes] extends Product with LabelUniverse[M
   private[analyzer2] def findIsomorphism(state: IsomorphismState, that: Expr[MT]): Boolean
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
 
-  final def debugStr(implicit ev: HasDoc[CV], ev2: HasDoc[MT#DatabaseColumnNameImpl]): String = debugStr(new StringBuilder).toString
-  final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV], ev2: HasDoc[MT#DatabaseColumnNameImpl]): StringBuilder = debugDoc(ev, ev2).layoutSmart().toStringBuilder(sb)
-  final def debugDoc(implicit ev: HasDoc[CV], ev2: HasDoc[MT#DatabaseColumnNameImpl]): Doc[Annotation[MT]] =
-    debugDoc(new ExprDocProvider(ev, ev2))
-  private[analyzer2] final def debugDoc(implicit ev: ExprDocProvider[MT]): Doc[Annotation[MT]] =
+  final def debugStr(implicit ev: HasDoc[CV], ev2: HasDoc[MT#DatabaseColumnNameImpl], ev3: HasDoc[MT#DatabaseTableNameImpl]): String = debugStr(new StringBuilder).toString
+  final def debugStr(sb: StringBuilder)(implicit ev: HasDoc[CV], ev2: HasDoc[MT#DatabaseColumnNameImpl], ev3: HasDoc[MT#DatabaseTableNameImpl]): StringBuilder = debugDoc(ev, ev2, ev3).layoutSmart().toStringBuilder(sb)
+  final def debugDoc(implicit ev: HasDoc[CV], ev2: HasDoc[MT#DatabaseColumnNameImpl], ev3: HasDoc[MT#DatabaseTableNameImpl]): Doc[Annotation[MT]] =
+    debugDoc(new StatementDocProvider(ev, ev3, ev2))
+  private[analyzer2] final def debugDoc(implicit ev: StatementDocProvider[MT]): Doc[Annotation[MT]] =
     doDebugDoc.annotate(Annotation.Typed(typ))
-  protected def doDebugDoc(implicit ev: ExprDocProvider[MT]): Doc[Annotation[MT]]
+  protected def doDebugDoc(implicit ev: StatementDocProvider[MT]): Doc[Annotation[MT]]
 
   def find(predicate: Expr[MT] => Boolean): Option[Expr[MT]]
 
@@ -213,6 +215,18 @@ object NullLiteral extends expression.ONullLiteralImpl
 sealed abstract class FuncallLike[MT <: MetaTypes] extends Expr[MT] with Product { this: HashedExpr =>
   override val position: FuncallPositionInfo
 }
+
+final case class InSubselect[MT <: MetaTypes](
+  scrutinee: Expr[MT],
+  substatement: Statement[MT],
+  typ: MT#ColumnType
+)(
+  val position: AtomicPositionInfo[MT#ResourceNameScope]
+) extends
+    Expr[MT]
+    with expression.InSubselectImpl[MT]
+    with HashedExpr
+object InSubselect extends expression.OInSubselectImpl
 
 /********* Function call *********/
 

@@ -99,6 +99,7 @@ object Soql2Toy extends (Array[String] => Unit) with StatementUniverse[Soql2Toy]
       } else {
         tf.findTables(0, selection, Map.empty) match {
           case Right(ft) =>
+            println(JsonUtil.renderJson(ft, pretty = true))
             analyzer(ft, UserParameters.empty) match {
               case Right(unrewrittenAnalysis) =>
                 val analysis = unrewrittenAnalysis.applyPasses(rewritePasses, rewritePassHelpers)

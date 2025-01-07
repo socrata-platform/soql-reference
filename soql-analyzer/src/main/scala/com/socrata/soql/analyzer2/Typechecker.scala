@@ -3,6 +3,7 @@ package com.socrata.soql.analyzer2
 import scala.util.control.NoStackTrace
 import scala.util.parsing.input.{Position, NoPosition}
 
+import com.socrata.soql.BinaryTree
 import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, CovariantSet}
 import com.socrata.soql.environment.{ColumnName, HoleName, ResourceName, Source, TableName, FunctionName, Provenance}
@@ -10,15 +11,16 @@ import com.socrata.soql.functions.FunctionType
 import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, FunctionCallTypechecker, Passed, TypeMismatchFailure}
 
 class Typechecker[MT <: MetaTypes](
-  sourceName: Option[types.ScopedResourceName[MT]],
+  sourceName: Option[types.ScopedResourceName[MT]], // anonymous soql will not have a name
   canonicalName: Option[CanonicalName],
-  primaryTable: Option[Provenance],
+  primaryTable: Option[Provenance], // anonymous soql will not have a primary table (select * from single_row())
   env: Environment[MT],
   namedExprs: Map[ColumnName, Expr[MT]],
   udfParams: Map[HoleName, (Option[types.ScopedResourceName[MT]], Position) => Expr[MT]],
   userParameters: UserParameters[MT#ColumnType, MT#ColumnValue],
   typeInfo: TypeInfo2[MT],
-  functionInfo: FunctionInfo[MT#ColumnType]
+  functionInfo: FunctionInfo[MT#ColumnType],
+  checkSelect: BinaryTree[ast.Select] => SoQLAnalysis[MT],
 ) extends ExpressionUniverse[MT] {
   type Error = TypecheckError[RNS]
   private val TypecheckError = SoQLAnalyzerError.TypecheckError
@@ -26,6 +28,8 @@ class Typechecker[MT <: MetaTypes](
 
   private val funcallTypechecker = new FunctionCallTypechecker(typeInfo, functionInfo)
 
+  // we rarely have an expected type -- things things in `where`.
+  // select 2 + 2 _outside_ of a where does not have an expected type.
   def apply(expr: ast.Expression, expectedType: Option[CT]): Either[Error, Expr] =
     try {
       Right(finalCheck(expr, expectedType))
@@ -37,7 +41,8 @@ class Typechecker[MT <: MetaTypes](
   private case class Bail(e: Error) extends Exception with NoStackTrace
 
   private def finalCheck(expr: ast.Expression, expectedType: Option[CT]): Expr =
-    check(expr).flatMap(disambiguate(_, expectedType, expr.position)) match {
+    check(expr)
+      .flatMap(disambiguate(_, expectedType, expr.position)) match {
       case Right(expr) => expr
       case Left(err) => throw Bail(err)
     }
@@ -45,6 +50,11 @@ class Typechecker[MT <: MetaTypes](
   private def mostPreferredType(types: Set[CT]): CT = {
     typeInfo.typeParameterUniverse.find(types).get
   }
+
+  /*
+   select "2001-01-01T00:00:00Z" <- a single column of type text.
+   select len("2001-01-01T00:00:00Z") <- we _know_ it's a String
+   */
 
   private def disambiguate(exprs: Seq[Expr], expectedType: Option[CT], pos: Position): Either[Error, Expr] = {
     val choices =
@@ -71,6 +81,8 @@ class Typechecker[MT <: MetaTypes](
     }
   }
 
+  // makes disambiguate more aggressive to be less combinatorially explosive
+
   private def squash(exprs: Seq[Expr], pos: Position): Either[Error, Seq[Expr]] = {
     var acc = OrderedMap.empty[CT, Expr]
 
@@ -86,10 +98,14 @@ class Typechecker[MT <: MetaTypes](
     Right(acc.valuesIterator.toVector)
   }
 
+  // The Seq is for alternatives, not for in-addition-to
   private def check(expr: ast.Expression): Either[Error, Seq[Expr]] = {
     expr match {
       case ast.FunctionCall(ast.SpecialFunctions.Parens, Seq(param), None, None) =>
         check(param)
+
+      // case(test_expr1, consequent1, test_expr2, consequent2, ...)
+
       case fc@ast.FunctionCall(ast.SpecialFunctions.Case, params, _, None) =>
         // The parser will always produce a case form that ends with
         // either (true, elseExpr) or (false, null) - it does this so
@@ -163,6 +179,7 @@ class Typechecker[MT <: MetaTypes](
                 Right(Seq(PhysicalColumn[MT](tableLabel, tableName, column, typ)(new AtomicPositionInfo(Source.nonSynthetic(sourceName, col.position)))))
             }
         }
+        // select @foo.bar (foo is the qualifier)
       case col@ast.ColumnOrAliasRef(Some(qual), name) =>
         val trueQual = ResourceName(qual.substring(TableName.PrefixIndex))
         env.lookup(trueQual, name) match {
@@ -181,6 +198,38 @@ class Typechecker[MT <: MetaTypes](
         }
       case hole@ast.Hole.SavedQuery(name, view) =>
         userParameter(view.map(CanonicalName), name, hole.position)
+      case inSubSelect @ ast.InSubSelect(thing, query) =>
+
+        /*
+         the select should select a single column
+         the type of that column should agree with the type of the "thing"
+         the type of "thing" should be something that can be compared for equality
+
+         (x in (select x from @res_name))
+         (x, y in (select x, y from @res_name)) <- disallowed
+          */
+
+        // "2001-01-01T00:00:00" in (select col from @something)
+
+        val analysis = checkSelect(query) // wrap in try
+
+        val rewritten = rewrite.RemoveSyntheticColumns(analysis.labelProvider, analysis.statement)
+
+        val schema = rewritten.schema
+        val (_, schemaEntry) = if (schema.size == 1) {
+          schema.head
+        } else {
+          ??? // the query cannot produce more than 1 column
+        }
+        val schemaType = schemaEntry.typ
+        if (typeInfo.isComparableForEquality(schemaType)) {
+          val lhs = finalCheck(thing, Some(schemaType))
+          val result = InSubselect(lhs, rewritten, typeInfo.boolType)(new AtomicPositionInfo(Source.nonSynthetic(sourceName, inSubSelect.position)))
+          Right(Seq(result)) // check that the type from the query matches the thing
+        } else {
+          ???
+        }
+
     }
   }
 
