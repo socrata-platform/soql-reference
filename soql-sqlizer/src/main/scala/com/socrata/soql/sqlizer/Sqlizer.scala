@@ -84,6 +84,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
 ) extends SqlizerUniverse[MT] {
   type DynamicContext = Sqlizer.DynamicContext[MT]
   private type DynamicContextImpl = Sqlizer.DynamicContextImpl[MT]
+  import Sqlizer.OutputColumnTransformation
 
   def funcallSqlizer = exprSqlizer.funcallSqlizer
   def exprSqlFactory = exprSqlizer.exprSqlFactory
@@ -126,7 +127,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
     )
 
     try {
-      val (sql, augmentedSchema) = sqlizeStatement(rewritten, dynamicContext, rewriteOutputColumns, false)
+      val (sql, augmentedSchema) = sqlizeStatement(rewritten, dynamicContext, if(rewriteOutputColumns) OutputColumnTransformation.TopLevel else OutputColumnTransformation.None)
       Right((sql, augmentedSchema, dynamicContext))
     } catch {
       case bail: Bail => Left(bail.err)
@@ -136,13 +137,12 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
   private def sqlizeStatement(
     stmt: Statement,
     dynamicContext: DynamicContextImpl,
-    topLevel: Boolean,
-    ensureCompressed: Boolean
+    outputColumnTransformation: OutputColumnTransformation
   ): (Doc, AugmentedSchema) = {
     stmt match {
-      case select: Select => sqlizeSelect(select, dynamicContext, topLevel, ensureCompressed)
-      case values: Values => sqlizeValues(values, dynamicContext, topLevel, ensureCompressed)
-      case combinedTables: CombinedTables => sqlizeCombinedTables(combinedTables, dynamicContext, topLevel, ensureCompressed)
+      case select: Select => sqlizeSelect(select, dynamicContext, outputColumnTransformation)
+      case values: Values => sqlizeValues(values, dynamicContext, outputColumnTransformation)
+      case combinedTables: CombinedTables => sqlizeCombinedTables(combinedTables, dynamicContext, outputColumnTransformation)
       case cte: CTE => ???
     }
   }
@@ -150,8 +150,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
   private def sqlizeCombinedTables(
     combinedTables: CombinedTables,
     dynamicContext: DynamicContextImpl,
-    topLevel: Boolean,
-    ensureCompressed: Boolean
+    outputColumnTransformation: OutputColumnTransformation
   ): (Doc, AugmentedSchema) = {
     // Ok, this is a little complicated because both the left and
     // right need to have the same database schema, so we need to line
@@ -161,8 +160,8 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
 
     val CombinedTables(op, leftStmt, rightStmt) = combinedTables
 
-    val (leftDoc, leftSchema) = sqlizeStatement(leftStmt, dynamicContext, topLevel, ensureCompressed)
-    val (rightDoc, rightSchema) = sqlizeStatement(rightStmt, dynamicContext, topLevel, ensureCompressed)
+    val (leftDoc, leftSchema) = sqlizeStatement(leftStmt, dynamicContext, outputColumnTransformation)
+    val (rightDoc, rightSchema) = sqlizeStatement(rightStmt, dynamicContext, outputColumnTransformation)
 
     assert(leftSchema.values.map(_.typ) == rightSchema.values.map(_.typ))
 
@@ -263,8 +262,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
   private def sqlizeValues(
     values: Values,
     dynamicContext: DynamicContextImpl,
-    topLevel: Boolean,
-    ensureCompressed: Boolean
+    outputColumnTransformation: OutputColumnTransformation
   ): (Doc, AugmentedSchema) = {
     val exprSqlizer = this.exprSqlizer.withContext(Vector.empty, dynamicContext)
 
@@ -272,8 +270,9 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
     // Ok so, if we have a single row, just sqlize it as a FROMless SELECT.
     if(values.values.tail.isEmpty) {
       val row = values.values.head.iterator
-        .map(exprSqlizer.sqlize).map { exprSql =>
-          if(ensureCompressed) exprSql.compressed else exprSql
+        .map(exprSqlizer.sqlize)
+        .map { exprSql =>
+          if(outputColumnTransformation == OutputColumnTransformation.EnsureCompressed) exprSql.compressed else exprSql
         }.toVector
 
       val physicalSchema: Seq[(Doc, ColumnName)] = values.labels.toSeq.lazyZip(row).lazyZip(values.schema.values).flatMap { (label, expr, schemaEntry) =>
@@ -298,8 +297,14 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
       val names = physicalSchema.iterator.map { case (label, name) =>
         Doc(label).annotate(SqlizeAnnotation.OutputName[MT](name))
       }
-      val selectList = row.flatMap { expr =>
-        expr match {
+      val selectList = row.flatMap { baseExpr =>
+        val effectiveExpr =
+          if(outputColumnTransformation == OutputColumnTransformation.TopLevel) {
+            dynamicContext.repFor(baseExpr.typ).wrapTopLevel(baseExpr)
+          } else {
+            baseExpr
+          }
+        effectiveExpr match {
           case cmp: ExprSql.Compressed[MT] =>
             Seq(cmp.sql +#+ d"AS" +#+ names.next())
           case exp: ExprSql.Expanded[MT] =>
@@ -318,7 +323,11 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
       // The rows must all have the same physical schema
       // so if a cell is compressed in one row, it must be compressed in _all_ rows
       val rawRowExprs = values.values.iterator.map { row =>
-        row.iterator.map(exprSqlizer.sqlize).toVector
+        row.iterator
+          .map(exprSqlizer.sqlize)
+          .map { exprSql =>
+            if(outputColumnTransformation == OutputColumnTransformation.EnsureCompressed) exprSql.compressed else exprSql
+          }.toVector
       }.toVector
 
       val compressedColumnIndices = rawRowExprs.foldLeft(Set.empty[Int]) { (acc, row) =>
@@ -355,8 +364,15 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
         row.toSeq.zipWithIndex.flatMap { case (expr, idx) =>
           val sqlized = exprSqlizer.sqlize(expr)
 
-          if(compressedColumnIndices(idx)) sqlized.compressed.sqls
-          else sqlized.sqls
+          val wrapped =
+            if(outputColumnTransformation == OutputColumnTransformation.TopLevel) {
+              dynamicContext.repFor(expr.typ).wrapTopLevel(sqlized)
+            } else {
+              sqlized
+            }
+
+          if(compressedColumnIndices(idx)) wrapped.compressed.sqls
+          else wrapped.sqls
         }.parenthesized
       }.toSeq.commaSep
 
@@ -375,8 +391,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
   private def sqlizeSelect(
     select: Select,
     dynamicContextPreSchemas: DynamicContextImpl,
-    topLevel: Boolean,
-    ensureCompressed: Boolean
+    outputColumnTransformation: OutputColumnTransformation
   ): (Doc, AugmentedSchema) = {
     // ok so the order here is very particular because we need to
     // track column-compressedness.
@@ -404,7 +419,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
       throw new Exception("Should have rewritten search out of the query by the time sqlization happens")
     }
 
-    if(topLevel) {
+    if(outputColumnTransformation == OutputColumnTransformation.TopLevel) {
       // We'll want to sqlize selected geometries with an additional
       // "convert to WKB" wrapper, which means we can't use such
       // columns as select list references.
@@ -422,11 +437,11 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
       selectList.iterator.map { case (label, namedExpr) =>
         val sqlized = locally {
           val tmp = exprSqlizer.sqlize(namedExpr.expr)
-          if(ensureCompressed) tmp.compressed
+          if(outputColumnTransformation == OutputColumnTransformation.EnsureCompressed) tmp.compressed
           else tmp
         }
         val wrapped =
-          if(topLevel) {
+          if(outputColumnTransformation == OutputColumnTransformation.TopLevel) {
             dynamicContext.repFor(namedExpr.expr.typ).wrapTopLevel(sqlized)
           } else {
             sqlized
@@ -583,7 +598,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
           )
 
         case FromStatement(stmt, _label, _rn, _alias) =>
-          val (sql, schema) = sqlizeStatement(stmt, dynamicContext, topLevel = false, ensureCompressed = false)
+          val (sql, schema) = sqlizeStatement(stmt, dynamicContext, OutputColumnTransformation.None)
           (d"(" ++ sql ++ d")", schema)
 
         case FromSingleRow(_label, _alias) =>
@@ -615,6 +630,13 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
 }
 
 object Sqlizer {
+  private sealed abstract class OutputColumnTransformation
+  private object OutputColumnTransformation {
+    case object None extends OutputColumnTransformation
+    case object TopLevel extends OutputColumnTransformation
+    case object EnsureCompressed extends OutputColumnTransformation
+  }
+
   trait DynamicContext[MT <: MetaTypes with MetaTypesExt] {
     val repFor: Rep.Provider[MT]
     val provTracker: ProvenanceTracker[MT]
@@ -640,7 +662,7 @@ object Sqlizer {
   ) extends DynamicContext[MT] {
     override def abortSqlization(err: MT#SqlizerError) = abortSqlizationImpl(err)
     override def sqlizeSubquery(stmt: Statement[MT], ensureCompressed: Boolean) =
-      sqlizer.sqlizeStatement(stmt, this, false, ensureCompressed)
+      sqlizer.sqlizeStatement(stmt, this, if(ensureCompressed) OutputColumnTransformation.EnsureCompressed else OutputColumnTransformation.None)
   }
 
   def positionInfo[MT <: MetaTypes with MetaTypesExt](doc: SimpleDocStream[SqlizeAnnotation[MT]]): Array[types.Source[MT]] = {
