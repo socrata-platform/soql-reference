@@ -28,6 +28,7 @@ sealed trait JoinSelect {
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): JoinSelect
   def directlyReferencedJoinFuncs: Set[TableName]
   def doc: Doc[Nothing]
+  private[ast] def findIdentsAndLiterals: Seq[String]
 }
 case class JoinTable(tableName: TableName) extends JoinSelect {
   val alias = tableName.alias
@@ -44,6 +45,15 @@ case class JoinTable(tableName: TableName) extends JoinSelect {
     result ++= tableName.alias
     result.result()
   }
+
+  private[ast] def findIdentsAndLiterals = {
+    tableName.aliasWithoutPrefix match {
+      case Some(a) =>
+        Seq(tableName.nameWithoutPrefix, "AS", a)
+      case None =>
+        Seq(tableName.nameWithoutPrefix)
+    }
+  }
 }
 case class JoinQuery(selects: BinaryTree[Select], definiteAlias: String) extends JoinSelect {
   val alias = Some(definiteAlias)
@@ -58,6 +68,9 @@ case class JoinQuery(selects: BinaryTree[Select], definiteAlias: String) extends
   def directlyReferencedJoinFuncs = Select.findDirectlyReferencedJoinFuncs(selects)
 
   val allTableNames = Select.allTableNames(selects) + definiteAlias
+
+  private[ast] def findIdentsAndLiterals =
+    Select.findIdentsAndLiterals(selects) ++ Seq("AS", TableName.removeValidPrefix(definiteAlias))
 }
 case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position: Position) extends JoinSelect {
   val alias = tableName.alias
@@ -72,6 +85,20 @@ case class JoinFunc(tableName: TableName, params: Seq[Expression])(val position:
     val result = Set.newBuilder[String]
     result += tableName.name
     result ++= tableName.alias
+    result.result()
+  }
+
+  private[ast] def findIdentsAndLiterals = {
+    val result = Vector.newBuilder[String]
+    result += tableName.nameWithoutPrefix
+    for(p <- params) result ++= p.findIdentsAndLiterals
+    tableName.aliasWithoutPrefix match {
+      case Some(a) =>
+        result += "AS"
+        result += a
+      case None =>
+        // ok
+    }
     result.result()
   }
 
@@ -191,6 +218,14 @@ object Select {
     result.result()
   }
 
+  private[ast] def findIdentsAndLiterals(node: BinaryTree[Select]): Vector[String] = {
+    node match {
+      case PipeQuery(l, r) => findIdentsAndLiterals(l) ++ findIdentsAndLiterals(r)
+      case Compound(op, l, r) => findIdentsAndLiterals(l) ++ op.split(" ") ++ findIdentsAndLiterals(r)
+      case Leaf(select) => select.findIdentsAndLiterals
+    }
+  }
+
   def walkTreeReplacingHoles(node: BinaryTree[Select], f: Hole => Expression): BinaryTree[Select] = {
     node.map(_.replaceHoles(f))
   }
@@ -260,6 +295,59 @@ case class Select(
   offset: Option[BigInt],
   search: Option[String],
   hints: Seq[Hint]) {
+
+  private[ast] def findIdentsAndLiterals = {
+    val result = Vector.newBuilder[String]
+    result += "SELECT"
+
+    if(hints.nonEmpty) {
+      result += "HINT"
+      result ++= hints.map(_.toString)
+    }
+
+    result ++= distinct.findIdentsAndLiterals
+    result ++= selection.findIdentsAndLiterals
+    from.foreach { tn =>
+      result += "FROM"
+      result += tn.nameWithoutPrefix
+      for(a <- tn.aliasWithoutPrefix) {
+        result += "AS"
+        result += a
+      }
+    }
+    for(join <- joins) {
+      result ++= join.findIdentsAndLiterals
+    }
+    for(w <- where) {
+      result += "WHERE"
+      result ++= w.findIdentsAndLiterals
+    }
+    if(groupBys.nonEmpty) {
+      result ++= Seq("GROUP","BY")
+      result ++= groupBys.flatMap(_.findIdentsAndLiterals)
+    }
+    for(h <- having) {
+      result += "HAVING"
+      result ++= h.findIdentsAndLiterals
+    }
+    if(orderBys.nonEmpty) {
+      result ++= Seq("ORDER","BY")
+      result ++= orderBys.flatMap(_.findIdentsAndLiterals)
+    }
+    for(s <- search) {
+      result += "SEARCH"
+      result += s
+    }
+    for(l <- limit) {
+      result += "LIMIT"
+      result += l.toString
+    }
+    for(o <- offset) {
+      result += "OFFSET"
+      result += o.toString
+    }
+    result.result()
+  }
 
   private def docOneCondition(e: Expression): Doc[Nothing] =
     e match {
@@ -447,6 +535,20 @@ case class Selection(allSystemExcept: Option[StarSelection], allUserExcept: Seq[
     }
   }
 
+  private[ast] def findIdentsAndLiterals: Seq[String] = {
+    val result = Vector.newBuilder[String]
+    for(sys <- allSystemExcept) {
+      result ++= sys.findIdentsAndLiterals
+    }
+    for(usr <- allSystemExcept) {
+      result ++= usr.findIdentsAndLiterals
+    }
+    for(e <- expressions) {
+      result ++= e.findIdentsAndLiterals
+    }
+    result.result()
+  }
+
   def isSimple = allSystemExcept.isEmpty && allUserExcept.isEmpty && expressions.isEmpty
 
   def replaceHoles(f: Hole => Expression) =
@@ -478,6 +580,9 @@ case class StarSelection(qualifier: Option[String], exceptions: Seq[(ColumnName,
     starPosition = p
     this
   }
+
+  private[ast] def findIdentsAndLiterals =
+    exceptions.map { case (cn, _) => cn.name }
 
   def doc(star: String): Doc[Nothing] = {
     val baseDoc = qualifier.fold(Doc.empty) { q => Doc(TableName.withSoqlPrefix(q)) ++ d"." } ++ Doc(star)
@@ -511,6 +616,8 @@ case class SelectedExpression(expression: Expression, name: Option[(ColumnName, 
     } else {
       AST.unpretty(this)
     }
+
+  private[ast] def findIdentsAndLiterals = expression.findIdentsAndLiterals ++ name.toSeq.flatMap { case (cn, _) => Seq("AS", cn.name) }
 
   def replaceHoles(f: Hole => Expression): SelectedExpression =
     copy(expression = expression.replaceHoles(f))
@@ -549,6 +656,11 @@ case class OrderBy(expression: Expression, ascending: Boolean, nullLast: Boolean
   }
 
   def removeSyntacticParens = copy(expression = expression.removeSyntacticParens)
+
+  private[ast] def findIdentsAndLiterals =
+    expression.findIdentsAndLiterals ++
+      (if(!ascending) Seq("DESC") else Nil) ++
+      (if(!nullLast) Seq("NULL", "FIRST") else Nil)
 }
 
 object SimpleSelect {

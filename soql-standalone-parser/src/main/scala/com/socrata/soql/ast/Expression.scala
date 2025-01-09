@@ -32,6 +32,8 @@ sealed abstract class Expression extends Product {
   def removeSyntacticParens: Expression
 
   def doc: Doc[Nothing]
+
+  private[ast] def findIdentsAndLiterals = Expression.findIdentsAndLiterals(this)
 }
 
 object Expression {
@@ -78,7 +80,7 @@ object Expression {
       val op =
         if(not) Vector("not", "in")
         else Vector("in")
-      findIdentsAndLiterals(scrutinee) ++ op ++ ??? /* need to FIaL of the subselect */
+      findIdentsAndLiterals(scrutinee) ++ op ++ Select.findIdentsAndLiterals(subquery)
   }
 
   private def findIdentsAndLiterals(windowFunctionInfo: Option[WindowFunctionInfo]): Seq[String] =  {
@@ -485,7 +487,17 @@ object Hole {
 }
 
 final case class InSubselect(scrutinee: Expression, not: Boolean, subselect: BinaryTree[Select])(val position: Position, val functionNamePosition: Position) extends Expression {
-  def allColumnRefs: Set[ColumnOrAliasRef] = ???
+  def allColumnRefs: Set[ColumnOrAliasRef] =
+    // This may be surprising ("what about column refs in the
+    // subselect?") but: this is used for generating the ordering for
+    // typechecking, and it's already the case that selected columns
+    // can't be seen within a subselect.  So, we don't need to walk
+    // into it to find column refs there.  Good thing too, as that
+    // introduces scoping issues!  (does the x in `... in (select x
+    // from @something)` refer to a column on `@something` or not?
+    // Impossible to tell without full analysis!
+    scrutinee.allColumnRefs
+
   def collectHoles(f: PartialFunction[Hole,Expression]): Expression = ???
   def doc: Doc[Nothing] = {
     val scrutineeDoc =

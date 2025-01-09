@@ -59,6 +59,7 @@ sealed trait Join {
   def replaceHoles(f: Hole => Expression): Join
   def collectHoles(f: PartialFunction[Hole, Expression]): Join
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): Join
+  private[ast] def findIdentsAndLiterals: Seq[String]
 }
 
 object Join {
@@ -92,6 +93,8 @@ case class InnerJoin(from: JoinSelect, on: Expression, lateral: Boolean) extends
     InnerJoin(from.collectHoles(f), on.collectHoles(f), lateral)
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): Join =
     copy(from = from.rewriteJoinFuncs(f, aliasProvider))
+  private[ast] def findIdentsAndLiterals =
+    Seq("JOIN") ++ (if(lateral) Seq("LATERAL") else Nil) ++ from.findIdentsAndLiterals ++ Seq("ON") ++ on.findIdentsAndLiterals
 }
 
 case class LeftOuterJoin(from: JoinSelect, on: Expression, lateral: Boolean) extends Join {
@@ -102,6 +105,8 @@ case class LeftOuterJoin(from: JoinSelect, on: Expression, lateral: Boolean) ext
     LeftOuterJoin(from.collectHoles(f), on.collectHoles(f), lateral)
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): Join =
     copy(from = from.rewriteJoinFuncs(f, aliasProvider))
+  private[ast] def findIdentsAndLiterals =
+    Seq("LEFT","OUTER","JOIN") ++ (if(lateral) Seq("LATERAL") else Nil) ++ from.findIdentsAndLiterals ++ Seq("ON") ++ on.findIdentsAndLiterals
 }
 
 case class RightOuterJoin(from: JoinSelect, on: Expression, lateral: Boolean) extends Join {
@@ -112,6 +117,8 @@ case class RightOuterJoin(from: JoinSelect, on: Expression, lateral: Boolean) ex
     RightOuterJoin(from.collectHoles(f), on.collectHoles(f), lateral)
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): Join =
     copy(from = from.rewriteJoinFuncs(f, aliasProvider))
+  private[ast] def findIdentsAndLiterals =
+    Seq("RIGHT","OUTER","JOIN") ++ (if(lateral) Seq("LATERAL") else Nil) ++ from.findIdentsAndLiterals ++ Seq("ON") ++ on.findIdentsAndLiterals
 }
 
 case class FullOuterJoin(from: JoinSelect, on: Expression, lateral: Boolean) extends Join {
@@ -122,6 +129,8 @@ case class FullOuterJoin(from: JoinSelect, on: Expression, lateral: Boolean) ext
     FullOuterJoin(from.collectHoles(f), on.collectHoles(f), lateral)
   def rewriteJoinFuncs(f: Map[TableName, UDF], aliasProvider: AliasProvider): Join =
     copy(from = from.rewriteJoinFuncs(f, aliasProvider))
+  private[ast] def findIdentsAndLiterals =
+    Seq("FULL","OUTER","JOIN") ++ (if(lateral) Seq("LATERAL") else Nil) ++ from.findIdentsAndLiterals ++ Seq("ON") ++ on.findIdentsAndLiterals
 }
 
 object OuterJoin {

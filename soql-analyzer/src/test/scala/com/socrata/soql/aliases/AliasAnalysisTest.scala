@@ -165,6 +165,10 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
       AliasAnalysis.implicitAlias(expr("a + b_"), Set(ColumnName("a_b_"))) must equal (ColumnName("a_b_1"))
       AliasAnalysis.implicitAlias(expr("a + `b-`"), Set(ColumnName("a_b-"))) must equal (ColumnName("a_b-1"))
     }
+
+    "include subselect text" in {
+      AliasAnalysis.implicitAlias(expr("text in (select hello from @ds)"), Set()) must equal(ColumnName("text_in_select_hello_from_ds"))
+    }
   }
 
   "assigning implicits" should {
