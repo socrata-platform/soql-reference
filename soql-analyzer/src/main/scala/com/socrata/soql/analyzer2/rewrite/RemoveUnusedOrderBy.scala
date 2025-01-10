@@ -4,13 +4,13 @@ import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection._
 
-class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[MT] {
+class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends RewritePassMixin[MT] {
   type RelabelMap = Map[(AutoTableLabel, AutoColumnLabel), (DatabaseColumnName, DatabaseTableName)]
 
   case class Result(statement: Statement, columnMap: RelabelMap)
 
   def rewriteStatement(stmt: Statement, callerCaresAboutOrder: Boolean): Statement = {
-    stmt match {
+    rewriteExpressionSubqueries(stmt, RemoveUnusedOrderBy(_)) match {
       case CombinedTables(op, left, right) =>
         // table ops never preserve ordering
         CombinedTables(op, rewriteStatement(left, false), rewriteStatement(right, false))

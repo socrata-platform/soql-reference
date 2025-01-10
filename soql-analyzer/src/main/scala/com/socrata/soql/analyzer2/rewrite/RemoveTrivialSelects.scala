@@ -6,7 +6,7 @@ import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection._
 
-class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse[MT] {
+class RemoveTrivialSelects[MT <: MetaTypes] private () extends RewritePassMixin[MT] {
   // A "trivial select" is a select of the form:
   //   select column_ref, ... from (non-output-schema-sensitive subselect)
   // without any other modifiers and where all the column_refs point
@@ -35,7 +35,7 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
   //      because a table's columns have DatabaseTableNames and
   //      a select's columns have AutoColumnLabels.
   def rewriteStatement(stmt: Statement): Statement = {
-    stmt match {
+    rewriteExpressionSubqueries(stmt, rewriteStatement) match {
       case CombinedTables(op, left, right) =>
         CombinedTables(op, rewriteStatement(left), rewriteStatement(right))
 

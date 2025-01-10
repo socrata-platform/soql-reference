@@ -3,12 +3,12 @@ package com.socrata.soql.analyzer2.rewrite
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 
-class SelectListReferences[MT <: MetaTypes] private () extends StatementUniverse[MT] {
+class SelectListReferences[MT <: MetaTypes] private () extends RewritePassMixin[MT] {
   abstract class Transform {
     def rewriteSelect(select: Select): Select
 
     def rewriteStatement(stmt: Statement): Statement = {
-      stmt match {
+      rewriteExpressionSubqueries(stmt, rewriteStatement) match {
         case CombinedTables(op, left, right) =>
           CombinedTables(op, rewriteStatement(left), rewriteStatement(right))
 

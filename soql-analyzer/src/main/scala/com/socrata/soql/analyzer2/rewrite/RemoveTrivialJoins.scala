@@ -6,9 +6,9 @@ import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection._
 
-class RemoveTrivialJoins[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] => Boolean) extends StatementUniverse[MT] {
+class RemoveTrivialJoins[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] => Boolean) extends RewritePassMixin[MT] {
   def rewriteStatement(stmt: Statement): Statement = {
-    stmt match {
+    rewriteExpressionSubqueries(stmt, rewriteStatement) match {
       case CombinedTables(op, left, right) =>
         CombinedTables(op, rewriteStatement(left), rewriteStatement(right))
 

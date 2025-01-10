@@ -8,14 +8,14 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.functions.MonomorphicFunction
 
-class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extends StatementUniverse[MT] {
+class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extends RewritePassMixin[MT] {
   // "wantOutputOrdered" == "if this statement can be rewritten to
   // preserve the ordering of its underlying query, do so".
   // "wantOrderingColumns" == "The caller needs column from this table
   // to order itself".  Note that just because the caller wants a
   // thing, it will not necessarily get it!
   def rewriteStatement(stmt: Statement, wantOutputOrdered: Boolean, wantOrderingColumns: Boolean): (Seq[(AutoColumnLabel, CT, Boolean, Boolean)], Statement) = {
-    stmt match {
+    rewriteExpressionSubqueries(stmt, rewriteStatement(_, true, false)._2) match {
       case CombinedTables(op, left, right) =>
         // table ops never preserve ordering
         (Nil, CombinedTables(op, rewriteStatement(left, false, false)._2, rewriteStatement(right, false, false)._2))

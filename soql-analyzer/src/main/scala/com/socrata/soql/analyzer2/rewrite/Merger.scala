@@ -8,7 +8,7 @@ import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.analyzer2._
 
-class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends StatementUniverse[MT] {
+class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends RewritePassMixin[MT] {
   private implicit val cvDoc = new HasDoc[CV] {
     override def docOf(v: CV) = com.socrata.prettyprint.Doc(v.toString)
   }
@@ -27,7 +27,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
   }
 
   private def doMerge(stmt: Statement): Statement =
-    stmt match {
+    rewriteExpressionSubqueries(stmt, doMerge) match {
       case c@CombinedTables(_, left, right) =>
         debug("combined tables")
         c.copy(left = doMerge(left), right = doMerge(right))

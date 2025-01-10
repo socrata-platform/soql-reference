@@ -3,7 +3,7 @@ package com.socrata.soql.analyzer2.rewrite
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 
-class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.AutoTableLabel[MT], Set[types.ColumnLabel[MT]]]) extends StatementUniverse[MT] {
+class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.AutoTableLabel[MT], Set[types.ColumnLabel[MT]]]) extends RewritePassMixin[MT] {
   // myLabel being "None" means "keep all of my output columns,
   // whether or not they appear to be used".  This is for both the
   // top-level (where of course all the columns will be used by
@@ -11,7 +11,7 @@ class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.
   // where the operation combining the tables will care about
   // apparently-unused columns.
   def rewriteStatement(stmt: Statement, myLabel: Option[AutoTableLabel]): (Statement, Boolean) = {
-    stmt match {
+    rewriteExpressionSubqueries(stmt, RemoveUnusedColumns(_)) match {
       case CombinedTables(op, left, right) =>
         val (newLeft, removedAnythingLeft) = rewriteStatement(left, None)
         val (newRight, removedAnythingRight) = rewriteStatement(right, None)
