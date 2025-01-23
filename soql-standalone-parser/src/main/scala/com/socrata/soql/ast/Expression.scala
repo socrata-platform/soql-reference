@@ -296,6 +296,20 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
             case None =>
               Expression.maybeParens(op)
           }
+        case inSubselect: InSubselect =>
+          val thatPrec = RecursiveDescentParser.precedenceOfIn
+          precLevel match {
+            case Some(myPrec) =>
+              if(thatPrec < myPrec) {
+                parenify(op)
+              } else if(thatPrec == myPrec && !parenLowerOnly) {
+                parenify(op)
+              } else {
+                Expression.maybeParens(op)
+              }
+            case None =>
+              Expression.maybeParens(op)
+          }
         case _ =>
           op.doc
       }
