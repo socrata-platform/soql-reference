@@ -1624,7 +1624,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
             FunctionCall(name, args, None)(scrutinee.position, op.position)
           }
         } catch {
-          case expressionListError: ParseException =>
+          case expressionListError: ParseException if parameters.allowInSubselect =>
             try {
               val not = op match {
                 case NOT() => true

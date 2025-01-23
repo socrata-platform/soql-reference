@@ -8,7 +8,7 @@ import com.socrata.soql.ast._
 import com.socrata.soql.exceptions._
 import com.socrata.soql.environment.{ColumnName, TableName, UntypedDatasetContext}
 import com.socrata.soql.collection.{OrderedMap, OrderedSet}
-import com.socrata.soql.parsing.AbstractParser.Parameters
+import com.socrata.soql.parsing.AbstractParser
 
 class AliasAnalysisTest extends WordSpec with MustMatchers {
   def columnNames(names: String*) =
@@ -33,15 +33,17 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
   def se(e: String, name: String, position: Position): SelectedExpression =
     SelectedExpression(expr(e), Some((ColumnName(name), position)))
 
+  val parserParams = AbstractParser.defaultParameters.copy(allowInSubselect = true)
+
   implicit def selections(e: String): Selection = {
-    new Parser().selection(e)
+    new Parser(parserParams).selection(e)
   }
   def selectionsNoPos(e: String): Selection = selections(e)
   def expr(e: String): Expression = {
-    new Parser().expression(e)
+    new Parser(parserParams).expression(e)
   }
   def ident(e: String): ColumnName = {
-    val p = new Parser()
+    val p = new Parser(parserParams)
     p.expression(e) match {
       case ColumnOrAliasRef(None, parsed) => parsed
       case failure => fail("Unable to parse expression fixture " + e + ": " + failure)
@@ -371,7 +373,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     }
 
     "allow standard system columns in aliases" in {
-      val parser = new Parser(new Parameters(true, Set(":id", ":created_at", ":updated_at").map(ColumnName(_))))
+      val parser = new Parser(parserParams.copy(systemColumnAliasesAllowed = Set(":id", ":created_at", ":updated_at").map(ColumnName(_))))
       AliasAnalysis(parser.selection("max(:id) as :id, max(:created_at) as :created_at, max(:updated_at) as :updated_at")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
           ColumnName(":id") -> expr("max(:id)"),

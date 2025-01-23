@@ -7,6 +7,7 @@ import com.socrata.prettyprint.prelude._
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName, Provenance}
 import com.socrata.soql.sqlizer._
+import com.socrata.soql.parsing.AbstractParser
 
 import mocktablefinder._
 
@@ -86,7 +87,9 @@ trait TestHelper { this: Assertions =>
   def xtest(name: String)(test: => Any): Unit = {}
 
   def tableFinder(items: ((Int, String), Thing[Int, TestType])*) =
-    new MockTableFinder[TestMT](items.toMap)
+    new MockTableFinder[TestMT](items.toMap) {
+      override val parserParameters = AbstractParser.defaultParameters.copy(allowInSubselect = true)
+    }
 
   val TestProvenanceMapper = TestHelper.TestProvenanceMapper
   val TestExprSqlFactory = TestHelper.TestExprSqlFactory

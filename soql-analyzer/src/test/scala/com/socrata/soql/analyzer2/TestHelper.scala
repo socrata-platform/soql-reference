@@ -6,6 +6,7 @@ import org.scalatest.matchers.{BeMatcher, MatchResult}
 import com.socrata.soql.ast
 import com.socrata.soql.environment.{ColumnName, ResourceName, HoleName, Provenance}
 import com.socrata.soql.analyzer2.rewrite.NonNegativeBigInt
+import com.socrata.soql.parsing.AbstractParser
 
 import mocktablefinder._
 
@@ -47,7 +48,9 @@ trait TestHelper { this: Assertions =>
 
   def xtest(s: String)(f: => Any): Unit = {}
 
-  def tableFinder(items: ((Int, String), Thing[Int, TestType])*) = new MockTableFinder[TestMT](items.toMap)
+  def tableFinder(items: ((Int, String), Thing[Int, TestType])*) = new MockTableFinder[TestMT](items.toMap) {
+    override val parserParameters = AbstractParser.defaultParameters.copy(allowInSubselect = true)
+  }
 
   def isLiteralTrue(e: Expr[TestMT]) =
     e match {

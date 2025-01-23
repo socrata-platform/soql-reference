@@ -5,9 +5,11 @@ import scala.util.parsing.input.NoPosition
 import org.scalatest._
 
 import com.socrata.soql.environment.{FunctionName, ColumnName}
-import com.socrata.soql.parsing.StandaloneParser
+import com.socrata.soql.parsing.{AbstractParser, StandaloneParser}
 
 class ExpressionTest extends FunSuite with MustMatchers {
+  private val parser = new StandaloneParser(AbstractParser.defaultParameters.copy(allowInSubselect = true))
+
   test("Docifying InSubselect inserts parentheses if the scrutinee is a low-precedence operator") {
     val expr =
       InSubselect(
@@ -19,7 +21,7 @@ class ExpressionTest extends FunSuite with MustMatchers {
           )
         )(NoPosition, NoPosition),
         false,
-        new StandaloneParser().binaryTreeSelect("select 1")
+        parser.binaryTreeSelect("select 1")
       )(NoPosition, NoPosition)
 
     expr.doc.toString must equal ("(null or null) IN (SELECT 1)")
@@ -36,7 +38,7 @@ class ExpressionTest extends FunSuite with MustMatchers {
           )
         )(NoPosition, NoPosition),
         false,
-        new StandaloneParser().binaryTreeSelect("select 1")
+        parser.binaryTreeSelect("select 1")
       )(NoPosition, NoPosition)
 
     expr.doc.toString must equal ("null + null IN (SELECT 1)")
@@ -52,7 +54,7 @@ class ExpressionTest extends FunSuite with MustMatchers {
           )
         )(NoPosition, NoPosition),
         false,
-        new StandaloneParser().binaryTreeSelect("select 1")
+        parser.binaryTreeSelect("select 1")
       )(NoPosition, NoPosition)
 
     expr.doc.toString must equal ("f(null) IN (SELECT 1)")
@@ -67,7 +69,7 @@ class ExpressionTest extends FunSuite with MustMatchers {
           InSubselect(
             ColumnOrAliasRef(None, ColumnName("x"))(NoPosition),
             false,
-            new StandaloneParser().binaryTreeSelect("select 1")
+            parser.binaryTreeSelect("select 1")
           )(NoPosition, NoPosition)
         )
       )(NoPosition, NoPosition)
@@ -84,7 +86,7 @@ class ExpressionTest extends FunSuite with MustMatchers {
           InSubselect(
             ColumnOrAliasRef(None, ColumnName("x"))(NoPosition),
             false,
-            new StandaloneParser().binaryTreeSelect("select 1")
+            parser.binaryTreeSelect("select 1")
           )(NoPosition, NoPosition)
         )
       )(NoPosition, NoPosition)
@@ -93,7 +95,7 @@ class ExpressionTest extends FunSuite with MustMatchers {
   }
 
   test("Parsing IN (subselect) as higher precedence") {
-    val parsed = new StandaloneParser().expression("true or x in (select 1)")
+    val parsed = parser.expression("true or x in (select 1)")
     parsed must equal (
       FunctionCall(
         SpecialFunctions.Operator("or"),
@@ -102,7 +104,7 @@ class ExpressionTest extends FunSuite with MustMatchers {
           InSubselect(
             ColumnOrAliasRef(None, ColumnName("x"))(NoPosition),
             false,
-            new StandaloneParser().binaryTreeSelect("select 1")
+            parser.binaryTreeSelect("select 1")
           )(NoPosition, NoPosition)
         )
       )(NoPosition, NoPosition)
@@ -110,7 +112,7 @@ class ExpressionTest extends FunSuite with MustMatchers {
   }
 
   test("Parsing IN (subselect) as lower precedence") {
-    val parsed = new StandaloneParser().expression("true = x in (select 1)")
+    val parsed = parser.expression("true = x in (select 1)")
     parsed must equal (
       InSubselect(
         FunctionCall(
@@ -121,7 +123,7 @@ class ExpressionTest extends FunSuite with MustMatchers {
           )
         )(NoPosition, NoPosition),
         false,
-        new StandaloneParser().binaryTreeSelect("select 1")
+        parser.binaryTreeSelect("select 1")
       )(NoPosition, NoPosition)
     )
   }
