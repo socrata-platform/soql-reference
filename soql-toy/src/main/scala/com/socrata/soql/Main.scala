@@ -31,6 +31,8 @@ object Main extends App {
       analyzer2.Soql2Toy
     case "rollup" =>
       analyzer2.RollupToy
+    case "analyze-foundtables" =>
+      analyzer2.AnalyzeFoundTables
     case other =>
       fail("soqltoy: unknown command " + other)
   }
