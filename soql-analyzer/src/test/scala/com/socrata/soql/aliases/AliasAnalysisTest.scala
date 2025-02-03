@@ -10,6 +10,9 @@ import com.socrata.soql.environment.{ColumnName, TableName, UntypedDatasetContex
 import com.socrata.soql.collection.{OrderedMap, OrderedSet}
 import com.socrata.soql.parsing.AbstractParser.Parameters
 
+import com.socrata.soql.aliases.AliasAnalysis.AliasType.{Implicit, SemiExplicit, Explicit}
+import com.socrata.soql.aliases.AliasAnalysis.{ExpressionInfo, AliasType}
+
 class AliasAnalysisTest extends WordSpec with MustMatchers {
   def columnNames(names: String*) =
     OrderedSet(names.map(ColumnName): _*)
@@ -39,6 +42,9 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
   def selectionsNoPos(e: String): Selection = selections(e)
   def expr(e: String): Expression = {
     new Parser().expression(e)
+  }
+  def expr(e: String, aliasType: AliasType): ExpressionInfo = {
+    ExpressionInfo(expr(e), aliasType)
   }
   def ident(e: String): ColumnName = {
     val p = new Parser()
@@ -171,45 +177,45 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     implicit val ctx = fixtureContext(":a",":b","c","d","e")
 
     "assign non-conflicting aliases" in {
-      AliasAnalysis.assignImplicit(Seq(se(":a + 1", "c", NoPosition), se(":a + 1"), se("-c"), se("-d"), se("e", "d_1", NoPosition))) must equal (
+      AliasAnalysis.assignImplicit(Seq(se(":a + 1", "c", NoPosition), se(":a + 1"), se("-c"), se("-d"), se("e", "d_1", NoPosition)), Set.empty) must equal (
         Map(
-          ColumnName("c") -> expr(":a + 1"),
-          ColumnName("a_1") -> expr(":a + 1"),
-          ColumnName("c_1") -> expr("-c"),
-          ColumnName("d_2") -> expr("-d"),
-          ColumnName("d_1") -> expr("e")
+          ColumnName("c") -> expr(":a + 1", Explicit),
+          ColumnName("a_1") -> expr(":a + 1", Implicit),
+          ColumnName("c_1") -> expr("-c", Implicit),
+          ColumnName("d_2") -> expr("-d", Implicit),
+          ColumnName("d_1") -> expr("e", Explicit)
         )
       )
     }
 
     "preserve ordering" in {
-      AliasAnalysis.assignImplicit(Seq(se(":a + 1", "c", NoPosition), se(":a + 1"), se("-c"), se("-d"), se("e", "d_1", NoPosition))).toSeq must equal (
+      AliasAnalysis.assignImplicit(Seq(se(":a + 1", "c", NoPosition), se(":a + 1"), se("-c"), se("-d"), se("e", "d_1", NoPosition)), Set.empty).toSeq must equal (
         Seq(
-          ColumnName("c") -> expr(":a + 1"),
-          ColumnName("a_1") -> expr(":a + 1"),
-          ColumnName("c_1") -> expr("-c"),
-          ColumnName("d_2") -> expr("-d"),
-          ColumnName("d_1") -> expr("e")
+          ColumnName("c") -> expr(":a + 1", Explicit),
+          ColumnName("a_1") -> expr(":a + 1", Implicit),
+          ColumnName("c_1") -> expr("-c", Implicit),
+          ColumnName("d_2") -> expr("-d", Implicit),
+          ColumnName("d_1") -> expr("e", Explicit)
         )
       )
     }
 
     "reject assigning to a straight identifier" in {
-      an [AssertionError] must be thrownBy { AliasAnalysis.assignImplicit(Seq(se("q"))) }
+      an [AssertionError] must be thrownBy { AliasAnalysis.assignImplicit(Seq(se("q")), Set.empty) }
     }
 
     "count(*) is count" in {
-      AliasAnalysis.assignImplicit(Seq(se("count(*)"))) must equal (
+      AliasAnalysis.assignImplicit(Seq(se("count(*)")), Set.empty) must equal (
         Map(
-          ColumnName("count") -> expr("count(*)")
+          ColumnName("count") -> expr("count(*)", Implicit)
         )
       )
     }
 
     "count(*) includes window options" in {
-      AliasAnalysis.assignImplicit(Seq(se("count(*) over(partition by col)"))) must equal (
+      AliasAnalysis.assignImplicit(Seq(se("count(*) over(partition by col)")), Set.empty) must equal (
         Map(
-          ColumnName("count_over_partition_by_col") -> expr("count(*) over(partition by col)")
+          ColumnName("count_over_partition_by_col") -> expr("count(*) over(partition by col)", Implicit)
         )
       )
     }
@@ -219,27 +225,27 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     implicit val ctx = fixtureContext()
 
     "accept semi-explicitly aliased names" in {
-      AliasAnalysis.orderAliasesForEvaluation(OrderedMap(ColumnName("x") -> expr("x")), Set(ColumnName("x"))) must equal (Seq(ColumnName("x")))
+      AliasAnalysis.orderAliasesForEvaluation(OrderedMap(ColumnName("x") -> expr("x", SemiExplicit)), Set(ColumnName("x"))) must equal (Seq(ColumnName("x")))
     }
 
     "reject indirectly-circular aliases" in {
       val aliasMap = OrderedMap(
-        ColumnName("x") -> expr("y * 2"),
-        ColumnName("b") -> expr("x+1"),
-        ColumnName("z") -> expr("5"),
-        ColumnName("y") -> expr("a / b")
+        ColumnName("x") -> expr("y * 2", Implicit),
+        ColumnName("b") -> expr("x+1", Implicit),
+        ColumnName("z") -> expr("5", Implicit),
+        ColumnName("y") -> expr("a / b", Implicit)
       )
       a [CircularAliasDefinition] must be thrownBy { AliasAnalysis.orderAliasesForEvaluation(aliasMap, Set.empty) }
     }
 
     "produce a valid linearization" in {
       val aliasMap = OrderedMap(
-        ColumnName("a") -> expr("b + c"),
-        ColumnName("z") -> expr("5"),
-        ColumnName("b") -> expr("7"),
-        ColumnName("o") -> expr("b * d"),
-        ColumnName("y") -> expr("a / b"),
-        ColumnName("d") -> expr("sqrt(z)")
+        ColumnName("a") -> expr("b + c", Implicit),
+        ColumnName("z") -> expr("5", Implicit),
+        ColumnName("b") -> expr("7", Implicit),
+        ColumnName("o") -> expr("b * d", Implicit),
+        ColumnName("y") -> expr("a / b", Implicit),
+        ColumnName("d") -> expr("sqrt(z)", Implicit)
       )
       val order = AliasAnalysis.orderAliasesForEvaluation(aliasMap, Set.empty)
       order.sorted must equal (Seq("a","b","d","o","y","z").map(ColumnName(_)))
@@ -258,9 +264,9 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     "expand *" in {
       AliasAnalysis(selections("*")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          ColumnName("c") -> expr("c"),
-          ColumnName("d") -> expr("d"),
-          ColumnName("e") -> expr("e")
+          ColumnName("c") -> expr("c", SemiExplicit),
+          ColumnName("d") -> expr("d", SemiExplicit),
+          ColumnName("e") -> expr("e", SemiExplicit)
         ),
         Seq("c","d","e").map(ColumnName)
       ))
@@ -269,8 +275,8 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     "expand :*" in {
       AliasAnalysis(selections(":*")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          ColumnName(":a") -> expr(":a"),
-          ColumnName(":b") -> expr(":b")
+          ColumnName(":a") -> expr(":a", SemiExplicit),
+          ColumnName(":b") -> expr(":b", SemiExplicit)
         ),
         Seq(":a", ":b").map(ColumnName)
       ))
@@ -279,11 +285,11 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     "expand :*,*" in {
       AliasAnalysis(selections(":*,*")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          ColumnName(":a") -> expr(":a"),
-          ColumnName(":b") -> expr(":b"),
-          ColumnName("c") -> expr("c"),
-          ColumnName("d") -> expr("d"),
-          ColumnName("e") -> expr("e")
+          ColumnName(":a") -> expr(":a", SemiExplicit),
+          ColumnName(":b") -> expr(":b", SemiExplicit),
+          ColumnName("c") -> expr("c", SemiExplicit),
+          ColumnName("d") -> expr("d", SemiExplicit),
+          ColumnName("e") -> expr("e", SemiExplicit)
         ),
         Seq(":a", ":b", "c", "d", "e").map(ColumnName)
       ))
@@ -292,7 +298,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     "not select an alias the same as a column in the dataset context" in {
       AliasAnalysis(selections("(c)")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          ColumnName("c_1") -> expr("(c)")
+          ColumnName("c_1") -> expr("(c)", Implicit)
         ),
         Seq("c_1").map(ColumnName)
       ))
@@ -301,8 +307,8 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     "not select an alias the same as an expression in the dataset context" in {
       AliasAnalysis(selections("c as c_d, c - d")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          ColumnName("c_d") -> expr("c"),
-          ColumnName("c_d_1") -> expr("c - d")
+          ColumnName("c_d") -> expr("c", Explicit),
+          ColumnName("c_d_1") -> expr("c - d", Implicit)
         ),
         Seq("c_d", "c_d_1").map(ColumnName)
       ))
@@ -311,8 +317,8 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     "never infer the same alias twice" in {
       AliasAnalysis(selections("c + d, c - d")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          ColumnName("c_d") -> expr("c + d"),
-          ColumnName("c_d_1") -> expr("c - d")
+          ColumnName("c_d") -> expr("c + d", Implicit),
+          ColumnName("c_d_1") -> expr("c - d", Implicit)
         ),
         Seq("c_d", "c_d_1").map(ColumnName)
       ))
@@ -321,7 +327,7 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     "allow hiding a column if it's not selected" in {
       AliasAnalysis(selections("c as d")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          ColumnName("d") -> expr("c")
+          ColumnName("d") -> expr("c", Explicit)
         ),
         Seq(ColumnName("d"))
       ))
@@ -342,9 +348,9 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
     "allow hiding a column if it's excluded via *" in {
       AliasAnalysis(selections("* (except d), c as d")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          ColumnName("c") -> expr("c"),
-          ColumnName("d") -> expr("c"),
-          ColumnName("e") -> expr("e")
+          ColumnName("c") -> expr("c", SemiExplicit),
+          ColumnName("d") -> expr("c", Explicit),
+          ColumnName("e") -> expr("e", SemiExplicit)
         ),
         Seq("c", "e", "d").map(ColumnName)
       ))
@@ -370,9 +376,9 @@ class AliasAnalysisTest extends WordSpec with MustMatchers {
       val parser = new Parser(new Parameters(true, Set(":id", ":created_at", ":updated_at").map(ColumnName(_))))
       AliasAnalysis(parser.selection("max(:id) as :id, max(:created_at) as :created_at, max(:updated_at) as :updated_at")) must equal(AliasAnalysis.Analysis(
         OrderedMap(
-          ColumnName(":id") -> expr("max(:id)"),
-          ColumnName(":created_at") -> expr("max(:created_at)"),
-          ColumnName(":updated_at") -> expr("max(:updated_at)")
+          ColumnName(":id") -> expr("max(:id)", Explicit),
+          ColumnName(":created_at") -> expr("max(:created_at)", Explicit),
+          ColumnName(":updated_at") -> expr("max(:updated_at)", Explicit)
         ),
         Seq(":id", ":created_at", ":updated_at").map(ColumnName)
       ))

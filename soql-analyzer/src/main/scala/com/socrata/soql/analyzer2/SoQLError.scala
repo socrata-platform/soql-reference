@@ -820,8 +820,17 @@ object SoQLAnalyzerError {
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[NoSuchColumn[RNS]] {
         override val code = tag
-        def encode(err: NoSuchColumn[RNS]) =
-          result(Fields(err.qualifier, err.name), s"No such column `${err.qualifier.fold("")("@" + _ + ".")}${err.name}'", err.source)
+        def encode(err: NoSuchColumn[RNS]) = {
+          val msg = new StringBuilder
+          msg.append("No such column `")
+            .append(err.qualifier.fold("")("@" + _ + "."))
+            .append(err.name)
+            .append("'")
+          if(err.qualifier.isEmpty) {
+            msg.append(" (Note: joined columns must be fully qualified)")
+          }
+          result(Fields(err.qualifier, err.name), msg.toString, err.source)
+        }
       }
 
       implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[NoSuchColumn[RNS]] {
