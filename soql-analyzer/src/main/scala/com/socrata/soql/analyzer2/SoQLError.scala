@@ -827,7 +827,7 @@ object SoQLAnalyzerError {
             .append(err.name)
             .append("'")
           if(err.qualifier.isEmpty) {
-            msg.append("  (Note: joined columns must be fully qualified)")
+            msg.append(" (Note: joined columns must be fully qualified)")
           }
           result(Fields(err.qualifier, err.name), msg.toString, err.source)
         }
