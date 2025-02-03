@@ -639,6 +639,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         // A bit of old-analyzer compatibility here: In OA, you cannot
         // refer to a qualified column reference by its output name
         // unless that output name was explicitly given to it.
+        //
+        // There are views that depend on this behavior.
         def isQualifiedColumnReference = expression.expr match {
           case ast.ColumnOrAliasRef(Some(_), _) => true
           case _ => false
