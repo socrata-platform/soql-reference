@@ -811,12 +811,11 @@ SELECT visits, @x2.zx
   }
 
   test("no_chain_merge work in join subanalysis") {
-    val analysis1 = analyzer.analyzeFullQueryBinary(
-      """SELECT name_first,name_last |>
-           SELECT name_last JOIN (SELECT name_last FROM @aaaa-aaaa |> select name_last) as a1 ON name_last = @a1.name_last""")
-    val analysis2 = analyzer.analyzeFullQueryBinary("""SELECT name_last JOIN (SELECT name_last FROM @aaaa-aaaa) as a1 ON name_last = @a1.name_last""")
-    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1)
-    merged must equal (analysis2)
+    val analysis = analyzer.analyzeFullQueryBinary(
+      """SELECT hint(no_chain_merge) name_first,name_last |>
+           SELECT name_last JOIN (SELECT name_last FROM @aaaa-aaaa |> SELECT hint(no_chain_merge) distinct name_last) as a1 ON name_last = @a1.name_last""")
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
+    merged must equal (analysis)
   }
 
   test("Cannot reference a non-explicitly-aliased foreign column") {
