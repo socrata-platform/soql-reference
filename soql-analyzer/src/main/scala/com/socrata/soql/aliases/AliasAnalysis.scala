@@ -12,11 +12,20 @@ trait AliasAnalysis {
   type Qualifier = String
   type AnalysisContext = Map[Qualifier, UntypedDatasetContext]
 
-  case class Analysis(expressions: OrderedMap[ColumnName, Expression], evaluationOrder: Seq[ColumnName])
+  case class Analysis(expressions: OrderedMap[ColumnName, AliasAnalysis.ExpressionInfo], evaluationOrder: Seq[ColumnName])
   def apply(selection: Selection, from: Option[TableName])(implicit ctx: AnalysisContext): Analysis
 }
 
 object AliasAnalysis extends AliasAnalysis {
+  sealed abstract class AliasType
+  object AliasType {
+    case object Implicit extends AliasType
+    case object SemiExplicit extends AliasType
+    case object Explicit extends AliasType
+  }
+
+  case class ExpressionInfo(expr: Expression, aliasType: AliasType)
+
   val log = org.slf4j.LoggerFactory.getLogger(classOf[AliasAnalysis])
 
   /** Validate and generate aliases for selected columns.
@@ -35,7 +44,7 @@ object AliasAnalysis extends AliasAnalysis {
     log.debug("After expanding stars: {}", starsExpanded)
     val (semiExplicit, explicitAndSemiExplicitAssigned) = assignExplicitAndSemiExplicit(starsExpanded)
     log.debug("After assigning explicit and semi-explicit: {}", explicitAndSemiExplicitAssigned)
-    val allAliasesAssigned = assignImplicit(explicitAndSemiExplicitAssigned)
+    val allAliasesAssigned = assignImplicit(explicitAndSemiExplicitAssigned, semiExplicit)
     log.debug("After assigning implicit aliases: {}", allAliasesAssigned)
     Analysis(allAliasesAssigned, orderAliasesForEvaluation(allAliasesAssigned, semiExplicit))
   }
@@ -133,19 +142,19 @@ object AliasAnalysis extends AliasAnalysis {
    * @param selections The selection-list, with semi-explicit and explicit aliases already assigned
    * @return The fully-aliased selections, in the same order as they arrived
    */
-  def assignImplicit(selections: Seq[SelectedExpression])(implicit ctx: AnalysisContext): OrderedMap[ColumnName, Expression] = {
+  def assignImplicit(selections: Seq[SelectedExpression], semiExplicit: Set[ColumnName])(implicit ctx: AnalysisContext): OrderedMap[ColumnName, ExpressionInfo] = {
     val assignedAliases: Set[ColumnName] = selections.iterator.collect {
       case SelectedExpression(_, Some((alias, _))) => alias
     }.to(Set)
-    selections.foldLeft((assignedAliases, OrderedMap.empty[ColumnName, Expression])) { (acc, selection) =>
+    selections.foldLeft((assignedAliases, OrderedMap.empty[ColumnName, ExpressionInfo])) { (acc, selection) =>
       val (assignedSoFar, mapped) = acc
       selection match {
         case SelectedExpression(expr, Some((name, _))) => // already has an alias
-          (assignedSoFar, mapped + (name -> expr))
+          (assignedSoFar, mapped + (name -> ExpressionInfo(expr, if(semiExplicit(name)) AliasType.SemiExplicit else AliasType.Explicit)))
         case SelectedExpression(expr, None) =>
           assert(!expr.isInstanceOf[ColumnOrAliasRef], "found un-aliased pure identifier")
           val newName = implicitAlias(expr, assignedSoFar)
-          (assignedSoFar + newName, mapped + (newName -> expr))
+          (assignedSoFar + newName, mapped + (newName -> ExpressionInfo(expr, AliasType.Implicit)))
       }
     }._2
   }
@@ -204,7 +213,7 @@ object AliasAnalysis extends AliasAnalysis {
     * @return the aliases in evaluation order
     * @throws com.socrata.soql.exceptions.CircularAliasDefinition if an alias's expansion refers to itself,
     *                                                             even indirectly. */
-  def orderAliasesForEvaluation(in: OrderedMap[ColumnName, Expression], semiExplicit: Set[ColumnName])(implicit ctx: AnalysisContext): Seq[ColumnName] = {
+  def orderAliasesForEvaluation(in: OrderedMap[ColumnName, ExpressionInfo], semiExplicit: Set[ColumnName])(implicit ctx: AnalysisContext): Seq[ColumnName] = {
     // We'll divide all the aliases up into two categories -- aliases which refer
     // to a column of the same name ("selfRefs") and everything else ("otherRefs").
     val (semiExplicitRefs, otherRefs) = in.partition {
@@ -212,7 +221,7 @@ object AliasAnalysis extends AliasAnalysis {
       case _ => false
     }
 
-    val graph = otherRefs.transform { (targetAlias, expr) =>
+    val graph = otherRefs.transform { case (targetAlias, ExpressionInfo(expr, _)) =>
       // semi-explicit refs are non-circular, but since they _look_ circular we want to exclude them.
       // We also want to exclude references to things that are not aliased at all (either they're columns
       // on the dataset or they're not -- either way it'll be handled at typechecking).

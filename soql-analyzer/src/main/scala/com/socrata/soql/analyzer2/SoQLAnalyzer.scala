@@ -618,19 +618,35 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       // With the aliases assigned we'll typecheck the select-list,
       // building up the set of named exprs we can use as shortcuts
       // for other expressions
-      class EvaluationState(val namedExprs: Map[ColumnName, Expr] = OrderedMap.empty) {
-        def update(name: ColumnName, expr: Expr): EvaluationState = {
-          new EvaluationState(namedExprs + (name -> expr))
+      class EvaluationState(val allNamedExprs: Map[ColumnName, Expr] = OrderedMap.empty, val referencableNamedExprs: Map[ColumnName, Expr] = OrderedMap.empty) {
+        def update(name: ColumnName, expr: Expr, enableReference: Boolean): EvaluationState = {
+          new EvaluationState(
+            allNamedExprs = allNamedExprs + (name -> expr),
+            referencableNamedExprs =
+              if(enableReference) referencableNamedExprs + (name -> expr)
+              else referencableNamedExprs
+          )
         }
 
         def typecheck(expr: ast.Expression, expectedType: Option[CT] = None) =
-          State.this.typecheck(ctx.copy(enclosingEnv = localEnv), expr, namedExprs, expectedType)
+          State.this.typecheck(ctx.copy(enclosingEnv = localEnv), expr, referencableNamedExprs, expectedType)
       }
 
       val finalState = aliasAnalysis.evaluationOrder.foldLeft(new EvaluationState()) { (state, colName) =>
         val expression = aliasAnalysis.expressions(colName)
-        val typed = state.typecheck(expression)
-        state.update(colName, typed)
+        val typed = state.typecheck(expression.expr)
+
+        // A bit of old-analyzer compatibility here: In OA, you cannot
+        // refer to a qualified column reference by its output name
+        // unless that output name was explicitly given to it.
+        def isQualifiedColumnReference = expression.expr match {
+          case ast.ColumnOrAliasRef(Some(_), _) => true
+          case _ => false
+        }
+
+        def hasExplicitAlias = expression.aliasType == AliasAnalysis.AliasType.Explicit
+
+        state.update(colName, typed, enableReference = !isQualifiedColumnReference || hasExplicitAlias)
       }
 
       val checkedDistinct: Distinctiveness = distinct match {
@@ -692,7 +708,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           }
           loop(exprs.to(Set), exprs.to(Set), checkedOrderBys.to(LazyList).map(_.expr))
         case Distinctiveness.FullyDistinct() =>
-          for(missingOb <- checkedOrderBys.find { ob => !finalState.namedExprs.values.exists(_ == ob.expr) }) {
+          for(missingOb <- checkedOrderBys.find { ob => !finalState.allNamedExprs.values.exists(_ == ob.expr) }) {
             ctx.orderByMustBeSelected(missingOb.expr.position.reference)
           }
         case Distinctiveness.Indistinct() =>
@@ -700,14 +716,14 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
 
       val selectList = OrderedMap() ++ aliasAnalysis.expressions.keysIterator.map { cn =>
-        val expr = finalState.namedExprs(cn)
+        val expr = finalState.allNamedExprs(cn)
         labelProvider.columnLabel() -> NamedExpr(expr, cn, ctx.outputColumnHints.get(cn), isSynthetic = false)
       }
 
       val stmt = addSystemColumnsIfDesired(Select(
         checkedDistinct,
         selectList,
-        completeFrom.typecheckOnClauses(ctx, finalState.namedExprs),
+        completeFrom.typecheckOnClauses(ctx, finalState.referencableNamedExprs),
         checkedWhere,
         checkedGroupBys,
         checkedHaving,

@@ -445,7 +445,7 @@ class SoQLAnalyzer[Type, Value](typeInfo: TypeInfo[Type, Value],
     val aliasAnalysis = AliasAnalysis(query.selection, query.from)(ctxWithJoins.schemas)
     val t1 = System.nanoTime()
     val typedAliases = aliasAnalysis.evaluationOrder.foldLeft(Map.empty[ColumnName, Expr]) { (acc, alias) =>
-      acc + (alias -> typechecker(aliasAnalysis.expressions(alias), acc, query.from))
+      acc + (alias -> typechecker(aliasAnalysis.expressions(alias).expr, acc, query.from))
     }
 
     val typecheck = typechecker(_ : Expression, typedAliases, query.from)

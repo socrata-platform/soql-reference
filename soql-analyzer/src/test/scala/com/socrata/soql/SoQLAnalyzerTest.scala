@@ -38,7 +38,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with ScalaCheckPropert
       ColumnName(":id") -> TestNumber,
       ColumnName(":updated_at") -> TestFixedTimestamp,
       ColumnName(":created_at") -> TestFixedTimestamp,
-      ColumnName("name_last") -> TestText
+      ColumnName("name_last") -> TestText,
+      ColumnName("foreign_column") -> TestText,
     )
   }
 
@@ -810,11 +811,38 @@ SELECT visits, @x2.zx
   }
 
   test("no_chain_merge work in join subanalysis") {
+    val analysis1 = analyzer.analyzeFullQueryBinary(
+      """SELECT name_first,name_last |>
+           SELECT name_last JOIN (SELECT name_last FROM @aaaa-aaaa |> select name_last) as a1 ON name_last = @a1.name_last""")
+    val analysis2 = analyzer.analyzeFullQueryBinary("""SELECT name_last JOIN (SELECT name_last FROM @aaaa-aaaa) as a1 ON name_last = @a1.name_last""")
+    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis1)
+    merged must equal (analysis2)
+  }
+
+  test("Cannot reference a non-explicitly-aliased foreign column") {
+    a [NoSuchColumn] must be thrownBy analyzer.analyzeFullQueryBinary(
+      """SELECT name_first, @aaaa-aaaa.foreign_column join @aaaa-aaaa on true where foreign_column = 'bleh'"""
+    )
+  }
+
+  test("Can reference an explicitly-aliased foreign column") {
     val analysis = analyzer.analyzeFullQueryBinary(
-      """SELECT hint(no_chain_merge) name_first,name_last |>
-           SELECT name_last JOIN (SELECT name_last FROM @aaaa-aaaa |> SELECT hint(no_chain_merge) distinct name_last) as a1 ON name_last = @a1.name_last""")
-    val merged = SoQLAnalysis.merge(TestFunctions.And.monomorphic.get, analysis)
-    merged must equal (analysis)
+      """SELECT name_first, @aaaa-aaaa.foreign_column as x join @aaaa-aaaa on true where x = 'bleh'"""
+    )
+    val analysis2 = analyzer.analyzeFullQueryBinary(
+      """SELECT name_first, @aaaa-aaaa.foreign_column as x join @aaaa-aaaa on true where @aaaa-aaaa.foreign_column = 'bleh'"""
+    )
+    analysis must equal (analysis2)
+  }
+
+  test("A non-explicitly referenced foreign column does not shadow local columns") {
+    val analysis = analyzer.analyzeFullQueryBinary(
+      """SELECT name_first, @aaaa-aaaa.name_last join @aaaa-aaaa on true where name_last = 'bleh'"""
+    )
+    val analysis2 = analyzer.analyzeFullQueryBinary(
+      """SELECT name_first, @aaaa-aaaa.name_last join @aaaa-aaaa on true where @aaaa-aaaa.name_last = 'bleh'"""
+    )
+    analysis must not equal (analysis2)
   }
 
   private def deHints[Id, Type](analysis: SoQLAnalysis[Id, Type]): SoQLAnalysis[Id, Type] = {

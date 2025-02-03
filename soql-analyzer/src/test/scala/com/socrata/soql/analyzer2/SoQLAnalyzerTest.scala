@@ -745,6 +745,53 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
   }
 
+  test("Cannot reference non-explicitly-aliased foreign columns") {
+    val tf = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
+      (0, "bbbb-bbbb") -> D("x" -> TestNumber)
+    )
+
+
+    expectFailure(0) {
+      analyze(tf, "aaaa-aaaa", "select @bbbb-bbbb.x join @bbbb-bbbb on true where x = 5")(new OnFail {
+        override def onAnalyzerError(e: SoQLAnalyzerError[Int]): Nothing = {
+          e match {
+            case SoQLAnalyzerError.TypecheckError.NoSuchColumn(Source.Anonymous(Pos(1, 51)), None, c) if c == cn("x") =>
+              expected(0)
+            case _ =>
+              super.onAnalyzerError(e)
+          }
+        }
+      })
+    }
+  }
+
+  test("A non-aliased qualified column does not shadow local names") {
+    val tf = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
+      (0, "bbbb-bbbb") -> D("n1" -> TestNumber, "n2" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "aaaa-aaaa", "select @bbbb-bbbb.n2 join @bbbb-bbbb on true where n2 = 5")
+
+    val expectedAnalysis = analyze(tf, "aaaa-aaaa", "select @bbbb-bbbb.n2 from @this as @t join @bbbb-bbbb on true where @t.n2 = 5")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("can refer to qualified column expressions with an explicit alias") {
+    val tf = tableFinder(
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
+      (0, "bbbb-bbbb") -> D("n1" -> TestNumber, "n2" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "aaaa-aaaa", "select @bbbb-bbbb.n2 as nn join @bbbb-bbbb on true where nn = 5")
+
+    val expectedAnalysis = analyze(tf, "aaaa-aaaa", "select @bbbb-bbbb.n2 from @this as @t join @bbbb-bbbb on true where @bbbb-bbbb.n2 = 5")
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
   test("logical positions - udf parameters") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
