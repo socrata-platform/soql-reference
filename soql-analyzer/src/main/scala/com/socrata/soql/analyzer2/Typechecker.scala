@@ -156,7 +156,7 @@ class Typechecker[MT <: MetaTypes](
             Right(Seq(prechecked.reReference(Source.nonSynthetic(sourceName, col.position))))
           case None =>
             env.lookup(name) match {
-              case None => Left(NoSuchColumn(Source.nonSynthetic(sourceName, col.position), None, name))
+              case None => Left(NoSuchColumn(Source.nonSynthetic(sourceName, col.position), None, name, Util.possibilitiesFor(env, namedExprs.keysIterator, None, name)))
               case Some(Environment.LookupResult.Virtual(table, column, typ)) =>
                 Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(Source.nonSynthetic(sourceName, col.position)))))
               case Some(Environment.LookupResult.Physical(tableName, tableLabel, column, typ)) =>
@@ -166,7 +166,7 @@ class Typechecker[MT <: MetaTypes](
       case col@ast.ColumnOrAliasRef(Some(qual), name) =>
         val trueQual = ResourceName(qual.substring(TableName.PrefixIndex))
         env.lookup(trueQual, name) match {
-          case None => Left(NoSuchColumn(Source.nonSynthetic(sourceName, col.position), Some(trueQual), name))
+          case None => Left(NoSuchColumn(Source.nonSynthetic(sourceName, col.position), Some(trueQual), name, Util.possibilitiesFor(env, namedExprs.keysIterator, Some(trueQual), name)))
           case Some(Environment.LookupResult.Virtual(table, column, typ)) =>
             Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(Source.nonSynthetic(sourceName, col.position)))))
           case Some(Environment.LookupResult.Physical(tableName, tableLabel, column, typ)) =>

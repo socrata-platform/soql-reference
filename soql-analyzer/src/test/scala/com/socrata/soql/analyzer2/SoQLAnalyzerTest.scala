@@ -29,7 +29,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val Right(start) = tf.findTables(0, "select @bleh.whatever from @single_row", Map.empty)
     analyzer(start, UserParameters.empty) match {
       case Right(_) => fail("Expected an error")
-      case Left(SoQLAnalyzerError.TypecheckError.NoSuchColumn(Source.Anonymous(Pos(1, 8)), qualifier, name)) =>
+      case Left(SoQLAnalyzerError.TypecheckError.NoSuchColumn(Source.Anonymous(Pos(1, 8)), qualifier, name, _)) =>
         qualifier must be (Some(rn("bleh")))
         name must be (cn("whatever"))
       case Left(err) =>
@@ -756,7 +756,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       analyze(tf, "aaaa-aaaa", "select @bbbb-bbbb.x join @bbbb-bbbb on true where x = 5")(new OnFail {
         override def onAnalyzerError(e: SoQLAnalyzerError[Int]): Nothing = {
           e match {
-            case SoQLAnalyzerError.TypecheckError.NoSuchColumn(Source.Anonymous(Pos(1, 51)), None, c) if c == cn("x") =>
+            case SoQLAnalyzerError.TypecheckError.NoSuchColumn(Source.Anonymous(Pos(1, 51)), None, c, _) if c == cn("x") =>
               expected(0)
             case _ =>
               super.onAnalyzerError(e)
@@ -1357,7 +1357,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
 
     val Right(ft) = tf.findTables(0, rn("ds1"), "select @ds3.gnus + num as t join @ds2 on t = @ds2.world join @ds3 on true", Map.empty)
-    val Left(SoQLAnalyzerError.TypecheckError.NoSuchColumn(_, None, badColName)) = analyzer(ft, UserParameters.empty)
+    val Left(SoQLAnalyzerError.TypecheckError.NoSuchColumn(_, None, badColName, _)) = analyzer(ft, UserParameters.empty)
     badColName must equal(cn("t"))
   }
 }

@@ -436,8 +436,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           case SE.DuplicateAlias(name, pos) =>
             error(Error.AliasAnalysisError.DuplicateAlias(Source.nonSynthetic(scopedResourceName, pos), name))
           case nsc@SE.NoSuchColumn(name, pos) =>
-            val qual = nsc.asInstanceOf[SE.NoSuchColumn.RealNoSuchColumn].qualifier // ew
-            error(Error.TypecheckError.NoSuchColumn(Source.nonSynthetic(scopedResourceName, pos), qual.map(_.substring(1)).map(ResourceName(_)), name))
+            val qual = nsc.asInstanceOf[SE.NoSuchColumn.RealNoSuchColumn].qualifier.map(_.substring(1)).map(ResourceName(_)) // ew
+            error(Error.TypecheckError.NoSuchColumn(Source.nonSynthetic(scopedResourceName, pos), qual, name, Util.possibilitiesFor(enclosingEnv, Iterator.empty, qual, name)))
           case SE.NoSuchTable(_, _) =>
             throw new Exception("Alias analysis doesn't actually throw NoSuchTable")
         }
