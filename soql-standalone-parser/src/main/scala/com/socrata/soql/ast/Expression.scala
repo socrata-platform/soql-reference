@@ -361,7 +361,7 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
         functionDoc(d"count(DISTINCT " ++ parameters(0).doc ++ d")")
       case SpecialFunctions.Case =>
         val whens = parameters.dropRight(2).grouped(2).map { case Seq(a, b) =>
-          Seq(d"WHEN" +#+ a.doc.align, d"THEN" +#+ b.doc.align).sep.nest(2).group
+          Seq(d"WHEN" +#+ a.doc.align, d"THEN" +#+ b.doc.align).sep.nest(2)
         }.toSeq
         val otherwise = parameters.takeRight(2) match {
           case Seq(BooleanLiteral(true), e) =>
