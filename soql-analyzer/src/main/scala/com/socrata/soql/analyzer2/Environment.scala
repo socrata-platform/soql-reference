@@ -72,6 +72,7 @@ sealed trait Scope[MT <: MetaTypes] extends LabelUniverse[MT] {
   val label: AutoTableLabel
   // def types = schemaByName.iterator.map { case (_, e) => e.typ }.toSeq
 
+  def contents: Iterator[ColumnName]
 }
 
 object Scope {
@@ -87,6 +88,8 @@ object Scope {
         append(" -> ").
         append(schemaByLabel).
         toString
+
+    override def contents = schemaByName.keysIterator
   }
 
   final class Physical[MT <: MetaTypes] (
@@ -104,6 +107,8 @@ object Scope {
         append(" -> ").
         append(schemaByLabel).
         toString
+
+    override def contents = schemaByName.keysIterator
   }
 }
 
@@ -146,6 +151,8 @@ sealed abstract class Environment[MT <: MetaTypes](parent: Option[Environment[MT
   def extend: Environment[MT]
 
   def addScope(name: Option[ResourceName], scope: Scope[MT]): Either[AddScopeError, Environment[MT]]
+
+  def contents: Iterator[(Option[ResourceName], ColumnName)]
 }
 
 object Environment {
@@ -171,6 +178,8 @@ object Environment {
       ))
 
     override def toString = "Environment()"
+
+    override def contents = parent.map(_.contents).getOrElse(Iterator.empty)
   }
 
   private class NonEmptyEnvironment[MT <: MetaTypes](
@@ -200,6 +209,11 @@ object Environment {
         append("\n)").
         toString
     }
+
+    override def contents =
+      implicitScope.contents.map((None, _)) ++
+        explicitScopes.iterator.flatMap { case (table, scope) => scope.contents.map((Some(table), _)) } ++
+        parent.map(_.contents).getOrElse(Iterator.empty)
 
     override def extend: Environment[MT] = new EmptyEnvironment(Some(this))
 

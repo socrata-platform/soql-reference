@@ -8,7 +8,7 @@ import com.rojoma.json.v3.ast.{JValue, JObject, JNull, JString}
 import com.rojoma.json.v3.codec.{JsonEncode, JsonDecode, DecodeError}
 import com.rojoma.json.v3.interpolation._
 import com.rojoma.json.v3.matcher._
-import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder, AutomaticJsonCodecBuilder, InternalTag, TagAndValue, NoTag, AutomaticJsonCodec}
+import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, AutomaticJsonDecodeBuilder, AutomaticJsonCodecBuilder, InternalTag, TagAndValue, NoTag, AutomaticJsonCodec, AllowMissing}
 import com.rojoma.json.v3.util.OrJNull.implicits._
 
 import com.socrata.soql.collection.CovariantSet
@@ -810,13 +810,27 @@ object SoQLAnalyzerError {
     case class NoSuchColumn[+RNS](
       source: Source[RNS],
       qualifier: Option[ResourceName],
-      name: ColumnName
+      name: ColumnName,
+      possibilities: Seq[NoSuchColumn.ColumnCandidate]
     ) extends TypecheckError[RNS] with AliasAnalysisError[RNS]
     object NoSuchColumn {
       private val tag = "soql.analyzer.typechecker.no-such-column"
 
       @AutomaticJsonCodec
-      private case class Fields(qualifier: Option[ResourceName], name: ColumnName)
+      case class ColumnCandidate(
+        table: Option[ResourceName],
+        column: ColumnName
+      ) {
+        override def toString =
+          table.fold("")("@" + _ + ".") + column
+      }
+
+      @AutomaticJsonCodec
+      private case class Fields(
+        qualifier: Option[ResourceName],
+        name: ColumnName,
+        @AllowMissing("Nil") possibilities: Seq[ColumnCandidate]
+      )
 
       implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[NoSuchColumn[RNS]] {
         override val code = tag
@@ -826,10 +840,21 @@ object SoQLAnalyzerError {
             .append(err.qualifier.fold("")("@" + _ + "."))
             .append(err.name)
             .append("'")
-          if(err.qualifier.isEmpty) {
-            msg.append(" (Note: joined columns must be fully qualified)")
+          if(err.possibilities.nonEmpty) {
+            msg.append(" (Perhaps you meant ")
+            var didOne = false
+            for(p <- err.possibilities.dropRight(1)) {
+              if(didOne) msg.append(", ")
+              else didOne = true
+              msg.append("`").append(p).append("'")
+            }
+            for(p <- err.possibilities.takeRight(1)) {
+              if(didOne) msg.append(", or ")
+              msg.append("`").append(p).append("'")
+            }
+            msg.append(")")
           }
-          result(Fields(err.qualifier, err.name), msg.toString, err.source)
+          result(Fields(err.qualifier, err.name, err.possibilities), msg.toString, err.source)
         }
       }
 
@@ -840,7 +865,7 @@ object SoQLAnalyzerError {
             fields <- data[Fields](v)
             source <- source[RNS](v)
           } yield {
-            NoSuchColumn(source, fields.qualifier, fields.name)
+            NoSuchColumn(source, fields.qualifier, fields.name, fields.possibilities)
           }
       }
     }
