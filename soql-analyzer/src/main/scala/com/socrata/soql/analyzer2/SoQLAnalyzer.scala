@@ -981,7 +981,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         }
 
         val augmentedFrom = envify(ctx, left.extendEnvironment(ctx.enclosingEnv), NoPosition /* TODO: NEED POS INFO FROM AST */)
-        val effectiveLateral = join.lateral || requiresLateral(join)
+        val effectiveLateral = (join.lateral && !definitelyDoesNotRequireLateral(join)) || requiresLateral(join)
         val checkedRight =
           if(effectiveLateral) {
             analyzeJoinSelect(ctx.copy(enclosingEnv = augmentedFrom), join.from)
@@ -996,6 +996,12 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     def requiresLateral(join: ast.Join): Boolean =
       join.from match {
         case ast.JoinFunc(_, params) => params.exists(containsColumnRef)
+        case _ => false
+      }
+
+    def definitelyDoesNotRequireLateral(join: ast.Join): Boolean =
+      join.from match {
+        case ast.JoinFunc(_, _) => !requiresLateral(join)
         case _ => false
       }
 

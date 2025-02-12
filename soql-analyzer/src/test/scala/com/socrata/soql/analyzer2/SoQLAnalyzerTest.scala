@@ -1360,4 +1360,36 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val Left(SoQLAnalyzerError.TypecheckError.NoSuchColumn(_, None, badColName, _)) = analyzer(ft, UserParameters.empty)
     badColName must equal(cn("t"))
   }
+
+  test("An explicit LATERAL on a UDF call is ignored if it's not required") {
+    val tf = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "ds2") -> D("another_text" -> TestText, "another_num" -> TestNumber),
+      (0, "udf") -> U(0, "select * from @ds2 where another_num = ?x", "x" -> TestNumber)
+    )
+
+    val Right(ft) = tf.findTables(0, rn("ds1"), "select text, num, @u.another_text join lateral @udf(5) as @u on true", Map.empty)
+    val Right(analysis) = analyzer(ft, UserParameters.empty)
+
+    val select = analysis.statement.asInstanceOf[Select[TestMT]]
+    val from = select.from.asInstanceOf[Join[TestMT]]
+
+    from.lateral must be (false)
+  }
+
+  test("An absent LATERAL on a UDF call is provided if it is required") {
+    val tf = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "ds2") -> D("another_text" -> TestText, "another_num" -> TestNumber),
+      (0, "udf") -> U(0, "select * from @ds2 where another_num = ?x", "x" -> TestNumber)
+    )
+
+    val Right(ft) = tf.findTables(0, rn("ds1"), "select text, num, @u.another_text join @udf(num) as @u on true", Map.empty)
+    val Right(analysis) = analyzer(ft, UserParameters.empty)
+
+    val select = analysis.statement.asInstanceOf[Select[TestMT]]
+    val from = select.from.asInstanceOf[Join[TestMT]]
+
+    from.lateral must be (true)
+  }
 }
