@@ -34,14 +34,15 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
   typeInfo: TypeInfo2[MT],
   functionInfo: FunctionInfo[MT#ColumnType],
   toProvenance: ToProvenance[MT#DatabaseTableNameImpl],
-  aggregateMerge: Option[(ColumnName, Expr[MT]) => Option[Expr[MT]]]
+  aggregateMerge: Option[(ColumnName, Expr[MT]) => Option[Expr[MT]]],
+  allowSloppyUDFParams: Boolean
 ) extends StatementUniverse[MT] {
   def this(
     typeInfo: TypeInfo2[MT],
     functionInfo: FunctionInfo[MT#ColumnType],
     toProvenance: ToProvenance[MT#DatabaseTableNameImpl]
   ) =
-    this(typeInfo, functionInfo, toProvenance, None)
+    this(typeInfo, functionInfo, toProvenance, None, allowSloppyUDFParams = false)
 
   type TableMap = com.socrata.soql.analyzer2.TableMap[MT]
   type FoundTables = com.socrata.soql.analyzer2.FoundTables[MT]
@@ -56,11 +57,17 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
   private def preserveSystemColumnsRequested =
     aggregateMerge.isDefined
 
-  private def copy(aggregateMerge: Option[(ColumnName, Expr) => Option[Expr]] = aggregateMerge): SoQLAnalyzer[MT] =
-    new SoQLAnalyzer(typeInfo, functionInfo, toProvenance, aggregateMerge)
+  private def copy(
+    aggregateMerge: Option[(ColumnName, Expr) => Option[Expr]] = aggregateMerge,
+    allowSloppyUDFParams: Boolean = allowSloppyUDFParams
+  ): SoQLAnalyzer[MT] =
+    new SoQLAnalyzer(typeInfo, functionInfo, toProvenance, aggregateMerge, allowSloppyUDFParams)
 
   def preserveSystemColumns(aggregateMerge: (ColumnName, Expr) => Option[Expr]): SoQLAnalyzer[MT] =
     copy(aggregateMerge = Some(aggregateMerge))
+
+  def sloppyUDFParams(allow: Boolean) =
+    copy(allowSloppyUDFParams = allow)
 
   def apply(start: FoundTables, userParameters: UserParameters): Either[SoQLAnalyzerError[RNS], SoQLAnalysis[MT]] = {
     try {
@@ -1078,7 +1085,14 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
 
           val typecheckedParams =
             OrderedMap() ++ params.lazyZip(paramSpecs).map { case (expr, (name, typ)) =>
-              name -> typecheck(callerCtx, expr, Map.empty, Some(typ))
+              val rewrittenExpr =
+                if(allowSloppyUDFParams) {
+                  ast.FunctionCall(ast.SpecialFunctions.Cast(typeInfo.typeNameFor(typ)), Seq(expr))(expr.position, expr.position)
+                } else {
+                  expr
+                }
+
+              name -> typecheck(callerCtx, rewrittenExpr, Map.empty, Some(typ))
             }
 
           NonEmptySeq.fromSeq(typecheckedParams.toVector) match {
