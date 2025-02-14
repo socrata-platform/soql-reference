@@ -406,7 +406,7 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
   }
 
   protected final def parseFull[T](parser: Reader => ParseResult[T], soql: String): T = {
-    val ParseResult(end, result) = parser(new LexerReader(lexer(soql)))
+    val ParseResult(end, result) = parser(new LexerReader(lexer(soql)).withoutComments)
     if(end.first.isInstanceOf[EOF]) {
       result
     } else {

@@ -27,6 +27,12 @@ import com.socrata.soql.tokens.*;
     return s;
   }
 
+  Token finishBlockComment() {
+    Token c = new BlockComment(string.toString());
+    c.setPosition(stringStart);
+    return c;
+  }
+
   int dehex(String s) {
     return Integer.parseInt(s, 16);
   }
@@ -151,18 +157,22 @@ TableIdentifier = "@" ("-" | [:jletterdigit:])+
 
   {WhiteSpace} { }
 
-  "--" .* { /* comment */ }
+  "--" .* { return token(new LineComment(yytext().substring(2))); }
 
-  "/*" { yybegin(BLOCKCOMMENT); }
+  "/*" { string.setLength(0); stringStart = pos(); yybegin(BLOCKCOMMENT); }
 
   <<EOF>> { return token(new EOF()); }
 }
 
 <BLOCKCOMMENT> {
-  "*/" { yybegin(YYINITIAL); }
+  "*/" { yybegin(YYINITIAL); return finishBlockComment(); }
   <<EOF>> { throw unexpectedEOF(pos()); }
-  . {}
-  [\r\n] {}
+  [^*]+ { string.append(yytext()); }
+  [\r\n]+ { string.append(yytext()); }
+
+  // note this is deliberately not "*"+ because otherwise "****/" would be
+  // lexed as "four *" followed by "/" rather than "three *" followed by "*/"
+  "*" { string.append(yytext()); }
 }
 
 <QUOTEDIDENTIFIER> {
