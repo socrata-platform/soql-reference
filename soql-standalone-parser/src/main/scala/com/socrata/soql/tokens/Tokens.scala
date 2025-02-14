@@ -20,6 +20,12 @@ sealed abstract class ValueToken[T] extends Token {
   override def printable = value.toString
 }
 
+// Comments - note the positions are the position of the start of the
+// comment, but the string only contains the text of the comment.
+sealed abstract class Comment extends Token
+case class LineComment(text: String) extends Comment
+case class BlockComment(text: String) extends Comment
+
 // Keywords
 case class SELECT() extends Token
 case class DISTINCT() extends Token

@@ -10,6 +10,7 @@ import com.socrata.soql.tokens._
 
 trait StreamableReader[T] extends Reader[T] {
   def toStream: StreamShim.Stream[T]
+  def withoutComments: StreamableReader[T]
   override def rest: StreamableReader[T]
 }
 
@@ -34,6 +35,8 @@ trait ExtendedReader[T] extends StreamableReader[T] {
   def resetAlternates(): Unit = alts = Nil
 
   override def rest: ExtendedReader[T]
+
+  override def withoutComments: ExtendedReader[T]
 }
 
 class LexerReader(lexer: AbstractLexer) extends ExtendedReader[Token] { self =>
@@ -58,8 +61,22 @@ class LexerReader(lexer: AbstractLexer) extends ExtendedReader[Token] { self =>
         def atEnd = true
         def pos = first.position
         def toStream = StreamShim.Stream.empty
+        def withoutComments = this
       }
     } else new LexerReader(lexer)
+  }
+
+  override def withoutComments: ExtendedReader[Token] = {
+    var here: ExtendedReader[Token] = this
+    while(here.first.isInstanceOf[Comment]) here = here.rest
+    new ExtendedReader[Token] {
+      def first = here.first
+      lazy val rest = here.rest.withoutComments
+      def atEnd = here.atEnd
+      def pos = first.position
+      def toStream = first #:: rest.toStream
+      def withoutComments = this
+    }
   }
 }
 
