@@ -138,7 +138,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       // "required" means "there is an implicit FROM; the current soql
       // query _must not_ provide one that queries something else, but
       // _may_ do "FROM @this AS @alias"
-      case class Required(from: AtomicFrom) extends ImplicitFrom {
+      case class Required(from: AtomicFrom, named: Option[ResourceName]) extends ImplicitFrom {
         def optionalize(left: Boolean) = new Optional(from, left)
         def forced = true
       }
@@ -184,10 +184,10 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             analyzeForFrom(ctx.scopedResourceName, ScopedResourceName(scope, rn), None, NoPosition)
           case FoundTables.InContext(rn, q, _, parameters) =>
             val from = analyzeForFrom(ctx.scopedResourceName, ScopedResourceName(scope, rn), None, NoPosition)
-            analyzeStatement(ctx, q, ImplicitFrom.Required(from))
+            analyzeStatement(ctx, q, ImplicitFrom.Required(from, Some(rn)))
           case FoundTables.InContextImpersonatingSaved(rn, q, _, parameters, impersonating) =>
             val from = analyzeForFrom(ctx.scopedResourceName, ScopedResourceName(scope, rn), None, NoPosition)
-            analyzeStatement(ctx.copy(canonicalName = Some(impersonating)), q, ImplicitFrom.Required(from))
+            analyzeStatement(ctx.copy(canonicalName = Some(impersonating)), q, ImplicitFrom.Required(from, Some(rn)))
           case FoundTables.Standalone(q, _, parameters) =>
             analyzeStatement(ctx, q, ImplicitFrom.None)
         }
@@ -339,7 +339,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             // so this is basedOn |> parsed
             // so we want to use "basedOn" as the implicit "from" for "parsed"
             val from = analyzeForFrom(source, ScopedResourceName(scope, basedOn), None, NoPosition /* Yes, actually NoPosition here */)
-            analyzeStatement(Ctx(scope, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, outputColumnHints, true), parsed, ImplicitFrom.Required(from))
+            analyzeStatement(Ctx(scope, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, outputColumnHints, true), parsed, ImplicitFrom.Required(from, Some(basedOn)))
           case TableDescription.TableFunction(_, _, _, _, _, _) =>
             parameterlessTableFunction(source, name.name, position)
         }
@@ -464,7 +464,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               ),
               left, from0
             )
-          analyzeStatement(ctx, right, ImplicitFrom.Required(analyzedLeft))
+          analyzeStatement(ctx, right, ImplicitFrom.Required(analyzedLeft, None))
         case other: TrueOp[ast.Select] =>
           analyzeTableOp(ctx, other, from0)
       }
@@ -924,10 +924,10 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case (ImplicitFrom.None, None) =>
           // No required context and no from given; this is an error
           ctx.noDataSource(NoPosition /* TODO: NEED POS INFO FROM AST */)
-        case (ImplicitFrom.Required(prev), Some(tn)) =>
+        case (ImplicitFrom.Required(prev, maybeName), Some(tn)) =>
           tn.aliasWithoutPrefix.foreach(ensureLegalAlias(ctx, _, NoPosition /* TODO: NEED POS INFO FROM AST */))
           val rn = ResourceName(tn.nameWithoutPrefix)
-          if(rn == SoQLAnalyzer.This) {
+          if(rn == SoQLAnalyzer.This || Some(rn) == maybeName) {
             // chained query: {something} |> select ... from @this [as alias]
             prev.reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
           } else {
@@ -960,7 +960,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             // n.b., sometable may actually be a query
             fromNamedTable(rn, alias)
           }
-        case (ImplicitFrom.Required(input), None) =>
+        case (ImplicitFrom.Required(input, _), None) =>
           // chained query: {something} |> {the thing we're analyzing}
           input.reAlias(None)
         case (opt: ImplicitFrom.Optional, None) =>

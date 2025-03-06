@@ -1149,6 +1149,32 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val Left(SoQLAnalyzerError.FromForbidden(_)) = analyzer(ft, UserParameters.empty)
   }
 
+  test("May refer to the parent by name") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val Right(ft) = tf.findTables(0, rn("ds"), "select @ds.text as t, num*2 as n from @ds", Map.empty)
+    val Right(analysis) = analyzer(ft, UserParameters.empty)
+
+    val Right(expectedAnalysis) = locally {
+      val Right(ft) = tf.findTables(0, rn("ds"), "select text as t, num*2 as n", Map.empty)
+      analyzer(ft, UserParameters.empty)
+    }
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("May not ignore the parent") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "ds2") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val Right(ft) = tf.findTables(0, rn("ds2"), "select @ds.text as t, num*2 as n from @ds", Map.empty)
+    val Left(SoQLAnalyzerError.FromForbidden(_)) = analyzer(ft, UserParameters.empty)
+  }
+
   test("hints get piped through - originating in a table") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber).withOutputColumnHints("num" -> j"true"),
