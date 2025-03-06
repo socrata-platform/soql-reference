@@ -137,7 +137,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
       // "required" means "there is an implicit FROM; the current soql
       // query _must not_ provide one that queries something else, but
-      // _may_ do "FROM @this AS @alias"
+      // _may_ do "FROM @this AS @alias", or if the parent query was
+      // named, "FROM @that-name [AS @alias]"
       case class Required(from: AtomicFrom, named: Option[ResourceName]) extends ImplicitFrom {
         def optionalize(left: Boolean) = new Optional(from, left)
         def forced = true
