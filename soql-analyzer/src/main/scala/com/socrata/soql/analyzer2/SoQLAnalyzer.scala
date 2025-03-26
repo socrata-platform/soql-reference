@@ -1068,7 +1068,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       tableMap.find(udfScopedResourceName) match {
         case TableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs, hiddenColumns) =>
           if(params.length != paramSpecs.size) {
-            callerCtx.incorrectNumberOfParameters(resource, expected = params.length, got = paramSpecs.size, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
+            callerCtx.incorrectNumberOfParameters(resource, expected = paramSpecs.size, got = params.length, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
           }
           // we're rewriting the UDF from
           //    @bleh(x, y, z)
