@@ -306,4 +306,22 @@ class SqlizerTest extends FunSuite with MustMatchers with TestHelper with Sqlize
     // and in particular _not_ "select "c a", "c b" order by compress(1, 2)"...
     sqlish must equal ("""SELECT "column a" AS i1_a, "column b" AS i1_b ORDER BY test_soql_compress_compound("column a", "column b") ASC NULLS LAST""")
   }
+
+  test("selecting nothing from @single_row turns into 'select 1'") {
+    val tf = tableFinder()
+    val soql = "select from @single_row"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("SELECT 1")
+  }
+
+  test("selecting nothing from a table turns into 'select 1 from that_table'") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        ":id" -> TestID
+      )
+    )
+    val soql = "select from @table1"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("SELECT 1 FROM table1 AS x1")
+  }
 }

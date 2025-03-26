@@ -210,9 +210,8 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
     val tmpTable = Doc(dynamicContext.gensymProvider.next())
     val schemaOrder = schema.keys.toSeq
 
-    val selectionDoc = Seq(
-      Some(d"SELECT"),
-      Some(
+    val selection =
+      if(schemaOrder.nonEmpty) {
         schemaOrder.flatMap { columnLabel =>
           val typ = schema(columnLabel).typ
           val rep = dynamicContext.repFor(typ)
@@ -230,8 +229,14 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
             Seq(tmpTable ++ d"." ++ Doc(rep.compressedDatabaseColumn(columnLabel)) +#+ d"AS" +#+ Doc(rep.compressedDatabaseColumn(columnLabel)))
           }
         }.commaSep
-      ).filter { _ => schemaOrder.nonEmpty }
-    ).flatten.vsep.nest(2)
+      } else {
+        d"1"
+      }
+
+    val selectionDoc = Seq(
+      d"SELECT",
+      selection
+    ).vsep.nest(2)
     val fromDoc = (d"FROM" ++ Doc.lineSep ++ stmt.parenthesized +#+ d"AS" +#+ tmpTable).nest(2)
 
     val doc = Seq(
@@ -292,14 +297,19 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
       val names = physicalSchema.iterator.map { case (label, name) =>
         Doc(label).annotate(SqlizeAnnotation.OutputName[MT](name))
       }
-      val selectList = row.flatMap { expr =>
-        expr match {
-          case cmp: ExprSql.Compressed[MT] =>
-            Seq(cmp.sql +#+ d"AS" +#+ names.next())
-          case exp: ExprSql.Expanded[MT] =>
-            exp.sqls.map { sql => sql +#+ d"AS" +#+ names.next() }
+      val selectList =
+        if(row.nonEmpty) {
+          row.flatMap { expr =>
+            expr match {
+              case cmp: ExprSql.Compressed[MT] =>
+                Seq(cmp.sql +#+ d"AS" +#+ names.next())
+              case exp: ExprSql.Expanded[MT] =>
+                exp.sqls.map { sql => sql +#+ d"AS" +#+ names.next() }
+            }
+          }.commaSep
+        } else {
+          d"1"
         }
-      }.commaSep
       assert(!names.hasNext)
 
       (d"SELECT" +#+ selectList, augmentedSchema)
@@ -341,9 +351,14 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
 
       val valuesLabel = Doc(dynamicContext.gensymProvider.next())
 
-      val selection = physicalSchema.map { case (physicalColName, outputName) =>
-        valuesLabel ++ d"." ++ Doc(physicalColName) +#+ d"AS" +#+ Doc(physicalColName).annotate(SqlizeAnnotation.OutputName[MT](outputName))
-      }.commaSep
+      val selection =
+        if(physicalSchema.nonEmpty) {
+          physicalSchema.map { case (physicalColName, outputName) =>
+            valuesLabel ++ d"." ++ Doc(physicalColName) +#+ d"AS" +#+ Doc(physicalColName).annotate(SqlizeAnnotation.OutputName[MT](outputName))
+          }.commaSep
+        } else {
+          d"1"
+        }
 
       val rows = values.values.map { row =>
         row.toSeq.zipWithIndex.flatMap { case (expr, idx) =>
@@ -483,7 +498,11 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
     val selectionDoc = Seq(
       Some(d"SELECT"),
       distinctSql,
-      Some(selectListSql).filter(_ => selectListExprs.nonEmpty)
+      if(selectListExprs.nonEmpty) {
+        Some(selectListSql)
+      } else {
+        Some(d"1")
+      }
     ).flatten.vsep.nest(2)
 
     val fromDoc = fromSql.map(Seq(d"FROM", _).vsep.nest(2).group)
