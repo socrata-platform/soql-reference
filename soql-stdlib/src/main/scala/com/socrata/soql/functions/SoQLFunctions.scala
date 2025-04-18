@@ -360,10 +360,10 @@ object SoQLFunctions {
     "Return the average of a given set of numbers"
   )
   val Median = f("median", FunctionName("median"), Map("a" -> NumLike), Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Aggregate)(
-    "Return a median of a given set of numbers"
+    "Return a (continuous) median of a given set of numbers.  If there are an even number of items in the group, the average of the two nearest the center will be returned."
   )
   val MedianDisc = f("median_disc", FunctionName("median"), Map("a" -> (Ordered -- NumLike)), Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Aggregate)(
-    "Return a discrete median of a given set of numbers"
+    "Return a median of a given set of non-numbers.  If there are an even number of items in the group, the lower of the center two will be returned."
   )
   val RegrIntercept = mf("regr_intercept", FunctionName("regr_intercept"), Seq(SoQLNumber, SoQLNumber), Seq.empty, SoQLNumber, FunctionType.Aggregate) (
     "Return the Ordinary Least Squares Regression intercept of (y, x) columns"
