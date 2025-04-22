@@ -12,13 +12,7 @@ case class Debug(
   @AllowMissing("Debug.default.inhibitRun")
   inhibitRun: Boolean,
   @AllowMissing("Debug.default.useCache")
-  useCache: Boolean,
-
-  // Temporary hack to enable turning _off_ merging system columns to
-  // see what breaks.  This will go away once the experiment is done
-  // as part of EN-77404
-  @AllowMissing("Debug.default.mergeSystemColumns")
-  mergeSystemColumns: Boolean
+  useCache: Boolean
 )
 
 object Debug {
@@ -28,8 +22,7 @@ object Debug {
     None,
     None,
     inhibitRun = false,
-    useCache = true,
-    mergeSystemColumns = true
+    useCache = true
   )
 
   object Sql {
@@ -168,35 +161,34 @@ object Debug {
         sql,
         explain,
         inhibitRun,
-        useCache,
-        mergeSystemColumns
+        useCache
       ) = t
 
       buffer.write(sql)
       buffer.write(explain)
       buffer.write(inhibitRun)
       buffer.write(useCache)
-      buffer.write(mergeSystemColumns)
     }
 
     def readFrom(buffer: ReadBuffer): Debug =
       buffer.version match {
-        case Version.V3 =>
+        case Version.V3 | Version.V5 =>
           Debug(
             sql = buffer.read[Option[Sql.Format]](),
             explain = buffer.read[Option[Explain]](),
             inhibitRun = buffer.read[Boolean](),
-            useCache = buffer.read[Boolean](),
-            mergeSystemColumns = default.mergeSystemColumns,
+            useCache = buffer.read[Boolean]()
           )
         case Version.V4 =>
-          Debug(
-            sql = buffer.read[Option[Sql.Format]](),
-            explain = buffer.read[Option[Explain]](),
-            inhibitRun = buffer.read[Boolean](),
-            useCache = buffer.read[Boolean](),
-            mergeSystemColumns = buffer.read[Boolean]()
-          )
+          val result =
+            Debug(
+              sql = buffer.read[Option[Sql.Format]](),
+              explain = buffer.read[Option[Explain]](),
+              inhibitRun = buffer.read[Boolean](),
+              useCache = buffer.read[Boolean]()
+            )
+          buffer.read[Boolean]() // mergeSystemColumns
+          result
       }
   }
 }
