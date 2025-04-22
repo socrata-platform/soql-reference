@@ -150,28 +150,14 @@ trait OFromTableImpl { this: FromTable.type =>
 
   implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope], ctReadable: Readable[MT#ColumnType], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[FromTable[MT]] = new Readable[FromTable[MT]] with LabelUniverse[MT] {
     def readFrom(buffer: ReadBuffer): FromTable[MT] = {
-      buffer.version match {
-        case Version.V0 | Version.V1 =>
-          FromTable(
-            tableName = buffer.read[DatabaseTableName](),
-            definiteResourceName = buffer.read[ScopedResourceName](),
-            alias = buffer.read[Option[ResourceName]](),
-            label = buffer.read[AutoTableLabel](),
-            columns = buffer.read[OrderedMap[DatabaseColumnName, NameEntry[CT]]]().withValuesMapped { case NameEntry(name, typ) =>
-              ColumnInfo[MT](name, typ, None)
-            },
-            primaryKeys = buffer.read[Seq[Seq[DatabaseColumnName]]]()
-          )
-        case Version.V2 | Version.V3 =>
-          FromTable(
-            tableName = buffer.read[DatabaseTableName](),
-            definiteResourceName = buffer.read[ScopedResourceName](),
-            alias = buffer.read[Option[ResourceName]](),
-            label = buffer.read[AutoTableLabel](),
-            columns = buffer.read[OrderedMap[DatabaseColumnName, ColumnInfo[MT]]](),
-            primaryKeys = buffer.read[Seq[Seq[DatabaseColumnName]]]()
-          )
-      }
+      FromTable(
+        tableName = buffer.read[DatabaseTableName](),
+        definiteResourceName = buffer.read[ScopedResourceName](),
+        alias = buffer.read[Option[ResourceName]](),
+        label = buffer.read[AutoTableLabel](),
+        columns = buffer.read[OrderedMap[DatabaseColumnName, ColumnInfo[MT]]](),
+        primaryKeys = buffer.read[Seq[Seq[DatabaseColumnName]]]()
+      )
     }
   }
 }
