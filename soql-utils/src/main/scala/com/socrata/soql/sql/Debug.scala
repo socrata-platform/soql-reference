@@ -12,7 +12,13 @@ case class Debug(
   @AllowMissing("Debug.default.inhibitRun")
   inhibitRun: Boolean,
   @AllowMissing("Debug.default.useCache")
-  useCache: Boolean
+  useCache: Boolean,
+
+  // Temporary hack to enable turning _off_ merging system columns to
+  // see what breaks.  This will go away once the experiment is done
+  // as part of EN-77404
+  @AllowMissing("Debug.default.mergeSystemColumns")
+  mergeSystemColumns: Boolean
 )
 
 object Debug {
@@ -22,7 +28,8 @@ object Debug {
     None,
     None,
     inhibitRun = false,
-    useCache = true
+    useCache = true,
+    mergeSystemColumns = true
   )
 
   object Sql {
@@ -161,30 +168,34 @@ object Debug {
         sql,
         explain,
         inhibitRun,
-        useCache
+        useCache,
+        mergeSystemColumns
       ) = t
 
       buffer.write(sql)
       buffer.write(explain)
       buffer.write(inhibitRun)
       buffer.write(useCache)
+      buffer.write(mergeSystemColumns)
     }
 
     def readFrom(buffer: ReadBuffer): Debug =
       buffer.version match {
-        case Version.V0 | Version.V1 | Version.V2 =>
-          Debug(
-            sql = buffer.read[Option[Sql.Format]](),
-            explain = buffer.read[Option[Explain]](),
-            inhibitRun = buffer.read[Boolean](),
-            useCache = true
-          )
         case Version.V3 =>
           Debug(
             sql = buffer.read[Option[Sql.Format]](),
             explain = buffer.read[Option[Explain]](),
             inhibitRun = buffer.read[Boolean](),
-            useCache = buffer.read[Boolean]()
+            useCache = buffer.read[Boolean](),
+            mergeSystemColumns = default.mergeSystemColumns,
+          )
+        case Version.V4 =>
+          Debug(
+            sql = buffer.read[Option[Sql.Format]](),
+            explain = buffer.read[Option[Explain]](),
+            inhibitRun = buffer.read[Boolean](),
+            useCache = buffer.read[Boolean](),
+            mergeSystemColumns = buffer.read[Boolean]()
           )
       }
   }

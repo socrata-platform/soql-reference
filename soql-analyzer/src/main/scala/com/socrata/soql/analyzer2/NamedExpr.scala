@@ -27,22 +27,12 @@ object NamedExpr {
 
   implicit def deserialize[MT <: MetaTypes](implicit ev: Readable[Expr[MT]]) = new Readable[NamedExpr[MT]] {
     def readFrom(buffer: ReadBuffer): NamedExpr[MT] = {
-      buffer.version match {
-        case Version.V0 | Version.V1 =>
-          NamedExpr(
-            expr = buffer.read[Expr[MT]](),
-            name = buffer.read[ColumnName](),
-            isSynthetic = buffer.read[Boolean](),
-            hint = None
-          )
-        case Version.V2 | Version.V3 =>
-          NamedExpr(
-            expr = buffer.read[Expr[MT]](),
-            name = buffer.read[ColumnName](),
-            isSynthetic = buffer.read[Boolean](),
-            hint = buffer.read[Option[JValue]]()
-          )
-      }
+      NamedExpr(
+        expr = buffer.read[Expr[MT]](),
+        name = buffer.read[ColumnName](),
+        isSynthetic = buffer.read[Boolean](),
+        hint = buffer.read[Option[JValue]]()
+      )
     }
   }
 }

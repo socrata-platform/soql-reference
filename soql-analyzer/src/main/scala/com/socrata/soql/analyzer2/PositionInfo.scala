@@ -68,38 +68,16 @@ object AtomicPositionInfo {
 
   implicit def deserialize[RNS: Readable] = new Readable[AtomicPositionInfo[RNS]] {
     override def readFrom(buffer: ReadBuffer): AtomicPositionInfo[RNS] = {
-      buffer.version match {
-        case Version.V0 =>
-          buffer.read[Int]() match {
-            case 0 =>
-              val pSrn = buffer.read[Option[ScopedResourceName[RNS]]]()
-              val pLoc = buffer.read[Position]()
-              new AtomicPositionInfo(Source.nonSynthetic(pSrn, pLoc))
-            case 1 =>
-              val lSrn = buffer.read[Option[ScopedResourceName[RNS]]]()
-              val lLoc = buffer.read[Position]()
-              val pSrn = buffer.read[Option[ScopedResourceName[RNS]]]()
-              val pLoc = buffer.read[Position]()
-              new AtomicPositionInfo(
-                source = Source.nonSynthetic(pSrn, pLoc),
-                reference = Source.nonSynthetic(lSrn, lLoc)
-              )
-            case other =>
-              fail("Unknown AtomicPositionInfo tag " + other)
-          }
-
-        case Version.V1 | Version.V2 | Version.V3 =>
-          buffer.read[Int]() match {
-            case 0 =>
-              new AtomicPositionInfo(buffer.read[Source[RNS]]())
-            case 1 =>
-              new AtomicPositionInfo(
-                source = buffer.read[Source[RNS]](),
-                reference = buffer.read[Source[RNS]]()
-              )
-            case other =>
-              fail("Unknown AtomicPositionInfo tag " + other)
-          }
+      buffer.read[Int]() match {
+        case 0 =>
+          new AtomicPositionInfo(buffer.read[Source[RNS]]())
+        case 1 =>
+          new AtomicPositionInfo(
+            source = buffer.read[Source[RNS]](),
+            reference = buffer.read[Source[RNS]]()
+          )
+        case other =>
+          fail("Unknown AtomicPositionInfo tag " + other)
       }
     }
   }
@@ -147,55 +125,27 @@ object FuncallPositionInfo {
 
   implicit def deserialize[RNS: Readable] = new Readable[FuncallPositionInfo[RNS]] {
     override def readFrom(buffer: ReadBuffer): FuncallPositionInfo[RNS] = {
-      buffer.version match {
-        case Version.V0 =>
-          val ctor =
-            buffer.read[Int]() match {
-              case 0 =>
-                val srn = buffer.read[Option[ScopedResourceName[RNS]]]()
-                val pos = buffer.read[Position]()
-                new FuncallPositionInfo(Source.nonSynthetic(srn, pos), _ : Position)
-              case 1 =>
-                val lSrn = buffer.read[Option[ScopedResourceName[RNS]]]()
-                val lPos = buffer.read[Position]()
-                val pSrn = buffer.read[Option[ScopedResourceName[RNS]]]()
-                val pPos = buffer.read[Position]()
+      val ctor =
+        buffer.read[Int]() match {
+          case 0 =>
+            val source = buffer.read[Source[RNS]]()
+            new FuncallPositionInfo(source, source, _ : Source[RNS])
+          case 1 =>
+            val source = buffer.read[Source[RNS]]()
+            val reference = buffer.read[Source[RNS]]()
 
-                { fnPos: Position =>
-                  new FuncallPositionInfo(
-                    source = Source.nonSynthetic(pSrn, pPos),
-                    reference = Source.nonSynthetic(lSrn, lPos),
-                    functionNameSource = Source.nonSynthetic(pSrn, fnPos)
-                  )
-                }
-              case other =>
-                fail("Unknown FuncallPositionInfo tag " + other)
+            { (fnSrc: Source[RNS]) =>
+              new FuncallPositionInfo(
+                source = source,
+                reference = reference,
+                functionNameSource = fnSrc
+              )
             }
-          ctor(buffer.read[Position]())
+          case other =>
+            fail("Unknown FuncallPositionInfo tag " + other)
+        }
 
-        case Version.V1 | Version.V2 | Version.V3 =>
-          val ctor =
-            buffer.read[Int]() match {
-              case 0 =>
-                val source = buffer.read[Source[RNS]]()
-                new FuncallPositionInfo(source, source, _ : Source[RNS])
-              case 1 =>
-                val source = buffer.read[Source[RNS]]()
-                val reference = buffer.read[Source[RNS]]()
-
-                { (fnSrc: Source[RNS]) =>
-                  new FuncallPositionInfo(
-                    source = source,
-                    reference = reference,
-                    functionNameSource = fnSrc
-                  )
-                }
-              case other =>
-                fail("Unknown FuncallPositionInfo tag " + other)
-            }
-
-          ctor(buffer.read[Source[RNS]]())
-      }
+      ctor(buffer.read[Source[RNS]]())
     }
   }
 }
