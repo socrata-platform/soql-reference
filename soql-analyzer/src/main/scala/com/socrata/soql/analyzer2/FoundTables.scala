@@ -96,6 +96,20 @@ final case class FoundTables[MT <: MetaTypes] private[analyzer2] (
     (newFT, newToOld)
   }
 
+  /*
+   This lets you find all the identifiers the user provided.
+   - If the user provides an explicit query, then dredge up all names that the user provided (including through joins/unions, etc)
+   - If the user did _not_ provide a query, then return _just_ the resource name of the thing the user hit (including derived views).
+   */
+  def topMostIdentifiers: Iterator[ScopedResourceName] = {
+    val graph = queryGraph
+    graph.root match {
+      case Some(name) => Iterator(name)
+      case None =>
+        graph.graph.getOrElse(None, Set.empty).iterator
+    }
+  }
+
   def queryGraph: QueryGraph[MT] =
     initialQuery match {
       case FoundTables.Saved(rn) =>
