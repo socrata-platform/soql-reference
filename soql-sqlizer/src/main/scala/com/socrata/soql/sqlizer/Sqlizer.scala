@@ -507,8 +507,8 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
 
     val fromDoc = fromSql.map(Seq(d"FROM", _).vsep.nest(2).group)
 
-    val stmtSql = Seq(
-      Some(selectionDoc),
+    val stmtSql = assembleSelect(
+      selectionDoc,
       fromDoc,
       whereSql,
       groupBySql,
@@ -516,9 +516,31 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
       orderBySql,
       limitSql,
       offsetSql
-    ).flatten.vsep
+    )
 
     (stmtSql, augmentedSchema)
+  }
+
+  protected def assembleSelect(
+    selection: Doc,
+    from: Option[Doc],
+    where: Option[Doc],
+    groupBy: Option[Doc],
+    having: Option[Doc],
+    orderBy: Option[Doc],
+    limit: Option[Doc],
+    offset: Option[Doc]
+  ): Doc = {
+    Seq(
+      Some(selection),
+      from,
+      where,
+      groupBy,
+      having,
+      orderBy,
+      limit,
+      offset
+    ).flatten.vsep
   }
 
   private def sqlizeDistinct(distinct: Distinctiveness, exprSqlizer: ExprSqlizer.Contexted[MT]): Option[Doc] = {
