@@ -1,0 +1,19 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: soql-reference
+  description: |
+    This library defines SoQL. It provides type definitions and utilities such
+    as analyzers and parsers for Socrata's SoQL query language.
+  links:
+    - title: "On the Interpretation of SoQL"
+      url: "https://socrata.atlassian.net/wiki/spaces/PD/pages/2478702783/On+the+Interpretation+of+SoQL"
+    - title: "SoQL Function Documentation"
+      url: "https://github.com/socrata-platform/soql-reference/blob/main/soql-stdlib/src/main/scala/com/socrata/soql/functions/SoQLFunctions.scala#L14"
+  annotations:
+    github.com/project-slug: 'socrata-platform/soql-postgres-adapter'
+    backstage.io/techdocs-ref: dir:.
+spec:
+  type: library
+  owner: egress
+  lifecycle: production

@@ -1,0 +1,6 @@
+site_name: 'soql-reference'
+docs_dir: '.'
+nav:
+  - Home: README.md
+  - Analyzer: doc/analyzer2.md
+
