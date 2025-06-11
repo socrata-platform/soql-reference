@@ -12,7 +12,9 @@ case class Debug(
   @AllowMissing("Debug.default.inhibitRun")
   inhibitRun: Boolean,
   @AllowMissing("Debug.default.useCache")
-  useCache: Boolean
+  useCache: Boolean,
+  @AllowMissing("Debug.default.rollupStats")
+  rollupStats: Boolean
 )
 
 object Debug {
@@ -22,7 +24,8 @@ object Debug {
     None,
     None,
     inhibitRun = false,
-    useCache = true
+    useCache = true,
+    rollupStats = false
   )
 
   object Sql {
@@ -161,34 +164,35 @@ object Debug {
         sql,
         explain,
         inhibitRun,
-        useCache
+        useCache,
+        rollupStats
       ) = t
 
       buffer.write(sql)
       buffer.write(explain)
       buffer.write(inhibitRun)
       buffer.write(useCache)
+      buffer.write(rollupStats)
     }
 
     def readFrom(buffer: ReadBuffer): Debug =
       buffer.version match {
-        case Version.V3 | Version.V5 =>
+        case Version.V5 =>
           Debug(
             sql = buffer.read[Option[Sql.Format]](),
             explain = buffer.read[Option[Explain]](),
             inhibitRun = buffer.read[Boolean](),
-            useCache = buffer.read[Boolean]()
+            useCache = buffer.read[Boolean](),
+            rollupStats = default.rollupStats
           )
-        case Version.V4 =>
-          val result =
-            Debug(
-              sql = buffer.read[Option[Sql.Format]](),
-              explain = buffer.read[Option[Explain]](),
-              inhibitRun = buffer.read[Boolean](),
-              useCache = buffer.read[Boolean]()
-            )
-          buffer.read[Boolean]() // mergeSystemColumns
-          result
+        case Version.V6 =>
+          Debug(
+            sql = buffer.read[Option[Sql.Format]](),
+            explain = buffer.read[Option[Explain]](),
+            inhibitRun = buffer.read[Boolean](),
+            useCache = buffer.read[Boolean](),
+            rollupStats = buffer.read[Boolean]()
+          )
       }
   }
 }
