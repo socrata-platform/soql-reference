@@ -324,4 +324,67 @@ class SqlizerTest extends FunSuite with MustMatchers with TestHelper with Sqlize
     val sqlish = analyze(tf, soql).layoutSingleLine.toString
     sqlish must equal ("SELECT 1 FROM table1 AS x1")
   }
+
+  test("search, text only") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "a" -> TestText,
+        "b" -> TestText
+      )
+    )
+    val soql = "select from @table1 search 'foo'"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("""SELECT 1 FROM table1 AS x1 WHERE search(prepare_haystack(((coalesce(x1.a, text "")) || (text " ")) || (coalesce(x1.b, text ""))), prepare_needle(text "foo"))""")
+  }
+
+  test("search, text and number but non-numeric needle") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "a" -> TestText,
+        "b" -> TestText,
+        "c" -> TestNumber
+      )
+    )
+    val soql = "select from @table1 search 'foo'"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("""SELECT 1 FROM table1 AS x1 WHERE search(prepare_haystack(((coalesce(x1.a, text "")) || (text " ")) || (coalesce(x1.b, text ""))), prepare_needle(text "foo"))""")
+  }
+
+  test("search, text and number with numeric needle") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "a" -> TestText,
+        "b" -> TestText,
+        "c" -> TestNumber,
+        "d" -> TestNumber
+      )
+    )
+    val soql = "select from @table1 search '1'"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("""SELECT 1 FROM table1 AS x1 WHERE ((search(prepare_haystack(((coalesce(x1.a, text "")) || (text " ")) || (coalesce(x1.b, text ""))), prepare_needle(text "1"))) OR ((x1.c) = (1.0 :: numeric))) OR ((x1.d) = (1.0 :: numeric))""")
+  }
+
+  test("search, number only with numeric needle") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "c" -> TestNumber,
+        "d" -> TestNumber
+      )
+    )
+    val soql = "select from @table1 search '1'"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("""SELECT 1 FROM table1 AS x1 WHERE ((x1.c) = (1.0 :: numeric)) OR ((x1.d) = (1.0 :: numeric))""")
+  }
+
+  test("search, number only with non-numeric needle") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "c" -> TestNumber,
+        "d" -> TestNumber
+      )
+    )
+    val soql = "select from @table1 search 'hello'"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("""SELECT 1 FROM table1 AS x1 WHERE false""")
+  }
 }

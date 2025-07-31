@@ -58,6 +58,10 @@ object TestFunctions {
 
   val NonTrivialFunctionWhichProducesAnExpandedCompoundValue = mf("expanded_compound", FunctionName("expanded_compound"), Nil, Nil, TestCompound)
 
+  val PrepareNeedle = mf("prepare_needle", FunctionName("prepare_query"), Seq(TestText), Seq.empty, TestText)
+  val PrepareHaystack = mf("prepare_haystack", FunctionName("prepare_haystack"), Seq(TestText), Seq.empty, TestText)
+  val Search = mf("search", FunctionName("search"), Seq(TestText, TestText), Seq.empty, TestBoolean)
+
   val castIdentitiesByType = OrderedMap() ++ TestType.typesByName.iterator.map { case (n, t) =>
     t -> mf(n.caseFolded + "::" + n.caseFolded, SpecialFunctions.Cast(n), Seq(t), Seq.empty, t)
   }

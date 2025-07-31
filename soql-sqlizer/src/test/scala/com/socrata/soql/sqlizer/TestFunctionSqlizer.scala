@@ -23,8 +23,14 @@ object TestFunctionSqlizer extends FuncallSqlizer[TestHelper.TestMT] {
     TestFunctions.Eq -> sqlizeEq _,
     TestFunctions.Plus -> sqlizeBinaryOp("+"),
     TestFunctions.Times -> sqlizeBinaryOp("*"),
+    TestFunctions.Or -> sqlizeBinaryOp("OR"),
     TestFunctions.Compress -> compress,
-    TestFunctions.NonTrivialFunctionWhichProducesAnExpandedCompoundValue -> sqlizeExpandedFunction
+    TestFunctions.NonTrivialFunctionWhichProducesAnExpandedCompoundValue -> sqlizeExpandedFunction,
+    TestFunctions.Concat -> sqlizeBinaryOp("||"),
+    TestFunctions.Coalesce -> sqlizeNormalOrdinaryFuncall("coalesce"),
+    TestFunctions.PrepareHaystack -> sqlizeNormalOrdinaryFuncall("prepare_haystack"),
+    TestFunctions.PrepareNeedle -> sqlizeNormalOrdinaryFuncall("prepare_needle"),
+    TestFunctions.Search -> sqlizeNormalOrdinaryFuncall("search"),
   )
 
   override def sqlizeOrdinaryFunction(e: FunctionCall, args: Seq[ExprSql], ctx: DynamicContext): ExprSql =
