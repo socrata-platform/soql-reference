@@ -68,69 +68,101 @@ abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
     )
 
   private def rewriteSearchAF(from: AtomicFrom, search: String): Expr = {
-    val columns: Iterator[Expr] =
+    def findColumns(fieldExtract: Expr => Seq[Expr]) =
       from match {
         case fsr: FromSingleRow =>
           Iterator.empty
         case ft: FromTable =>
           ft.columns.iterator.flatMap { case (dcn, FromTable.ColumnInfo(_, typ, _hint)) =>
-            fieldsOf(PhysicalColumn[MT](ft.label, ft.tableName, dcn, typ)(AtomicPositionInfo.Synthetic))
+            fieldExtract(PhysicalColumn[MT](ft.label, ft.tableName, dcn, typ)(AtomicPositionInfo.Synthetic))
           }
         case fs: FromStatement =>
           fs.statement.schema.iterator.flatMap { case (acl, Statement.SchemaEntry(_, typ, _hint, isSynthetic)) =>
             if(isSynthetic) {
               Nil
             } else {
-              fieldsOf(VirtualColumn[MT](fs.label, acl, typ)(AtomicPositionInfo.Synthetic))
+              fieldExtract(VirtualColumn[MT](fs.label, acl, typ)(AtomicPositionInfo.Synthetic))
             }
           }
       }
 
-    if(columns.hasNext) {
-      val haystack =
-        columns.map(denull).reduceLeft { (left, right) => // || is left-associative
-          assert(isText(left.typ))
-          assert(isText(right.typ))
+    val textExpr: Option[Expr] = locally {
+      val textColumns: Iterator[Expr] = findColumns(textFieldsOf)
+      if(textColumns.hasNext) {
+        val haystack =
+          textColumns.map(denull).reduceLeft { (left, right) => // || is left-associative
+            assert(isText(left.typ))
+            assert(isText(right.typ))
 
-          val result =
-            FunctionCall[MT](
-              concat,
-              Seq(
-                FunctionCall[MT](
-                  concat,
-                  Seq(left, litText(" "))
-                )(FuncallPositionInfo.Synthetic),
-                right
-              )
-            )(FuncallPositionInfo.Synthetic)
+            val result =
+              FunctionCall[MT](
+                concat,
+                Seq(
+                  FunctionCall[MT](
+                    concat,
+                    Seq(left, litText(" "))
+                  )(FuncallPositionInfo.Synthetic),
+                  right
+                )
+              )(FuncallPositionInfo.Synthetic)
 
-          assert(isText(result.typ))
+            assert(isText(result.typ))
 
-          result
+            result
+          }
+        val needle = litText(search)
+
+        val finalized =
+          FunctionCall[MT](
+            tsSearch,
+            Seq(
+              FunctionCall[MT](toTsVector, Seq(haystack))(FuncallPositionInfo.Synthetic),
+              FunctionCall[MT](plainToTsQuery, Seq(needle))(FuncallPositionInfo.Synthetic)
+            )
+          )(FuncallPositionInfo.Synthetic)
+
+        Some(finalized)
+      } else {
+        None
+      }
+    }
+
+    val numExpr: Iterator[Expr] = litNum(search).iterator.flatMap { numLiteral =>
+      findColumns(numberFieldsOf).map { numCol =>
+        mkEq(numCol, numLiteral)
+      }
+    }
+
+    if(numExpr.hasNext) {
+      val folder =
+        textExpr match {
+          case Some(te) =>
+            numExpr.foldLeft(te) _
+          case None =>
+            numExpr.reduceLeft _
         }
-      val needle = litText(search)
 
-      FunctionCall[MT](
-        tsSearch,
-        Seq(
-          FunctionCall[MT](toTsVector, Seq(haystack))(FuncallPositionInfo.Synthetic),
-          FunctionCall[MT](plainToTsQuery, Seq(needle))(FuncallPositionInfo.Synthetic)
-        )
-      )(FuncallPositionInfo.Synthetic)
+      folder { (acc, numTest) =>
+        mkOr(acc, numTest)
+      }
     } else {
-      litBool(false)
+      textExpr.getOrElse(litBool(false))
     }
   }
 
+  type NumberLiteral
   protected def litText(s: String): Expr
   protected def litBool(b: Boolean): Expr
+  protected def litNum(s: String): Option[NumberLiteral]
 
   protected def isText(t: CT): Boolean
   protected def isBoolean(t: CT): Boolean
 
-  protected def fieldsOf(expr: Expr): Seq[Expr]
+  protected def textFieldsOf(expr: Expr): Seq[Expr]
+  protected def numberFieldsOf(expr: Expr): Seq[Expr]
   protected def mkAnd(left: Expr, right: Expr): Expr
   protected def mkOr(left: Expr, right: Expr): Expr
+  protected def mkEq(left: Expr, right: NumberLiteral): Expr
   protected def denull(string: Expr): Expr
   protected def concat: MonomorphicFunction
   protected def tsSearch: MonomorphicFunction
