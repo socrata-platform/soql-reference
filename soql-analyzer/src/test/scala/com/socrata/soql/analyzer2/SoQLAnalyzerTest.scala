@@ -1418,4 +1418,19 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
     from.lateral must be (true)
   }
+
+  test("Hidden columns get removed from primary-key sets during analysis") {
+    val tf = tableFinder(
+      (0, "ds1") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withHiddenColumns("text").withPrimaryKey(":id").withPrimaryKey("text")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("ds1"), "select *", Map.empty)
+    val Right(analysis) = analyzer(ft, UserParameters.empty)
+
+    val select = analysis.statement.asInstanceOf[Select[TestMT]]
+    val fromTable = select.from.asInstanceOf[FromTable[TestMT]]
+
+    fromTable.primaryKeys must be (Seq(Seq(DatabaseColumnName(":id"))))
+  }
+
 }

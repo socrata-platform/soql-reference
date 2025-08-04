@@ -267,13 +267,19 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
 
     def fromTable(srn: ScopedResourceName, desc: TableDescription.Dataset[MT]): AtomicFrom = {
       if(desc.ordering.isEmpty) {
+        val hiddenColumns: Set[DatabaseColumnName] =
+          desc.schema.iterator.flatMap { case (databaseColumnName, FromTable.ColumnInfo(name, _, _)) =>
+            if(desc.hiddenColumns(name)) Some(databaseColumnName)
+            else None
+          }.toSet
+
         FromTable(
           desc.name,
           srn,
           None,
           labelProvider.tableLabel(),
-          columns = desc.schema.filter { case (_, FromTable.ColumnInfo(name, _, _)) => !desc.hiddenColumns(name) },
-          primaryKeys = desc.primaryKeys
+          columns = desc.schema.filter { case (databaseColumnName, _) => !hiddenColumns(databaseColumnName) },
+          primaryKeys = desc.primaryKeys.filter(_.forall(!hiddenColumns(_)))
         )
       } else {
         for(TableDescription.Ordering(col, _ascending, _nullLast) <- desc.ordering) {
