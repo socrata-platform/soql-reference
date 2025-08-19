@@ -73,7 +73,16 @@ abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
         case fsr: FromSingleRow =>
           Iterator.empty
         case ft: FromTable =>
-          ft.columns.iterator.flatMap { case (dcn, FromTable.ColumnInfo(_, typ, _hint)) =>
+          // ok, this is annoying and _potentially_ can cause the same
+          // query to give different results in different secondaries,
+          // but it's necessary to make such a query use the FTS index
+          // that we build.  We're going to order the columns by their
+          // database column name...
+          ft.columns
+            .toVector
+            .sortWith { (c1, c2) => compareDatabseColumnNames(c1._1, c2._1) }
+            .iterator
+            .flatMap { case (dcn, FromTable.ColumnInfo(_, typ, _hint)) =>
             fieldExtract(PhysicalColumn[MT](ft.label, ft.tableName, dcn, typ)(AtomicPositionInfo.Synthetic))
           }
         case fs: FromStatement =>
@@ -149,6 +158,9 @@ abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
       textExpr.getOrElse(litBool(false))
     }
   }
+
+  // returns true if "a" is less than "b"
+  protected def compareDatabseColumnNames(a: DatabaseColumnName, b: DatabaseColumnName): Boolean
 
   type NumberLiteral
   protected def litText(s: String): Expr
