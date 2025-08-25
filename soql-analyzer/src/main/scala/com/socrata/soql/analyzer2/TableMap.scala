@@ -91,7 +91,23 @@ class TableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[
   def descriptions = underlying.valuesIterator.flatMap(_.valuesIterator)
 
   private[analyzer2] def rewriteScopes(topLevel: RNS): (TableMap[Intified[MT]], Map[Int, RNS], Map[RNS, Int]) = {
-    val oldToNew = (underlying.keysIterator ++ Iterator.single(topLevel)).zipWithIndex.toMap
+    val allScopes = Set.newBuilder[RNS]
+    allScopes += topLevel
+    allScopes ++= underlying.keysIterator
+
+    // here's an edge case: if we encounter a query or tablefunction
+    // _without any further references to other things_, it could have
+    // a "look things up in..." scope which is not among those we've
+    // found already.  So we need to go through them all and add extra
+    // scopes to our set.
+
+    allScopes ++= underlying.valuesIterator.flatMap(_.valuesIterator).flatMap {
+      case _ : TableDescription.Dataset[MT] => None
+      case q: TableDescription.Query[MT] => Some(q.scope)
+      case tf: TableDescription.TableFunction[MT] => Some(tf.scope)
+    }
+
+    val oldToNew = allScopes.result().iterator.zipWithIndex.toMap
     val newToOld = oldToNew.iterator.map(_.swap).toMap
     val newMap =
       underlying.iterator.map { case (rns, resources) =>
