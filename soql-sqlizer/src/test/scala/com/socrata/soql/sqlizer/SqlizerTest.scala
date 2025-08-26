@@ -387,4 +387,100 @@ class SqlizerTest extends FunSuite with MustMatchers with TestHelper with Sqlize
     val sqlish = analyze(tf, soql).layoutSingleLine.toString
     sqlish must equal ("""SELECT 1 FROM table1 AS x1 WHERE false""")
   }
+
+  test("union sqlizes as UNION") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "a" -> TestText,
+        "b" -> TestNumber
+      ),
+      (0, "table2") -> D(
+        "c" -> TestText,
+        "d" -> TestNumber
+      )
+    )
+    val soql = "(select * from @table1) union (select * from @table2)"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("""(SELECT x1.a AS i1, x1.b AS i2 FROM table1 AS x1) UNION (SELECT x3.c AS i3, x3.d AS i4 FROM table2 AS x3)""")
+  }
+
+  test("union all sqlizes as UNION ALL") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "a" -> TestText,
+        "b" -> TestNumber
+      ),
+      (0, "table2") -> D(
+        "c" -> TestText,
+        "d" -> TestNumber
+      )
+    )
+    val soql = "(select * from @table1) union all (select * from @table2)"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("""(SELECT x1.a AS i1, x1.b AS i2 FROM table1 AS x1) UNION ALL (SELECT x3.c AS i3, x3.d AS i4 FROM table2 AS x3)""")
+  }
+
+  test("intersect sqlizes as INTERSECT") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "a" -> TestText,
+        "b" -> TestNumber
+      ),
+      (0, "table2") -> D(
+        "c" -> TestText,
+        "d" -> TestNumber
+      )
+    )
+    val soql = "(select * from @table1) intersect (select * from @table2)"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("""(SELECT x1.a AS i1, x1.b AS i2 FROM table1 AS x1) INTERSECT (SELECT x3.c AS i3, x3.d AS i4 FROM table2 AS x3)""")
+  }
+
+  test("intersect all sqlizes as INTERSECT ALL") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "a" -> TestText,
+        "b" -> TestNumber
+      ),
+      (0, "table2") -> D(
+        "c" -> TestText,
+        "d" -> TestNumber
+      )
+    )
+    val soql = "(select * from @table1) intersect all (select * from @table2)"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("""(SELECT x1.a AS i1, x1.b AS i2 FROM table1 AS x1) INTERSECT ALL (SELECT x3.c AS i3, x3.d AS i4 FROM table2 AS x3)""")
+  }
+
+  test("minus sqlizes as EXCEPT") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "a" -> TestText,
+        "b" -> TestNumber
+      ),
+      (0, "table2") -> D(
+        "c" -> TestText,
+        "d" -> TestNumber
+      )
+    )
+    val soql = "(select * from @table1) minus (select * from @table2)"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("""(SELECT x1.a AS i1, x1.b AS i2 FROM table1 AS x1) EXCEPT (SELECT x3.c AS i3, x3.d AS i4 FROM table2 AS x3)""")
+  }
+
+  test("minus all sqlizes as EXCEPT ALL") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "a" -> TestText,
+        "b" -> TestNumber
+      ),
+      (0, "table2") -> D(
+        "c" -> TestText,
+        "d" -> TestNumber
+      )
+    )
+    val soql = "(select * from @table1) minus all (select * from @table2)"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("""(SELECT x1.a AS i1, x1.b AS i2 FROM table1 AS x1) EXCEPT ALL (SELECT x3.c AS i3, x3.d AS i4 FROM table2 AS x3)""")
+  }
 }

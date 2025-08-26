@@ -258,8 +258,8 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
       case TableFunc.UnionAll => d"UNION ALL"
       case TableFunc.Intersect => d"INTERSECT"
       case TableFunc.IntersectAll => d"INTERSECT ALL"
-      case TableFunc.Minus => d"MINUS"
-      case TableFunc.MinusAll => d"MINUS ALL"
+      case TableFunc.Minus => d"EXCEPT"
+      case TableFunc.MinusAll => d"EXCEPT ALL"
     }
 
   private def sqlizeValues(
