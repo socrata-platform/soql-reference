@@ -2,24 +2,22 @@ package com.socrata.soql.types.obfuscation
 
 import java.security.SecureRandom
 
-import org.bouncycastle.crypto.params.KeyParameter
-import org.bouncycastle.crypto.engines.BlowfishEngine
-
 class CryptProvider(keyMaterial: Array[Byte]) {
-  def key = java.util.Arrays.copyOf(keyMaterial, keyMaterial.length)
-  private val keyParam = new KeyParameter(keyMaterial)
+  private lazy val blowfish = Blowfish(keyMaterial)
 
-  lazy val encryptor = locally {
-    val bf = new BlowfishEngine
-    bf.init(true, keyParam)
-    bf
-  }
+  val encryptor =
+    new CryptProvider.Transformer {
+      def apply(in: Long): Long = {
+        blowfish.encrypt(in)
+      }
+    }
 
-  lazy val decryptor = locally {
-    val bf = new BlowfishEngine
-    bf.init(false, keyParam)
-    bf
-  }
+  val decryptor =
+    new CryptProvider.Transformer {
+      def apply(in: Long): Long = {
+        blowfish.decrypt(in)
+      }
+    }
 }
 
 object CryptProvider {
@@ -32,5 +30,9 @@ object CryptProvider {
   }
 
   val zeros: CryptProvider = new CryptProvider(new Array[Byte](72))
+
+  trait Transformer {
+    def apply(in: Long): Long
+  }
 }
 
