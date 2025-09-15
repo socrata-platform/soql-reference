@@ -83,6 +83,8 @@ class SoQLAnalysis[MT <: MetaTypes] private (
               current.removeSyntheticColumns
             case Pass.RemoveSystemColumns =>
               current.removeSystemColumns
+            case Pass.MaterializeNamedQueries =>
+              current.materializeNamedQueries
             case DangerousPass.PreserveOrderingWithColumns =>
               current.dangerous.preserveOrderingWithColumns
           }
@@ -267,6 +269,15 @@ class SoQLAnalysis[MT <: MetaTypes] private (
       self.copy(
         labelProvider = nlp,
         statement = rewrite.RemoveSystemColumns(nlp, self.statement)
+      )
+    }
+
+  def materializeNamedQueries =
+    withoutSelectListReferences { self =>
+      val nlp = self.labelProvider.clone()
+      self.copy(
+        labelProvider = nlp,
+        statement = rewrite.MaterializeNamedQueries(nlp, self.statement)
       )
     }
 
