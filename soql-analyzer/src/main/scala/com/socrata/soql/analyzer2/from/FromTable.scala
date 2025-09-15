@@ -107,6 +107,8 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
       state.columnMap += (label, columnLabel) -> (tr, columnName)
     }
   }
+
+  override def nonlocalColumnReferences = Map.empty[AutoTableLabel, Set[ColumnLabel]]
 }
 
 trait OFromTableImpl { this: FromTable.type =>

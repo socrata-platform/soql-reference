@@ -55,4 +55,33 @@ private[analyzer2] object Util {
     candidates.toVector.distinct
   }
 
+  def mergeColumnSet[T](
+    a: Map[AutoTableLabel, Set[ColumnLabel[T]]],
+    b: Map[AutoTableLabel, Set[ColumnLabel[T]]]
+  ): Map[AutoTableLabel, Set[ColumnLabel[T]]] = {
+    if(a.size < b.size) {
+      mergeColumnSet(b, a)
+    } else {
+      b.foldLeft(a) { case (acc, (table, cols)) =>
+        val newCols = acc.get(table) match {
+          case None => cols
+          case Some(knownCols) => knownCols ++ cols
+        }
+        acc + (table -> newCols)
+      }
+    }
+  }
+
+  def augmentColumnSet[T](
+    a: Map[AutoTableLabel, Set[ColumnLabel[T]]],
+    bs: Iterator[(AutoTableLabel, ColumnLabel[T])]
+  ): Map[AutoTableLabel, Set[ColumnLabel[T]]] = {
+    bs.foldLeft(a) { case (acc, (table, col)) =>
+      val newCols = acc.get(table) match {
+        case None => Set(col)
+        case Some(cols) => cols + col
+      }
+      acc + (table -> newCols)
+    }
+  }
 }

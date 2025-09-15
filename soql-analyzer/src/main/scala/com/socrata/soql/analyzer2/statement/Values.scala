@@ -144,6 +144,12 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
   private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
     // no interior queries, nothing to do
   }
+
+  override lazy val nonlocalColumnReferences =
+    // All column references are automatically foreign
+    values.foldLeft(Map.empty[AutoTableLabel, Set[ColumnLabel]]) { (acc, row) =>
+      row.foldLeft(acc) { (acc, expr) => Util.mergeColumnSet(acc, expr.columnReferences) }
+    }
 }
 
 trait OValuesImpl { this: Values.type =>

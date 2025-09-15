@@ -148,6 +148,9 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
   private[analyzer2] override def doDebugDoc(implicit ev: StatementDocProvider[MT]): Doc[Annotation[MT]] = {
     left.doDebugDoc.encloseNesting(d"(", d")") +#+ op.debugDoc +#+ right.doDebugDoc.encloseNesting(d"(", d")")
   }
+
+  override def nonlocalColumnReferences =
+    Util.mergeColumnSet(left.nonlocalColumnReferences, right.nonlocalColumnReferences)
 }
 
 trait OCombinedTablesImpl { this: CombinedTables.type =>

@@ -132,6 +132,10 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
   }
 
   private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit
+
+  // All columns in this Statement which reference tables from outside this Statement
+  def nonlocalColumnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
+  final def containsNonlocalColumnReferences = !nonlocalColumnReferences.isEmpty
 }
 
 object Statement {

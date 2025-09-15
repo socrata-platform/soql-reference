@@ -375,6 +375,63 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
       offset.map { o => d"OFFSET $o" },
       search.map { s => Seq(d"SEARCH", Doc(JString(s).toString)).sep }
     ).flatten.sep
+
+
+  override def nonlocalColumnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = {
+    val Select(
+      distinctiveness,
+      selectList,
+      from,
+      where,
+      groupBy,
+      having,
+      orderBy,
+      _limit,
+      _offset,
+      _search,
+      _hint
+    ) = this
+
+    val localTables = from.reduce[Set[AutoTableLabel]](
+      { base => Set(base.label) },
+      { (acc, join) => acc + join.right.label }
+    )
+
+    var acc = Map.empty[AutoTableLabel, Set[ColumnLabel]]
+
+    distinctiveness match {
+      case Distinctiveness.FullyDistinct() | Distinctiveness.Indistinct() =>
+        // no column refs
+      case Distinctiveness.On(exprs) =>
+        for(e <- exprs) {
+          acc = Util.mergeColumnSet(acc, e.columnReferences)
+        }
+    }
+
+    for(ne <- selectList.values) {
+      acc = Util.mergeColumnSet(acc, ne.expr.columnReferences)
+    }
+
+    acc = Util.mergeColumnSet(acc, from.nonlocalColumnReferences)
+
+    for(w <- where) {
+      acc = Util.mergeColumnSet(acc, w.columnReferences)
+    }
+
+    for(gb <- groupBy) {
+      acc = Util.mergeColumnSet(acc, gb.columnReferences)
+    }
+
+    for(h <- having) {
+      acc = Util.mergeColumnSet(acc, h.columnReferences)
+    }
+
+    for(ob <- orderBy) {
+      acc = Util.mergeColumnSet(acc, ob.expr.columnReferences)
+    }
+
+    acc -- localTables
+  }
 }
 
 trait OSelectImpl { this: Select.type =>
