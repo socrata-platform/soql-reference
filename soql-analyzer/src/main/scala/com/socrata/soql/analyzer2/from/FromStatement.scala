@@ -90,6 +90,8 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
 
   private[analyzer2] def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
     (statement.doDebugDoc.encloseNesting(d"(", d")") +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
+
+  override def nonlocalColumnReferences = statement.nonlocalColumnReferences
 }
 
 trait OFromStatementImpl { this: FromStatement.type =>

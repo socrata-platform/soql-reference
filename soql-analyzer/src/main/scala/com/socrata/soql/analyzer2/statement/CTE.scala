@@ -100,6 +100,9 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
     }
     useQuery.doLabelMap(state)
   }
+
+  override def nonlocalColumnReferences =
+    Util.mergeColumnSet(definitionQuery.nonlocalColumnReferences, useQuery.nonlocalColumnReferences - definitionLabel)
 }
 
 trait OCTEImpl { this: CTE.type =>

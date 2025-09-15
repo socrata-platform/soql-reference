@@ -212,6 +212,20 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
     { leftmost => List(leftmost.schema) },
     { (schemaSoFar, join) => join.right.schema :: schemaSoFar }
   ).reverse.flatten
+
+  override lazy val nonlocalColumnReferences = {
+    val leftNLCR = left.nonlocalColumnReferences
+
+    val leftTables = left.reduce[Set[AutoTableLabel]](
+      { base => Set(base.label) },
+      { (acc, join) => acc + join.right.label }
+    )
+
+    val rightNLCR = right.nonlocalColumnReferences -- leftTables
+    val onNLCR = (on.columnReferences - right.label) -- leftTables
+
+    Util.mergeColumnSet(Util.mergeColumnSet(leftNLCR, rightNLCR), onNLCR)
+  }
 }
 
 trait OJoinImpl { this: Join.type =>

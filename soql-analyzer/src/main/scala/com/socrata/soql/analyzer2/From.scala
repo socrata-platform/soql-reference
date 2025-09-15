@@ -141,6 +141,10 @@ sealed abstract class From[MT <: MetaTypes] extends LabelUniverse[MT] {
         (combine(s, j), j)
       }
     )._1
+
+  // All columns in this From which reference tables from outside this From
+  def nonlocalColumnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
+  final def containsNonlocalColumnReferences = !nonlocalColumnReferences.isEmpty
 }
 
 object From {

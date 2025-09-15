@@ -70,6 +70,8 @@ trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
 
   private[analyzer2] def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
     (d"(SELECT)" +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
+
+  override def nonlocalColumnReferences = Map.empty[AutoTableLabel, Set[ColumnLabel]]
 }
 
 trait OFromSingleRowImpl { this: FromSingleRow.type =>
