@@ -240,6 +240,22 @@ select text, count(*) where num = 3 group by text
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("merge - aggregate without group-by on non-aggregate") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", """
+select 1 where num = 3 |> select count(*)
+""")
+
+    val expectedAnalysis = analyze(tf, "twocol", """
+select count(*) where num = 3
+""")
+
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
   test("merge - non-aggregate on aggregate") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)

@@ -46,7 +46,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
             // queries are frequently constructed in a chain.
             mergeSelects(a, aLabel, aResourceName, aAlias, b, bRejoin) match {
               case None =>
-                debug("declained to merge")
+                debug("declined to merge")
                 b
               case Some(merged) =>
                 debug("merged")
@@ -143,7 +143,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
         case (a, b) if definitelyRequiresSubselect(a, aLabel, b) =>
           debug("declaining to merge - definitely requires subselect")
           None
-        case (a, Select(bDistinct, bSelect, _oldA, None, Nil, None, Nil, bLim, bOff, None, bHint)) =>
+        case (a, b@Select(bDistinct, bSelect, _oldA, None, Nil, None, Nil, bLim, bOff, None, bHint)) if !b.isAggregated =>
           // Just projection change + possibly limit/offset and
           // distinctiveness.  We can merge this onto almost anything,
           // and what we can't merge it onto has been rejected by
