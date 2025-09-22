@@ -54,14 +54,14 @@ class TransformManager[MT <: MetaTypes, RollupId](
           val newAnalysis =
             previousAnalysis.applyPasses(passes, rewritePassHelpers)
 
-          val newRollupCandidates = previousRollupCandidates.flatMap { case previousCandidate =>
-            val newRollupCandidateAnalysis = previousCandidate.analysis.applyPasses(passes, rewritePassHelpers)
-            doRollup(newAnalysis, rollups) ++
+          val newRollupCandidates = doRollup(newAnalysis, rollups) ++
+            previousRollupCandidates.flatMap { case previousCandidate =>
+              val newRollupCandidateAnalysis = previousCandidate.analysis.applyPasses(passes, rewritePassHelpers)
               Vector(previousCandidate.copy(analysis = newRollupCandidateAnalysis)) ++
-              doRollup(newRollupCandidateAnalysis, rollups).map { wsa =>
-                wsa.copy(rollupIds = wsa.rollupIds ++ previousCandidate.rollupIds)
-              }
-          }
+                doRollup(newRollupCandidateAnalysis, rollups).map { wsa =>
+                  wsa.copy(rollupIds = wsa.rollupIds ++ previousCandidate.rollupIds)
+                }
+            }
 
           val filtered = newRollupCandidates.tails.flatMap { remainder =>
             if(remainder.isEmpty || remainder.tail.exists(_.analysis.statement.isIsomorphic(remainder.head.analysis.statement))) {
