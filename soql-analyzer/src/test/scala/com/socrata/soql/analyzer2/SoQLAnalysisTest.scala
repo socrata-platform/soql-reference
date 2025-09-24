@@ -399,6 +399,22 @@ select a |> select a |> select a
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("merge - non-simple non-aggregate on implicit aggregate") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", """
+select count(*) |> select 2 as s order by s -- the order-by forces "non-simple"
+""")
+
+    val expectedAnalysis = analyze(tf, "twocol", """
+select count(*) |> select 2 as s order by s
+""")
+
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
   test("remove unused columns - simple") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
