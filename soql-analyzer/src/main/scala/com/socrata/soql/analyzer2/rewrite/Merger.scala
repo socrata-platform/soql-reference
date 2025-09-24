@@ -168,7 +168,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
           ).filter(_.isAggregated == a.isAggregated)
 
         case (a@Select(_aDistinct, aSelect, aFrom, aWhere, Nil, None, aOrder, None, None, None, aHint),
-              b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if !b.isAggregated =>
+              b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if !a.isAggregated && !b.isAggregated =>
           debug("non-aggregate on non-aggregate")
           val selectList = mergeSelection(aLabel, a.selectedExprs, bSelect)
           Some(a.copy(
@@ -183,7 +183,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
                ))
 
         case (a@Select(_aDistinct, aSelect, aFrom, aWhere, Nil, None, _aOrder, None, None, None, aHint),
-              b@Select(bDistinct, bSelect, _oldA, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, bHint)) if b.isAggregated =>
+              b@Select(bDistinct, bSelect, _oldA, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, bHint)) if !a.isAggregated && b.isAggregated =>
           debug("aggregate on non-aggregate")
           Some(Select(
                  distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
@@ -199,7 +199,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
                  hint = aHint ++ bHint))
 
         case (a@Select(_aDistinct, aSelect, aFrom, aWhere, aGroup, aHaving, aOrder, None, None, None, aHint),
-              b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if a.isAggregated =>
+              b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if a.isAggregated && !b.isAggregated =>
           debug("non-aggregate on aggregate")
           Some(
             Select(
