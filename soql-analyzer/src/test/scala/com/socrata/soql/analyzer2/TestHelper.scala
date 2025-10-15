@@ -47,7 +47,7 @@ trait TestHelper { this: Assertions =>
 
   def xtest(s: String)(f: => Any): Unit = {}
 
-  def tableFinder(items: ((Int, String), Thing[Int, TestType])*) = new MockTableFinder[TestMT](items.toMap)
+  def tableFinder(items: ((Int, String), Thing[Int, TestType])*) = MockTableFinder[TestMT](items : _*)
 
   def isLiteralTrue(e: Expr[TestMT]) =
     e match {

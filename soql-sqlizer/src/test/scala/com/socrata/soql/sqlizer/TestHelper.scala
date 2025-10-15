@@ -86,7 +86,7 @@ trait TestHelper { this: Assertions =>
   def xtest(name: String)(test: => Any): Unit = {}
 
   def tableFinder(items: ((Int, String), Thing[Int, TestType])*) =
-    new MockTableFinder[TestMT](items.toMap)
+    MockTableFinder[TestMT](items : _*)
 
   val TestProvenanceMapper = TestHelper.TestProvenanceMapper
   val TestExprSqlFactory = TestHelper.TestExprSqlFactory

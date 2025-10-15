@@ -70,14 +70,15 @@ object UnparsedTableMap {
 
   private[analyzer2] def asMockTableFinder[MT <: MetaTypes](self: UnparsedTableMap[MT])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl): mocktablefinder.MockTableFinder[MT] = {
     new mocktablefinder.MockTableFinder[MT](
-      self.underlying.iterator.flatMap { case (rns, resources) =>
+      OrderedMap() ++ self.underlying.iterator.flatMap { case (rns, resources) =>
         resources.iterator.map { case (rn, desc) =>
           val thing =
             desc match {
-              case UnparsedTableDescription.Dataset(_name, _canonicalName, schema, ordering, pks) =>
+              case UnparsedTableDescription.Dataset(_name, canonicalName, schema, ordering, pks) =>
                 val base =
                   mocktablefinder.D(schema.valuesIterator.map { case TableDescription.DatasetColumnInfo(n, t, _, _) => n.name -> t }.toSeq : _*).
                     withHiddenColumns(schema.valuesIterator.filter(_.hidden).map(_.name.name).toSeq : _*).
+                    withCanonicalName(canonicalName.name).
                     withOutputColumnHints(
                       schema.valuesIterator.collect {
                         case TableDescription.DatasetColumnInfo(name, _, _, Some(hint)) =>
@@ -101,7 +102,7 @@ object UnparsedTableMap {
             }
           (rns, rn.name) -> thing
         }
-      }.toMap
+      }
     )
   }
 }

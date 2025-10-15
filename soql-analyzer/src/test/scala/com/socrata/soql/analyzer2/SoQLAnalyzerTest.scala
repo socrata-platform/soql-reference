@@ -105,7 +105,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
   test("simple context") {
     val tf = tableFinder(
-      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withCanonicalName("a")
     )
 
     val analysis = analyze(tf, "aaaa-aaaa", "select text as t, num * num")
@@ -149,7 +149,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       FromTable[TestMT](
         dtn("aaaa-aaaa"),
         ScopedResourceName(0, rn("aaaa-aaaa")),
-        CanonicalName("aaaa-aaaa"),
+        CanonicalName("a"),
         None,
         t(1),
         OrderedMap(
@@ -255,7 +255,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
   test("dataset ordering - direct select") {
     val tf = tableFinder(
-      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withOrdering("text")
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withCanonicalName("a").withOrdering("text")
     )
 
     val analysis = analyzeSaved(tf, "aaaa-aaaa")
@@ -275,7 +275,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         FromTable[TestMT](
           dtn("aaaa-aaaa"),
           ScopedResourceName(0, rn("aaaa-aaaa")),
-          CanonicalName("aaaa-aaaa"),
+          CanonicalName("a"),
           None,
           t(1),
           OrderedMap(
@@ -296,7 +296,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
   test("dataset ordering - nested select") {
     val tf = tableFinder(
-      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withOrdering("text")
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withCanonicalName("a").withOrdering("text")
     )
 
     val analysis = analyze(tf, "aaaa-aaaa", "select *")
@@ -323,7 +323,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             FromTable[TestMT](
               dtn("aaaa-aaaa"),
               ScopedResourceName(0, rn("aaaa-aaaa")),
-              CanonicalName("aaaa-aaaa"),
+              CanonicalName("a"),
               None,
               t(1),
               OrderedMap(
@@ -340,7 +340,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           ),
           t(2),
           Some(ScopedResourceName(0, rn("aaaa-aaaa"))),
-          Some(CanonicalName("aaaa-aaaa")),
+          Some(CanonicalName("a")),
           None
         ),
         None,Nil,None,Nil,None,None,None,Set.empty
@@ -385,9 +385,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
   test("UDF - no parameter") {
     val tf = tableFinder(
-      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber),
-      (0, "bbbb-bbbb") -> D("user" -> TestText, "allowed" -> TestBoolean),
-      (0, "cccc-cccc") -> U(0, "select 1 from @bbbb-bbbb where user = ?user and allowed limit 1", "user" -> TestText)
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withCanonicalName("a"),
+      (0, "bbbb-bbbb") -> D("user" -> TestText, "allowed" -> TestBoolean).withCanonicalName("b"),
+      (0, "cccc-cccc") -> U(0, "select 1 from @bbbb-bbbb where user = ?user and allowed limit 1", "user" -> TestText).withCanonicalName("c")
     )
 
     val analysis = analyze(tf, "aaaa-aaaa", "select * join @cccc-cccc('bob') on true")
@@ -419,7 +419,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         JoinType.Inner,
         false, // NOT implicitly lateral!
         FromTable[TestMT](
-          dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), CanonicalName("aaaa-aaaa"), None, t(1),
+          dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), CanonicalName("a"), None, t(1),
           OrderedMap(
             dcn("text") -> FromTable.ColumnInfo[TestMT](cn("text"), TestText, None),
             dcn("num") -> FromTable.ColumnInfo[TestMT](cn("num"), TestNumber, None)
@@ -442,7 +442,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   FromSingleRow(t(2), None),
                   None, Nil, None, Nil, None, None, None, Set.empty
                 ),
-                t(3), Some(ScopedResourceName(0,rn("cccc-cccc"))), Some(CanonicalName("cccc-cccc")), None
+                t(3), Some(ScopedResourceName(0,rn("cccc-cccc"))), Some(CanonicalName("c")), None
               ),
               FromStatement[TestMT](
                 Select[TestMT](
@@ -451,7 +451,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     c(2) -> NamedExpr(LiteralValue[TestMT](TestNumber(1))(AtomicPositionInfo.Synthetic),cn("_1"),None,false)
                   ),
                   FromTable[TestMT](
-                    dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")), CanonicalName("bbbb-bbbb"), Some(rn("bbbb-bbbb")),
+                    dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")), CanonicalName("b"), Some(rn("bbbb-bbbb")),
                     t(4),
                     OrderedMap(
                       dcn("user") -> FromTable.ColumnInfo[TestMT](cn("user"),TestText, None),
@@ -476,7 +476,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   ),
                   Nil,None,Nil,Some(1),None,None,Set.empty
                 ),
-                t(5), Some(ScopedResourceName(0, rn("cccc-cccc"))), Some(CanonicalName("cccc-cccc")), None
+                t(5), Some(ScopedResourceName(0, rn("cccc-cccc"))), Some(CanonicalName("c")), None
               ),
               LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.Synthetic)
             ),
@@ -492,9 +492,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
   test("UDF - referencing outer column") {
     val tf = tableFinder(
-      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber),
-      (0, "bbbb-bbbb") -> D("user" -> TestText, "allowed" -> TestBoolean),
-      (0, "cccc-cccc") -> U(0, "select 1 from @bbbb-bbbb where user = ?user and allowed limit 1", "user" -> TestText)
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withCanonicalName("a"),
+      (0, "bbbb-bbbb") -> D("user" -> TestText, "allowed" -> TestBoolean).withCanonicalName("b"),
+      (0, "cccc-cccc") -> U(0, "select 1 from @bbbb-bbbb where user = ?user and allowed limit 1", "user" -> TestText).withCanonicalName("c")
     )
 
     val analysis = analyze(tf, "aaaa-aaaa", "select * join @cccc-cccc(text) on true")
@@ -526,7 +526,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         JoinType.Inner,
         true,
         FromTable[TestMT](
-          dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), CanonicalName("aaaa-aaaa"), None, t(1),
+          dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), CanonicalName("a"), None, t(1),
           OrderedMap(
             dcn("text") -> FromTable.ColumnInfo[TestMT](cn("text"), TestText, None),
             dcn("num") -> FromTable.ColumnInfo[TestMT](cn("num"), TestNumber, None)
@@ -549,7 +549,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   FromSingleRow(t(2), None),
                   None, Nil, None, Nil, None, None, None, Set.empty
                 ),
-                t(3), Some(ScopedResourceName(0,rn("cccc-cccc"))), Some(CanonicalName("cccc-cccc")), None
+                t(3), Some(ScopedResourceName(0,rn("cccc-cccc"))), Some(CanonicalName("c")), None
               ),
               FromStatement[TestMT](
                 Select[TestMT](
@@ -558,7 +558,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     c(2) -> NamedExpr(LiteralValue[TestMT](TestNumber(1))(AtomicPositionInfo.Synthetic),cn("_1"),None,false)
                   ),
                   FromTable[TestMT](
-                    dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")), CanonicalName("bbbb-bbbb"), Some(rn("bbbb-bbbb")),
+                    dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")), CanonicalName("b"), Some(rn("bbbb-bbbb")),
                     t(4),
                     OrderedMap(
                       dcn("user") -> FromTable.ColumnInfo[TestMT](cn("user"),TestText, None),
@@ -583,7 +583,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   ),
                   Nil,None,Nil,Some(1),None,None,Set.empty
                 ),
-                t(5), Some(ScopedResourceName(0,rn("cccc-cccc"))), Some(CanonicalName("cccc-cccc")), None
+                t(5), Some(ScopedResourceName(0,rn("cccc-cccc"))), Some(CanonicalName("c")), None
               ),
               LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.Synthetic)
             ),
@@ -599,8 +599,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
   test("UDF - some parameters are function calls") {
     val tf = tableFinder(
-      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber),
-      (0, "bbbb-bbbb") -> U(0, "select ?a, ?b, ?c, ?d from @single_row", "d" -> TestText, "c" -> TestNumber, "b" -> TestBoolean, "a" -> TestText)
+      (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withCanonicalName("a"),
+      (0, "bbbb-bbbb") -> U(0, "select ?a, ?b, ?c, ?d from @single_row", "d" -> TestText, "c" -> TestNumber, "b" -> TestBoolean, "a" -> TestText).withCanonicalName("b")
     )
 
     val analysis = analyze(tf, "aaaa-aaaa", "select * join @bbbb-bbbb('hello' :: text, 5, true :: boolean, text) on true")
@@ -632,7 +632,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         JoinType.Inner,
         true,
         FromTable[TestMT](
-          dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), CanonicalName("aaaa-aaaa"), None, t(1),
+          dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), CanonicalName("a"), None, t(1),
           OrderedMap(
             dcn("text") -> FromTable.ColumnInfo[TestMT](cn("text"), TestText, None),
             dcn("num") -> FromTable.ColumnInfo[TestMT](cn("num"), TestNumber, None)
@@ -689,7 +689,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   FromSingleRow(t(2), None),
                   None, Nil, None, Nil, None, None, None, Set.empty
                 ),
-                t(3), Some(ScopedResourceName(0,rn("bbbb-bbbb"))), Some(CanonicalName("bbbb-bbbb")), None
+                t(3), Some(ScopedResourceName(0,rn("bbbb-bbbb"))), Some(CanonicalName("b")), None
               ),
               FromStatement[TestMT](
                 Select[TestMT](
@@ -703,7 +703,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   FromSingleRow(t(4), Some(rn("single_row"))),
                   None,Nil,None,Nil,None,None,None,Set()
                 ),
-                t(5), Some(ScopedResourceName(0,rn("bbbb-bbbb"))), Some(CanonicalName("bbbb-bbbb")), None
+                t(5), Some(ScopedResourceName(0,rn("bbbb-bbbb"))), Some(CanonicalName("b")), None
               ),
               LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.Synthetic)
             ),
