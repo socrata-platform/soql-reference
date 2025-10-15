@@ -1529,4 +1529,21 @@ select * where first = 'Tom'
     val expectedAnalysis = analyze(tf, "table", "select text")
     analysis.removeSystemColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
+
+  test("materialize named queries") {
+    val tf = tableFinder(
+      (0, "table") -> D(
+        ":id" -> TestNumber,
+        "text" -> TestText,
+        "num" -> TestNumber
+      ),
+      (0, "query") -> Q(0, "table", "select :id, text")
+    )
+
+    val analysis = analyze(tf, "select @q1.text as t1, @q2.text as t2 from @query as @q1 join @query as @q2 on true")
+      .materializeNamedQueries
+
+    println(analysis.statement)
+    println(analysis.statement.debugDoc)
+  }
 }

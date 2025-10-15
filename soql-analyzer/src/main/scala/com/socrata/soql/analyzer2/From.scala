@@ -171,6 +171,9 @@ object From {
         case fsr: FromSingleRow[MT] =>
           buffer.write(3)
           buffer.write(fsr)
+        case fc: FromCTE[MT] =>
+          buffer.write(4)
+          buffer.write(fc)
       }
     }
   }
@@ -182,6 +185,7 @@ object From {
         case 1 => buffer.read[FromTable[MT]]()
         case 2 => buffer.read[FromStatement[MT]]()
         case 3 => buffer.read[FromSingleRow[MT]]()
+        case 4 => buffer.read[FromCTE[MT]]()
         case other => fail("Unknown from tag " + other)
       }
     }
@@ -205,12 +209,24 @@ object AtomicFrom extends from.OAtomicFromImpl
 case class FromTable[MT <: MetaTypes](
   tableName: types.DatabaseTableName[MT],
   definiteResourceName: types.ScopedResourceName[MT],
+  definiteCanonicalName: CanonicalName,
   alias: Option[ResourceName],
   label: AutoTableLabel,
   columns: OrderedMap[types.DatabaseColumnName[MT], FromTable.ColumnInfo[MT]],
   primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]]
 ) extends AtomicFrom[MT] with from.FromTableImpl[MT]
 object FromTable extends from.OFromTableImpl
+
+case class FromCTE[MT <: MetaTypes](
+  cteLabel: AutoTableLabel,
+  label: AutoTableLabel,
+  basedOn: Statement[MT],
+  columnMapping: Map[AutoColumnLabel, AutoColumnLabel], // key is basedOn's column labels, value is the CTE's
+  definiteResourceName: types.ScopedResourceName[MT],
+  canonicalName: CanonicalName,
+  alias: Option[ResourceName]
+) extends AtomicFrom[MT] with from.FromCTEImpl[MT]
+object FromCTE extends from.OFromCTEImpl
 
 // "alias" is optional here because of chained soql; actually having a
 // real subselect syntactically requires an alias, but `select ... |>
@@ -220,6 +236,7 @@ case class FromStatement[MT <: MetaTypes](
   statement: Statement[MT],
   label: AutoTableLabel,
   resourceName: Option[types.ScopedResourceName[MT]],
+  canonicalName: Option[CanonicalName],
   alias: Option[ResourceName]
 ) extends AtomicFrom[MT] with from.FromStatementImpl[MT]
 object FromStatement extends from.OFromStatementImpl

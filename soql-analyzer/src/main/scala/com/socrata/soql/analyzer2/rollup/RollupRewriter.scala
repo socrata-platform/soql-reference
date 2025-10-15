@@ -188,9 +188,9 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
 
   private def rollupAtomicFrom(from: AtomicFrom): Seq[(AtomicFrom, Set[RollupId])] = {
     from match {
-      case FromStatement(stmt, label, resourceName, alias) =>
+      case FromStatement(stmt, label, resourceName, canonicalName, alias) =>
         rollup(stmt).map { case (stmt, rollupIds) =>
-          (FromStatement(stmt, label, resourceName, alias), rollupIds)
+          (FromStatement(stmt, label, resourceName, canonicalName, alias), rollupIds)
         }
       case other =>
         Nil
@@ -240,7 +240,7 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
       )
 
     rollup(target, prefixesAllowed = false).map { case (rewritten, rollupIds) =>
-      (FromStatement(rewritten, newTable, None, None), columnMap, rollupIds)
+      (FromStatement(rewritten, newTable, None, None, None), columnMap, rollupIds)
     }
   }
 
@@ -325,6 +325,7 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
         from match {
           case _ : FromSingleRow => ()
           case _ : FromTable => ()
+          case _ : FromCTE => ()
           case fs: FromStatement => go(fs.statement)
         }
     }
@@ -380,6 +381,7 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
         case fs: FromStatement => fs.copy(statement = goStmt(fs.statement))
         case fsr: FromSingleRow => fsr
         case ft: FromTable => ft
+        case fc: FromCTE => fc
       }
 
     def goDistinct(distinct: Distinctiveness): Distinctiveness = {

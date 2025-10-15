@@ -34,7 +34,8 @@ class SelectListReferences[MT <: MetaTypes] private () extends StatementUniverse
       from match {
         case ft: FromTable => ft
         case fsr: FromSingleRow => fsr
-        case fs@FromStatement(stmt, label, resourceName, alias) =>
+        case fc: FromCTE => fc
+        case fs@FromStatement(stmt, label, resourceName, canonicalName, alias) =>
           fs.copy(statement = rewriteStatement(stmt))
       }
     }

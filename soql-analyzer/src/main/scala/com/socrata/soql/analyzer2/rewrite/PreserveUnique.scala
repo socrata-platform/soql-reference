@@ -88,7 +88,8 @@ class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends 
     from match {
       case ft: FromTable => ft
       case fs: FromSingleRow => fs
-      case fs@FromStatement(stmt, label, resourceName, alias) =>
+      case fc: FromCTE => fc
+      case fs@FromStatement(stmt, label, resourceName, canonicalName, alias) =>
         val newStmt = rewriteStatement(stmt, true)
         fs.copy(statement = newStmt)
     }

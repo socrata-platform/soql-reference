@@ -29,6 +29,8 @@ private[analyzer2] class PhysicalTableMap[MT <: MetaTypes] extends StatementUniv
         walkStatement(fs.statement, acc)
       case fsr: FromSingleRow =>
         acc
+      case fc: FromCTE =>
+        walkStatement(fc.basedOn, acc)
       case ft: FromTable =>
         acc + (ft.label -> ft.tableName)
     }

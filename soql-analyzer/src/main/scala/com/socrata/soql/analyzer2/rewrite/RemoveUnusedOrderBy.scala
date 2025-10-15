@@ -56,7 +56,8 @@ class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[
     from match {
       case ft: FromTable => (currentMap, ft)
       case fs: FromSingleRow => (currentMap, fs)
-      case fs@FromStatement(stmt, label, resourceName, alias) =>
+      case fc: FromCTE => (currentMap, fc)
+      case fs@FromStatement(stmt, label, resourceName, canonicalName, alias) =>
         fs.copy(statement = rewriteStatement(stmt, false)) match {
           // It's possible we've just reduced a statement to "select
           // column1, column2, ... from table" and we want to
@@ -73,13 +74,14 @@ class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[
             ),
             label,
             resourceName,
+            canonicalName,
             alias
           ) if selectList.valuesIterator.map(_.expr).forall(isPhysicalColumnRefTo(tbl.label, tbl.tableName, _)) =>
             // yep, we did - instead of a FromStatement, we can just
             // return a FromTable with enough info to rewrite any
             // VirtualColumn references to the ex-Statement into
             // PhysicalColumn references to the table.
-            val replacementFrom = FromTable(tbl.tableName, tbl.definiteResourceName, alias, label, tbl.columns, tbl.primaryKeys)
+            val replacementFrom = FromTable(tbl.tableName, tbl.definiteResourceName, tbl.definiteCanonicalName, alias, label, tbl.columns, tbl.primaryKeys)
             val newMap = selectList.foldLeft(currentMap) { case (acc, (columnLabel, namedExpr)) =>
               val PhysicalColumn(_, _, physCol, _) = namedExpr.expr
               acc + ((label, columnLabel) -> (physCol, tbl.tableName))
@@ -165,6 +167,7 @@ class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[
       f match {
         case fsr: FromSingleRow => fsr
         case ft: FromTable => ft
+        case fc: FromCTE => fc
         case fs: FromStatement => fs.copy(statement = relabel(fs.statement))
       }
   }

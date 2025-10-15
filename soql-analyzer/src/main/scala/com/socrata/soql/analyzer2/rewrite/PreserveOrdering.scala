@@ -124,7 +124,8 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extend
     from match {
       case ft: FromTable => (Nil, ft)
       case fs: FromSingleRow => (Nil, fs)
-      case fs@FromStatement(stmt, label, resourceName, alias) =>
+      case fc: FromCTE => ???
+      case fs@FromStatement(stmt, label, resourceName, canonicalName, alias) =>
         val (orderColumn, newStmt) = rewriteStatement(stmt, wantOutputOrdered, wantOrderingColumns)
         (orderColumn.map { case (col, typ, asc, nullLast) => OrderBy(VirtualColumn(label, col, typ)(AtomicPositionInfo.Synthetic), asc, nullLast) }, fs.copy(statement = newStmt))
     }

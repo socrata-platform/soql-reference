@@ -59,7 +59,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   ): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
-      case FromTable(thatTableName, thatResourceName, thatAlias, thatLabel, thatColumns, thatPrimaryKeys) =>
+      case FromTable(thatTableName, thatResourceName, thatCanonicalName, thatAlias, thatLabel, thatColumns, thatPrimaryKeys) =>
         this.tableName == thatTableName &&
           // don't care about aliases
           state.tryAssociate(this.label, thatLabel) &&
@@ -76,7 +76,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
 
   private[analyzer2] final def findVerticalSlice(state: IsomorphismState, that: From[MT]): Boolean =
     that match {
-      case FromTable(thatTableName, thatResourceName, thatAlias, thatLabel, thatColumns, thatPrimaryKeys) =>
+      case FromTable(thatTableName, thatResourceName, thatCanonicalName, thatAlias, thatLabel, thatColumns, thatPrimaryKeys) =>
         this.tableName == thatTableName &&
           state.tryAssociate(this.label, thatLabel) &&
           this.columns.forall { case (thisColName, thisEntry) =>
@@ -143,6 +143,7 @@ trait OFromTableImpl { this: FromTable.type =>
     def writeTo(buffer: WriteBuffer, from: FromTable[MT]): Unit = {
       buffer.write(from.tableName)
       buffer.write(from.definiteResourceName)
+      buffer.write(from.definiteCanonicalName)
       buffer.write(from.alias)
       buffer.write(from.label)
       buffer.write(from.columns)
@@ -152,14 +153,28 @@ trait OFromTableImpl { this: FromTable.type =>
 
   implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope], ctReadable: Readable[MT#ColumnType], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[FromTable[MT]] = new Readable[FromTable[MT]] with LabelUniverse[MT] {
     def readFrom(buffer: ReadBuffer): FromTable[MT] = {
-      FromTable(
-        tableName = buffer.read[DatabaseTableName](),
-        definiteResourceName = buffer.read[ScopedResourceName](),
-        alias = buffer.read[Option[ResourceName]](),
-        label = buffer.read[AutoTableLabel](),
-        columns = buffer.read[OrderedMap[DatabaseColumnName, ColumnInfo[MT]]](),
-        primaryKeys = buffer.read[Seq[Seq[DatabaseColumnName]]]()
-      )
+      buffer.version match {
+        case Version.V6 =>
+          FromTable(
+            tableName = buffer.read[DatabaseTableName](),
+            definiteResourceName = buffer.read[ScopedResourceName](),
+            definiteCanonicalName = ???,
+            alias = buffer.read[Option[ResourceName]](),
+            label = buffer.read[AutoTableLabel](),
+            columns = buffer.read[OrderedMap[DatabaseColumnName, ColumnInfo[MT]]](),
+            primaryKeys = buffer.read[Seq[Seq[DatabaseColumnName]]]()
+          )
+        case Version.V7 =>
+            FromTable(
+              tableName = buffer.read[DatabaseTableName](),
+              definiteResourceName = buffer.read[ScopedResourceName](),
+              definiteCanonicalName = buffer.read[CanonicalName](),
+              alias = buffer.read[Option[ResourceName]](),
+              label = buffer.read[AutoTableLabel](),
+              columns = buffer.read[OrderedMap[DatabaseColumnName, ColumnInfo[MT]]](),
+              primaryKeys = buffer.read[Seq[Seq[DatabaseColumnName]]]()
+            )
+      }
     }
   }
 }

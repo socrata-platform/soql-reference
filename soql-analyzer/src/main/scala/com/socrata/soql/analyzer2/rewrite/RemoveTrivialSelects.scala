@@ -53,7 +53,7 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
         rewriteFrom(from) match {
           case FromStatement(
             newSel@Select(Distinctiveness.Indistinct() | Distinctiveness.On(_), newSelectList, _from, _where, _groupBy, _having, _orderBy, _limit, _offset, None, _hint),
-            label, _resourceName, _alias
+            label, _resourceName, _canonicalName, _alias
           ) =>
             newSel.copy(
               selectList = originalSelectList.withValuesMapped { se =>
@@ -100,7 +100,8 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
     from match {
       case ft: FromTable => ft
       case fsr: FromSingleRow => fsr
-      case fs@FromStatement(stmt, _label, _resourceName, _alias) =>
+      case fc: FromCTE => fc
+      case fs@FromStatement(stmt, _label, _resourceName, _canonicalName, _alias) =>
         fs.copy(statement = rewriteStatement(stmt))
     }
   }

@@ -606,7 +606,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
   private def sqlizeAtomicFrom(from: AtomicFrom, availableSchemas: AvailableSchemas, dynamicContext: DynamicContext): (Doc, AvailableSchemas) = {
     val (sql, schema: AugmentedSchema) =
       from match {
-        case FromTable(name, _rn, _alias, label, columns, _pks) =>
+        case FromTable(name, _rn, _cn, _alias, label, columns, _pks) =>
           (
             namespace.databaseTableName(name),
             OrderedMap() ++ columns.iterator.map { case (dcn, nameEntry) =>
@@ -614,12 +614,22 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
             }
           )
 
-        case FromStatement(stmt, _label, _rn, _alias) =>
+        case FromStatement(stmt, _label, _rn, _cn, _alias) =>
           val (sql, schema) = sqlizeStatement(stmt, availableSchemas, dynamicContext, topLevel = false)
           (d"(" ++ sql ++ d")", schema)
 
         case FromSingleRow(_label, _alias) =>
           (d"(SELECT)", OrderedMap.empty)
+
+        case FromCTE(cteLabel, label, basedOn, columnMapping, _rn, _cn, _alias) =>
+          // This is kind of icky since we're just throwing away the
+          // generated sql, but we need the true schema.
+          val (_sql, schema) = sqlizeStatement(basedOn, availableSchemas, dynamicContext, topLevel = false)
+
+          (
+            namespace.tableLabel(cteLabel),
+            OrderedMap() ++ schema.iterator.map { case (colLabel, se) => columnMapping(colLabel.asInstanceOf[AutoColumnLabel] /* ick */) -> se }
+          )
       }
 
     (sql.annotate[SqlizeAnnotation](SqlizeAnnotation.Table(from.label)) +#+ d"AS" +#+ namespace.tableLabel(from.label), availableSchemas + (from.label -> schema))

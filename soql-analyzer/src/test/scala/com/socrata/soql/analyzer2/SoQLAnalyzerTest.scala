@@ -149,6 +149,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       FromTable[TestMT](
         dtn("aaaa-aaaa"),
         ScopedResourceName(0, rn("aaaa-aaaa")),
+        CanonicalName("aaaa-aaaa"),
         None,
         t(1),
         OrderedMap(
@@ -274,6 +275,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         FromTable[TestMT](
           dtn("aaaa-aaaa"),
           ScopedResourceName(0, rn("aaaa-aaaa")),
+          CanonicalName("aaaa-aaaa"),
           None,
           t(1),
           OrderedMap(
@@ -321,6 +323,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             FromTable[TestMT](
               dtn("aaaa-aaaa"),
               ScopedResourceName(0, rn("aaaa-aaaa")),
+              CanonicalName("aaaa-aaaa"),
               None,
               t(1),
               OrderedMap(
@@ -337,6 +340,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           ),
           t(2),
           Some(ScopedResourceName(0, rn("aaaa-aaaa"))),
+          Some(CanonicalName("aaaa-aaaa")),
           None
         ),
         None,Nil,None,Nil,None,None,None,Set.empty
@@ -415,7 +419,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         JoinType.Inner,
         false, // NOT implicitly lateral!
         FromTable[TestMT](
-          dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
+          dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), CanonicalName("aaaa-aaaa"), None, t(1),
           OrderedMap(
             dcn("text") -> FromTable.ColumnInfo[TestMT](cn("text"), TestText, None),
             dcn("num") -> FromTable.ColumnInfo[TestMT](cn("num"), TestNumber, None)
@@ -438,7 +442,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   FromSingleRow(t(2), None),
                   None, Nil, None, Nil, None, None, None, Set.empty
                 ),
-                t(3), Some(ScopedResourceName(0,rn("cccc-cccc"))), None
+                t(3), Some(ScopedResourceName(0,rn("cccc-cccc"))), Some(CanonicalName("cccc-cccc")), None
               ),
               FromStatement[TestMT](
                 Select[TestMT](
@@ -447,7 +451,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     c(2) -> NamedExpr(LiteralValue[TestMT](TestNumber(1))(AtomicPositionInfo.Synthetic),cn("_1"),None,false)
                   ),
                   FromTable[TestMT](
-                    dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")),Some(rn("bbbb-bbbb")),
+                    dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")), CanonicalName("bbbb-bbbb"), Some(rn("bbbb-bbbb")),
                     t(4),
                     OrderedMap(
                       dcn("user") -> FromTable.ColumnInfo[TestMT](cn("user"),TestText, None),
@@ -472,14 +476,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   ),
                   Nil,None,Nil,Some(1),None,None,Set.empty
                 ),
-                t(5), Some(ScopedResourceName(0, rn("cccc-cccc"))), None
+                t(5), Some(ScopedResourceName(0, rn("cccc-cccc"))), Some(CanonicalName("cccc-cccc")), None
               ),
               LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.Synthetic)
             ),
             None,Nil,None,Nil,None,None,None,Set.empty
           ),
           t(6),
-          Some(ScopedResourceName(0,rn("cccc-cccc"))),Some(rn("cccc-cccc"))
+          None, None, Some(rn("cccc-cccc"))
         ),
         LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.Synthetic)
       )
@@ -522,7 +526,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         JoinType.Inner,
         true,
         FromTable[TestMT](
-          dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
+          dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), CanonicalName("aaaa-aaaa"), None, t(1),
           OrderedMap(
             dcn("text") -> FromTable.ColumnInfo[TestMT](cn("text"), TestText, None),
             dcn("num") -> FromTable.ColumnInfo[TestMT](cn("num"), TestNumber, None)
@@ -545,7 +549,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   FromSingleRow(t(2), None),
                   None, Nil, None, Nil, None, None, None, Set.empty
                 ),
-                t(3), Some(ScopedResourceName(0,rn("cccc-cccc"))), None
+                t(3), Some(ScopedResourceName(0,rn("cccc-cccc"))), Some(CanonicalName("cccc-cccc")), None
               ),
               FromStatement[TestMT](
                 Select[TestMT](
@@ -554,7 +558,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                     c(2) -> NamedExpr(LiteralValue[TestMT](TestNumber(1))(AtomicPositionInfo.Synthetic),cn("_1"),None,false)
                   ),
                   FromTable[TestMT](
-                    dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")),Some(rn("bbbb-bbbb")),
+                    dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")), CanonicalName("bbbb-bbbb"), Some(rn("bbbb-bbbb")),
                     t(4),
                     OrderedMap(
                       dcn("user") -> FromTable.ColumnInfo[TestMT](cn("user"),TestText, None),
@@ -579,14 +583,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   ),
                   Nil,None,Nil,Some(1),None,None,Set.empty
                 ),
-                t(5), Some(ScopedResourceName(0,rn("cccc-cccc"))), None
+                t(5), Some(ScopedResourceName(0,rn("cccc-cccc"))), Some(CanonicalName("cccc-cccc")), None
               ),
               LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.Synthetic)
             ),
             None,Nil,None,Nil,None,None,None,Set.empty
           ),
           t(6),
-          Some(ScopedResourceName(0,rn("cccc-cccc"))),Some(rn("cccc-cccc"))
+          None, None, Some(rn("cccc-cccc"))
         ),
         LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.Synthetic)
       )
@@ -628,7 +632,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         JoinType.Inner,
         true,
         FromTable[TestMT](
-          dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), None, t(1),
+          dtn("aaaa-aaaa"), ScopedResourceName(0, rn("aaaa-aaaa")), CanonicalName("aaaa-aaaa"), None, t(1),
           OrderedMap(
             dcn("text") -> FromTable.ColumnInfo[TestMT](cn("text"), TestText, None),
             dcn("num") -> FromTable.ColumnInfo[TestMT](cn("num"), TestNumber, None)
@@ -685,7 +689,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   FromSingleRow(t(2), None),
                   None, Nil, None, Nil, None, None, None, Set.empty
                 ),
-                t(3), Some(ScopedResourceName(0,rn("bbbb-bbbb"))), None
+                t(3), Some(ScopedResourceName(0,rn("bbbb-bbbb"))), Some(CanonicalName("bbbb-bbbb")), None
               ),
               FromStatement[TestMT](
                 Select[TestMT](
@@ -699,13 +703,13 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                   FromSingleRow(t(4), Some(rn("single_row"))),
                   None,Nil,None,Nil,None,None,None,Set()
                 ),
-                t(5), Some(ScopedResourceName(0,rn("bbbb-bbbb"))), None
+                t(5), Some(ScopedResourceName(0,rn("bbbb-bbbb"))), Some(CanonicalName("bbbb-bbbb")), None
               ),
               LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.Synthetic)
             ),
             None,Nil,None,Nil,None,None,None,Set()
           ),
-          t(6),Some(ScopedResourceName(0,rn("bbbb-bbbb"))), Some(rn("bbbb-bbbb"))
+          t(6),None, None, Some(rn("bbbb-bbbb"))
         ),
         LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.Synthetic)
       )
@@ -806,12 +810,12 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
 
     val subquery = select.from match {
-      case Join(_, _, _, FromStatement(subquery: Select[TestMT], _, _, _), _) => subquery
+      case Join(_, _, _, FromStatement(subquery: Select[TestMT], _, _, _, _), _) => subquery
       case _ => fail("Expected a join to a subquery")
     }
 
     val lit = subquery.from match {
-      case Join(_, _, FromStatement(Select(_, map, FromSingleRow(_, _), _, _, _, _, _, _, _, _), _, _, _), _, _) if map.size == 1 =>
+      case Join(_, _, FromStatement(Select(_, map, FromSingleRow(_, _), _, _, _, _, _, _, _, _), _, _, _, _), _, _) if map.size == 1 =>
         map.head._2.expr
       case _ => fail("Expected a join to a single-row subselect")
     }

@@ -41,7 +41,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
       case select: Select =>
         debug("select")
         select.copy(from = mergeFrom(select.from)) match {
-          case b@Select(_, _, Unjoin(FromStatement(a: Select, aLabel, aResourceName, aAlias), bRejoin), _, _, _, _, _, _, _, _) =>
+          case b@Select(_, _, Unjoin(FromStatement(a: Select, aLabel, aResourceName, aCanonicalName, aAlias), bRejoin), _, _, _, _, _, _, _, _) =>
             // This privileges the first query in b's FROM because our
             // queries are frequently constructed in a chain.
             mergeSelects(a, aLabel, aResourceName, aAlias, b, bRejoin) match {
@@ -70,7 +70,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
 
   private def mergeAtomicFrom(from: AtomicFrom): AtomicFrom = {
     from match {
-      case s@FromStatement(stmt, _, _, _) => s.copy(statement = doMerge(stmt))
+      case s@FromStatement(stmt, _, _, _, _) => s.copy(statement = doMerge(stmt))
       case other => other
     }
   }
@@ -104,7 +104,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
 
   private def rewrite(from: AtomicFrom, xform: ExprRewriter): AtomicFrom =
     from match {
-      case fs@FromStatement(s, _, _, _) => fs.copy(statement = rewrite(s, xform))
+      case fs@FromStatement(s, _, _, _, _) => fs.copy(statement = rewrite(s, xform))
       case other => other
     }
 

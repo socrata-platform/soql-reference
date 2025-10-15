@@ -9,7 +9,7 @@ private[rewrite] class RemoveOutputColumns[MT <: MetaTypes] (labelProvider: Labe
     stmt match {
       case ct@CombinedTables(_op, _left, _right) =>
         if(ct.schema.values.exists(toRemove)) {
-          val newFrom = FromStatement(ct, labelProvider.tableLabel(), None, None)
+          val newFrom = FromStatement(ct, labelProvider.tableLabel(), None, None, None)
           Select(
             Distinctiveness.Indistinct(),
             OrderedMap() ++ ct.schema.iterator.flatMap { case (k, v) =>
@@ -37,7 +37,7 @@ private[rewrite] class RemoveOutputColumns[MT <: MetaTypes] (labelProvider: Labe
 
       case select@Select(Distinctiveness.FullyDistinct(), selectList, _from, _where, _groupBy, _having, orderBy, _limit, _offset, _search, _hint) =>
         if(select.schema.values.exists(toRemove)) {
-          val newFrom = FromStatement(select, labelProvider.tableLabel(), None, None)
+          val newFrom = FromStatement(select, labelProvider.tableLabel(), None, None, None)
           Select(
             Distinctiveness.Indistinct(),
             OrderedMap() ++ select.schema.iterator.flatMap { case (k, v) =>

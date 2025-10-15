@@ -150,6 +150,10 @@ object ProvenanceTracker {
           processStatement(fs.statement).lazyZip(fs.schema).foreach { (prov, schemaInfo) =>
             identifiers += (schemaInfo.table, schemaInfo.column) -> prov
           }
+        case fc : FromCTE =>
+          processStatement(fc.basedOn).lazyZip(fc.schema).foreach { (prov, schemaInfo) =>
+            identifiers += (schemaInfo.table, schemaInfo.column) -> prov
+          }
       }
     }
 

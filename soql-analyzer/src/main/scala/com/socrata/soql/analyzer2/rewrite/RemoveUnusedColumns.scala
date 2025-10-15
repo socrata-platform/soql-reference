@@ -68,9 +68,10 @@ class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.
     from match {
       case ft: FromTable => (ft, false)
       case fsr: FromSingleRow => (fsr, false)
-      case FromStatement(stmt, label, resourceName, alias) =>
+      case fc: FromCTE => (fc, false)
+      case FromStatement(stmt, label, resourceName, canonicalName, alias) =>
         val (newStmt, removedAnything) = rewriteStatement(stmt, Some(label))
-        (FromStatement(newStmt, label, resourceName, alias), removedAnything)
+        (FromStatement(newStmt, label, resourceName, canonicalName, alias), removedAnything)
     }
   }
 }

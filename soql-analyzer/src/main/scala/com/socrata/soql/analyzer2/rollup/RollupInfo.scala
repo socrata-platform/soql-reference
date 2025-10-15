@@ -10,6 +10,7 @@ trait RollupInfo[MT <: MetaTypes, RollupId] extends StatementUniverse[MT] {
   val id: RollupId
   val statement: Statement
   val resourceName: types.ScopedResourceName[MT]
+  val canonicalName: CanonicalName
   val databaseName: DatabaseTableName
 
   def databaseColumnNameOfIndex(idx: Int): DatabaseColumnName
@@ -23,6 +24,7 @@ trait RollupInfo[MT <: MetaTypes, RollupId] extends StatementUniverse[MT] {
     new FromTable(
       databaseName,
       resourceName,
+      canonicalName,
       None,
       labelProvider.tableLabel(),
       OrderedMap() ++ statement.schema.iterator.map { case (label, schemaEnt) =>

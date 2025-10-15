@@ -57,8 +57,9 @@ abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
     from match {
       case ft: FromTable => ft
       case fsr: FromSingleRow => fsr
-      case FromStatement(statement, label, resourceName, alias) =>
-        FromStatement(rewriteStatement(statement), label, resourceName, alias)
+      case fc: FromCTE => fc
+      case FromStatement(statement, label, resourceName, canonicalName, alias) =>
+        FromStatement(rewriteStatement(statement), label, resourceName, canonicalName, alias)
     }
 
   private def rewriteSearch(from: From, search: String): Expr =
@@ -91,6 +92,14 @@ abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
               Nil
             } else {
               fieldExtract(VirtualColumn[MT](fs.label, acl, typ)(AtomicPositionInfo.Synthetic))
+            }
+          }
+        case fc: FromCTE =>
+          fc.basedOn.schema.iterator.flatMap { case (acl, Statement.SchemaEntry(_, typ, _hint, isSynthetic)) =>
+            if(isSynthetic) {
+              Nil
+            } else {
+              fieldExtract(VirtualColumn[MT](fc.label, fc.columnMapping(acl), typ)(AtomicPositionInfo.Synthetic))
             }
           }
       }

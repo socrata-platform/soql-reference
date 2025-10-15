@@ -94,6 +94,7 @@ object RollupToy extends (Array[String] => Unit) {
           override val id = name
           override val statement = analysis.applyPasses(rewritePasses.flatten, rewritePassHelpers).statement
           override val resourceName = ScopedResourceName((), ResourceName(s"rollup:$name"))
+          override val canonicalName = CanonicalName(s"rollup:$name")
           override val databaseName = DatabaseTableName(name)
           override def databaseColumnNameOfIndex(idx: Int) = DatabaseColumnName("c" + idx)
         }
