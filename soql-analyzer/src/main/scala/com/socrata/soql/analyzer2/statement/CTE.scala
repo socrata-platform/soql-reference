@@ -41,8 +41,8 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
 
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     copy(
-      definitions = OrderedMap() ++ definitions.iterator.map { case (label, defn) =>
-        label -> defn.copy(query = defn.query.doRewriteDatabaseNames(state))
+      definitions = definitions.withValuesMapped { defn =>
+        defn.copy(query = defn.query.doRewriteDatabaseNames(state))
       },
       useQuery = useQuery.doRewriteDatabaseNames(state)
     )

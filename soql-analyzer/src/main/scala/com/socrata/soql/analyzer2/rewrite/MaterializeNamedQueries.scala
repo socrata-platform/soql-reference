@@ -4,6 +4,7 @@ import scala.collection.mutable
 
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.analyzer2._
+import com.socrata.soql.collection._
 
 class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProvider) extends StatementUniverse[MT] {
   // ok so, we want to walk over the Statement, and for each select,
@@ -148,7 +149,7 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
     }
 
   private def rewriteExprs(cm: ColumnMap, selectList: OrderedMap[AutoColumnLabel, NamedExpr]): OrderedMap[AutoColumnLabel, NamedExpr] =
-    OrderedMap() ++ selectList.iterator.map { case (colLabel, namedExpr) => colLabel -> namedExpr.copy(expr = rewriteExprs(cm, namedExpr.expr)) }
+    selectList.withValuesMapped { case namedExpr => namedExpr.copy(expr = rewriteExprs(cm, namedExpr.expr)) }
 
   private def rewriteExprs(cm: ColumnMap, e: Expr): Expr = {
     e match {
