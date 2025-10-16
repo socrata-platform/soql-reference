@@ -240,8 +240,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           )
         case from: FromCTE =>
           selectFromFrom(
-            from.basedOn.schema.map { case (label, se) =>
-              labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](from.label, from.columnMapping(label), se.typ)(AtomicPositionInfo.Synthetic), se.name, None, isSynthetic = false)
+            from.statementSchema.map { case (label, se) =>
+              labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](from.label, label, se.typ)(AtomicPositionInfo.Synthetic), se.name, None, isSynthetic = false)
             },
             from
           )
@@ -568,9 +568,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           stmt.schema.iterator.collect { case (colLabel, Statement.SchemaEntry(name, typ, _hint, _isSynthetic)) if isSystemColumn(name) =>
             name -> VirtualColumn[MT](tableLabel, colLabel, typ)(AtomicPositionInfo.Synthetic)
           }.toSeq
-        case fc@FromCTE(_, tableLabel, stmt, columnMapping, _, _, _) =>
-          stmt.schema.iterator.collect { case (colLabel, Statement.SchemaEntry(name, typ, _hint, _isSynthetic)) if isSystemColumn(name) =>
-            name -> VirtualColumn[MT](tableLabel, columnMapping(colLabel), typ)(AtomicPositionInfo.Synthetic)
+        case fc@FromCTE(_, tableLabel, _, _, _, _, _) =>
+          fc.statementSchema.iterator.collect { case (colLabel, Statement.SchemaEntry(name, typ, _hint, _isSynthetic)) if isSystemColumn(name) =>
+            name -> VirtualColumn[MT](tableLabel, colLabel, typ)(AtomicPositionInfo.Synthetic)
           }.toSeq
         case FromSingleRow(_, _) =>
           Nil

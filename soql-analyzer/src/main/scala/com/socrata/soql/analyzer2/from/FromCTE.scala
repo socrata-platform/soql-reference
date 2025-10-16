@@ -22,19 +22,27 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
 
   lazy val resourceName = Some(definiteResourceName)
 
-  def schema = basedOn.schema.iterator.map { case (columnLabel, ent) =>
+  lazy val schema = statementSchema.iterator.map { case (columnLabel, ent) =>
     From.SchemaEntry(
-      label, columnMapping(columnLabel), ent.typ, ent.hint,
+      label, columnLabel, ent.typ, ent.hint,
       ent.isSynthetic
     )
   }.toVector
+
+  // The schema of this CTE _as if_ it were still a FromStatment
+  // (i.e., with the CTE's column labels)
+  lazy val statementSchema =
+    OrderedMap() ++ basedOn.schema.iterator.map { case (columnLabel, ent) =>
+      columnMapping(columnLabel) -> ent
+    }
 
   def unique = basedOn.unique.map(_.map { cn => VirtualColumn[MT](label, cn, basedOn.schema(cn).typ)(AtomicPositionInfo.Synthetic) })
 
   // A CTE does not, itself, contain any column references
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = Map.empty
 
-  private[analyzer2] override final val scope: Scope[MT] = new Scope.Virtual[MT](label, basedOn.schema.withValuesMapped(_.asNameEntry))
+  private[analyzer2] override final val scope: Scope[MT] =
+    new Scope.Virtual[MT](label, statementSchema.withValuesMapped(_.asNameEntry))
 
   private[analyzer2] def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
     (cteLabel.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias,label))).annotate(Annotation.TableAliasDefinition[MT](alias, label))
@@ -68,6 +76,9 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
           // context where we won't "see" CTEs, so we need to use the
           // based-on to determine that we're referring to the same
           // CTE.
+          // Actually, is this correct, or should this repaint the
+          // "basedOn" Statements so their output column labels line
+          // up with the froms'?
           recurseStmt(this.basedOn, state, Some(this.label), Some(thatLabel), thatBasedOn)
       case _ =>
         false
@@ -78,6 +89,9 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
       case FromCTE(thatCteLabel, thatLabel, thatBasedOn, thatColumnMapping, thatResourceName, thatCanonicalName, thatAlias) =>
         state.tryAssociate(this.label, thatLabel) &&
           state.tryAssociate(this.cteLabel, thatCteLabel) &&
+          // Actually, is this correct, or should this repaint the
+          // "basedOn" Statements so their output column labels line
+          // up with the froms'?
           this.basedOn.findVerticalSlice(state, Some(this.label), Some(thatLabel), thatBasedOn)
       case _ =>
         false
