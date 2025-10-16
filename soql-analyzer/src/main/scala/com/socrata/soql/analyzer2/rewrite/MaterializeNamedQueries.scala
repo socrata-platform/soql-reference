@@ -207,12 +207,21 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
             // ctestuff.defQuery is isomorphic to stmt, so we can line
             // up the output columns...
             assert(stmt.schema.size == ctestuff.defQuery.schema.size)
-            val mappedColumns = stmt.schema.iterator.zip(ctestuff.defQuery.schema.iterator).map {
+            val mappedColumns = stmt.schema.iterator.zip(ctestuff.defQuery.schema.iterator).flatMap {
               case ((myColLabel, mySchemaEntry), (theirColLabel, theirSchemaEntry)) =>
                 assert(mySchemaEntry.typ == theirSchemaEntry.typ)
-                myColLabel -> theirColLabel
+                if(myColLabel == theirColLabel) {
+                  None
+                } else {
+                  Some(myColLabel -> theirColLabel)
+                }
             }.toMap
-            (Map(label -> mappedColumns), FromCTE(ctestuff.label, label, rewriteStatement(stmt), rn, cn, alias))
+
+            // We'll only need to rewrite exprs if we're using
+            // "someone else's" Statement to define the CTE.
+            val columnMap: ColumnMap = if(mappedColumns.isEmpty) Map.empty else Map(label -> mappedColumns)
+
+            (columnMap, FromCTE(ctestuff.label, label, rewriteStatement(stmt), rn, cn, alias))
           case _ =>
             // can't replace this whole
             (Map.empty, orig.copy(statement = rewriteStatement(stmt)))
