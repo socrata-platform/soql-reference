@@ -35,8 +35,10 @@ package object sqlizer {
   }
 
   implicit class AugmentedIterableOnce[T](private val underlying: IterableOnce[T]) extends AnyVal {
-    def foldMap[S, U](initialValue: S)(f: (S, T) => (S, U)): Iterator[U] = {
-      new Iterator[U] {
+    // This is basically iterator map + a running accumulator state.
+    // The final state is accessible once the iterator is exhausted.
+    def foldMap[S, U](initialValue: S)(f: (S, T) => (S, U)): Iterator[U] with IteratorState[S] = {
+      new Iterator[U] with IteratorState[S] {
         val iter = underlying.iterator
         var state = initialValue
 
@@ -50,6 +52,9 @@ package object sqlizer {
     }
   }
 
+  trait IteratorState[+S] {
+    def state: S
+  }
+
   type AugmentedSchema[MT <: MetaTypes with MetaTypesExt] = OrderedMap[types.ColumnLabel[MT], AugmentedType[MT]]
-  type AvailableSchemas[MT <: MetaTypes with MetaTypesExt] = Map[AutoTableLabel, AugmentedSchema[MT]]
 }

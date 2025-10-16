@@ -124,7 +124,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
     )
 
     try {
-      val (sql, augmentedSchema) = sqlizeStatement(rewritten, Map.empty, dynamicContext, rewriteOutputColumns)
+      val (sql, augmentedSchema) = sqlizeStatement(rewritten, AvailableSchemas.empty, dynamicContext, rewriteOutputColumns)
       Right((sql, augmentedSchema, dynamicContext))
     } catch {
       case bail: Bail => Left(bail.err)
@@ -151,17 +151,25 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
     dynamicContext: DynamicContext,
     topLevel: Boolean
   ): (Doc, AugmentedSchema) = {
-    val defDocs = cte.definitions.map { case (label, defn) =>
-      Seq(
-        Some(namespace.tableLabel(label) +#+ d"AS"),
-        sqlizeMaterializedHint(defn.hint),
-        Some(sqlizeStatement(defn.query, availableSchemas, dynamicContext, false)._1.encloseNesting(d"(", d")"))
-      ).flatten.hsep
-    }.toVector.concatWith(_ ++ d"," ++ Doc.lineSep ++ _)
+    val defClauses =
+      cte.definitions.foldMap(availableSchemas) { case (availableSchemas, (label, defn)) =>
+        val (defDoc, defSchema) = sqlizeStatement(defn.query, availableSchemas, dynamicContext, false)
 
-    val (qDoc, augSchema) = sqlizeStatement(cte.useQuery, availableSchemas, dynamicContext, topLevel)
+        val clause = Seq(
+          Some(namespace.tableLabel(label) +#+ d"AS"),
+          sqlizeMaterializedHint(defn.hint),
+          Some(defDoc.encloseNesting(d"(", d")"))
+        ).flatten.hsep
 
-    ((d"WITH" ++ Doc.lineSep ++ defDocs).nest(2) ++ Doc.lineSep ++ qDoc, augSchema)
+        (availableSchemas.addPotential(label -> defSchema), clause)
+      }
+
+    val defDoc = defClauses.toVector.concatWith(_ ++ d"," ++ Doc.lineSep ++ _)
+    val finalAvailableSchemas = defClauses.state
+
+    val (qDoc, augSchema) = sqlizeStatement(cte.useQuery, finalAvailableSchemas, dynamicContext, topLevel)
+
+    ((d"WITH" ++ Doc.lineSep ++ defDoc).nest(2) ++ Doc.lineSep ++ qDoc, augSchema)
   }
 
   private def sqlizeMaterializedHint(h: MaterializedHint): Option[Doc] =
@@ -648,18 +656,11 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
         case FromSingleRow(_label, _alias) =>
           (d"(SELECT)", OrderedMap.empty)
 
-        case FromCTE(cteLabel, label, basedOn, _rn, _cn, _alias) =>
-          // This is kind of icky since we're just throwing away the
-          // generated sql, but we need the true schema.
-          val (_sql, schema) = sqlizeStatement(basedOn, availableSchemas, dynamicContext, topLevel = false)
-
-          (
-            namespace.tableLabel(cteLabel),
-            schema
-          )
+        case FromCTE(cteLabel, _label, _basedOn, _rn, _cn, _alias) =>
+          (namespace.tableLabel(cteLabel), availableSchemas.potential(cteLabel))
       }
 
-    (sql.annotate[SqlizeAnnotation](SqlizeAnnotation.Table(from.label)) +#+ d"AS" +#+ namespace.tableLabel(from.label), availableSchemas + (from.label -> schema))
+    (sql.annotate[SqlizeAnnotation](SqlizeAnnotation.Table(from.label)) +#+ d"AS" +#+ namespace.tableLabel(from.label), availableSchemas.addInstantiated(from.label -> schema))
   }
 
   private def deSelectListReferenceWrappedToplevelExprs(dynamicContext: DynamicContext, selectList: Vector[Expr], distinct: Distinctiveness): Distinctiveness =
