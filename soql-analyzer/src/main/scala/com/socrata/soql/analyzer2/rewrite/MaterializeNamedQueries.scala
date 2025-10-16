@@ -80,6 +80,11 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
 
   private def collectAtomicFromNamedQueries(f: AtomicFrom): Unit = {
     f match {
+      case FromStatement(stmt, _, _, _, _) if stmt.containsNonlocalColumnReferences =>
+        // We can't CTEify this because it references an external
+        // column, but we might be able to do so to some internal
+        // query, so keep collecting them
+        collectNamedQueries(stmt)
       case FromStatement(stmt, _, _, Some(cn), _) =>
         collectNamedQueries(stmt)
         NamedQueries.retrieveCached(cn, stmt) match {
