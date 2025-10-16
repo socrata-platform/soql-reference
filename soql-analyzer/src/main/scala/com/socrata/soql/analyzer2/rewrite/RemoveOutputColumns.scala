@@ -26,7 +26,7 @@ private[rewrite] class RemoveOutputColumns[MT <: MetaTypes] (labelProvider: Labe
           ct
         }
 
-      case cte@CTE(_defLabel, _defAlias, _defQuery, _matHint, useQuery) =>
+      case cte@CTE(_defns, useQuery) =>
         cte.copy(useQuery = rewriteStatement(useQuery))
 
       case v@Values(_, _) =>

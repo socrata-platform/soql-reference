@@ -2,6 +2,7 @@ package com.socrata.soql.analyzer2.rewrite
 
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
+import com.socrata.soql.collection._
 
 class SelectListReferences[MT <: MetaTypes] private () extends StatementUniverse[MT] {
   abstract class Transform {
@@ -12,8 +13,9 @@ class SelectListReferences[MT <: MetaTypes] private () extends StatementUniverse
         case CombinedTables(op, left, right) =>
           CombinedTables(op, rewriteStatement(left), rewriteStatement(right))
 
-        case CTE(defLabel, defAlias, defQuery, materializedHint, useQuery) =>
-          CTE(defLabel, defAlias, rewriteStatement(defQuery), materializedHint, rewriteStatement(useQuery))
+        case CTE(defns, useQuery) =>
+          val newDefns = defns.withValuesMapped { defn => defn.copy(query = rewriteStatement(defn.query)) }
+          CTE(newDefns, rewriteStatement(useQuery))
 
         case v@Values(_, _) =>
           v

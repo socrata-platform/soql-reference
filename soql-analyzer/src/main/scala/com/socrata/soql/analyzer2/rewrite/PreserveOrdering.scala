@@ -5,6 +5,7 @@ import scala.collection.{mutable => scm}
 
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
+import com.socrata.soql.collection._
 import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.functions.MonomorphicFunction
 
@@ -20,15 +21,17 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extend
         // table ops never preserve ordering
         (Nil, CombinedTables(op, rewriteStatement(left, false, false)._2, rewriteStatement(right, false, false)._2))
 
-      case cte@CTE(defLabel, defAlias, defQuery, matHint, useQuery) =>
+      case CTE(defns, useQuery) =>
+        // Need to think about how "preserve ordering" happens over
+        // CTEs!
         val (orderingColumns, newUseQuery) = rewriteStatement(useQuery, wantOutputOrdered, wantOrderingColumns)
+        val newDefinitions = defns.withValuesMapped { defn =>
+          defn.copy(query = rewriteStatement(defn.query, true, false)._2)
+        }
 
         (
           orderingColumns,
-          cte.copy(
-            definitionQuery = rewriteStatement(defQuery, true, false)._2,
-            useQuery = newUseQuery
-          )
+          CTE(newDefinitions, newUseQuery)
         )
 
       case v@Values(_, _) =>

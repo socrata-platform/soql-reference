@@ -25,7 +25,7 @@ class AddLimitOffset[MT <: MetaTypes] private (labelProvider: LabelProvider) ext
           Set.empty
         )
 
-      case cte@CTE(defLabel, defAlias, defQuery, matHint, useQuery) =>
+      case cte@CTE(defs, useQuery) =>
         cte.copy(useQuery = rewriteStatement(useQuery, desiredLimit, desiredOffset))
 
       case sel@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, oldLimit, oldOffset, search, hint) =>

@@ -5,6 +5,7 @@ import scala.collection.compat.immutable.LazyList
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
+import com.socrata.soql.collection._
 import com.socrata.soql.functions.MonomorphicFunction
 
 abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
@@ -21,8 +22,9 @@ abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
     stmt match {
       case CombinedTables(op, left, right) =>
         CombinedTables(op, rewriteStatement(left), rewriteStatement(right))
-      case CTE(defLabel, defAlias, defQuery, matHint, useQuery) =>
-        CTE(defLabel, defAlias, rewriteStatement(defQuery), matHint, rewriteStatement(useQuery))
+      case CTE(defns, useQuery) =>
+        val newDefns = defns.withValuesMapped { defn => defn.copy(query = rewriteStatement(defn.query)) }
+        CTE(newDefns, rewriteStatement(useQuery))
       case v: Values =>
         v
       case s@Select(_distinctiveness, _selectList, rawFrom, where, _groupBy, _having, _orderBy, _limit, _offset, Some(search), _hint) =>

@@ -12,10 +12,10 @@ class RemoveTrivialJoins[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] => Bo
       case CombinedTables(op, left, right) =>
         CombinedTables(op, rewriteStatement(left), rewriteStatement(right))
 
-      case CTE(defLabel, defAlias, defQuery, materializedHint, useQuery) =>
-        val newDefQuery = rewriteStatement(defQuery)
+      case CTE(defns, useQuery) =>
+        val newDefns = defns.withValuesMapped { defn => defn.copy(query = rewriteStatement(defn.query)) }
         val newUseQuery = rewriteStatement(useQuery)
-        CTE(defLabel, defAlias, newDefQuery, materializedHint, newUseQuery)
+        CTE(newDefns, newUseQuery)
 
       case v@Values(_, _) =>
         v

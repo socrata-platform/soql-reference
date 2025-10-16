@@ -15,13 +15,11 @@ class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[
         // table ops never preserve ordering
         CombinedTables(op, rewriteStatement(left, false), rewriteStatement(right, false))
 
-      case cte@CTE(defLabel, defAlias, defQuery, matHint, useQuery) =>
+      case CTE(defns, useQuery) =>
+        val newDefinitions = defns.withValuesMapped { defn => defn.copy(query = rewriteStatement(defn.query, false)) }
         val newUseQuery = rewriteStatement(useQuery, callerCaresAboutOrder)
 
-        cte.copy(
-          definitionQuery = rewriteStatement(defQuery, false),
-          useQuery = newUseQuery
-        )
+        CTE(newDefinitions, newUseQuery)
 
       case v@Values(_, _) =>
         v
@@ -105,11 +103,10 @@ class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[
       stmt match {
         case ct@CombinedTables(op, left, right) =>
           ct.copy(left = relabel(left), right = relabel(right))
-        case cte@CTE(defLabel, defAlias, defQuery, matHint, useQuery) =>
-          cte.copy(
-            definitionQuery = relabel(defQuery),
-            useQuery = relabel(useQuery)
-          )
+        case CTE(defns, useQuery) =>
+          val newDefns = defns.withValuesMapped { defn => defn.copy(query = relabel(defn.query)) }
+          val newUseQuery = relabel(useQuery)
+          CTE(newDefns, newUseQuery)
         case v@Values(labels, values) =>
           v.copy(values = values.map(_.map(relabel(_))))
         case sel@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>

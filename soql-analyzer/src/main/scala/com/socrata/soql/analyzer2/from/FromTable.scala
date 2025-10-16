@@ -158,7 +158,7 @@ trait OFromTableImpl { this: FromTable.type =>
           FromTable(
             tableName = buffer.read[DatabaseTableName](),
             definiteResourceName = buffer.read[ScopedResourceName](),
-            definiteCanonicalName = ???,
+            definiteCanonicalName = CanonicalName("invalid - this is only (at time of migration) used by MaterializeNamedQueries, which will not happen in a V6 serialization"),
             alias = buffer.read[Option[ResourceName]](),
             label = buffer.read[AutoTableLabel](),
             columns = buffer.read[OrderedMap[DatabaseColumnName, ColumnInfo[MT]]](),

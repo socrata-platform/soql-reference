@@ -190,10 +190,7 @@ case class CombinedTables[MT <: MetaTypes](
 object CombinedTables extends statement.OCombinedTablesImpl
 
 case class CTE[MT <: MetaTypes](
-  definitionLabel: AutoTableLabel,
-  definitionAlias: Option[ResourceName], // can this ever be not-some?  If not, perhaps mapAlias's type needs changing
-  definitionQuery: Statement[MT],
-  materializedHint: MaterializedHint,
+  definitions: OrderedMap[AutoTableLabel, CTE.Definition[MT]],
   useQuery: Statement[MT]
 ) extends Statement[MT] with statement.CTEImpl[MT]
 object CTE extends statement.OCTEImpl

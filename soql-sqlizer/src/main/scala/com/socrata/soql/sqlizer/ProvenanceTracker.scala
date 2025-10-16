@@ -64,8 +64,10 @@ object ProvenanceTracker {
       s match {
         case CombinedTables(op, left, right) =>
           processStatement(left).lazyZip(processStatement(right)).map(_ ++ _)
-        case CTE(defLabel, _defAlias, defQuery, _, useQuery) =>
-          processStatement(defQuery)
+        case CTE(defns, useQuery) =>
+          for(defn <- defns.valuesIterator) {
+            processStatement(defn.query)
+          }
           processStatement(useQuery)
 
         case Values(labels, values) =>

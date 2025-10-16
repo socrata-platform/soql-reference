@@ -6,7 +6,7 @@ import scala.collection.compat._
 import org.slf4j.LoggerFactory
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.collection.OrderedMap
+import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, Provenance}
 
 object RollupRewriter {
@@ -263,8 +263,8 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
           case CombinedTables(_op, left, right) =>
             go(left)
             go(right)
-          case CTE(_defLbl, _defAlias, defQ, _matHint, useQ) =>
-            go(defQ)
+          case CTE(defns, useQ) =>
+            for(defn <- defns.valuesIterator) { go(defn.query) }
             go(useQ)
           case Values(_labels, values) =>
             for {
@@ -349,8 +349,9 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
       stmt match {
         case ct@CombinedTables(_op, left, right) =>
           ct.copy(left = goStmt(left), right = goStmt(right))
-        case cte@CTE(_defLbl, _defAlias, defQ, _matHint, useQ) =>
-          cte.copy(definitionQuery = goStmt(defQ), useQuery = goStmt(useQ))
+        case CTE(defns, useQ) =>
+          val newDefns = defns.withValuesMapped { defn => defn.copy(query = goStmt(defn.query)) }
+          CTE(newDefns, goStmt(useQ))
         case v@Values(_labels, values) =>
           v.copy(values = values.map { row => row.map(goExpr(_)) })
         case Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>

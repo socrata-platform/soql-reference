@@ -18,7 +18,7 @@ class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends 
         // potentially changing the results of the query.
         ct
 
-      case cte@CTE(defLabel, defAlias, defQuery, matHint, useQuery) =>
+      case cte@CTE(defns, useQuery) =>
         // This needs a little more thought when/if CTEs become a real
         // thing, because we'll likely want to preserve unique columns
         // through the definitions.

@@ -29,7 +29,7 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
     // The "same" canonical name can name multiple different queries,
     // because the actual query you get can (theoretically) differ
     // based on who you are.
-    private val queries = new mutable.HashMap[CanonicalName, Vector[CTEStuff]]
+    private val queries = new mutable.LinkedHashMap[CanonicalName, Vector[CTEStuff]]
 
     def retrieveCached(x: CanonicalName, s: Statement): Option[CTEStuff] =
       queries.getOrElse(x, Vector.empty).find(_.defQuery.isIsomorphic(s))
@@ -49,10 +49,11 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
     collectNamedQueries(stmt)
 
     if(NamedQueries.any) {
-      val queries = NamedQueries.things.toVector.sortBy(_.label)
-      queries.foldLeft(rewriteStatement(stmt)) { (stmt, ctestuff) =>
-        CTE(ctestuff.label, None, ctestuff.defQuery, MaterializedHint.Default, stmt)
+      val cteDefs = OrderedMap() ++ NamedQueries.things.map { case CTEStuff(label, defQuery) =>
+        label -> CTE.Definition(None, defQuery, MaterializedHint.Default)
       }
+      val newStmt = rewriteStatement(stmt)
+      CTE(cteDefs, newStmt)
     } else {
       stmt
     }
@@ -100,7 +101,7 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
         throw new Exception("Shouldn't see CTEs at this point")
       case v: Values =>
         v
-      case Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
+      case stmt@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
         val (columnMap, newFrom) = from.reduceMap[ColumnMap, MT](
           rewriteAtomicFrom,
           { (rewrote, jt, lat, left, right, on) =>
@@ -108,14 +109,31 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
             (rewrote ++ rewroteRight, Join(jt, lat, left, newRight, on))
           }
         )
+        val stmtWithPossiblyDanglingColumnRefs = stmt.copy(from = newFrom)
+        if(columnMap.nonEmpty) {
+          rewriteExprs(columnMap, stmtWithPossiblyDanglingColumnRefs)
+        } else { // no dangling column refs
+          stmtWithPossiblyDanglingColumnRefs
+        }
+    }
+
+  private def rewriteExprs(cm: ColumnMap, stmt: Statement): Statement =
+    stmt match {
+      case CombinedTables(op, left, right) =>
+        CombinedTables(op, rewriteExprs(cm, left), rewriteExprs(cm, right))
+      case _ : CTE =>
+        throw new Exception("Shouldn't see CTEs at this point")
+      case Values(labels, values) =>
+        Values(labels, values.map(_.map(rewriteExprs(cm, _))))
+      case stmt@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
         Select(
-          rewriteExpr(columnMap, distinctiveness),
-          rewriteExpr(columnMap, selectList),
-          rewriteExpr(columnMap, newFrom),
-          where.map(rewriteExpr(columnMap, _)),
-          groupBy.map(rewriteExpr(columnMap, _)),
-          having.map(rewriteExpr(columnMap, _)),
-          orderBy.map(rewriteExpr(columnMap, _)),
+          rewriteExprs(cm, distinctiveness),
+          rewriteExprs(cm, selectList),
+          rewriteExprs(cm, from),
+          where.map(rewriteExprs(cm, _)),
+          groupBy.map(rewriteExprs(cm, _)),
+          having.map(rewriteExprs(cm, _)),
+          orderBy.map(rewriteExprs(cm, _)),
           limit,
           offset,
           search,
@@ -123,16 +141,16 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
         )
     }
 
-  private def rewriteExpr(cm: ColumnMap, d: Distinctiveness): Distinctiveness =
+  private def rewriteExprs(cm: ColumnMap, d: Distinctiveness): Distinctiveness =
     d match {
-      case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(rewriteExpr(cm, _)))
+      case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(rewriteExprs(cm, _)))
       case other@(Distinctiveness.Indistinct() | Distinctiveness.FullyDistinct()) => other
     }
 
-  private def rewriteExpr(cm: ColumnMap, selectList: OrderedMap[AutoColumnLabel, NamedExpr]): OrderedMap[AutoColumnLabel, NamedExpr] =
-    OrderedMap() ++ selectList.iterator.map { case (colLabel, namedExpr) => colLabel -> namedExpr.copy(expr = rewriteExpr(cm, namedExpr.expr)) }
+  private def rewriteExprs(cm: ColumnMap, selectList: OrderedMap[AutoColumnLabel, NamedExpr]): OrderedMap[AutoColumnLabel, NamedExpr] =
+    OrderedMap() ++ selectList.iterator.map { case (colLabel, namedExpr) => colLabel -> namedExpr.copy(expr = rewriteExprs(cm, namedExpr.expr)) }
 
-  private def rewriteExpr(cm: ColumnMap, e: Expr): Expr = {
+  private def rewriteExprs(cm: ColumnMap, e: Expr): Expr = {
     e match {
       case vc@VirtualColumn(t, c, typ) =>
         cm.get(t) match {
@@ -142,50 +160,55 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
       case otherAtomic: AtomicExpr =>
         otherAtomic
       case fc@FunctionCall(func, args) =>
-        FunctionCall(func, args.map(rewriteExpr(cm, _)))(fc.position)
+        FunctionCall(func, args.map(rewriteExprs(cm, _)))(fc.position)
       case afc@AggregateFunctionCall(func, args, distinct, filter) =>
-        AggregateFunctionCall(func, args.map(rewriteExpr(cm, _)), distinct, filter.map(rewriteExpr(cm, _)))(afc.position)
+        AggregateFunctionCall(func, args.map(rewriteExprs(cm, _)), distinct, filter.map(rewriteExprs(cm, _)))(afc.position)
       case wfc@WindowedFunctionCall(func, args, filter, partitionBy, orderBy, frame) =>
-        WindowedFunctionCall(func, args.map(rewriteExpr(cm, _)), filter.map(rewriteExpr(cm, _)), partitionBy.map(rewriteExpr(cm, _)), orderBy.map(rewriteExpr(cm, _)), frame)(wfc.position)
+        WindowedFunctionCall(func, args.map(rewriteExprs(cm, _)), filter.map(rewriteExprs(cm, _)), partitionBy.map(rewriteExprs(cm, _)), orderBy.map(rewriteExprs(cm, _)), frame)(wfc.position)
     }
   }
 
-  private def rewriteExpr(cm: ColumnMap, f: From): From = {
-    f.reduceMap[Boolean, MT](
-      { leftmost => (false, leftmost) },
-      { (seenLateral, joinType, lateral, left, right, on) =>
-        val anyLateral = seenLateral || lateral
-        val newRight = if(anyLateral) rewriteAFExpr(cm, right) else right
-        (anyLateral, Join(joinType, lateral, left, newRight, rewriteExpr(cm, on)))
+  private def rewriteExprs(cm: ColumnMap, f: From): From = {
+    f.map[MT](
+      rewriteAFExprs(cm, _),
+      { (joinType, lateral, left, right, on) =>
+        val newRight = rewriteAFExprs(cm, right)
+        Join(joinType, lateral, left, newRight, rewriteExprs(cm, on))
       }
-    )._2
+    )
   }
 
-  private def rewriteExpr(cm: ColumnMap, ob: OrderBy): OrderBy =
-    ob.copy(expr = rewriteExpr(cm, ob.expr))
+  private def rewriteExprs(cm: ColumnMap, ob: OrderBy): OrderBy =
+    ob.copy(expr = rewriteExprs(cm, ob.expr))
 
   // This is annoying, but required to support lateral joins
-  private def rewriteAFExpr(cm: ColumnMap, f: AtomicFrom): AtomicFrom = {
-    ???
+  private def rewriteAFExprs(cm: ColumnMap, f: AtomicFrom): AtomicFrom = {
+    f match {
+      case fs: FromStatement => fs.copy(statement = rewriteExprs(cm, fs.statement))
+      case ft: FromTable => ft
+      case fsr: FromSingleRow => fsr
+      case fc: FromCTE => fc.copy(basedOn = rewriteExprs(cm, fc.basedOn))
+    }
   }
 
   private def rewriteAtomicFrom(f: AtomicFrom): (ColumnMap, AtomicFrom) =
     f match {
-      case orig@FromStatement(stmt, label, Some(rn), Some(cn), alias) => // "Some(rn)" means this is a saved query
-        NamedQueries.retrieveCached(cn, stmt) match {
+      case orig@FromStatement(origStmt, label, Some(rn), Some(cn), alias) => // "Some(rn)" means this is a saved query
+        val rewritten = rewriteStatement(origStmt)
+        NamedQueries.retrieveCached(cn, rewritten) match {
           case Some(ctestuff) if ctestuff.reused =>
             // ctestuff.defQuery is isomorphic to stmt, so we can line
             // up the output columns...
-            assert(stmt.schema.size == ctestuff.defQuery.schema.size)
-            val mappedColumns = stmt.schema.iterator.zip(ctestuff.defQuery.schema.iterator).map {
+            assert(rewritten.schema.size == ctestuff.defQuery.schema.size)
+            val mappedColumns = rewritten.schema.iterator.zip(ctestuff.defQuery.schema.iterator).map {
               case ((myColLabel, mySchemaEntry), (theirColLabel, theirSchemaEntry)) =>
                 assert(mySchemaEntry.typ == theirSchemaEntry.typ)
                 myColLabel -> theirColLabel
             }.toMap
-            (Map(label -> mappedColumns), FromCTE(ctestuff.label, label, stmt, mappedColumns, rn, cn, alias))
+            (Map(label -> mappedColumns), FromCTE(ctestuff.label, label, rewritten, mappedColumns, rn, cn, alias))
           case _ =>
             // can't replace this whole
-            (Map.empty, orig.copy(statement = rewriteStatement(stmt)))
+            (Map.empty, orig.copy(statement = rewriteStatement(rewritten)))
         }
       case other =>
         (Map.empty, other)

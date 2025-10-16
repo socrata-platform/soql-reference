@@ -126,8 +126,13 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
     stmt match {
       case CombinedTables(op, left, right) =>
         CombinedTables(op, rewriteStatement(left, exprReplaces), rewriteStatement(right, exprReplaces))
-      case CTE(defLabel, defAlias, defQuery, matHint, useQuery) =>
-        CTE(defLabel, defAlias, rewriteStatement(defQuery, exprReplaces), matHint, rewriteStatement(useQuery, exprReplaces))
+      case CTE(defs, useQuery) =>
+        CTE(
+          defs.withValuesMapped { defn =>
+            defn.copy(query = rewriteStatement(defn.query, exprReplaces))
+          },
+          rewriteStatement(useQuery, exprReplaces)
+        )
       case v@Values(_, _) =>
         v
       case s: Select =>

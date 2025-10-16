@@ -2,6 +2,7 @@ package com.socrata.soql.analyzer2.rewrite
 
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
+import com.socrata.soql.collection._
 
 class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.AutoTableLabel[MT], Set[types.ColumnLabel[MT]]]) extends StatementUniverse[MT] {
   // myLabel being "None" means "keep all of my output columns,
@@ -17,10 +18,14 @@ class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.
         val (newRight, removedAnythingRight) = rewriteStatement(right, None)
         (CombinedTables(op, newLeft, newRight), removedAnythingLeft || removedAnythingRight)
 
-      case CTE(defLabel, defAlias, defQuery, materializedHint, useQuery) =>
-        val (newDefQuery, removedAnythingDef) = rewriteStatement(defQuery, Some(defLabel))
+      case CTE(defns, useQuery) =>
+        val (newDefnsRev, removedAnythingDef) = defns.iterator.foldLeft((List.empty[(AutoTableLabel, CTE.Definition[MT])], false)) { case ((newDefnsRev, removedAnythingDef), (defLabel, defn)) =>
+          val (newQuery, removed)  = rewriteStatement(defn.query, Some(defLabel))
+          ((defLabel -> defn.copy(query = newQuery)) :: newDefnsRev, removed || removedAnythingDef)
+        }
+        val newDefns = OrderedMap() ++ newDefnsRev.reverse
         val (newUseQuery, removedAnythingUse) = rewriteStatement(useQuery, myLabel)
-        (CTE(defLabel, defAlias, newDefQuery, materializedHint, newUseQuery), removedAnythingDef || removedAnythingUse)
+        (CTE(newDefns, newUseQuery), removedAnythingDef || removedAnythingUse)
 
       case v@Values(_, _) =>
         (v, false)

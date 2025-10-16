@@ -50,7 +50,7 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
           Set.empty
         )
 
-      case cte@CTE(defLabel, defAlias, defQuery, materializedHint, useQuery) =>
+      case cte@CTE(defs, useQuery) =>
         cte.copy(useQuery = rewriteStatement(useQuery))
 
       case v@Values(_, _) =>

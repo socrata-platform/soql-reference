@@ -31,10 +31,12 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
       case c@CombinedTables(_, left, right) =>
         debug("combined tables")
         c.copy(left = doMerge(left), right = doMerge(right))
-      case cte@CTE(_defLabel, _defAlias, defQ, _label, useQ) =>
-        // TODO: maybe make this not a CTE at all, sometimes?
+      case CTE(defns, useQ) =>
         debug("CTE")
-        cte.copy(definitionQuery = doMerge(defQ), useQuery = doMerge(useQ))
+        CTE(
+          defns.withValuesMapped { defn => defn.copy(query = doMerge(defn.query)) },
+          doMerge(useQ)
+        )
       case v: Values =>
         debug("values")
         v
@@ -122,7 +124,11 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
           limit, offset, search, hint)
       case Values(labels, vs) => Values(labels, vs.map(_.map(xform)))
       case CombinedTables(op, left, right) => CombinedTables(op, rewrite(left, xform), rewrite(right, xform))
-      case CTE(defLbl, defAlias, defQ, useLbl, useQ) => CTE(defLbl, defAlias, rewrite(defQ, xform), useLbl, rewrite(useQ, xform))
+      case CTE(defns, useQ) =>
+        CTE(
+          defns.withValuesMapped { defn => defn.copy(query = rewrite(defn.query, xform)) },
+          rewrite(useQ, xform)
+        )
     }
   private def rewrite(d: Distinctiveness, xform: ExprRewriter): Distinctiveness =
     d match {
