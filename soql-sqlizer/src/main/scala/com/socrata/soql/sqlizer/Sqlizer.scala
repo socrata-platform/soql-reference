@@ -7,6 +7,7 @@ import scala.reflect.ClassTag
 import scala.util.control.ControlThrowable
 
 import com.socrata.soql.analyzer2._
+import com.socrata.soql.analyzer2.DocUtils._
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ColumnName, Provenance, Source}
 import com.socrata.prettyprint.prelude._
@@ -140,9 +141,35 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
       case select: Select => sqlizeSelect(select, availableSchemas, dynamicContext, topLevel)
       case values: Values => sqlizeValues(values, availableSchemas, dynamicContext, topLevel)
       case combinedTables: CombinedTables => sqlizeCombinedTables(combinedTables, availableSchemas, dynamicContext, topLevel)
-      case cte: CTE => ???
+      case cte: CTE => sqlizeCte(cte, availableSchemas, dynamicContext, topLevel)
     }
   }
+
+  private def sqlizeCte(
+    cte: CTE,
+    availableSchemas: AvailableSchemas,
+    dynamicContext: DynamicContext,
+    topLevel: Boolean
+  ): (Doc, AugmentedSchema) = {
+    val defDocs = cte.definitions.map { case (label, defn) =>
+      Seq(
+        Some(namespace.tableLabel(label) +#+ d"AS"),
+        sqlizeMaterializedHint(defn.hint),
+        Some(sqlizeStatement(defn.query, availableSchemas, dynamicContext, false)._1.encloseNesting(d"(", d")"))
+      ).flatten.hsep
+    }.toVector.concatWith(_ ++ d"," ++ Doc.lineSep ++ _)
+
+    val (qDoc, augSchema) = sqlizeStatement(cte.useQuery, availableSchemas, dynamicContext, topLevel)
+
+    ((d"WITH" ++ Doc.lineSep ++ defDocs).nest(2) ++ Doc.lineSep ++ qDoc, augSchema)
+  }
+
+  private def sqlizeMaterializedHint(h: MaterializedHint): Option[Doc] =
+    h match {
+      case MaterializedHint.Default => None
+      case MaterializedHint.Materialized => Some(d"MATERIALIZED")
+      case MaterializedHint.NotMaterialized => Some(d"NOT MATERIALIZED")
+    }
 
   private def sqlizeCombinedTables(
     combinedTables: CombinedTables,

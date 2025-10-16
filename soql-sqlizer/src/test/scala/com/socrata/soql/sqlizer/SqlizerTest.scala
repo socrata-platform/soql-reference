@@ -483,4 +483,52 @@ class SqlizerTest extends FunSuite with MustMatchers with TestHelper with Sqlize
     val sqlish = analyze(tf, soql).layoutSingleLine.toString
     sqlish must equal ("""(SELECT x1.a AS i1, x1.b AS i2 FROM table1 AS x1) EXCEPT ALL (SELECT x3.c AS i3, x3.d AS i4 FROM table2 AS x3)""")
   }
+
+  test("CTE") {
+    val tf = tableFinder(
+      (0, "table") -> D(
+        "id" -> TestNumber,
+        "text" -> TestText,
+        "num" -> TestNumber
+      ),
+      (0, "inner_query") -> Q(0, "table", "select id, text"),
+      (0, "outer_query") -> Q(0, "inner_query", "select text as t1, @q.text as t2 join @inner_query as @q on true")
+    )
+
+    val soql = "select @q1.t1, @q2.t2 from @outer_query as @q1 join @outer_query as @q2 on true"
+
+    val sqlish = analyze(tf, soql, Seq(rewrite.Pass.MaterializeNamedQueries)).layoutSingleLine.toString
+
+    sqlish must equal ("""WITH x12 AS (SELECT x1.id AS i1, x1.text AS i2 FROM table AS x1), x13 AS (SELECT x2.i2 AS i5, x4.i2 AS i6 FROM x12 AS x2 JOIN x12 AS x4 ON true) SELECT x5.i5 AS i13, x10.i6 AS i14 FROM x13 AS x5 JOIN x13 AS x10 ON true""")
+  }
+
+  test("CTE - uncompressed column") {
+    val tf = tableFinder(
+      (0, "table") -> D(
+        "compound" -> TestCompound
+      ),
+      (0, "query") -> Q(0, "table", "select compound as c")
+    )
+
+    val soql = "select @q1.c, @q2.c as c2 from @query as @q1 join @query as @q2 on true"
+
+    val sqlish = analyze(tf, soql, Seq(rewrite.Pass.MaterializeNamedQueries)).layoutSingleLine.toString
+
+    sqlish must equal ("""WITH x6 AS (SELECT x1.compound_a AS i1_a, x1.compound_b AS i1_b FROM table AS x1) SELECT x2.i1_a AS i3_a, x2.i1_b AS i3_b, x4.i1_a AS i4_a, x4.i1_b AS i4_b FROM x6 AS x2 JOIN x6 AS x4 ON true""")
+  }
+
+  test("CTE - compressed column") {
+    val tf = tableFinder(
+      (0, "table") -> D(
+        "compound" -> TestCompound
+      ),
+      (0, "query") -> Q(0, "table", "select compress(compound) as c")
+    )
+
+    val soql = "select @q1.c, @q2.c as c2 from @query as @q1 join @query as @q2 on true"
+
+    val sqlish = analyze(tf, soql, Seq(rewrite.Pass.MaterializeNamedQueries)).layoutSingleLine.toString
+
+    sqlish must equal ("""WITH x6 AS (SELECT test_soql_compress_compound(x1.compound_a, x1.compound_b) AS i1 FROM table AS x1) SELECT x2.i1 AS i3, x4.i1 AS i4 FROM x6 AS x2 JOIN x6 AS x4 ON true""")
+  }
 }
