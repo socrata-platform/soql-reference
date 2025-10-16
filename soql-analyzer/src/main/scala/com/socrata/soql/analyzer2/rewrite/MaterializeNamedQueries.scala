@@ -32,6 +32,7 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
     // based on who you are.
     private val queries = new mutable.LinkedHashMap[CanonicalName, Vector[CTEStuff]]
 
+    // We only store UN-REWRITTEN queries in the cache!
     def retrieveCached(x: CanonicalName, s: Statement): Option[CTEStuff] =
       queries.getOrElse(x, Vector.empty).find(_.defQuery.isIsomorphic(s))
 
@@ -51,7 +52,7 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
 
     if(NamedQueries.any) {
       val cteDefs = OrderedMap() ++ NamedQueries.things.map { case CTEStuff(label, defQuery) =>
-        label -> CTE.Definition(None, defQuery, MaterializedHint.Default)
+        label -> CTE.Definition(None, rewriteStatement(defQuery), MaterializedHint.Default)
       }
       val newStmt = rewriteStatement(stmt)
       CTE(cteDefs, newStmt)
@@ -80,6 +81,7 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
   private def collectAtomicFromNamedQueries(f: AtomicFrom): Unit = {
     f match {
       case FromStatement(stmt, _, _, Some(cn), _) =>
+        collectNamedQueries(stmt)
         NamedQueries.retrieveCached(cn, stmt) match {
           case None =>
             NamedQueries.save(cn, CTEStuff(labelProvider.tableLabel(), stmt))
@@ -194,22 +196,21 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
 
   private def rewriteAtomicFrom(f: AtomicFrom): (ColumnMap, AtomicFrom) =
     f match {
-      case orig@FromStatement(origStmt, label, Some(rn), Some(cn), alias) => // "Some(rn)" means this is a saved query
-        val rewritten = rewriteStatement(origStmt)
-        NamedQueries.retrieveCached(cn, rewritten) match {
+      case orig@FromStatement(stmt, label, Some(rn), Some(cn), alias) => // "Some(rn)" means this is a saved query
+        NamedQueries.retrieveCached(cn, stmt) match {
           case Some(ctestuff) if ctestuff.reused =>
             // ctestuff.defQuery is isomorphic to stmt, so we can line
             // up the output columns...
-            assert(rewritten.schema.size == ctestuff.defQuery.schema.size)
-            val mappedColumns = rewritten.schema.iterator.zip(ctestuff.defQuery.schema.iterator).map {
+            assert(stmt.schema.size == ctestuff.defQuery.schema.size)
+            val mappedColumns = stmt.schema.iterator.zip(ctestuff.defQuery.schema.iterator).map {
               case ((myColLabel, mySchemaEntry), (theirColLabel, theirSchemaEntry)) =>
                 assert(mySchemaEntry.typ == theirSchemaEntry.typ)
                 myColLabel -> theirColLabel
             }.toMap
-            (Map(label -> mappedColumns), FromCTE(ctestuff.label, label, rewritten, mappedColumns, rn, cn, alias))
+            (Map(label -> mappedColumns), FromCTE(ctestuff.label, label, rewriteStatement(stmt), mappedColumns, rn, cn, alias))
           case _ =>
             // can't replace this whole
-            (Map.empty, orig.copy(statement = rewriteStatement(rewritten)))
+            (Map.empty, orig.copy(statement = rewriteStatement(stmt)))
         }
       case other =>
         (Map.empty, other)

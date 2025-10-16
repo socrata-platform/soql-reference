@@ -1537,13 +1537,14 @@ select * where first = 'Tom'
         "text" -> TestText,
         "num" -> TestNumber
       ),
-      (0, "query") -> Q(0, "table", "select :id, text")
+      (0, "inner_query") -> Q(0, "table", "select :id, text").withCanonicalName("inner"),
+      (0, "outer_query") -> Q(0, "inner_query", "select text as t1, @q.text as t2 join @inner_query as @q on true").withCanonicalName("outer")
     )
 
-    val analysis = analyze(tf, "select @q1.text as t1, @q2.text as t2 from @query as @q1 join @query as @q2 on true")
+    val analysis = analyze(tf, "select @q1.t1, @q2.t2 from @outer_query as @q1 join @outer_query as @q2 on true")
       .materializeNamedQueries
 
-    println(analysis.statement)
+    //println(analysis.statement)
     println(analysis.statement.debugDoc)
   }
 }
