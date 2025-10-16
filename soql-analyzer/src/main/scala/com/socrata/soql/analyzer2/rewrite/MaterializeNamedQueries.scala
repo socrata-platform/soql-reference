@@ -24,6 +24,14 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
 
   private case class CTEStuff(label: AutoTableLabel, defQuery: Statement) {
     var reused = false
+
+    // This is sort of gnarly flow, but, this works in two passes.
+    // First, we collect all the named queries (in NamedQueries), then
+    // we rewrite them using that same cache.  This lazy val lets us
+    // get the single canonical copy of the CTE statement with
+    // rewrites applied; it's only accessed after we're done
+    // populating NamedQueries.
+    lazy val rewrittenDefQuery = rewriteStatement(defQuery)
   }
 
   private object NamedQueries {
@@ -51,8 +59,8 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
     collectNamedQueries(stmt)
 
     if(NamedQueries.any) {
-      val cteDefs = OrderedMap() ++ NamedQueries.things.map { case CTEStuff(label, defQuery) =>
-        label -> CTE.Definition(None, rewriteStatement(defQuery), MaterializedHint.Default)
+      val cteDefs = OrderedMap() ++ NamedQueries.things.map { case ctestuff =>
+        ctestuff.label -> CTE.Definition(None, ctestuff.rewrittenDefQuery, MaterializedHint.Default)
       }
       val newStmt = rewriteStatement(stmt)
       CTE(cteDefs, newStmt)
@@ -221,9 +229,11 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
             // "someone else's" Statement to define the CTE.
             val columnMap: ColumnMap = if(mappedColumns.isEmpty) Map.empty else Map(label -> mappedColumns)
 
-            (columnMap, FromCTE(ctestuff.label, label, rewriteStatement(stmt), rn, cn, alias))
+            (columnMap, FromCTE(ctestuff.label, label, ctestuff.rewrittenDefQuery, rn, cn, alias))
           case _ =>
-            // can't replace this whole
+            // Not reused, so don't CTEify it.  Instead just
+            // recursively rewrite the query to catch any interior
+            // reuse.
             (Map.empty, orig.copy(statement = rewriteStatement(stmt)))
         }
       case other =>
