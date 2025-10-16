@@ -9,8 +9,10 @@ private[analyzer2] class PhysicalTableMap[MT <: MetaTypes] extends StatementUniv
     stmt match {
       case CombinedTables(_, left, right) =>
         walkStatement(left, walkStatement(right, acc))
-      case CTE(_defLbl, _defAlias, defQ, _matHint, useQ) =>
-        walkStatement(defQ, walkStatement(useQ, acc))
+      case CTE(defns, useQ) =>
+        defns.valuesIterator.foldLeft(walkStatement(useQ, acc)) { (acc, defn) =>
+          walkStatement(defn.query, acc)
+        }
       case Values(_, _) =>
         acc
       case s: Select =>
