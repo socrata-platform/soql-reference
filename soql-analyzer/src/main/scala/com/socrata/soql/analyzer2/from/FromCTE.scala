@@ -105,33 +105,6 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
 }
 
 trait OFromCTEImpl { this: FromCTE.type =>
-  case class ColumnInfo[MT <: MetaTypes](name: ColumnName, typ: types.ColumnType[MT], hint: Option[JValue]) {
-    def asNameEntry = NameEntry(name, typ)
-
-    private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](ev: MetaTypes.ChangesOnlyLabels[MT, MT2]) =
-      ColumnInfo(name, ev.convertCT(typ), hint)
-  }
-
-  object ColumnInfo {
-    implicit def serialize[MT <: MetaTypes](implicit ctWritable: Writable[types.ColumnType[MT]]): Writable[ColumnInfo[MT]] = new Writable[ColumnInfo[MT]] {
-      def writeTo(buffer: WriteBuffer, from: ColumnInfo[MT]): Unit = {
-        buffer.write(from.name)
-        buffer.write(from.typ)
-        buffer.write(from.hint)
-      }
-    }
-
-    implicit def deserialize[MT <: MetaTypes](implicit ctReadable: Readable[types.ColumnType[MT]]): Readable[ColumnInfo[MT]] = new Readable[ColumnInfo[MT]] {
-      def readFrom(buffer: ReadBuffer): ColumnInfo[MT] = {
-        ColumnInfo[MT](
-          name = buffer.read[ColumnName](),
-          typ = buffer.read[types.ColumnType[MT]](),
-          hint = buffer.read[Option[JValue]]()
-        )
-      }
-    }
-  }
-
   implicit def serialize[MT <: MetaTypes](implicit rnsWritable: Writable[MT#ResourceNameScope], ctWritable: Writable[MT#ColumnType], exprWritable: Writable[Expr[MT]], dtnWritable: Writable[MT#DatabaseTableNameImpl], dcnWritable: Writable[MT#DatabaseColumnNameImpl]): Writable[FromCTE[MT]] = new Writable[FromCTE[MT]] {
     def writeTo(buffer: WriteBuffer, from: FromCTE[MT]): Unit = {
       buffer.write(from.cteLabel)
