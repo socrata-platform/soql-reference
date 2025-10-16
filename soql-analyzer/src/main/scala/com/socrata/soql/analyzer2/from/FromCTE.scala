@@ -22,19 +22,12 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
 
   lazy val resourceName = Some(definiteResourceName)
 
-  lazy val schema = statementSchema.iterator.map { case (columnLabel, ent) =>
+  lazy val schema = basedOn.schema.iterator.map { case (columnLabel, ent) =>
     From.SchemaEntry(
       label, columnLabel, ent.typ, ent.hint,
       ent.isSynthetic
     )
   }.toVector
-
-  // The schema of this CTE _as if_ it were still a FromStatment
-  // (i.e., with the CTE's column labels)
-  lazy val statementSchema =
-    OrderedMap() ++ basedOn.schema.iterator.map { case (columnLabel, ent) =>
-      columnMapping(columnLabel) -> ent
-    }
 
   def unique = basedOn.unique.map(_.map { cn => VirtualColumn[MT](label, cn, basedOn.schema(cn).typ)(AtomicPositionInfo.Synthetic) })
 
@@ -42,7 +35,7 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = Map.empty
 
   private[analyzer2] override final val scope: Scope[MT] =
-    new Scope.Virtual[MT](label, statementSchema.withValuesMapped(_.asNameEntry))
+    new Scope.Virtual[MT](label, basedOn.schema.withValuesMapped(_.asNameEntry))
 
   private[analyzer2] def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
     (cteLabel.debugDoc ++ Doc.softlineSep ++ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias,label))).annotate(Annotation.TableAliasDefinition[MT](alias, label))
@@ -57,8 +50,7 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
     copy(
       basedOn = basedOn.doRelabel(state),
       cteLabel = state.convert(cteLabel),
-      label = state.convert(label),
-      columnMapping = columnMapping.iterator.map { case (a, b) => state.convert(a) -> state.convert(b) }.toMap
+      label = state.convert(label)
     )
   }
 
@@ -68,7 +60,7 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
     recurseStmt: (Statement[MT], IsomorphismState, Option[AutoTableLabel], Option[AutoTableLabel], Statement[MT]) => Boolean
   ): Boolean =
     that match {
-      case FromCTE(thatCteLabel, thatLabel, thatBasedOn, thatColumnMapping, thatResourceName, thatCanonicalName, thatAlias) =>
+      case FromCTE(thatCteLabel, thatLabel, thatBasedOn, thatResourceName, thatCanonicalName, thatAlias) =>
         state.tryAssociate(this.cteLabel, thatCteLabel) &&
           state.tryAssociate(this.label, thatLabel) &&
           // I think this is necessary, because sometimes -
@@ -76,9 +68,6 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
           // context where we won't "see" CTEs, so we need to use the
           // based-on to determine that we're referring to the same
           // CTE.
-          // Actually, is this correct, or should this repaint the
-          // "basedOn" Statements so their output column labels line
-          // up with the froms'?
           recurseStmt(this.basedOn, state, Some(this.label), Some(thatLabel), thatBasedOn)
       case _ =>
         false
@@ -86,12 +75,9 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
 
   private[analyzer2] final def findVerticalSlice(state: IsomorphismState, that: From[MT]): Boolean =
     that match {
-      case FromCTE(thatCteLabel, thatLabel, thatBasedOn, thatColumnMapping, thatResourceName, thatCanonicalName, thatAlias) =>
+      case FromCTE(thatCteLabel, thatLabel, thatBasedOn, thatResourceName, thatCanonicalName, thatAlias) =>
         state.tryAssociate(this.label, thatLabel) &&
           state.tryAssociate(this.cteLabel, thatCteLabel) &&
-          // Actually, is this correct, or should this repaint the
-          // "basedOn" Statements so their output column labels line
-          // up with the froms'?
           this.basedOn.findVerticalSlice(state, Some(this.label), Some(thatLabel), thatBasedOn)
       case _ =>
         false
@@ -111,7 +97,7 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
     val tr = LabelMap.TableReference(resourceName, alias)
     state.tableMap += label -> tr
     for((columnLabel, Statement.SchemaEntry(columnName, _typ, _isSynthetic, _hint)) <- basedOn.schema) {
-      state.columnMap += (label, columnMapping(columnLabel)) -> (tr, columnName)
+      state.columnMap += (label, columnLabel) -> (tr, columnName)
     }
   }
 
@@ -124,7 +110,6 @@ trait OFromCTEImpl { this: FromCTE.type =>
       buffer.write(from.cteLabel)
       buffer.write(from.label)
       buffer.write(from.basedOn)
-      buffer.write(from.columnMapping)
       buffer.write(from.definiteResourceName)
       buffer.write(from.canonicalName)
       buffer.write(from.alias)
@@ -137,7 +122,6 @@ trait OFromCTEImpl { this: FromCTE.type =>
         cteLabel = buffer.read[AutoTableLabel](),
         label = buffer.read[AutoTableLabel](),
         basedOn = buffer.read[Statement[MT]](),
-        columnMapping = buffer.read[Map[AutoColumnLabel, AutoColumnLabel]](),
         definiteResourceName = buffer.read[ScopedResourceName](),
         canonicalName = buffer.read[CanonicalName](),
         alias = buffer.read[Option[ResourceName]]()

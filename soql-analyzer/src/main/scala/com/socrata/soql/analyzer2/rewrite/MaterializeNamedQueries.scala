@@ -212,7 +212,7 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
                 assert(mySchemaEntry.typ == theirSchemaEntry.typ)
                 myColLabel -> theirColLabel
             }.toMap
-            (Map(label -> mappedColumns), FromCTE(ctestuff.label, label, rewriteStatement(stmt), mappedColumns, rn, cn, alias))
+            (Map(label -> mappedColumns), FromCTE(ctestuff.label, label, rewriteStatement(stmt), rn, cn, alias))
           case _ =>
             // can't replace this whole
             (Map.empty, orig.copy(statement = rewriteStatement(stmt)))

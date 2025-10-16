@@ -221,7 +221,6 @@ case class FromCTE[MT <: MetaTypes](
   cteLabel: AutoTableLabel,
   label: AutoTableLabel,
   basedOn: Statement[MT],
-  columnMapping: Map[AutoColumnLabel, AutoColumnLabel], // key is basedOn's column labels, value is the CTE's
   definiteResourceName: types.ScopedResourceName[MT],
   canonicalName: CanonicalName,
   alias: Option[ResourceName]

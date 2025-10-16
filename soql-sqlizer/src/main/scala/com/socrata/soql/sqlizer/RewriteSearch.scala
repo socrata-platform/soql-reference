@@ -101,7 +101,7 @@ abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
             if(isSynthetic) {
               Nil
             } else {
-              fieldExtract(VirtualColumn[MT](fc.label, fc.columnMapping(acl), typ)(AtomicPositionInfo.Synthetic))
+              fieldExtract(VirtualColumn[MT](fc.label, acl, typ)(AtomicPositionInfo.Synthetic))
             }
           }
       }

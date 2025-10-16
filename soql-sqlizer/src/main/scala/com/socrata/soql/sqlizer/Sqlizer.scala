@@ -621,14 +621,14 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
         case FromSingleRow(_label, _alias) =>
           (d"(SELECT)", OrderedMap.empty)
 
-        case FromCTE(cteLabel, label, basedOn, columnMapping, _rn, _cn, _alias) =>
+        case FromCTE(cteLabel, label, basedOn, _rn, _cn, _alias) =>
           // This is kind of icky since we're just throwing away the
           // generated sql, but we need the true schema.
           val (_sql, schema) = sqlizeStatement(basedOn, availableSchemas, dynamicContext, topLevel = false)
 
           (
             namespace.tableLabel(cteLabel),
-            OrderedMap() ++ schema.iterator.map { case (colLabel, se) => columnMapping(colLabel.asInstanceOf[AutoColumnLabel] /* ick */) -> se }
+            OrderedMap() ++ schema.iterator
           )
       }
 
