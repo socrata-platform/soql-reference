@@ -628,7 +628,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
 
           (
             namespace.tableLabel(cteLabel),
-            OrderedMap() ++ schema.iterator
+            schema
           )
       }
 
