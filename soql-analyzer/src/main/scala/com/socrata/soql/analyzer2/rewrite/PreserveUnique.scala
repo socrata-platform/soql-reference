@@ -9,7 +9,9 @@ import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.functions.MonomorphicFunction
 
 class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends StatementUniverse[MT] {
-  def rewriteStatement(stmt: Statement, wantColumns: Boolean): Statement = {
+  type ACTEs = AvailableCTEs[MT, Unit]
+
+  def rewriteStatement(availableCTEs: ACTEs, stmt: Statement, wantColumns: Boolean): Statement = {
     stmt match {
       case ct@CombinedTables(op, left, right) =>
         // combined tables cannot guarantee unique columns exist.
@@ -19,14 +21,13 @@ class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends 
         ct
 
       case cte@CTE(defns, useQuery) =>
-        // This needs a little more thought when/if CTEs become a real
-        // thing, because we'll likely want to preserve unique columns
-        // through the definitions.
-        val newUseQuery = rewriteStatement(useQuery, wantColumns)
+        val (newAvailableCTEs, newDefinitions) = availableCTEs.collect(defns) { (aCTEs, query) =>
+          ((), rewriteStatement(aCTEs, query, true))
+        }
 
-        cte.copy(
-          useQuery = newUseQuery
-        )
+        val newUseQuery = rewriteStatement(newAvailableCTEs, useQuery, wantColumns)
+
+        CTE(newDefinitions, newUseQuery)
 
       case v@Values(_, _) =>
         // valueses don't have unique columns
@@ -50,8 +51,8 @@ class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends 
           // if we're un-aggregated, otherwise pull up un-selected
           // columns from our GROUP BY clause
           val newFrom =
-            if(select.isAggregated) from
-            else rewriteFrom(from)
+            if(select.isAggregated) availableCTEs.rebaseAll(from) // not touching the rest but need to rebase CTEs anyway
+            else rewriteFrom(availableCTEs, from)
 
           if(wantColumns) {
             var existingExprs = selectList.valuesIterator.map(_.expr).to(Set)
@@ -77,20 +78,20 @@ class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends 
     }
   }
 
-  def rewriteFrom(from: From): From = {
+  def rewriteFrom(availableCTEs: ACTEs, from: From): From = {
     from.map[MT](
-      rewriteAtomicFrom,
-      { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, rewriteAtomicFrom(right), on) }
+      rewriteAtomicFrom(availableCTEs, _),
+      { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, rewriteAtomicFrom(availableCTEs, right), on) }
     )
   }
 
-  def rewriteAtomicFrom(from: AtomicFrom): AtomicFrom = {
+  def rewriteAtomicFrom(availableCTEs: ACTEs, from: AtomicFrom): AtomicFrom = {
     from match {
       case ft: FromTable => ft
       case fs: FromSingleRow => fs
-      case fc: FromCTE => fc
+      case fc: FromCTE => availableCTEs.rebase(fc)
       case fs@FromStatement(stmt, label, resourceName, canonicalName, alias) =>
-        val newStmt = rewriteStatement(stmt, true)
+        val newStmt = rewriteStatement(availableCTEs, stmt, true)
         fs.copy(statement = newStmt)
     }
   }
@@ -100,6 +101,6 @@ class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends 
   * SelectListReferences must not be present (this is unchecked!!). */
 object PreserveUnique {
   def apply[MT <: MetaTypes](labelProvider: LabelProvider, stmt: Statement[MT]): Statement[MT] = {
-    new PreserveUnique[MT](labelProvider).rewriteStatement(stmt, false)
+    new PreserveUnique[MT](labelProvider).rewriteStatement(AvailableCTEs.empty, stmt, false)
   }
 }

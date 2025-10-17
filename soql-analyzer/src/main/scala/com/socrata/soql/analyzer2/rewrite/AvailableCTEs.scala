@@ -22,6 +22,12 @@ case class AvailableCTEs[MT <: MetaTypes, T](
   def rebase(fc: FromCTE[MT]) =
     fc.copy(basedOn = ctes(fc.cteLabel).stmt)
 
+  def rebaseAll(f: From[MT]): From[MT] =
+    new AvailableCTEs.Rebaser[MT, T](ctes).rebaseAll(f)
+
+  def rebaseAll(s: Statement[MT]): Statement[MT] =
+    new AvailableCTEs.Rebaser[MT, T](ctes).rebaseAll(s)
+
   def collect(
     defns: OrderedMap[AutoTableLabel, CTE.Definition[MT]]
   )(
@@ -47,4 +53,39 @@ case class AvailableCTEs[MT <: MetaTypes, T](
 }
 object AvailableCTEs {
   def empty[MT <: MetaTypes, T] = AvailableCTEs[MT, T](Map.empty)
+
+  private class Rebaser[MT <: MetaTypes, +T](ctes: Map[AutoTableLabel, AvailableCTE[MT, T]]) {
+    private def justTheStatements = ctes.iterator.map { case (k, v) => k -> v.stmt }.toMap
+
+    def rebaseAll(f: From[MT]): From[MT] =
+      rebaseAll(justTheStatements, f)
+
+    private def rebaseAll(ctes: Map[AutoTableLabel, Statement[MT]], f: From[MT]): From[MT] = {
+      f match {
+        case fs: FromStatement[MT] => fs.copy(statement = rebaseAll(ctes, fs.statement))
+        case other => other
+      }
+    }
+
+    def rebaseAll(s: Statement[MT]): Statement[MT] =
+      rebaseAll(justTheStatements, s)
+
+    private def rebaseAll(ctes: Map[AutoTableLabel, Statement[MT]], s: Statement[MT]): Statement[MT] = {
+      s match {
+        case CombinedTables(op, left, right) =>
+          CombinedTables(op, rebaseAll(ctes, left), rebaseAll(ctes, right))
+        case v: Values[MT] =>
+          v
+        case CTE(defns, useQuery) =>
+          val (newCTEs, newDefns) = defns.iterator.foldLeft((ctes, OrderedMap.empty[AutoTableLabel, CTE.Definition[MT]])) { case ((ctes, newDefns), (label, defn)) =>
+            val newStmt = rebaseAll(ctes, defn.query)
+            (ctes + (label -> newStmt), newDefns + (label -> defn.copy(query = newStmt)))
+          }
+          val newUseQuery = rebaseAll(newCTEs, useQuery)
+          CTE(newDefns, newUseQuery)
+        case sel: Select[MT] =>
+          sel.copy(from = rebaseAll(ctes, sel.from))
+      }
+    }
+  }
 }
