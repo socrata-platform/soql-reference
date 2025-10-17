@@ -17,6 +17,8 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
   type Self[MT <: MetaTypes] = FromCTE[MT]
   def asSelf = this
 
+  def referencedCTEs = Set(cteLabel)
+
   def find(predicate: Expr[MT] => Boolean) = None
   def contains(e: Expr[MT]): Boolean = false
 

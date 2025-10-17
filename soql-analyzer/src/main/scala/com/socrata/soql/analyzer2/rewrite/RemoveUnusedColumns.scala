@@ -1,5 +1,7 @@
 package com.socrata.soql.analyzer2.rewrite
 
+import scala.annotation.tailrec
+
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection._
@@ -86,13 +88,14 @@ class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.
 /** Remove columns that are not useful from inner selects.
   * SelectListReferences must not be present (this is unchecked!!). */
 object RemoveUnusedColumns {
+  @tailrec
   def apply[MT <: MetaTypes](stmt: Statement[MT]): Statement[MT] = {
     val (newStmt, removedAnything) =
       new RemoveUnusedColumns[MT](stmt.columnReferences).rewriteStatement(AvailableCTEs.empty, stmt, None)
     if(removedAnything) {
       this(newStmt)
     } else {
-      newStmt
+      MaterializeNamedQueries.validate(newStmt)
     }
   }
 }

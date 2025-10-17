@@ -31,6 +31,8 @@ sealed abstract class From[MT <: MetaTypes] extends LabelUniverse[MT] {
   // into a corner?
   def unique: LazyList[Seq[Column[MT]]]
 
+  def referencedCTEs: Set[AutoTableLabel]
+
   def schema: Seq[From.SchemaEntry[MT]]
   lazy val schemaByTableColumn: Map[(AutoTableLabel, ColumnLabel), From.SchemaEntry[MT]] = locally {
     def atomicFromSchema(af: AtomicFrom[MT]) =
@@ -217,6 +219,12 @@ case class FromTable[MT <: MetaTypes](
 ) extends AtomicFrom[MT] with from.FromTableImpl[MT]
 object FromTable extends from.OFromTableImpl
 
+// This has a rather unfortunate non-local semi-requirement that
+// rewrite passes MUST uphold: the `basedOn` will be `eq` to a query
+// that is defined in some parent CTE statement node.  This isn't a
+// _hard_ requirement as long as they're equal, but rewrite passes in
+// particular MUST uphold it.  It can be checked with
+// MaterializeNamedQueries.validate
 case class FromCTE[MT <: MetaTypes](
   cteLabel: AutoTableLabel,
   label: AutoTableLabel,

@@ -19,6 +19,8 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
 
   val schema = left.schema
 
+  lazy val referencedCTEs = left.referencedCTEs ++ right.referencedCTEs
+
   def unique =
     op match {
       case TableFunc.Union | TableFunc.UnionAll =>

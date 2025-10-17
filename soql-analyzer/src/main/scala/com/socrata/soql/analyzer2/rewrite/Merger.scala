@@ -25,7 +25,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
     val r = doMerge(AvailableCTEs.empty, stmt)
     debug("finished", r)
     debugDone()
-    r
+    MaterializeNamedQueries.validate(r)
   }
 
   private def doMerge(availableCTEs: ACTEs, stmt: Statement): Statement =

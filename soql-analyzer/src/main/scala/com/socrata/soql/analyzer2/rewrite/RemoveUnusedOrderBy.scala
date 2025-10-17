@@ -179,6 +179,8 @@ class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[
   * SelectListReferences must not be present (this is unchecked!!). */
 object RemoveUnusedOrderBy {
   def apply[MT <: MetaTypes](stmt: Statement[MT], preserveTopLevelOrdering: Boolean = true): Statement[MT] = {
-    new RemoveUnusedOrderBy[MT]().rewriteStatement(AvailableCTEs.empty, stmt, preserveTopLevelOrdering)
+    MaterializeNamedQueries.validate(
+      new RemoveUnusedOrderBy[MT]().rewriteStatement(AvailableCTEs.empty, stmt, preserveTopLevelOrdering)
+    )
   }
 }

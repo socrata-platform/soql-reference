@@ -17,6 +17,8 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
   type Self[MT <: MetaTypes] = FromStatement[MT]
   def asSelf = this
 
+  lazy val referencedCTEs = statement.referencedCTEs
+
   def schema = statement.schema.map { case (acl, Statement.SchemaEntry(_, typ, hint, isSynthetic)) =>
     From.SchemaEntry(label, acl, typ, hint, isSynthetic = isSynthetic)
   }.toVector

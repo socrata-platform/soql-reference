@@ -18,6 +18,10 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
   type Self[MT <: MetaTypes] = CTE[MT]
   def asSelf = this
 
+  lazy val referencedCTEs = definitions.valuesIterator.foldLeft(useQuery.referencedCTEs) { (acc, defn) =>
+    acc ++ defn.query.referencedCTEs
+  } -- definitions.keysIterator
+
   val schema = useQuery.schema
 
   def unique = useQuery.unique

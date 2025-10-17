@@ -11,6 +11,8 @@ import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer}
 import mocktablefinder._
 
 class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
+  rewrite.MaterializeNamedQueries.validationActive = true
+
   val rowNumber = TestFunctions.RowNumber.monomorphic.get
   val windowFunction = TestFunctions.WindowFunction.monomorphic.get
   val and = TestFunctions.And.monomorphic.get

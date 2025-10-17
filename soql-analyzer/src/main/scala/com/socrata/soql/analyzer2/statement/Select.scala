@@ -19,6 +19,8 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
   type Self[MT <: MetaTypes] = Select[MT]
   def asSelf = this
 
+  def referencedCTEs = from.referencedCTEs
+
   private[analyzer2] def columnReferences: Map[AutoTableLabel, Set[ColumnLabel]] = {
     var refs = distinctiveness.columnReferences
     for(e <- selectList.values) {

@@ -18,6 +18,8 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
 
   def unique = if(values.tail.isEmpty) LazyList(Nil) else LazyList.empty
 
+  def referencedCTEs = Set.empty[AutoTableLabel]
+
   val schema: OrderedMap[AutoColumnLabel, Statement.SchemaEntry[MT]] =
     OrderedMap() ++ values.head.iterator.zip(labels.iterator).zipWithIndex.map { case ((expr, label), idx) =>
       label -> Statement.SchemaEntry(ColumnName(s"column_${idx+1}"), expr.typ, hint = None, isSynthetic = false)

@@ -27,6 +27,8 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
   // information to produce a full Column.
   def unique: LazyList[Seq[AutoColumnLabel]]
 
+  def referencedCTEs: Set[AutoTableLabel]
+
   final def allTables: Set[DatabaseTableName] = doAllTables(Set.empty)
   private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName]
 
@@ -189,6 +191,10 @@ case class CombinedTables[MT <: MetaTypes](
 }
 object CombinedTables extends statement.OCombinedTablesImpl
 
+// This has a rather unfortunate non-local semi-requirement that
+// rewrite passes MUST uphold: the `basedOn` of any FromCTE node
+// inside this CTE which references a statement listed in
+// `definitions` will be `eq` to that definition's query.
 case class CTE[MT <: MetaTypes](
   definitions: OrderedMap[AutoTableLabel, CTE.Definition[MT]],
   useQuery: Statement[MT]

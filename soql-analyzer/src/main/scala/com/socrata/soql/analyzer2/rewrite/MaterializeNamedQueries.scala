@@ -203,7 +203,7 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
       case fs: FromStatement => fs.copy(statement = rewriteExprs(cm, fs.statement))
       case ft: FromTable => ft
       case fsr: FromSingleRow => fsr
-      case fc: FromCTE => fc.copy(basedOn = rewriteExprs(cm, fc.basedOn))
+      case fc: FromCTE => fc // don't need to rewrite anything because we won't have created it if it had references that needed rewriting
     }
   }
 
@@ -242,7 +242,51 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
 }
 
 object MaterializeNamedQueries {
+  @volatile var validationActive = false
+
   def apply[MT <: MetaTypes](labelProvider: LabelProvider, statement: Statement[MT]): Statement[MT] = {
-    new MaterializeNamedQueries[MT](labelProvider).rewriteTopLevelStatement(statement)
+    validate(new MaterializeNamedQueries[MT](labelProvider).rewriteTopLevelStatement(statement))
+  }
+
+  def validate[MT <: MetaTypes](s: Statement[MT]): Statement[MT] = {
+    if(validationActive) {
+      assert(s.referencedCTEs.isEmpty)
+      new MaterializeNamedQueriesValidator[MT].validate(AvailableCTEs.empty, s)
+    }
+    s
+  }
+
+  private class MaterializeNamedQueriesValidator[MT <: MetaTypes] extends StatementUniverse[MT] {
+    type ACTEs = AvailableCTEs[MT, Unit]
+
+    def validate(availableCTEs: ACTEs, s: Statement): Unit = s match {
+      case CombinedTables(_op, left, right) =>
+        validate(availableCTEs, left)
+        validate(availableCTEs, right)
+      case _ : Values =>
+        // ok
+      case CTE(defns, useQuery) =>
+        val (newAvailableCTEs, newDefns) = availableCTEs.collect(defns) { (aCTEs, query) =>
+          validate(aCTEs, query)
+
+          ((), query)
+        }
+        validate(newAvailableCTEs, useQuery)
+      case sel: Select =>
+        validate(availableCTEs, sel.from)
+    }
+
+    def validate(availableCTEs: ACTEs, f: From): Unit =
+      f.reduce[Unit](
+        validateAtomic(availableCTEs, _),
+        { case ((), j) => validateAtomic(availableCTEs, j.right) }
+      )
+
+    def validateAtomic(availableCTEs: ACTEs, f: AtomicFrom): Unit =
+      f match {
+        case fc: FromCTE => assert(fc.basedOn eq availableCTEs.ctes(fc.cteLabel).stmt)
+        case fs: FromStatement => validate(availableCTEs, fs.statement)
+        case _ => // ok
+      }
   }
 }
