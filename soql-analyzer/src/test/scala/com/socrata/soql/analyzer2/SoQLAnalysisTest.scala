@@ -1621,8 +1621,6 @@ select * where first = 'Tom'
     //                     outer_query
     //                          ↓
     //                     inner_query
-    //
-    // and that inner_query is first in the list of CTEs
 
     val CTE(defs, useQuery) = analysis.statement match {
       case cte: CTE[TestMT] => cte
