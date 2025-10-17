@@ -1530,7 +1530,7 @@ select * where first = 'Tom'
     analysis.removeSystemColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("materialize named queries") {
+  test("materialize nested genuinely multiply-used named queries") {
     val tf = tableFinder(
       (0, "table") -> D(
         ":id" -> TestNumber,
@@ -1544,7 +1544,120 @@ select * where first = 'Tom'
     val analysis = analyze(tf, "select @q1.t1, @q2.t2 from @outer_query as @q1 join @outer_query as @q2 on true")
       .materializeNamedQueries
 
-    //println(analysis.statement)
-    println(analysis.statement.debugDoc)
+    // There is no source form for CTEs (yet) so we'll have to
+    // destructure it rather than just saying "it should be isomorphic
+    // to this un-rewritten query".
+
+    // What we're checking is that the query tree has been turned into a DAG:
+    //
+    //                    ad-hoc query
+    //                       ↘     ↙
+    //                     outer_query
+    //                       ↘     ↙
+    //                     inner_query
+    //
+    // and that inner_query is first in the list of CTEs
+
+    val CTE(defs, useQuery) = analysis.statement match {
+      case cte: CTE[TestMT] => cte
+      case _ => fail("Should have produced a top-level CTE node")
+    }
+
+    defs.size must equal (2)
+
+    val useSelect = useQuery match {
+      case sel: Select[TestMT] => sel
+      case _ => fail("The use query should have been a plain SELECT")
+    }
+
+    val (useLeft, useRight) = useSelect.from match {
+      case Join(_, _, left: FromCTE[TestMT], right: FromCTE[TestMT], _) => (left, right)
+      case _ => fail("The use query's FROM should have been a join between two CTE references")
+    }
+
+    useLeft.canonicalName must be (CanonicalName("outer"))
+    useRight.canonicalName must be (CanonicalName("outer"))
+
+    useRight.cteLabel must equal (useLeft.cteLabel)
+    defs.keysIterator.indexOf(useLeft.cteLabel) must equal (1)
+
+    val outerCTE = defs(useRight.cteLabel)
+    val outerSelect = outerCTE.query match {
+      case sel: Select[TestMT] => sel
+      case _ => fail("The outer cte query should have been a plain SELECT")
+    }
+
+    val (outerLeft, outerRight) = outerSelect.from match {
+      case Join(_, _, left: FromCTE[TestMT], right: FromCTE[TestMT], _) => (left, right)
+      case _ => fail("The outer cte query's FROM should have been a join between two CTE references")
+    }
+
+    outerLeft.canonicalName must be (CanonicalName("inner"))
+    outerRight.canonicalName must be (CanonicalName("inner"))
+
+    outerRight.cteLabel must equal (outerLeft.cteLabel)
+    defs.keysIterator.indexOf(outerLeft.cteLabel) must equal (0)
+  }
+
+  test("materialize avoid false sharing of named queries inside materialized queries") {
+    val tf = tableFinder(
+      (0, "table") -> D(
+        ":id" -> TestNumber,
+        "text" -> TestText,
+        "num" -> TestNumber
+      ),
+      (0, "inner_query") -> Q(0, "table", "select :id, text").withCanonicalName("inner"),
+      (0, "outer_query") -> Q(0, "inner_query", "select text as t1").withCanonicalName("outer")
+    )
+
+    val analysis = analyze(tf, "select @q1.t1, @q2.t1 as t2 from @outer_query as @q1 join @outer_query as @q2 on true")
+      .materializeNamedQueries
+
+    // What we're checking is that the query tree has been turned into
+    // a DAG, and that the inner query is _not_ CTEified:
+    //
+    //                    ad-hoc query
+    //                       ↘     ↙
+    //                     outer_query
+    //                          ↓
+    //                     inner_query
+    //
+    // and that inner_query is first in the list of CTEs
+
+    val CTE(defs, useQuery) = analysis.statement match {
+      case cte: CTE[TestMT] => cte
+      case _ => fail("Should have produced a top-level CTE node")
+    }
+
+    defs.size must equal (1)
+
+    val useSelect = useQuery match {
+      case sel: Select[TestMT] => sel
+      case _ => fail("The use query should have been a plain SELECT")
+    }
+
+    val (useLeft, useRight) = useSelect.from match {
+      case Join(_, _, left: FromCTE[TestMT], right: FromCTE[TestMT], _) => (left, right)
+      case _ => fail("The use query's FROM should have been a join between two CTE references")
+    }
+
+    useLeft.canonicalName must be (CanonicalName("outer"))
+    useRight.canonicalName must be (CanonicalName("outer"))
+
+    useRight.cteLabel must equal (useLeft.cteLabel)
+    defs.keysIterator.indexOf(useLeft.cteLabel) must equal (0)
+
+    val outerCTE = defs(useRight.cteLabel)
+    val outerSelect = outerCTE.query match {
+      case sel: Select[TestMT] => sel
+      case _ => fail("The outer cte query should have been a plain SELECT")
+    }
+
+    val outerStmt = outerSelect.from match {
+      case outerStmt: FromStatement[TestMT] => outerStmt
+      case _ => fail("The outer cte query's FROM should have been a simple Statement")
+    }
+
+    outerStmt.canonicalName must be (Some(CanonicalName("inner")))
   }
 }

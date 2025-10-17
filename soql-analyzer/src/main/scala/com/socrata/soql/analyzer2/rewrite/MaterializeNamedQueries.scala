@@ -94,9 +94,9 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
         // query, so keep collecting them
         collectNamedQueries(stmt)
       case FromStatement(stmt, _, _, Some(cn), _) =>
-        collectNamedQueries(stmt)
         NamedQueries.retrieveCached(cn, stmt) match {
           case None =>
+            collectNamedQueries(stmt)
             NamedQueries.save(cn, CTEStuff(labelProvider.tableLabel(), stmt))
           case Some(ctestuff) =>
             ctestuff.reused = true
