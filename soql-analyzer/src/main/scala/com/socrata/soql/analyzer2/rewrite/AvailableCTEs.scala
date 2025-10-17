@@ -61,7 +61,8 @@ object AvailableCTEs {
     private val justTheStatements = ctes.iterator.map { case (k, v) => k -> v.stmt }.toMap
 
     def rebaseAll(f: From[MT]): From[MT] =
-      rebaseAll(justTheStatements, f)
+      if(justTheStatements.isEmpty) f
+      else rebaseAll(justTheStatements, f)
 
     private def rebaseAll(ctes: Map[AutoTableLabel, Statement[MT]], f: From[MT]): From[MT] =
       f.map[MT](
@@ -70,7 +71,8 @@ object AvailableCTEs {
       )
 
     def rebaseAllAtomic(f: AtomicFrom[MT]): AtomicFrom[MT] =
-      rebaseAllAtomic(justTheStatements, f)
+      if(justTheStatements.isEmpty) f
+      else rebaseAllAtomic(justTheStatements, f)
 
     private def rebaseAllAtomic(ctes: Map[AutoTableLabel, Statement[MT]], f: AtomicFrom[MT]): AtomicFrom[MT] = {
       f match {
@@ -81,7 +83,8 @@ object AvailableCTEs {
     }
 
     def rebaseAll(s: Statement[MT]): Statement[MT] =
-      rebaseAll(justTheStatements, s)
+      if(justTheStatements.isEmpty) s
+      else rebaseAll(justTheStatements, s)
 
     private def rebaseAll(ctes: Map[AutoTableLabel, Statement[MT]], s: Statement[MT]): Statement[MT] = {
       s match {
