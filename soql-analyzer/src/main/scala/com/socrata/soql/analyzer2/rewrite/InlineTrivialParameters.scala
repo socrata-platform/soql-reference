@@ -28,6 +28,8 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
   // hopefully go back the other way, someday, which is why this
   // understand both.
 
+  type ACTEs = AvailableCTEs[MT, Unit]
+
   type ExprReplaces = Map[(AutoTableLabel, AutoColumnLabel), Expr]
 
   private def matchingSelects(outerSelectList: OrderedMap[AutoColumnLabel, NamedExpr], innerSelectList: OrderedMap[AutoColumnLabel, Statement.SchemaEntry[MT]], innerLabel: AutoTableLabel): Boolean = {
@@ -122,25 +124,23 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
       case _ => false
     }
 
-  def rewriteStatement(stmt: Statement, exprReplaces: ExprReplaces): Statement = {
+  def rewriteStatement(availableCTEs: ACTEs, stmt: Statement, exprReplaces: ExprReplaces): Statement = {
     stmt match {
       case CombinedTables(op, left, right) =>
-        CombinedTables(op, rewriteStatement(left, exprReplaces), rewriteStatement(right, exprReplaces))
+        CombinedTables(op, rewriteStatement(availableCTEs, left, exprReplaces), rewriteStatement(availableCTEs, right, exprReplaces))
       case CTE(defs, useQuery) =>
-        CTE(
-          defs.withValuesMapped { defn =>
-            defn.copy(query = rewriteStatement(defn.query, exprReplaces))
-          },
-          rewriteStatement(useQuery, exprReplaces)
-        )
+        val (newAvailableCTEs, newDefs) = availableCTEs.collect(defs) { (aCTEs, query) =>
+          ((), rewriteStatement(aCTEs, query, exprReplaces))
+        }
+        rewriteStatement(newAvailableCTEs, useQuery, exprReplaces)
       case v@Values(_, _) =>
         v
       case s: Select =>
-        rewriteSelect(s, exprReplaces)
+        rewriteSelect(availableCTEs, s, exprReplaces)
     }
   }
 
-  def rewriteSelect(select: Select, exprReplaces: ExprReplaces): Statement = {
+  def rewriteSelect(availableCTEs: ACTEs, select: Select, exprReplaces: ExprReplaces): Statement = {
     select match {
       case Candidate(c) =>
         // Ok, it's shaped right for this optimization.
@@ -165,7 +165,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
         }
 
         // ..and use that to rewrite the subselect.
-        val newSubselect = rewriteStatement(subselect, newExprReplaces)
+        val newSubselect = rewriteStatement(availableCTEs, subselect, newExprReplaces)
         assert(newSubselect.schema.size == selectList.size)
 
         // We'll only be keeping columns in the `values` form which
@@ -246,7 +246,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
         Select(
           rewriteDistinctiveness(distinctiveness, exprReplaces),
           selectList.withValuesMapped { ne => ne.copy(expr = rewriteExpr(ne.expr, exprReplaces)) },
-          rewriteFrom(from, exprReplaces),
+          rewriteFrom(availableCTEs, from, exprReplaces),
           where.map(rewriteExpr(_, exprReplaces)),
           groupBy.map(rewriteExpr(_, exprReplaces)),
           having.map(rewriteExpr(_, exprReplaces)),
@@ -278,20 +278,20 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
       case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(rewriteExpr(_, exprReplaces)))
     }
 
-  def rewriteFrom(from: From, exprReplaces: ExprReplaces): From =
+  def rewriteFrom(availableCTEs: ACTEs, from: From, exprReplaces: ExprReplaces): From =
     from.map[MT](
-      rewriteAtomicFrom(_, exprReplaces),
+      rewriteAtomicFrom(availableCTEs, _, exprReplaces),
       { (joinType, lateral, left, right, on) =>
-        Join(joinType, lateral, left, rewriteAtomicFrom(right, exprReplaces), rewriteExpr(on, exprReplaces))
+        Join(joinType, lateral, left, rewriteAtomicFrom(availableCTEs, right, exprReplaces), rewriteExpr(on, exprReplaces))
       }
     )
 
-  def rewriteAtomicFrom(from: AtomicFrom, exprReplaces: ExprReplaces): AtomicFrom =
+  def rewriteAtomicFrom(availableCTEs: ACTEs, from: AtomicFrom, exprReplaces: ExprReplaces): AtomicFrom =
     from match {
       case t: FromTable => t
       case sr: FromSingleRow => sr
-      case FromStatement(stmt, label, rn, cn, alias) => FromStatement(rewriteStatement(stmt, exprReplaces), label, rn, cn, alias)
-      case c: FromCTE => c
+      case FromStatement(stmt, label, rn, cn, alias) => FromStatement(rewriteStatement(availableCTEs, stmt, exprReplaces), label, rn, cn, alias)
+      case c: FromCTE => availableCTEs.rebase(c)
     }
 
   def rewriteExpr(expr: Expr, exprReplaces: ExprReplaces): Expr =
@@ -336,6 +336,6 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
 
 object InlineTrivialParameters {
   def apply[MT <: MetaTypes](isLiteralTrue: Expr[MT] => Boolean, stmt: Statement[MT]): Statement[MT] = {
-    new InlineTrivialParameters[MT](isLiteralTrue).rewriteStatement(stmt, Map.empty)
+    new InlineTrivialParameters[MT](isLiteralTrue).rewriteStatement(AvailableCTEs.empty, stmt, Map.empty)
   }
 }
