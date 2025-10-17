@@ -5,20 +5,7 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection._
 
 class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.AutoTableLabel[MT], Set[types.ColumnLabel[MT]]]) extends StatementUniverse[MT] {
-  case class AvailableCTEs(
-    ctes: Map[AutoTableLabel, Statement]
-  ) {
-    def add(
-      label: AutoTableLabel,
-      stmt: Statement
-    ): AvailableCTEs = {
-      assert(!ctes.contains(label))
-      copy(ctes = ctes + (label -> stmt))
-    }
-  }
-  object AvailableCTEs {
-    def empty = AvailableCTEs(Map.empty)
-  }
+  type ACTEs = AvailableCTEs[MT, Unit]
 
   // myLabel being "None" means "keep all of my output columns,
   // whether or not they appear to be used".  This is for both the
@@ -26,7 +13,7 @@ class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.
   // whatever's running the query) as well as inside CombinedTables,
   // where the operation combining the tables will care about
   // apparently-unused columns.
-  def rewriteStatement(availableCTEs: AvailableCTEs, stmt: Statement, myLabel: Option[AutoTableLabel]): (Statement, Boolean) = {
+  def rewriteStatement(availableCTEs: ACTEs, stmt: Statement, myLabel: Option[AutoTableLabel]): (Statement, Boolean) = {
     stmt match {
       case CombinedTables(op, left, right) =>
         val (newLeft, removedAnythingLeft) = rewriteStatement(availableCTEs, left, None)
@@ -34,10 +21,11 @@ class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.
         (CombinedTables(op, newLeft, newRight), removedAnythingLeft || removedAnythingRight)
 
       case CTE(defns, useQuery) =>
-        val (removedAnythingDefns, newAvailableCTEs, newDefns)= defns.iterator.foldLeft((false, availableCTEs, OrderedMap.empty[AutoTableLabel, CTE.Definition[MT]])) { case ((removedAnything, aCTE, newDefns), (label, defn)) =>
-          val (newStmt, newRemoved) = rewriteStatement(aCTE, defn.query, None)
-          (removedAnything || newRemoved, availableCTEs.add(label, newStmt), newDefns + (label -> defn.copy(query = newStmt)))
+        val (removedAnythingDefns, newAvailableCTEs, newDefns) = availableCTEs.foldCollect(defns, false) { (removedAnything, aCTE, query) =>
+          val (newStmt, newRemoved) = rewriteStatement(aCTE, query, None)
+          (removedAnything || newRemoved, (), newStmt)
         }
+
         val (newUseQuery, removedAnythingUse) = rewriteStatement(newAvailableCTEs, useQuery, myLabel)
         (CTE(newDefns, newUseQuery), removedAnythingDefns || removedAnythingUse)
 
@@ -73,7 +61,7 @@ class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.
     }
   }
 
-  def rewriteFrom(availableCTEs: AvailableCTEs, from: From): (From, Boolean) = {
+  def rewriteFrom(availableCTEs: ACTEs, from: From): (From, Boolean) = {
     from.reduceMap[Boolean, MT](
       rewriteAtomicFrom(availableCTEs, _).swap,
       { (removedAnythingLeft, joinType, lateral, left, right, on) =>
@@ -83,11 +71,11 @@ class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.
     ).swap
   }
 
-  def rewriteAtomicFrom(availableCTEs: AvailableCTEs, from: AtomicFrom): (AtomicFrom, Boolean) = {
+  def rewriteAtomicFrom(availableCTEs: ACTEs, from: AtomicFrom): (AtomicFrom, Boolean) = {
     from match {
       case ft: FromTable => (ft, false)
       case fsr: FromSingleRow => (fsr, false)
-      case fc: FromCTE => (fc.copy(basedOn = availableCTEs.ctes(fc.cteLabel)), false)
+      case fc: FromCTE => (availableCTEs.rebase(fc), false)
       case FromStatement(stmt, label, resourceName, canonicalName, alias) =>
         val (newStmt, removedAnything) = rewriteStatement(availableCTEs, stmt, Some(label))
         (FromStatement(newStmt, label, resourceName, canonicalName, alias), removedAnything)
@@ -99,10 +87,8 @@ class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.
   * SelectListReferences must not be present (this is unchecked!!). */
 object RemoveUnusedColumns {
   def apply[MT <: MetaTypes](stmt: Statement[MT]): Statement[MT] = {
-    val (newStmt, removedAnything) = {
-      val roc = new RemoveUnusedColumns[MT](stmt.columnReferences)
-      roc.rewriteStatement(roc.AvailableCTEs.empty, stmt, None)
-    }
+    val (newStmt, removedAnything) =
+      new RemoveUnusedColumns[MT](stmt.columnReferences).rewriteStatement(AvailableCTEs.empty, stmt, None)
     if(removedAnything) {
       this(newStmt)
     } else {
