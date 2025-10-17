@@ -25,6 +25,9 @@ case class AvailableCTEs[MT <: MetaTypes, T](
   def rebaseAll(f: From[MT]): From[MT] =
     new AvailableCTEs.Rebaser[MT, T](ctes).rebaseAll(f)
 
+  def rebaseAllAtomic(f: AtomicFrom[MT]): AtomicFrom[MT] =
+    new AvailableCTEs.Rebaser[MT, T](ctes).rebaseAllAtomic(f)
+
   def rebaseAll(s: Statement[MT]): Statement[MT] =
     new AvailableCTEs.Rebaser[MT, T](ctes).rebaseAll(s)
 
@@ -55,14 +58,24 @@ object AvailableCTEs {
   def empty[MT <: MetaTypes, T] = AvailableCTEs[MT, T](Map.empty)
 
   private class Rebaser[MT <: MetaTypes, +T](ctes: Map[AutoTableLabel, AvailableCTE[MT, T]]) {
-    private def justTheStatements = ctes.iterator.map { case (k, v) => k -> v.stmt }.toMap
+    private val justTheStatements = ctes.iterator.map { case (k, v) => k -> v.stmt }.toMap
 
     def rebaseAll(f: From[MT]): From[MT] =
       rebaseAll(justTheStatements, f)
 
-    private def rebaseAll(ctes: Map[AutoTableLabel, Statement[MT]], f: From[MT]): From[MT] = {
+    private def rebaseAll(ctes: Map[AutoTableLabel, Statement[MT]], f: From[MT]): From[MT] =
+      f.map[MT](
+        rebaseAllAtomic(ctes, _),
+        { (joinType, lat, left, right, on) => Join(joinType, lat, left, rebaseAllAtomic(ctes, right), on) }
+      )
+
+    def rebaseAllAtomic(f: AtomicFrom[MT]): AtomicFrom[MT] =
+      rebaseAllAtomic(justTheStatements, f)
+
+    private def rebaseAllAtomic(ctes: Map[AutoTableLabel, Statement[MT]], f: AtomicFrom[MT]): AtomicFrom[MT] = {
       f match {
         case fs: FromStatement[MT] => fs.copy(statement = rebaseAll(ctes, fs.statement))
+        case fc: FromCTE[MT] => fc.copy(basedOn = ctes(fc.cteLabel))
         case other => other
       }
     }
