@@ -502,13 +502,13 @@ select b, n |> select n join @udf(b) as @udf on true
     analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("remove unused order by - window functions don't force ordering to be kept") {
+  test("remove unused order by - window functions do force ordering to be kept") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
     )
 
     val analysis = analyze(tf, "twocol", "select text, num, window_function() over () order by text |> select text, num order by num")
-    val expectedAnalysis = analyze(tf, "twocol", "select text, num, window_function() over () |> select text, num order by num")
+    val expectedAnalysis = analyze(tf, "twocol", "select text, num, window_function() over () order by text |> select text, num order by num")
 
     analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
@@ -1484,7 +1484,7 @@ select * where first = 'Tom'
       (0, "query") -> Q(0, "table", "select text where num > 5")
     )
 
-    val analysis = AnalysisBuilder.saved(tf, "query").withPreserveSystemColumns(true).finishAnalysis
+    val analysis = AnalysisBuilder.saved(tf, 0, "query").withPreserveSystemColumns(true).finishAnalysis
 
     // just a sanity check
     analysis.statement must be (isomorphicTo(analyze(tf, "table", "select text, :id where num > 5").statement))
@@ -1502,7 +1502,7 @@ select * where first = 'Tom'
       ),
     )
 
-    val analysis = AnalysisBuilder.saved(tf, "table").finishAnalysis
+    val analysis = analyzeSaved(tf, "table")
 
     // just a sanity check
     analysis.statement must be (isomorphicTo(analyze(tf, "table", "select :id, text, num").statement))
@@ -1521,7 +1521,7 @@ select * where first = 'Tom'
       (0, "query") -> Q(0, "table", "select :id, text")
     )
 
-    val analysis = AnalysisBuilder.saved(tf, "query").finishAnalysis
+    val analysis = analyzeSaved(tf, "query")
 
     // just a sanity check
     analysis.statement must be (isomorphicTo(analyze(tf, "table", "select :id, text").statement))
@@ -1657,5 +1657,57 @@ select * where first = 'Tom'
     }
 
     outerStmt.canonicalName must be (Some(CanonicalName("inner")))
+  }
+
+  test("materialize then preserve ordering") {
+    val tf = tableFinder(
+      (0, "table") -> D(
+        ":id" -> TestNumber,
+        "text" -> TestText,
+        "num" -> TestNumber
+      ),
+      (0, "ordered_query") -> Q(0, "table", "select text, num order by :id"),
+      (0, "outer_query_a") -> Q(0, "ordered_query", "select text, row_number() over ()"),
+      (0, "outer_query_b") -> Q(0, "ordered_query", "select num, row_number() over ()"),
+      (0, "joined") -> Q(0, "outer_query_a", "select text, @ocb.num join @outer_query_b as @ocb on true"),
+
+      (1, "ordered_query") -> Q(0, "table", "select text, num, :id order by :id"),
+      (1, "outer_query_a") -> Q(1, "ordered_query", "select text, row_number() over () order by :id"),
+      (1, "outer_query_b") -> Q(1, "ordered_query", "select num, row_number() over () order by :id"),
+      (1, "joined") -> Q(1, "outer_query_a", "select text, @ocb.num join @outer_query_b as @ocb on true")
+    )
+
+    val analysis1 = analyze(tf, "select @oca.text, @ocb.num from @outer_query_a as @oca join @outer_query_b as @ocb on true")
+      .materializeNamedQueries.preserveOrdering
+    val analysis2 = AnalysisBuilder.analyze(tf, 1, "select @oca.text, @ocb.num from @outer_query_a as @oca join @outer_query_b as @ocb on true").finishAnalysis
+      .materializeNamedQueries
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("materialize then remove unused ordering") {
+    val tf = tableFinder(
+      (0, "table") -> D(
+        ":id" -> TestNumber,
+        "text" -> TestText,
+        "num" -> TestNumber
+      ),
+      (0, "ordered_query") -> Q(0, "table", "select text, num order by :id"),
+      (0, "outer_query_a") -> Q(0, "ordered_query", "select text"),
+      (0, "outer_query_b") -> Q(0, "ordered_query", "select num"),
+      (0, "joined") -> Q(0, "outer_query_a", "select text, @ocb.num join @outer_query_b as @ocb on true"),
+
+      (1, "ordered_query") -> Q(0, "table", "select text, num"),
+      (1, "outer_query_a") -> Q(1, "ordered_query", "select text"),
+      (1, "outer_query_b") -> Q(1, "ordered_query", "select num"),
+      (1, "joined") -> Q(1, "outer_query_a", "select text, @ocb.num join @outer_query_b as @ocb on true")
+    )
+
+    val analysis1 = analyze(tf, "select @oca.text, @ocb.num from @outer_query_a as @oca join @outer_query_b as @ocb on true")
+      .materializeNamedQueries.removeUnusedOrderBy
+    val analysis2 = AnalysisBuilder.analyze(tf, 1, "select @oca.text, @ocb.num from @outer_query_a as @oca join @outer_query_b as @ocb on true").finishAnalysis
+      .materializeNamedQueries
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 }

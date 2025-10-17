@@ -7,17 +7,36 @@ import com.socrata.soql.collection._
 class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[MT] {
   type RelabelMap = Map[(AutoTableLabel, AutoColumnLabel), (DatabaseColumnName, DatabaseTableName)]
 
+  case class AvailableCTEs(
+    ctes: Map[AutoTableLabel, Statement]
+  ) {
+    def add(
+      label: AutoTableLabel,
+      stmt: Statement
+    ): AvailableCTEs = {
+      assert(!ctes.contains(label))
+      copy(ctes = ctes + (label -> stmt))
+    }
+  }
+  object AvailableCTEs {
+    def empty = AvailableCTEs(Map.empty)
+  }
+
   case class Result(statement: Statement, columnMap: RelabelMap)
 
-  def rewriteStatement(stmt: Statement, callerCaresAboutOrder: Boolean): Statement = {
+  def rewriteStatement(availableCTEs: AvailableCTEs, stmt: Statement, callerCaresAboutOrder: Boolean): Statement = {
     stmt match {
       case CombinedTables(op, left, right) =>
         // table ops never preserve ordering
-        CombinedTables(op, rewriteStatement(left, false), rewriteStatement(right, false))
+        CombinedTables(op, rewriteStatement(availableCTEs, left, false), rewriteStatement(availableCTEs, right, false))
 
       case CTE(defns, useQuery) =>
-        val newDefinitions = defns.withValuesMapped { defn => defn.copy(query = rewriteStatement(defn.query, false)) }
-        val newUseQuery = rewriteStatement(useQuery, callerCaresAboutOrder)
+        val (newAvailableCTEs, newDefinitions )= defns.iterator.foldLeft((availableCTEs, OrderedMap.empty[AutoTableLabel, CTE.Definition[MT]])) { case ((aCTE, newDefns), (label, defn)) =>
+          val newStmt = rewriteStatement(aCTE, defn.query, false)
+          (availableCTEs.add(label, newStmt), newDefns + (label -> defn.copy(query = newStmt)))
+        }
+
+        val newUseQuery = rewriteStatement(newAvailableCTEs, useQuery, callerCaresAboutOrder)
 
         CTE(newDefinitions, newUseQuery)
 
@@ -25,11 +44,11 @@ class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[
         v
 
       case select@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
-        val (relabelMap, newFrom) = rewriteFrom(from)
+        val (relabelMap, newFrom) = rewriteFrom(availableCTEs, from)
 
         val newSelect = select.copy(
           from = newFrom,
-          orderBy = if(callerCaresAboutOrder || limit.isDefined || offset.isDefined) orderBy else Nil
+          orderBy = if(callerCaresAboutOrder || select.isWindowed || limit.isDefined || offset.isDefined) orderBy else Nil
         )
 
         if(relabelMap.nonEmpty) {
@@ -40,23 +59,23 @@ class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[
     }
   }
 
-  def rewriteFrom(from: From): (RelabelMap, From) = {
+  def rewriteFrom(availableCTEs: AvailableCTEs, from: From): (RelabelMap, From) = {
     from.reduceMap[RelabelMap, MT](
-      rewriteAtomicFrom(Map.empty, _),
+      rewriteAtomicFrom(availableCTEs, Map.empty, _),
       { (relabelMap, joinType, lateral, left, right, on) =>
-        val (newMap, newRight) = rewriteAtomicFrom(relabelMap, right)
+        val (newMap, newRight) = rewriteAtomicFrom(availableCTEs, relabelMap, right)
         (newMap, Join(joinType, lateral, left, newRight, on))
       }
     )
   }
 
-  def rewriteAtomicFrom(currentMap: RelabelMap, from: AtomicFrom): (RelabelMap, AtomicFrom) = {
+  def rewriteAtomicFrom(availableCTEs: AvailableCTEs, currentMap: RelabelMap, from: AtomicFrom): (RelabelMap, AtomicFrom) = {
     from match {
       case ft: FromTable => (currentMap, ft)
       case fs: FromSingleRow => (currentMap, fs)
-      case fc: FromCTE => (currentMap, fc)
+      case fc: FromCTE => (currentMap, fc.copy(basedOn = availableCTEs.ctes(fc.cteLabel)))
       case fs@FromStatement(stmt, label, resourceName, canonicalName, alias) =>
-        fs.copy(statement = rewriteStatement(stmt, false)) match {
+        fs.copy(statement = rewriteStatement(availableCTEs, stmt, false)) match {
           // It's possible we've just reduced a statement to "select
           // column1, column2, ... from table" and we want to
           // eliminate the now-unnecessary subselect
@@ -174,6 +193,7 @@ class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[
   * SelectListReferences must not be present (this is unchecked!!). */
 object RemoveUnusedOrderBy {
   def apply[MT <: MetaTypes](stmt: Statement[MT], preserveTopLevelOrdering: Boolean = true): Statement[MT] = {
-    new RemoveUnusedOrderBy[MT]().rewriteStatement(stmt, preserveTopLevelOrdering)
+    val rob = new RemoveUnusedOrderBy[MT]()
+    rob.rewriteStatement(rob.AvailableCTEs.empty, stmt, preserveTopLevelOrdering)
   }
 }

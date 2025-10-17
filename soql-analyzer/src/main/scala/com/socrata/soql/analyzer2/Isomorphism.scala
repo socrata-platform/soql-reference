@@ -96,6 +96,9 @@ class IsomorphismState[MT <: MetaTypes] private (
   def mapFrom(table: Option[AutoTableLabel], col: ColumnLabel): Option[(Option[AutoTableLabel], ColumnLabel)] =
     forwardColumns.get((table, col))
 
+  def alreadyAssociated(tableA: AutoTableLabel, tableB: AutoTableLabel): Boolean =
+    forwardTables.get(tableA) == Some(tableB)
+
   def tryAssociate(tableA: AutoTableLabel, tableB: AutoTableLabel): Boolean = {
     (tableA, tableB) match {
       case (ta: AutoTableLabel, tb: AutoTableLabel) =>

@@ -61,14 +61,10 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
   ): Boolean =
     that match {
       case FromCTE(thatCteLabel, thatLabel, thatBasedOn, thatResourceName, thatCanonicalName, thatAlias) =>
-        state.tryAssociate(this.cteLabel, thatCteLabel) &&
-          state.tryAssociate(this.label, thatLabel) &&
-          // I think this is necessary, because sometimes -
-          // particularly in rollup-rewrites - we're doing this in a
-          // context where we won't "see" CTEs, so we need to use the
-          // based-on to determine that we're referring to the same
-          // CTE.
-          recurseStmt(this.basedOn, state, Some(this.label), Some(thatLabel), thatBasedOn)
+        // CTEs can only be considered candidates if we've already
+        // decided that the CTEs are associated.
+        state.alreadyAssociated(this.cteLabel, thatCteLabel) &&
+          state.tryAssociate(this.label, thatLabel)
       case _ =>
         false
     }
@@ -76,8 +72,10 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
   private[analyzer2] final def findVerticalSlice(state: IsomorphismState, that: From[MT]): Boolean =
     that match {
       case FromCTE(thatCteLabel, thatLabel, thatBasedOn, thatResourceName, thatCanonicalName, thatAlias) =>
-        state.tryAssociate(this.label, thatLabel) &&
-          state.tryAssociate(this.cteLabel, thatCteLabel) &&
+        // CTEs can only be considered candidates if we've already
+        // decided that the CTEs are associated.
+        state.alreadyAssociated(this.cteLabel, thatCteLabel) &&
+          state.tryAssociate(this.label, thatLabel) &&
           this.basedOn.findVerticalSlice(state, Some(this.label), Some(thatLabel), thatBasedOn)
       case _ =>
         false
