@@ -178,15 +178,19 @@ trait OCTEImpl { this: CTE.type =>
   implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope], ctReadable: Readable[MT#ColumnType], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[CTE[MT]] =
     new Readable[CTE[MT]] {
       def readFrom(buffer: ReadBuffer): CTE[MT] = {
+        val validator = new CTEValidator[MT]()
         val result =
-          CTE.unvalidated(
-            definitions = buffer.read[OrderedMap[AutoTableLabel, Definition[MT]]](),
-            useQuery = buffer.read[Statement[MT]]()
+          // Need to reseat FromCTEs' basedOn references to point here
+          // as necessary...
+          validator.fixupSpecificallyCTEReferences(
+            AvailableCTEs.empty,
+            CTE.unvalidated(
+              definitions = buffer.read[OrderedMap[AutoTableLabel, Definition[MT]]](),
+              useQuery = buffer.read[Statement[MT]]()
+            )
           )
-
-        // Need to reseat FromCTEs' basedOn references to point here
-        // as necessary...
-        new CTEValidator[MT]().fixupSpecificallyCTEReferences(AvailableCTEs.empty, result)
+        validator.validate(AvailableCTEs.empty, result)
+        result
       }
     }
 
