@@ -178,10 +178,128 @@ trait OCTEImpl { this: CTE.type =>
   implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope], ctReadable: Readable[MT#ColumnType], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[CTE[MT]] =
     new Readable[CTE[MT]] {
       def readFrom(buffer: ReadBuffer): CTE[MT] = {
-        CTE(
-          definitions = buffer.read[OrderedMap[AutoTableLabel, Definition[MT]]](),
-          useQuery = buffer.read[Statement[MT]]()
-        )
+        val result =
+          CTE.unvalidated(
+            definitions = buffer.read[OrderedMap[AutoTableLabel, Definition[MT]]](),
+            useQuery = buffer.read[Statement[MT]]()
+          )
+
+        // Need to reseat FromCTEs' basedOn references to point here
+        // as necessary...
+        new CTEValidator[MT]().fixupSpecificallyCTEReferences(AvailableCTEs.empty, result)
       }
     }
+
+  private class CTEValidator[MT <: MetaTypes]() extends StatementUniverse[MT] {
+    type ACTEs = AvailableCTEs[MT, Unit]
+
+    def validate(availableCTEs: ACTEs, s: Statement): Unit = {
+      if(s.referencedCTEs.intersect(availableCTEs.ctes.keySet).isEmpty) {
+        // no referenced CTES in the CTEs we know about == it is valid
+        return
+      }
+      s match {
+        case CombinedTables(_op, left, right) =>
+          validate(availableCTEs, left)
+          validate(availableCTEs, right)
+        case v : Values =>
+          // ok
+        case CTE(defns, useQuery) =>
+          val (newAvailableCTEs, newDefns) = availableCTEs.collect(defns) { (aCTEs, query) =>
+            validate(aCTEs, query)
+
+            ((), query)
+          }
+          validate(newAvailableCTEs, useQuery)
+        case sel: Select =>
+          validate(availableCTEs, sel.from)
+      }
+    }
+
+    def validate(availableCTEs: ACTEs, f: From): Unit =
+      f.reduce[Unit](
+        validateAtomic(availableCTEs, _),
+        { case ((), j) => validateAtomic(availableCTEs, j.right) }
+      )
+
+    def validateAtomic(availableCTEs: ACTEs, f: AtomicFrom): Unit =
+      f match {
+        case fc: FromCTE =>
+          for(defQuery <- availableCTEs.ctes.get(fc.cteLabel)) {
+            fc.basedOn eq defQuery.stmt
+          }
+        case fs: FromStatement =>
+          validate(availableCTEs, fs.statement)
+        case _ =>
+          // ok
+      }
+
+
+    def fixupCTEReferences(availableCTEs: ACTEs, s: Statement): Statement = {
+      if(s.referencedCTEs.intersect(availableCTEs.ctes.keySet).isEmpty) {
+        // no referenced CTES in the CTEs we know about == it is valid
+        return s
+      }
+
+      s match {
+        case CombinedTables(op, left, right) =>
+          CombinedTables(
+            op,
+            fixupCTEReferences(availableCTEs, left),
+            fixupCTEReferences(availableCTEs, right)
+          )
+
+        case v : Values =>
+          v
+
+        case cte: CTE =>
+          fixupSpecificallyCTEReferences(availableCTEs, cte)
+
+        case sel: Select =>
+          sel.copy(from = fixupCTEReferences(availableCTEs, sel.from))
+      }
+    }
+
+    def fixupSpecificallyCTEReferences(availableCTEs: ACTEs, cte: CTE): CTE = {
+      val CTE(defns, useQuery) = cte
+      val (newAvailableCTEs, newDefns) = availableCTEs.collect(defns) { (aCTEs, query) =>
+        fixupCTEReferences(aCTEs, query)
+
+        ((), query)
+      }
+      val newUseQuery = fixupCTEReferences(newAvailableCTEs, useQuery)
+      CTE.unvalidated(newDefns, newUseQuery)
+    }
+
+    def fixupCTEReferences(availableCTEs: ACTEs, f: From): From =
+      f.map[MT](
+        fixupCTEReferencesAtomic(availableCTEs, _),
+        { case (joinType, lat, left, right, on) =>
+          Join(joinType, lat, left, fixupCTEReferencesAtomic(availableCTEs, right), on)
+        }
+      )
+
+    def fixupCTEReferencesAtomic(availableCTEs: ACTEs, f: AtomicFrom): AtomicFrom =
+      f match {
+        case fc: FromCTE =>
+          availableCTEs.ctes.get(fc.cteLabel) match {
+            case None =>
+              // ok, it must just refer to a CTE defined at a higher level
+              fc
+            case Some(AvailableCTE(defQuery, ())) if defQuery eq fc.basedOn =>
+              // ok, we're already fixed up
+              fc
+            case Some(AvailableCTE(defQuery, ())) =>
+              fc.copy(basedOn = defQuery)
+          }
+        case fs: FromStatement =>
+          fs.copy(statement = fixupCTEReferences(availableCTEs, fs.statement))
+        case other =>
+          other
+      }
+  }
+
+  def validateBasedOnIdentity[MT <: MetaTypes](cte: CTE[MT]): Unit = {
+    new CTEValidator[MT]().validate(AvailableCTEs.empty, cte)
+  }
 }

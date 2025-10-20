@@ -1,4 +1,4 @@
-package com.socrata.soql.analyzer2.rewrite
+package com.socrata.soql.analyzer2
 
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection._

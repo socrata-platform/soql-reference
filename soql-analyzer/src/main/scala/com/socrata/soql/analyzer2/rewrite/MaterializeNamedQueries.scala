@@ -249,44 +249,7 @@ object MaterializeNamedQueries {
   }
 
   def validate[MT <: MetaTypes](s: Statement[MT]): Statement[MT] = {
-    if(validationActive) {
-      assert(s.referencedCTEs.isEmpty)
-      new MaterializeNamedQueriesValidator[MT].validate(AvailableCTEs.empty, s)
-    }
+    assert(s.referencedCTEs.isEmpty)
     s
-  }
-
-  private class MaterializeNamedQueriesValidator[MT <: MetaTypes] extends StatementUniverse[MT] {
-    type ACTEs = AvailableCTEs[MT, Unit]
-
-    def validate(availableCTEs: ACTEs, s: Statement): Unit = s match {
-      case CombinedTables(_op, left, right) =>
-        validate(availableCTEs, left)
-        validate(availableCTEs, right)
-      case _ : Values =>
-        // ok
-      case CTE(defns, useQuery) =>
-        val (newAvailableCTEs, newDefns) = availableCTEs.collect(defns) { (aCTEs, query) =>
-          validate(aCTEs, query)
-
-          ((), query)
-        }
-        validate(newAvailableCTEs, useQuery)
-      case sel: Select =>
-        validate(availableCTEs, sel.from)
-    }
-
-    def validate(availableCTEs: ACTEs, f: From): Unit =
-      f.reduce[Unit](
-        validateAtomic(availableCTEs, _),
-        { case ((), j) => validateAtomic(availableCTEs, j.right) }
-      )
-
-    def validateAtomic(availableCTEs: ACTEs, f: AtomicFrom): Unit =
-      f match {
-        case fc: FromCTE => assert(fc.basedOn eq availableCTEs.ctes(fc.cteLabel).stmt)
-        case fs: FromStatement => validate(availableCTEs, fs.statement)
-        case _ => // ok
-      }
   }
 }

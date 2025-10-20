@@ -194,12 +194,29 @@ object CombinedTables extends statement.OCombinedTablesImpl
 // This has a rather unfortunate non-local semi-requirement that
 // rewrite passes MUST uphold: the `basedOn` of any FromCTE node
 // inside this CTE which references a statement listed in
-// `definitions` will be `eq` to that definition's query.
-case class CTE[MT <: MetaTypes](
+// `definitions` will be `eq` to that definition's query.  It is
+// enforced in this class's constructor.
+case class CTE[MT <: MetaTypes] private (
   definitions: OrderedMap[AutoTableLabel, CTE.Definition[MT]],
   useQuery: Statement[MT]
 ) extends Statement[MT] with statement.CTEImpl[MT]
-object CTE extends statement.OCTEImpl
+object CTE extends statement.OCTEImpl {
+  def apply[MT <: MetaTypes](
+    definitions: OrderedMap[AutoTableLabel, CTE.Definition[MT]],
+    useQuery: Statement[MT]
+  ): CTE[MT] = {
+    val result = unvalidated(definitions, useQuery)
+    CTE.validateBasedOnIdentity(result)
+    result
+  }
+
+  def unvalidated[MT <: MetaTypes](
+    definitions: OrderedMap[AutoTableLabel, CTE.Definition[MT]],
+    useQuery: Statement[MT]
+  ): CTE[MT] = {
+    new CTE(definitions, useQuery)
+  }
+}
 
 case class Values[MT <: MetaTypes](
   labels: OrderedSet[AutoColumnLabel],

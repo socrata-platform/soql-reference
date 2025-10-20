@@ -221,10 +221,8 @@ object FromTable extends from.OFromTableImpl
 
 // This has a rather unfortunate non-local semi-requirement that
 // rewrite passes MUST uphold: the `basedOn` will be `eq` to a query
-// that is defined in some parent CTE statement node.  This isn't a
-// _hard_ requirement as long as they're equal, but rewrite passes in
-// particular MUST uphold it.  It can be checked with
-// MaterializeNamedQueries.validate
+// that is defined in some parent CTE statement node.  It is checked
+// in the `CTE` constructor.
 case class FromCTE[MT <: MetaTypes](
   cteLabel: AutoTableLabel,
   label: AutoTableLabel,
