@@ -189,7 +189,7 @@ trait OCTEImpl { this: CTE.type =>
               useQuery = buffer.read[Statement[MT]]()
             )
           )
-        validator.validate(AvailableCTEs.empty, result)
+        validator.validate(AvailableCTEs.empty[MT, Unit], result)
         result
       }
     }
@@ -304,6 +304,6 @@ trait OCTEImpl { this: CTE.type =>
   }
 
   def validateBasedOnIdentity[MT <: MetaTypes](cte: CTE[MT]): Unit = {
-    new CTEValidator[MT]().validate(AvailableCTEs.empty, cte)
+    new CTEValidator[MT]().validate(AvailableCTEs.empty[MT, Unit], cte)
   }
 }
