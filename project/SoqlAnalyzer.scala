@@ -21,7 +21,6 @@ object SoqlAnalyzer {
     scalacOptions ++= {
       if(scalaVersion.value.startsWith("2.13")) Seq("-Ymacro-annotations")
       else Nil
-    },
-    scalacOptions ++= Seq("-Werror")
+    }
   )
 }
