@@ -9,7 +9,7 @@ import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.analyzer2._
 
 class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends StatementUniverse[MT] {
-  type ACTEs = AvailableCTEs[MT, Unit]
+  type ACTEs = AvailableCTEs[Unit]
 
   private implicit val cvDoc = new HasDoc[CV] {
     override def docOf(v: CV) = com.socrata.prettyprint.Doc(v.toString)

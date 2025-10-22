@@ -7,7 +7,7 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection._
 
 class RemoveTrivialJoins[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] => Boolean) extends StatementUniverse[MT] {
-  type ACTEs = AvailableCTEs[MT, Unit]
+  type ACTEs = AvailableCTEs[Unit]
 
   def rewriteStatement(availableCTEs: ACTEs, stmt: Statement): Statement = {
     stmt match {

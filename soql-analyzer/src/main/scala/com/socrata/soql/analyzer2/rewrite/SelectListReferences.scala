@@ -5,7 +5,7 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection._
 
 class SelectListReferences[MT <: MetaTypes] private () extends StatementUniverse[MT] {
-  type ACTEs = AvailableCTEs[MT, Unit]
+  type ACTEs = AvailableCTEs[Unit]
 
   abstract class Transform {
     def rewriteSelect(availableCTEs: ACTEs, select: Select): Select

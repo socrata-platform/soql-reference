@@ -9,7 +9,7 @@ import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.functions.MonomorphicFunction
 
 class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends StatementUniverse[MT] {
-  type ACTEs = AvailableCTEs[MT, Unit]
+  type ACTEs = AvailableCTEs[Unit]
 
   def rewriteStatement(availableCTEs: ACTEs, stmt: Statement, wantColumns: Boolean): Statement = {
     stmt match {

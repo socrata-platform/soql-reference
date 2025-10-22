@@ -195,7 +195,7 @@ trait OCTEImpl { this: CTE.type =>
     }
 
   private class CTEValidator[MT <: MetaTypes]() extends StatementUniverse[MT] {
-    type ACTEs = AvailableCTEs[MT, Unit]
+    type ACTEs = AvailableCTEs[Unit]
 
     def validate(availableCTEs: ACTEs, s: Statement): Unit = {
       if(s.referencedCTEs.intersect(availableCTEs.ctes.keySet).isEmpty) {

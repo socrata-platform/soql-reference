@@ -28,7 +28,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
   // hopefully go back the other way, someday, which is why this
   // understand both.
 
-  type ACTEs = AvailableCTEs[MT, Unit]
+  type ACTEs = AvailableCTEs[Unit]
 
   type ExprReplaces = Map[(AutoTableLabel, AutoColumnLabel), Expr]
 

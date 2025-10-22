@@ -19,7 +19,7 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
 
   // This is mainly a sample rewrite pass; `merge` does a lot more.
 
-  type ACTEs = AvailableCTEs[MT, Unit]
+  type ACTEs = AvailableCTEs[Unit]
 
   private def isTrivialExpr(e: Expr) =
     e match {

@@ -148,4 +148,6 @@ trait StatementUniverse[MT <: MetaTypes] extends ExpressionUniverse[MT] with Lab
 
   type Distinctiveness = analyzer2.Distinctiveness[MT]
   type NamedExpr = analyzer2.NamedExpr[MT]
+
+  type AvailableCTEs[T] = analyzer2.AvailableCTEs[MT, T]
 }

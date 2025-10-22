@@ -7,7 +7,7 @@ import com.socrata.soql.collection._
 class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[MT] {
   type RelabelMap = Map[(AutoTableLabel, AutoColumnLabel), (DatabaseColumnName, DatabaseTableName)]
 
-  type ACTEs = AvailableCTEs[MT, Unit]
+  type ACTEs = AvailableCTEs[Unit]
 
   case class Result(statement: Statement, columnMap: RelabelMap)
 

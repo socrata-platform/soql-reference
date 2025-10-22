@@ -10,7 +10,7 @@ import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.functions.MonomorphicFunction
 
 class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extends StatementUniverse[MT] {
-  type ACTEs = AvailableCTEs[MT, Seq[(AutoColumnLabel, CT, Boolean, Boolean)]]
+  type ACTEs = AvailableCTEs[Seq[(AutoColumnLabel, CT, Boolean, Boolean)]]
 
   // "wantOutputOrdered" == "if this statement can be rewritten to
   // preserve the ordering of its underlying query, do so".
