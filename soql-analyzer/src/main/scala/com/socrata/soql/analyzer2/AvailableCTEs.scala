@@ -5,7 +5,7 @@ import com.socrata.soql.collection._
 
 case class AvailableCTE[MT <: MetaTypes, +T](
   stmt: Statement[MT],
-  extra: T,
+  extra: T, // If there is no extra information, just use Unit
 )
 case class AvailableCTEs[MT <: MetaTypes, T](
   ctes: Map[AutoTableLabel, AvailableCTE[MT, T]]
@@ -19,8 +19,15 @@ case class AvailableCTEs[MT <: MetaTypes, T](
     copy(ctes = ctes + (label -> AvailableCTE(stmt, extra)))
   }
 
+  // rebase and its variants update the `basedOn` field of FromCTEs
+  // to point at the equivalent query in this object.
   def rebase(fc: FromCTE[MT]) =
-    fc.copy(basedOn = ctes(fc.cteLabel).stmt)
+    ctes.get(fc.cteLabel) match {
+      case Some(cte) =>
+        fc.copy(basedOn = ctes(fc.cteLabel).stmt)
+      case None =>
+        fc
+    }
 
   def rebaseAll(f: From[MT]): From[MT] =
     new AvailableCTEs.Rebaser[MT, T](ctes).rebaseAll(f)
@@ -31,6 +38,12 @@ case class AvailableCTEs[MT <: MetaTypes, T](
   def rebaseAll(s: Statement[MT]): Statement[MT] =
     new AvailableCTEs.Rebaser[MT, T](ctes).rebaseAll(s)
 
+  // this is a "foldMapValues"-type operation over "defns" where the
+  // state being folded over is this AvailableCTEs.  Its result is a
+  // new AvailableCTEs plus the new query definitions.  It's called
+  // "collect" because what it's mostly used for is transforming a
+  // query in a way that produces new CTEs, which are collected into
+  // the final AvailableCTEs.
   def collect(
     defns: OrderedMap[AutoTableLabel, CTE.Definition[MT]]
   )(
@@ -42,6 +55,10 @@ case class AvailableCTEs[MT <: MetaTypes, T](
     }
   }
 
+  // this is a "foldMapValues"-type operation over "defns" where the
+  // state being folded over is this AvailableCTEs + "B".  Its result
+  // is the final "B" plus the new AvailableCTEs plus the new query
+  // definitions.
   def foldCollect[B](
     defns: OrderedMap[AutoTableLabel, CTE.Definition[MT]],
     init: B
@@ -76,9 +93,15 @@ object AvailableCTEs {
 
     private def rebaseAllAtomic(ctes: Map[AutoTableLabel, Statement[MT]], f: AtomicFrom[MT]): AtomicFrom[MT] = {
       f match {
-        case fs: FromStatement[MT] => fs.copy(statement = rebaseAll(ctes, fs.statement))
-        case fc: FromCTE[MT] => fc.copy(basedOn = ctes(fc.cteLabel))
-        case other => other
+        case fs: FromStatement[MT] =>
+          fs.copy(statement = rebaseAll(ctes, fs.statement))
+        case fc: FromCTE[MT] =>
+          ctes.get(fc.cteLabel) match {
+            case Some(cte) => fc.copy(basedOn = cte)
+            case None => fc
+          }
+        case other =>
+          other
       }
     }
 

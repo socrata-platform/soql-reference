@@ -128,15 +128,24 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extend
       case ft: FromTable => (Nil, ft)
       case fs: FromSingleRow => (Nil, fs)
       case fc: FromCTE =>
-        val cteInfo = availableCTEs.ctes(fc.cteLabel)
-        val newCTE = availableCTEs.rebase(fc)
-        val orderingColumns =
-          if(wantOrderingColumns) {
-            cteInfo.extra.map { case (col, typ, asc, nullLast) => OrderBy(VirtualColumn[MT](newCTE.label, col, typ)(AtomicPositionInfo.Synthetic), asc, nullLast) }
-          } else {
-            Nil
-          }
-        (orderingColumns, newCTE)
+        availableCTEs.ctes.get(fc.cteLabel) match {
+          case Some(cteInfo) =>
+            val newCTE = availableCTEs.rebase(fc)
+            val orderingColumns =
+              if(wantOrderingColumns) {
+                cteInfo.extra.map { case (col, typ, asc, nullLast) => OrderBy(VirtualColumn[MT](newCTE.label, col, typ)(AtomicPositionInfo.Synthetic), asc, nullLast) }
+              } else {
+                Nil
+              }
+            (orderingColumns, newCTE)
+          case None =>
+            // This shouldn't actually happen, but if it does, we just
+            // didn't rewrite anything.  If it does happen, it means
+            // the rewrite pass was applied to something that wasn't a
+            // top-level statement, and it references a CTE defined in
+            // the higher level to which the pass has no access.
+            (Nil, fc)
+        }
       case fs@FromStatement(stmt, label, resourceName, canonicalName, alias) =>
         val (orderColumn, newStmt) = rewriteStatement(availableCTEs, stmt, wantOutputOrdered, wantOrderingColumns)
         (orderColumn.map { case (col, typ, asc, nullLast) => OrderBy(VirtualColumn(label, col, typ)(AtomicPositionInfo.Synthetic), asc, nullLast) }, fs.copy(statement = newStmt))
