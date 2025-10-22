@@ -132,7 +132,7 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
         val (newAvailableCTEs, newDefs) = availableCTEs.collect(defs) { (aCTEs, query) =>
           ((), rewriteStatement(aCTEs, query, exprReplaces))
         }
-        rewriteStatement(newAvailableCTEs, useQuery, exprReplaces)
+        CTE(newDefs, rewriteStatement(newAvailableCTEs, useQuery, exprReplaces))
       case v@Values(_, _) =>
         v
       case s: Select =>
