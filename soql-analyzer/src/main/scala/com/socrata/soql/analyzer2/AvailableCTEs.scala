@@ -84,7 +84,7 @@ object AvailableCTEs {
     private def rebaseAll(ctes: Map[AutoTableLabel, Statement[MT]], f: From[MT]): From[MT] =
       f.map[MT](
         rebaseAllAtomic(ctes, _),
-        { (joinType, lat, left, right, on) => Join(joinType, lat, left, rebaseAllAtomic(ctes, right), on) }
+        { (joinType, isLateral, left, right, on) => Join(joinType, isLateral, left, rebaseAllAtomic(ctes, right), on) }
       )
 
     def rebaseAllAtomic(f: AtomicFrom[MT]): AtomicFrom[MT] =
