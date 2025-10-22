@@ -336,8 +336,6 @@ class InlineTrivialParameters[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] 
 
 object InlineTrivialParameters {
   def apply[MT <: MetaTypes](isLiteralTrue: Expr[MT] => Boolean, stmt: Statement[MT]): Statement[MT] = {
-    MaterializeNamedQueries.validate(
-      new InlineTrivialParameters[MT](isLiteralTrue).rewriteStatement(AvailableCTEs.empty, stmt, Map.empty)
-    )
+    new InlineTrivialParameters[MT](isLiteralTrue).rewriteStatement(AvailableCTEs.empty, stmt, Map.empty)
   }
 }

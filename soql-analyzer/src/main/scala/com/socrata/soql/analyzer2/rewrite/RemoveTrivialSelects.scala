@@ -115,8 +115,6 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
   * columns from some single subselect, with no other action". */
 object RemoveTrivialSelects {
   def apply[MT <: MetaTypes](stmt: Statement[MT]): Statement[MT] = {
-    MaterializeNamedQueries.validate(
-      new RemoveTrivialSelects[MT]().rewriteStatement(AvailableCTEs.empty, stmt)
-    )
+    new RemoveTrivialSelects[MT]().rewriteStatement(AvailableCTEs.empty, stmt)
   }
 }

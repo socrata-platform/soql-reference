@@ -101,8 +101,6 @@ class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends 
   * SelectListReferences must not be present (this is unchecked!!). */
 object PreserveUnique {
   def apply[MT <: MetaTypes](labelProvider: LabelProvider, stmt: Statement[MT]): Statement[MT] = {
-    MaterializeNamedQueries.validate(
-      new PreserveUnique[MT](labelProvider).rewriteStatement(AvailableCTEs.empty, stmt, false)
-    )
+    new PreserveUnique[MT](labelProvider).rewriteStatement(AvailableCTEs.empty, stmt, false)
   }
 }

@@ -245,11 +245,8 @@ object MaterializeNamedQueries {
   @volatile var validationActive = false
 
   def apply[MT <: MetaTypes](labelProvider: LabelProvider, statement: Statement[MT]): Statement[MT] = {
-    validate(new MaterializeNamedQueries[MT](labelProvider).rewriteTopLevelStatement(statement))
-  }
-
-  def validate[MT <: MetaTypes](s: Statement[MT]): Statement[MT] = {
-    assert(s.referencedCTEs.isEmpty)
-    s
+    val result = new MaterializeNamedQueries[MT](labelProvider).rewriteTopLevelStatement(statement)
+    assert(result.referencedCTEs == statement.referencedCTEs)
+    result
   }
 }

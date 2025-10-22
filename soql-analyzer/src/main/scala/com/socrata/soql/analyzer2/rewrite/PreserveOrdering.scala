@@ -157,14 +157,10 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extend
   * SelectListReferences must not be present (this is unchecked!!). */
 object PreserveOrdering {
   def apply[MT <: MetaTypes](labelProvider: LabelProvider, stmt: Statement[MT]): Statement[MT] = {
-    MaterializeNamedQueries.validate(
-      new PreserveOrdering[MT](labelProvider).rewriteStatement(AvailableCTEs.empty, stmt, true, false)._2
-    )
+    new PreserveOrdering[MT](labelProvider).rewriteStatement(AvailableCTEs.empty, stmt, true, false)._2
   }
 
   def withExtraOutputColumns[MT <: MetaTypes](labelProvider: LabelProvider, stmt: Statement[MT]): Statement[MT] = {
-    MaterializeNamedQueries.validate(
-      new PreserveOrdering[MT](labelProvider).rewriteStatement(AvailableCTEs.empty, stmt, true, true)._2
-    )
+    new PreserveOrdering[MT](labelProvider).rewriteStatement(AvailableCTEs.empty, stmt, true, true)._2
   }
 }

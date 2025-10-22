@@ -95,7 +95,7 @@ object RemoveUnusedColumns {
     if(removedAnything) {
       this(newStmt)
     } else {
-      MaterializeNamedQueries.validate(newStmt)
+      newStmt
     }
   }
 }

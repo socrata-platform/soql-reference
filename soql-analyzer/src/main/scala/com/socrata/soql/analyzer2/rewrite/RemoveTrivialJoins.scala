@@ -55,8 +55,6 @@ class RemoveTrivialJoins[MT <: MetaTypes] private (isLiteralTrue: Expr[MT] => Bo
   * columns from some single subselect, with no other action". */
 object RemoveTrivialJoins {
   def apply[MT <: MetaTypes](stmt: Statement[MT], isLiteralTrue: Expr[MT] => Boolean): Statement[MT] = {
-    MaterializeNamedQueries.validate(
-      new RemoveTrivialJoins[MT](isLiteralTrue).rewriteStatement(AvailableCTEs.empty, stmt)
-    )
+    new RemoveTrivialJoins[MT](isLiteralTrue).rewriteStatement(AvailableCTEs.empty, stmt)
   }
 }

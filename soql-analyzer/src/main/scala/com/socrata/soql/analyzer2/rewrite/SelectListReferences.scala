@@ -115,14 +115,10 @@ class SelectListReferences[MT <: MetaTypes] private () extends StatementUniverse
   */
 object SelectListReferences {
   def use[MT <: MetaTypes](stmt: Statement[MT]): Statement[MT] = {
-    MaterializeNamedQueries.validate(
-      new SelectListReferences[MT]().Use.rewriteStatement(AvailableCTEs.empty, stmt)
-    )
+    new SelectListReferences[MT]().Use.rewriteStatement(AvailableCTEs.empty, stmt)
   }
 
   def unuse[MT <: MetaTypes](stmt: Statement[MT]): Statement[MT] = {
-    MaterializeNamedQueries.validate(
-      new SelectListReferences[MT]().Unuse.rewriteStatement(AvailableCTEs.empty, stmt)
-    )
+    new SelectListReferences[MT]().Unuse.rewriteStatement(AvailableCTEs.empty, stmt)
   }
 }
