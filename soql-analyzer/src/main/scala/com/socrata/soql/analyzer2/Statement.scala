@@ -27,7 +27,7 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
   // information to produce a full Column.
   def unique: LazyList[Seq[AutoColumnLabel]]
 
-  def referencedCTEs: Set[AutoTableLabel]
+  def referencedCTEs: Set[AutoCTELabel]
 
   final def allTables: Set[DatabaseTableName] = doAllTables(Set.empty)
   private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName]
@@ -197,12 +197,12 @@ object CombinedTables extends statement.OCombinedTablesImpl
 // `definitions` will be `eq` to that definition's query.  It is
 // enforced in this class's constructor.
 case class CTE[MT <: MetaTypes] private (
-  definitions: OrderedMap[AutoTableLabel, CTE.Definition[MT]],
+  definitions: OrderedMap[AutoCTELabel, CTE.Definition[MT]],
   useQuery: Statement[MT]
 ) extends Statement[MT] with statement.CTEImpl[MT]
 object CTE extends statement.OCTEImpl {
   def apply[MT <: MetaTypes](
-    definitions: OrderedMap[AutoTableLabel, CTE.Definition[MT]],
+    definitions: OrderedMap[AutoCTELabel, CTE.Definition[MT]],
     useQuery: Statement[MT]
   ): CTE[MT] = {
     val result = unvalidated(definitions, useQuery)
@@ -211,7 +211,7 @@ object CTE extends statement.OCTEImpl {
   }
 
   def unvalidated[MT <: MetaTypes](
-    definitions: OrderedMap[AutoTableLabel, CTE.Definition[MT]],
+    definitions: OrderedMap[AutoCTELabel, CTE.Definition[MT]],
     useQuery: Statement[MT]
   ): CTE[MT] = {
     new CTE(definitions, useQuery)

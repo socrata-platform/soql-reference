@@ -227,7 +227,7 @@ trait JoinImpl[MT <: MetaTypes] { this: Join[MT] =>
     Util.mergeColumnSet(Util.mergeColumnSet(leftNLCR, rightNLCR), onNLCR)
   }
 
-  lazy val referencedCTEs = reduce[Set[AutoTableLabel]](
+  lazy val referencedCTEs = reduce[Set[AutoCTELabel]](
     _.referencedCTEs,
     { (acc, join) => acc ++ join.right.referencedCTEs }
   )

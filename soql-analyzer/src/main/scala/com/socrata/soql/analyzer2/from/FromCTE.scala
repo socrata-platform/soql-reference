@@ -66,7 +66,8 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
         // CTEs can only be considered candidates if we've already
         // decided that the CTEs are associated.
         state.alreadyAssociated(this.cteLabel, thatCteLabel) &&
-          state.tryAssociate(this.label, thatLabel)
+          state.tryAssociate(this.label, thatLabel) &&
+          recurseStmt(this.basedOn, state, Some(this.label), Some(thatLabel), thatBasedOn)
       case _ =>
         false
     }
@@ -74,8 +75,6 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
   private[analyzer2] final def findVerticalSlice(state: IsomorphismState, that: From[MT]): Boolean =
     that match {
       case FromCTE(thatCteLabel, thatLabel, thatBasedOn, thatResourceName, thatCanonicalName, thatAlias) =>
-        // CTEs can only be considered candidates if we've already
-        // decided that the CTEs are associated.
         state.alreadyAssociated(this.cteLabel, thatCteLabel) &&
           state.tryAssociate(this.label, thatLabel) &&
           this.basedOn.findVerticalSlice(state, Some(this.label), Some(thatLabel), thatBasedOn)
@@ -119,7 +118,7 @@ trait OFromCTEImpl { this: FromCTE.type =>
   implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope], ctReadable: Readable[MT#ColumnType], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[FromCTE[MT]] = new Readable[FromCTE[MT]] with LabelUniverse[MT] {
     def readFrom(buffer: ReadBuffer): FromCTE[MT] = {
       FromCTE(
-        cteLabel = buffer.read[AutoTableLabel](),
+        cteLabel = buffer.read[AutoCTELabel](),
         label = buffer.read[AutoTableLabel](),
         basedOn = buffer.read[Statement[MT]](),
         definiteResourceName = buffer.read[ScopedResourceName](),

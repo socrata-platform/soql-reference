@@ -22,7 +22,7 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
   // aren't necessarily.  Perhaps we should use structural equality
   // rather than relying on names?
 
-  private case class CTEStuff(label: AutoTableLabel, defQuery: Statement) {
+  private case class CTEStuff(label: AutoCTELabel, defQuery: Statement) {
     var reused = false
 
     // This is sort of gnarly flow, but, this works in two passes.
@@ -97,7 +97,7 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
         NamedQueries.retrieveCached(cn, stmt) match {
           case None =>
             collectNamedQueries(stmt)
-            NamedQueries.save(cn, CTEStuff(labelProvider.tableLabel(), stmt))
+            NamedQueries.save(cn, CTEStuff(labelProvider.cteLabel(), stmt))
           case Some(ctestuff) =>
             ctestuff.reused = true
         }

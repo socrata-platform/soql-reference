@@ -67,6 +67,7 @@ object TestHelper {
     override def gensymPrefix: String = "g"
     protected override def idxPrefix: String ="idx"
     protected override def autoTablePrefix: String = "x"
+    protected override def autoCTEPrefix: String = "c"
     protected override def autoColumnPrefix: String = "i"
   }
 

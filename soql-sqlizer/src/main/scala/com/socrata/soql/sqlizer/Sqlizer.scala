@@ -156,7 +156,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
         val (defDoc, defSchema) = sqlizeStatement(defn.query, availableSchemas, dynamicContext, false)
 
         val clause = Seq(
-          Some(namespace.tableLabel(label) +#+ d"AS"),
+          Some(namespace.cteLabel(label) +#+ d"AS"),
           sqlizeMaterializedHint(defn.hint),
           Some(defDoc.encloseNesting(d"(", d")"))
         ).flatten.hsep
@@ -657,7 +657,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
           (d"(SELECT)", OrderedMap.empty)
 
         case FromCTE(cteLabel, _label, _basedOn, _rn, _cn, _alias) =>
-          (namespace.tableLabel(cteLabel), availableSchemas.potential(cteLabel))
+          (namespace.cteLabel(cteLabel), availableSchemas.potential(cteLabel))
       }
 
     (sql.annotate[SqlizeAnnotation](SqlizeAnnotation.Table(from.label)) +#+ d"AS" +#+ namespace.tableLabel(from.label), availableSchemas.addInstantiated(from.label -> schema))

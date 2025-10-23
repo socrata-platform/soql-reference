@@ -31,7 +31,7 @@ sealed abstract class From[MT <: MetaTypes] extends LabelUniverse[MT] {
   // into a corner?
   def unique: LazyList[Seq[Column[MT]]]
 
-  def referencedCTEs: Set[AutoTableLabel]
+  def referencedCTEs: Set[AutoCTELabel]
 
   def schema: Seq[From.SchemaEntry[MT]]
   lazy val schemaByTableColumn: Map[(AutoTableLabel, ColumnLabel), From.SchemaEntry[MT]] = locally {
@@ -224,7 +224,7 @@ object FromTable extends from.OFromTableImpl
 // that is defined in some parent CTE statement node.  It is checked
 // in the `CTE` constructor.
 case class FromCTE[MT <: MetaTypes](
-  cteLabel: AutoTableLabel,
+  cteLabel: AutoCTELabel,
   label: AutoTableLabel,
   basedOn: Statement[MT],
   definiteResourceName: types.ScopedResourceName[MT],

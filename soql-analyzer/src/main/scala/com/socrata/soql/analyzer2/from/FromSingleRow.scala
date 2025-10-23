@@ -22,7 +22,7 @@ trait FromSingleRowImpl[MT <: MetaTypes] { this: FromSingleRow[MT] =>
 
   def schema = Nil
 
-  def referencedCTEs = Set.empty[AutoTableLabel]
+  def referencedCTEs = Set.empty[AutoCTELabel]
 
   private[analyzer2] val scope: Scope[MT] =
     new Scope.Virtual(label, OrderedMap.empty)

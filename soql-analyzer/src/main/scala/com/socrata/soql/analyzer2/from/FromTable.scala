@@ -17,7 +17,7 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   type Self[MT <: MetaTypes] = FromTable[MT]
   def asSelf = this
 
-  def referencedCTEs = Set.empty[AutoTableLabel]
+  def referencedCTEs = Set.empty[AutoCTELabel]
 
   def find(predicate: Expr[MT] => Boolean) = None
   def contains(e: Expr[MT]): Boolean = false

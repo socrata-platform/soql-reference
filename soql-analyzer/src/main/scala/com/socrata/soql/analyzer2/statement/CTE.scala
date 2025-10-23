@@ -72,10 +72,14 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
       case CTE(thatDefinitions, thatUseQuery) =>
         this.definitions.size == thatDefinitions.size &&
           this.definitions.iterator.zip(thatDefinitions.iterator).forall { case ((thisLabel, Definition(thisAlias, thisQuery, thisHint)), (thatLabel, Definition(thatAlias, thatQuery, thatHint))) =>
+            // This isn't great, but we're not going to check the
+            // queries for isomorphism here, because we do that in
+            // "virtual table space", and we don't have a full virtual
+            // table here, just a potential one.  Instead, we'll do
+            // that at the point of use, in FromCTE.
             state.tryAssociate(thisLabel, thatLabel) &&
-              recurseStmt(thisQuery, state, Some(thisLabel), Some(thatLabel), thatQuery) &&
               thisHint == thatHint
-          }
+          } &&
           this.useQuery.findIsomorphismish(state, thisCurrentTableLabel, thatCurrentTableLabel, thatUseQuery, recurseStmt, recurseFrom)
       case _ =>
         false
@@ -91,11 +95,13 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
       case CTE(thatDefinitions, thatUseQuery) =>
         this.definitions.size == thatDefinitions.size &&
           this.definitions.iterator.zip(thatDefinitions.iterator).forall { case ((thisLabel, Definition(thisAlias, thisQuery, thisHint)), (thatLabel, Definition(thatAlias, thatQuery, thatHint))) =>
+            // similarly to findIsomorphismish, we'll associate the
+            // CTE labels here but defer the "is vertical slice?"
+            // checking to point of use.
             state.tryAssociate(thisLabel, thatLabel) &&
-              thisQuery.findVerticalSlice(state, Some(thisLabel), Some(thatLabel), thatQuery) &&
               thisHint == thatHint
-          }
-          this.useQuery.findVerticalSlice(state, thisCurrentTableLabel, thatCurrentTableLabel, thatUseQuery)
+          } &&
+        this.useQuery.findVerticalSlice(state, thisCurrentTableLabel, thatCurrentTableLabel, thatUseQuery)
       case _ =>
         false
     }
@@ -123,17 +129,12 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
   private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
     for((label, defn) <- definitions) {
       defn.query.doLabelMap(state)
-      val tr = LabelMap.TableReference(None, None)
-      state.tableMap += label -> tr
-      for((columnLabel, Statement.SchemaEntry(name, _typ, _isSynthetic, _hint)) <- defn.query.schema) {
-        state.columnMap += (label, columnLabel) -> (tr, name)
-      }
     }
     useQuery.doLabelMap(state)
   }
 
   override def nonlocalColumnReferences =
-    definitions.valuesIterator.foldLeft(useQuery.nonlocalColumnReferences -- definitions.keys) { (acc, defn) =>
+    definitions.valuesIterator.foldLeft(useQuery.nonlocalColumnReferences) { (acc, defn) =>
       Util.mergeColumnSet(acc, defn.query.nonlocalColumnReferences)
     }
 }
@@ -185,7 +186,7 @@ trait OCTEImpl { this: CTE.type =>
           validator.fixupSpecificallyCTEReferences(
             AvailableCTEs.empty,
             CTE.unvalidated(
-              definitions = buffer.read[OrderedMap[AutoTableLabel, Definition[MT]]](),
+              definitions = buffer.read[OrderedMap[AutoCTELabel, Definition[MT]]](),
               useQuery = buffer.read[Statement[MT]]()
             )
           )

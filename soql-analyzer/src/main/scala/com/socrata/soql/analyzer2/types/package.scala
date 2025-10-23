@@ -18,6 +18,8 @@ package object types {
   type AutoTableLabel[MT <: MetaTypes] = analyzer2.AutoTableLabel
   type DatabaseTableName[MT <: MetaTypes] = analyzer2.DatabaseTableName[MT#DatabaseTableNameImpl]
 
+  type AutoCTELabel[MT <: MetaTypes] = analyzer2.AutoCTELabel
+
   type FromProvenance[MT <: MetaTypes] = analyzer2.FromProvenance[MT#DatabaseTableNameImpl]
   type ToProvenance[MT <: MetaTypes] = analyzer2.ToProvenance[MT#DatabaseTableNameImpl]
   type ProvenanceMapper[MT <: MetaTypes] = analyzer2.ProvenanceMapper[MT#DatabaseTableNameImpl]

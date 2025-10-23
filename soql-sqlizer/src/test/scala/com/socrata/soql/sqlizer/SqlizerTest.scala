@@ -499,7 +499,7 @@ class SqlizerTest extends FunSuite with MustMatchers with TestHelper with Sqlize
 
     val sqlish = analyze(tf, soql, Seq(rewrite.Pass.MaterializeNamedQueries)).layoutSingleLine.toString
 
-    sqlish must equal ("""WITH x12 AS (SELECT x1.id AS i1, x1.text AS i2 FROM table AS x1), x13 AS (SELECT x2.i2 AS i5, x4.i2 AS i6 FROM x12 AS x2 JOIN x12 AS x4 ON true) SELECT x5.i5 AS i13, x10.i6 AS i14 FROM x13 AS x5 JOIN x13 AS x10 ON true""")
+    sqlish must equal ("""WITH c1 AS (SELECT x1.id AS i1, x1.text AS i2 FROM table AS x1), c2 AS (SELECT x2.i2 AS i5, x4.i2 AS i6 FROM c1 AS x2 JOIN c1 AS x4 ON true) SELECT x5.i5 AS i13, x10.i6 AS i14 FROM c2 AS x5 JOIN c2 AS x10 ON true""")
   }
 
   test("CTE - uncompressed column") {
@@ -514,7 +514,7 @@ class SqlizerTest extends FunSuite with MustMatchers with TestHelper with Sqlize
 
     val sqlish = analyze(tf, soql, Seq(rewrite.Pass.MaterializeNamedQueries)).layoutSingleLine.toString
 
-    sqlish must equal ("""WITH x6 AS (SELECT x1.compound_a AS i1_a, x1.compound_b AS i1_b FROM table AS x1) SELECT x2.i1_a AS i3_a, x2.i1_b AS i3_b, x4.i1_a AS i4_a, x4.i1_b AS i4_b FROM x6 AS x2 JOIN x6 AS x4 ON true""")
+    sqlish must equal ("""WITH c1 AS (SELECT x1.compound_a AS i1_a, x1.compound_b AS i1_b FROM table AS x1) SELECT x2.i1_a AS i3_a, x2.i1_b AS i3_b, x4.i1_a AS i4_a, x4.i1_b AS i4_b FROM c1 AS x2 JOIN c1 AS x4 ON true""")
   }
 
   test("CTE - compressed column") {
@@ -529,6 +529,6 @@ class SqlizerTest extends FunSuite with MustMatchers with TestHelper with Sqlize
 
     val sqlish = analyze(tf, soql, Seq(rewrite.Pass.MaterializeNamedQueries)).layoutSingleLine.toString
 
-    sqlish must equal ("""WITH x6 AS (SELECT test_soql_compress_compound(x1.compound_a, x1.compound_b) AS i1 FROM table AS x1) SELECT x2.i1 AS i3, x4.i1 AS i4 FROM x6 AS x2 JOIN x6 AS x4 ON true""")
+    sqlish must equal ("""WITH c1 AS (SELECT test_soql_compress_compound(x1.compound_a, x1.compound_b) AS i1 FROM table AS x1) SELECT x2.i1 AS i3, x4.i1 AS i4 FROM c1 AS x2 JOIN c1 AS x4 ON true""")
   }
 }

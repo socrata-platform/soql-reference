@@ -6,11 +6,12 @@ import com.rojoma.json.v3.util.{SimpleHierarchyEncodeBuilder, SimpleHierarchyDec
 
 import com.socrata.prettyprint.prelude._
 
-import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer, Readable, Writable}
+import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer, Readable, Writable, Version}
 
 class LabelProvider extends Cloneable {
   private var tables = 0
   private var columns = 0
+  private var ctes = 0
 
   def tableLabel(): AutoTableLabel = {
     tables += 1
@@ -19,6 +20,10 @@ class LabelProvider extends Cloneable {
   def columnLabel(): AutoColumnLabel = {
     columns += 1
     new AutoColumnLabel(columns)
+  }
+  def cteLabel(): AutoCTELabel = {
+    ctes += 1
+    new AutoCTELabel(ctes)
   }
 
   override def clone(): LabelProvider =
@@ -30,12 +35,23 @@ object LabelProvider {
     def writeTo(buffer: WriteBuffer, lp: LabelProvider): Unit = {
       buffer.write(lp.tables)
       buffer.write(lp.columns)
+      buffer.write(lp.ctes)
     }
 
     def readFrom(buffer: ReadBuffer): LabelProvider = {
       val result = new LabelProvider
-      result.tables = buffer.read[Int]()
-      result.columns = buffer.read[Int]()
+
+      buffer.version match {
+        case Version.V6 =>
+          result.tables = buffer.read[Int]()
+          result.columns = buffer.read[Int]()
+          result.ctes = 0
+        case Version.V7 =>
+          result.tables = buffer.read[Int]()
+          result.columns = buffer.read[Int]()
+          result.ctes = buffer.read[Int]()
+      }
+
       result
     }
   }
@@ -255,4 +271,65 @@ object ColumnLabel {
           case (a: AutoColumnLabel, b: AutoColumnLabel) => AutoColumnLabel.ordering.compare(a, b)
         }
     }
+}
+
+final class AutoCTELabel private[analyzer2] (val name: Int) {
+  override def toString = s"cte${LabelProvider.subscript(name)}"
+
+  override def hashCode = name.hashCode
+  override def equals(that: Any) =
+    that match {
+      case acl: AutoCTELabel => this.name == acl.name
+      case _ => false
+    }
+
+  def debugDoc: Doc[Nothing] = Doc(toString)
+}
+object AutoCTELabel {
+  def unapply(acl: AutoCTELabel): Some[Int] = Some(acl.name)
+
+  def forTest(name: Int) = new AutoCTELabel(name)
+
+  implicit object jCodec extends JsonEncode[AutoCTELabel] with JsonDecode[AutoCTELabel] {
+    def encode(v: AutoCTELabel) = JNumber(v.name)
+    def decode(x: JValue) = x match {
+      case n: JNumber => decodeNum(n)
+      case other => Left(DecodeError.InvalidType(expected = JNumber, got = other.jsonType))
+    }
+    private[analyzer2] def decodeNum(n: JNumber) =
+      try {
+        Right(new AutoCTELabel(n.toJBigDecimal.intValueExact))
+      } catch {
+        case _ : ArithmeticException =>
+          Left(DecodeError.InvalidValue(n))
+      }
+  }
+
+  implicit object fCodec extends FieldEncode[AutoCTELabel] with FieldDecode[AutoCTELabel] {
+    def encode(v: AutoCTELabel) = v.name.toString
+    def decode(s: String) =
+      try {
+        val n = BigInt(s)
+        if(n.isValidInt) {
+          Right(new AutoCTELabel(n.intValue))
+        } else {
+          Left(DecodeError.InvalidField(s))
+        }
+      } catch {
+        case _ : NumberFormatException => Left(DecodeError.InvalidField(s))
+      }
+  }
+
+  implicit object serialize extends Writable[AutoCTELabel] with Readable[AutoCTELabel] {
+    def writeTo(buffer: WriteBuffer, a: AutoCTELabel) =
+      buffer.write(a.name)
+
+    def readFrom(buffer: ReadBuffer) =
+      new AutoCTELabel(buffer.read[Int]())
+  }
+
+  implicit object ordering extends Ordering[AutoCTELabel] {
+    def compare(a: AutoCTELabel, b: AutoCTELabel) =
+      a.name.compare(b.name)
+  }
 }

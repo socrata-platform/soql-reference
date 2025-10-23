@@ -9,6 +9,10 @@ trait SqlNamespaces[MT <: MetaTypes] extends LabelUniverse[MT] {
   def tableLabel(table: AutoTableLabel): Doc[Nothing] =
     d"$autoTablePrefix${table.name}"
 
+  // Ditto, for CTE labels
+  def cteLabel(cte: AutoCTELabel): Doc[Nothing] =
+    d"$autoCTEPrefix${cte.name}"
+
   // If the label is an AutoColumnLabel, turns it into a column name
   // that is guaranteed to not conflict with any real column.
   // Otherwise it returns the (base of) the physical column(s) which
@@ -55,6 +59,8 @@ trait SqlNamespaces[MT <: MetaTypes] extends LabelUniverse[MT] {
   protected def idxPrefix: String
 
   protected def autoTablePrefix: String
+
+  protected def autoCTEPrefix: String
 
   protected def autoColumnPrefix: String
 

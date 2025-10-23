@@ -8,7 +8,7 @@ import com.socrata.soql.collection.OrderedMap
 
 case class AvailableSchemas[MT <: MetaTypes with MetaTypesExt](
   instantiated: Map[AutoTableLabel, AugmentedSchema[MT]],
-  potential: Map[AutoTableLabel, AugmentedSchema[MT]]
+  potential: Map[AutoCTELabel, AugmentedSchema[MT]]
 ) {
   // "instantiated" schemas are ones that represent the output of a
   // particular query.
@@ -17,7 +17,7 @@ case class AvailableSchemas[MT <: MetaTypes with MetaTypesExt](
 
   // "potential" schemas are ones that have not yet been instantiated.
   // For example, the schema of a CTE.
-  def addPotential(labelSchema: (AutoTableLabel, AugmentedSchema[MT])) =
+  def addPotential(labelSchema: (AutoCTELabel, AugmentedSchema[MT])) =
     copy(potential = potential + labelSchema)
 }
 
