@@ -10,4 +10,5 @@ object SqlizeAnnotation {
   case class Table[MT <: MetaTypes with MetaTypesExt](table: AutoTableLabel) extends SqlizeAnnotation[MT]
   case class OutputName[MT <: MetaTypes with MetaTypesExt](name: ColumnName) extends SqlizeAnnotation[MT]
   case class Custom[MT <: MetaTypes with MetaTypesExt](ann: MT#CustomSqlizeAnnotation) extends SqlizeAnnotation[MT]
+  case class CTE[MT <: MetaTypes with MetaTypesExt](cte: AutoCTELabel) extends SqlizeAnnotation[MT]
 }

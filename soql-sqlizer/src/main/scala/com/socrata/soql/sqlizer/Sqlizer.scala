@@ -155,8 +155,10 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
       cte.definitions.foldMap(availableSchemas) { case (availableSchemas, (label, defn)) =>
         val (defDoc, defSchema) = sqlizeStatement(defn.query, availableSchemas, dynamicContext, false)
 
+        val cteName = namespace.cteLabel(label).annotate[SqlizeAnnotation](SqlizeAnnotation.CTE(label))
+
         val clause = Seq(
-          Some(namespace.cteLabel(label) +#+ d"AS"),
+          Some(cteName +#+ d"AS"),
           sqlizeMaterializedHint(defn.hint),
           Some(defDoc.encloseNesting(d"(", d")"))
         ).flatten.hsep
@@ -718,7 +720,7 @@ object Sqlizer {
           for(i <- 0 until indent) builder += s
         case tree.Ann(SqlizeAnnotation.Expression(e), subtree) =>
           processNode(subtree, e.position.source)
-        case tree.Ann(SqlizeAnnotation.Table(_) | SqlizeAnnotation.OutputName(_) | SqlizeAnnotation.Custom(_), subtree) =>
+        case tree.Ann(SqlizeAnnotation.Table(_) | SqlizeAnnotation.OutputName(_) | SqlizeAnnotation.Custom(_) | SqlizeAnnotation.CTE(_), subtree) =>
           processNode(subtree, s)
         case tree.Concat(elems) =>
           for(elem <- elems) {
