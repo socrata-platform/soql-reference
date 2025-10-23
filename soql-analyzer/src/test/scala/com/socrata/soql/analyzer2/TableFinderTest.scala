@@ -25,41 +25,39 @@ class TableFinderTest extends FunSuite with MustMatchers {
     type DatabaseColumnNameImpl = String
   }
 
-  val tables = new MockTableFinder[MT](
-    Map(
-      (0, "t1") -> D(
-        "key" -> "integer",
-        "value" -> "thing"
-      ),
-      (0, "t2") -> D(
-        "key" -> "integer",
-        "value" -> "otherthing"
-      ),
-      (0, "t3") -> Q(0, "t2", "select *"),
-      (0, "t4") -> U(0, "select * from @t2"),
-      (0, "t5") -> Q(1, "t1", "select *"),
-      (0, "t6") -> Q(1, "t2", "select *"), // t2 exists in scope 0 but not in scope 1
-      (0, "bad_one") -> Q(0, "bad_two", "select *"),
-      (0, "bad_two") -> Q(0, "bad_one", "select *"),
-      (0, "bad_three") -> Q(0, "t1", "select * join @bad_four on true"),
-      (0, "bad_four") -> Q(0, "t1", "select * join @bad_three on true"),
-      (0, "bad_five") -> Q(0, "t1", "select * join @bad_six on true"),
-      (0, "bad_six") -> Q(0, "bad_five", "select *"),
-      (0, "bad_deep_one") -> Q(0, "bad_deep_four", "select *"),   // \
-      (0, "bad_deep_two") -> Q(0, "bad_deep_one", "select *"),    //  \ these form
-      (0, "bad_deep_three") -> Q(0, "bad_deep_two", "select *"),  //  / a loop
-      (0, "bad_deep_four") -> Q(0, "bad_deep_three", "select *"), // /
-      (0, "bad_deep_five") -> Q(0, "bad_deep_four", "select *"),  // this one just calls into that loop
-      (1, "t1") -> D(),
+  val tables = MockTableFinder[MT](
+    (0, "t1") -> D(
+      "key" -> "integer",
+      "value" -> "thing"
+    ),
+    (0, "t2") -> D(
+      "key" -> "integer",
+      "value" -> "otherthing"
+    ),
+    (0, "t3") -> Q(0, "t2", "select *"),
+    (0, "t4") -> U(0, "select * from @t2"),
+    (0, "t5") -> Q(1, "t1", "select *").withCanonicalName("t5"),
+    (0, "t6") -> Q(1, "t2", "select *"), // t2 exists in scope 0 but not in scope 1
+    (0, "bad_one") -> Q(0, "bad_two", "select *").withCanonicalName("b1"),
+    (0, "bad_two") -> Q(0, "bad_one", "select *").withCanonicalName("b2"),
+    (0, "bad_three") -> Q(0, "t1", "select * join @bad_four on true").withCanonicalName("b3"),
+    (0, "bad_four") -> Q(0, "t1", "select * join @bad_three on true").withCanonicalName("b4"),
+    (0, "bad_five") -> Q(0, "t1", "select * join @bad_six on true").withCanonicalName("b5"),
+    (0, "bad_six") -> Q(0, "bad_five", "select *").withCanonicalName("b6"),
+    (0, "bad_deep_one") -> Q(0, "bad_deep_four", "select *").withCanonicalName("bd1"),   // \
+    (0, "bad_deep_two") -> Q(0, "bad_deep_one", "select *").withCanonicalName("bd2"),    //  \ these form
+    (0, "bad_deep_three") -> Q(0, "bad_deep_two", "select *").withCanonicalName("bd3"),  //  / a loop
+    (0, "bad_deep_four") -> Q(0, "bad_deep_three", "select *").withCanonicalName("bd4"), // /
+    (0, "bad_deep_five") -> Q(0, "bad_deep_four", "select *").withCanonicalName("bd5"),  // this one just calls into that loop
+    (1, "t1") -> D(),
 
-      (0, "graph_root") -> Q(0, "graph_parent_1", "select * join @graph_parent_2 on true"),
-      (0, "graph_parent_1") -> Q(0, "graph_dataset_1", "select *"),
-      (0, "graph_parent_2") -> Q(0, "graph_dataset_2", "select * join @graph_grandparent(1) on true"),
-      (0, "graph_grandparent") -> U(0, "select * from @single_row join @graph_dataset_3 on true"),
-      (0, "graph_dataset_1") -> D(),
-      (0, "graph_dataset_2") -> D(),
-      (0, "graph_dataset_3") -> D()
-    )
+    (0, "graph_root") -> Q(0, "graph_parent_1", "select * join @graph_parent_2 on true"),
+    (0, "graph_parent_1") -> Q(0, "graph_dataset_1", "select *"),
+    (0, "graph_parent_2") -> Q(0, "graph_dataset_2", "select * join @graph_grandparent(1) on true"),
+    (0, "graph_grandparent") -> U(0, "select * from @single_row join @graph_dataset_3 on true"),
+    (0, "graph_dataset_1") -> D(),
+    (0, "graph_dataset_2") -> D(),
+    (0, "graph_dataset_3") -> D()
   )
 
   def posMatches(pos: Position, rowCol: Option[(Int, Int)]) =
@@ -117,20 +115,20 @@ class TableFinderTest extends FunSuite with MustMatchers {
   }
 
   test("will reject mutually recursive queries - context") {
-    tables.findTables(0, ResourceName("bad_one")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_one"))), None, "bad_one","bad_two","bad_one"))
+    tables.findTables(0, ResourceName("bad_one")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_one"))), None, "b1","b2","b1"))
   }
 
   test("will reject mutually recursive queries - from") {
-    tables.findTables(0, ResourceName("bad_three")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_three"))), None, "bad_three","bad_four","bad_three"))
+    tables.findTables(0, ResourceName("bad_three")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_three"))), None, "b3","b4","b3"))
   }
 
   test("will reject mutually recursive queries - mixed") {
-    tables.findTables(0, ResourceName("bad_five")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_five"))), None, "bad_five","bad_six","bad_five"))
+    tables.findTables(0, ResourceName("bad_five")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_five"))), None, "b5","b6","b5"))
   }
 
   test("will reject mutually recursive queries - deep") {
     // this is checking that the Source in the error is the top of the loop
-    tables.findTables(0, ResourceName("bad_deep_five")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_deep_four"))), None, "bad_deep_four","bad_deep_one","bad_deep_two","bad_deep_three","bad_deep_four","bad_deep_five"))
+    tables.findTables(0, ResourceName("bad_deep_five")) must be (recursiveQuery(Some(ScopedResourceName(0, ResourceName("bad_deep_four"))), None, "bd4","bd1","bd2","bd3","bd4","bd5"))
   }
 
   test("will reject self-recursive queries when impersonating") {

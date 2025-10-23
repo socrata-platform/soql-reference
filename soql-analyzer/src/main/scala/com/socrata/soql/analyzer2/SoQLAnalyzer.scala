@@ -238,6 +238,13 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             },
             from
           )
+        case from: FromCTE =>
+          selectFromFrom(
+            from.basedOn.schema.map { case (label, se) =>
+              labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](from.label, label, se.typ)(AtomicPositionInfo.Synthetic), se.name, None, isSynthetic = false)
+            },
+            from
+          )
         case from: FromSingleRow =>
           selectFromFrom(OrderedMap.empty[AutoColumnLabel, NamedExpr], from)
         case from: FromStatement =>
@@ -276,6 +283,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         FromTable(
           desc.name,
           srn,
+          desc.canonicalName,
           None,
           labelProvider.tableLabel(),
           columns = desc.schema.filter { case (databaseColumnName, _) => !hiddenColumns(databaseColumnName) },
@@ -293,6 +301,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         val from = FromTable(
           desc.name,
           srn,
+          desc.canonicalName,
           None,
           labelProvider.tableLabel(),
           columns = desc.schema,
@@ -326,6 +335,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           ),
           labelProvider.tableLabel(),
           Some(srn),
+          Some(desc.canonicalName),
           None
         )
       }
@@ -510,7 +520,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
 
       val combined = CombinedTables(opify(op), lhs, rhs)
-      val fromCombined = FromStatement(combined, labelProvider.tableLabel(), ctx.scopedResourceName, None)
+      val fromCombined = FromStatement(combined, labelProvider.tableLabel(), ctx.scopedResourceName, ctx.canonicalName, None)
       if(ctx.hiddenColumns.isEmpty) {
         fromCombined
       } else {
@@ -529,7 +539,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             None, Nil, None, Nil, None, None, None, Set.empty
           )
 
-        FromStatement(filteredStmt, labelProvider.tableLabel(), None, None)
+        FromStatement(filteredStmt, labelProvider.tableLabel(), None, None, None)
       }
     }
 
@@ -550,12 +560,16 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     final def findSystemColumns(from: From): Iterable[(ColumnName, Column)] =
       from match {
         case j: Join => findSystemColumns(j.left)
-        case FromTable(tableName, _, _, tableLabel, columns, _) =>
+        case FromTable(tableName, _, _, _, tableLabel, columns, _) =>
           columns.collect { case (colLabel, FromTable.ColumnInfo(name, typ, _hint)) if isSystemColumn(name) =>
             name -> PhysicalColumn[MT](tableLabel, tableName, colLabel, typ)(AtomicPositionInfo.Synthetic)
           }
-        case FromStatement(stmt, tableLabel, _, _) =>
+        case FromStatement(stmt, tableLabel, _, _, _) =>
           stmt.schema.iterator.collect { case (colLabel, Statement.SchemaEntry(name, typ, _hint, _isSynthetic)) if isSystemColumn(name) =>
+            name -> VirtualColumn[MT](tableLabel, colLabel, typ)(AtomicPositionInfo.Synthetic)
+          }.toSeq
+        case fc@FromCTE(_, tableLabel, _, _, _, _) =>
+          fc.basedOn.schema.iterator.collect { case (colLabel, Statement.SchemaEntry(name, typ, _hint, _isSynthetic)) if isSystemColumn(name) =>
             name -> VirtualColumn[MT](tableLabel, colLabel, typ)(AtomicPositionInfo.Synthetic)
           }.toSeq
         case FromSingleRow(_, _) =>
@@ -754,7 +768,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       verifyAggregatesAndWindowFunctions(ctx, stmt)
 
       if(ctx.hiddenColumns.isEmpty) {
-        FromStatement(stmt, labelProvider.tableLabel(), ctx.scopedResourceName, None)
+        FromStatement(stmt, labelProvider.tableLabel(), ctx.scopedResourceName, ctx.canonicalName, None)
       } else {
         // ok, this is a little unpleasant, thanks to DISTINCT.
         stmt.distinctiveness match {
@@ -765,7 +779,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 case (_, NamedExpr(_, cn, _, _)) => !ctx.hiddenColumns(cn)
               }
             )
-            FromStatement(filteredStmt, labelProvider.tableLabel(), ctx.scopedResourceName, None)
+            FromStatement(filteredStmt, labelProvider.tableLabel(), ctx.scopedResourceName, ctx.canonicalName, None)
           case Distinctiveness.FullyDistinct() =>
             // This works because IF a DISTINCT statement has an
             // order by, those order by clauses MUST appear in the
@@ -777,7 +791,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             val (potentiallyUnorderedStatement, potentialLimit, potentialOffset) =
               (stmt.copy(orderBy = Nil, limit = None, offset = None), stmt.limit, stmt.offset)
 
-            val unfilteredFrom = FromStatement(potentiallyUnorderedStatement, labelProvider.tableLabel(), ctx.scopedResourceName, None)
+            val unfilteredFrom = FromStatement(potentiallyUnorderedStatement, labelProvider.tableLabel(), ctx.scopedResourceName, ctx.canonicalName, None)
             val filteredStmt =
               Select(
                 Distinctiveness.Indistinct(),
@@ -807,7 +821,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 search = None,
                 hint = Set.empty
               )
-            FromStatement(filteredStmt, labelProvider.tableLabel(), None, None)
+            FromStatement(filteredStmt, labelProvider.tableLabel(), None, None, None)
         }
       }
     }
@@ -820,6 +834,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           }
           case t: FromTable => new UntypedDatasetContext {
             val columns = OrderedSet() ++ t.columns.valuesIterator.map(_.name)
+          }
+          case cte: FromCTE => new UntypedDatasetContext {
+            val columns = OrderedSet() ++ cte.basedOn.schema.valuesIterator.map(_.name)
           }
           case s: FromStatement => new UntypedDatasetContext {
             val columns = OrderedSet() ++ s.statement.schema.valuesIterator.map(_.name)
@@ -1126,7 +1143,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                   Join(
                     JoinType.Inner,
                     true,
-                    FromStatement(outOfLineParamsQuery, outOfLineParamsLabel, Some(udfScopedResourceName), None),
+                    FromStatement(outOfLineParamsQuery, outOfLineParamsLabel, Some(udfScopedResourceName), Some(udfCanonicalName), None),
                     useQuery,
                     typeInfo.literalBoolean(true, Source.Synthetic)
                   ),
@@ -1140,7 +1157,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                   Set.empty
                 ),
                 labelProvider.tableLabel(),
-                Some(udfScopedResourceName),
+                None,
+                None,
                 None
               )
 

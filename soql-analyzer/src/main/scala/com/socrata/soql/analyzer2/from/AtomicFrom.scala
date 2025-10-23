@@ -50,6 +50,9 @@ trait OAtomicFromImpl { this: AtomicFrom.type =>
         case fsr: FromSingleRow[MT] =>
           buffer.write(2)
           buffer.write(fsr)
+        case fc: FromCTE[MT] =>
+          buffer.write(3)
+          buffer.write(fc)
       }
     }
   }
@@ -60,6 +63,7 @@ trait OAtomicFromImpl { this: AtomicFrom.type =>
         case 0 => buffer.read[FromTable[MT]]()
         case 1 => buffer.read[FromStatement[MT]]()
         case 2 => buffer.read[FromSingleRow[MT]]()
+        case 3 => buffer.read[FromCTE[MT]]()
         case other => fail("Unknown atomic from tag " + other)
       }
     }

@@ -7,6 +7,7 @@ import scala.reflect.ClassTag
 import scala.util.control.ControlThrowable
 
 import com.socrata.soql.analyzer2._
+import com.socrata.soql.analyzer2.DocUtils._
 import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.environment.{ColumnName, Provenance, Source}
 import com.socrata.prettyprint.prelude._
@@ -123,7 +124,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
     )
 
     try {
-      val (sql, augmentedSchema) = sqlizeStatement(rewritten, Map.empty, dynamicContext, rewriteOutputColumns)
+      val (sql, augmentedSchema) = sqlizeStatement(rewritten, AvailableSchemas.empty, dynamicContext, rewriteOutputColumns)
       Right((sql, augmentedSchema, dynamicContext))
     } catch {
       case bail: Bail => Left(bail.err)
@@ -140,9 +141,45 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
       case select: Select => sqlizeSelect(select, availableSchemas, dynamicContext, topLevel)
       case values: Values => sqlizeValues(values, availableSchemas, dynamicContext, topLevel)
       case combinedTables: CombinedTables => sqlizeCombinedTables(combinedTables, availableSchemas, dynamicContext, topLevel)
-      case cte: CTE => ???
+      case cte: CTE => sqlizeCte(cte, availableSchemas, dynamicContext, topLevel)
     }
   }
+
+  private def sqlizeCte(
+    cte: CTE,
+    availableSchemas: AvailableSchemas,
+    dynamicContext: DynamicContext,
+    topLevel: Boolean
+  ): (Doc, AugmentedSchema) = {
+    val defClauses =
+      cte.definitions.foldMap(availableSchemas) { case (availableSchemas, (label, defn)) =>
+        val (defDoc, defSchema) = sqlizeStatement(defn.query, availableSchemas, dynamicContext, false)
+
+        val cteName = namespace.cteLabel(label).annotate[SqlizeAnnotation](SqlizeAnnotation.CTE(label))
+
+        val clause = Seq(
+          Some(cteName +#+ d"AS"),
+          sqlizeMaterializedHint(defn.hint),
+          Some(defDoc.encloseNesting(d"(", d")"))
+        ).flatten.hsep
+
+        (availableSchemas.addPotential(label -> defSchema), clause)
+      }
+
+    val defDoc = defClauses.toVector.concatWith(_ ++ d"," ++ Doc.lineSep ++ _)
+    val finalAvailableSchemas = defClauses.state
+
+    val (qDoc, augSchema) = sqlizeStatement(cte.useQuery, finalAvailableSchemas, dynamicContext, topLevel)
+
+    ((d"WITH" ++ Doc.lineSep ++ defDoc).nest(2) ++ Doc.lineSep ++ qDoc, augSchema)
+  }
+
+  private def sqlizeMaterializedHint(h: MaterializedHint): Option[Doc] =
+    h match {
+      case MaterializedHint.Default => None
+      case MaterializedHint.Materialized => Some(d"MATERIALIZED")
+      case MaterializedHint.NotMaterialized => Some(d"NOT MATERIALIZED")
+    }
 
   private def sqlizeCombinedTables(
     combinedTables: CombinedTables,
@@ -606,7 +643,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
   private def sqlizeAtomicFrom(from: AtomicFrom, availableSchemas: AvailableSchemas, dynamicContext: DynamicContext): (Doc, AvailableSchemas) = {
     val (sql, schema: AugmentedSchema) =
       from match {
-        case FromTable(name, _rn, _alias, label, columns, _pks) =>
+        case FromTable(name, _rn, _cn, _alias, label, columns, _pks) =>
           (
             namespace.databaseTableName(name),
             OrderedMap() ++ columns.iterator.map { case (dcn, nameEntry) =>
@@ -614,15 +651,18 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
             }
           )
 
-        case FromStatement(stmt, _label, _rn, _alias) =>
+        case FromStatement(stmt, _label, _rn, _cn, _alias) =>
           val (sql, schema) = sqlizeStatement(stmt, availableSchemas, dynamicContext, topLevel = false)
           (d"(" ++ sql ++ d")", schema)
 
         case FromSingleRow(_label, _alias) =>
           (d"(SELECT)", OrderedMap.empty)
+
+        case FromCTE(cteLabel, _label, _basedOn, _rn, _cn, _alias) =>
+          (namespace.cteLabel(cteLabel), availableSchemas.potential(cteLabel))
       }
 
-    (sql.annotate[SqlizeAnnotation](SqlizeAnnotation.Table(from.label)) +#+ d"AS" +#+ namespace.tableLabel(from.label), availableSchemas + (from.label -> schema))
+    (sql.annotate[SqlizeAnnotation](SqlizeAnnotation.Table(from.label)) +#+ d"AS" +#+ namespace.tableLabel(from.label), availableSchemas.addInstantiated(from.label -> schema))
   }
 
   private def deSelectListReferenceWrappedToplevelExprs(dynamicContext: DynamicContext, selectList: Vector[Expr], distinct: Distinctiveness): Distinctiveness =
@@ -680,7 +720,7 @@ object Sqlizer {
           for(i <- 0 until indent) builder += s
         case tree.Ann(SqlizeAnnotation.Expression(e), subtree) =>
           processNode(subtree, e.position.source)
-        case tree.Ann(SqlizeAnnotation.Table(_) | SqlizeAnnotation.OutputName(_) | SqlizeAnnotation.Custom(_), subtree) =>
+        case tree.Ann(SqlizeAnnotation.Table(_) | SqlizeAnnotation.OutputName(_) | SqlizeAnnotation.Custom(_) | SqlizeAnnotation.CTE(_), subtree) =>
           processNode(subtree, s)
         case tree.Concat(elems) =>
           for(elem <- elems) {

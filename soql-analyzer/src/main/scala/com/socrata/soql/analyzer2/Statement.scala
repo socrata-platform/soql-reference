@@ -27,6 +27,8 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
   // information to produce a full Column.
   def unique: LazyList[Seq[AutoColumnLabel]]
 
+  def referencedCTEs: Set[AutoCTELabel]
+
   final def allTables: Set[DatabaseTableName] = doAllTables(Set.empty)
   private[analyzer2] def doAllTables(set: Set[DatabaseTableName]): Set[DatabaseTableName]
 
@@ -132,6 +134,10 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
   }
 
   private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit
+
+  // All columns in this Statement which reference tables from outside this Statement
+  def nonlocalColumnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
+  final def containsNonlocalColumnReferences = !nonlocalColumnReferences.isEmpty
 }
 
 object Statement {
@@ -185,14 +191,32 @@ case class CombinedTables[MT <: MetaTypes](
 }
 object CombinedTables extends statement.OCombinedTablesImpl
 
-case class CTE[MT <: MetaTypes](
-  definitionLabel: AutoTableLabel,
-  definitionAlias: Option[ResourceName], // can this ever be not-some?  If not, perhaps mapAlias's type needs changing
-  definitionQuery: Statement[MT],
-  materializedHint: MaterializedHint,
+// This has a rather unfortunate non-local semi-requirement that
+// rewrite passes MUST uphold: the `basedOn` of any FromCTE node
+// inside this CTE which references a statement listed in
+// `definitions` will be `eq` to that definition's query.  It is
+// enforced in this class's constructor.
+case class CTE[MT <: MetaTypes] private (
+  definitions: OrderedMap[AutoCTELabel, CTE.Definition[MT]],
   useQuery: Statement[MT]
 ) extends Statement[MT] with statement.CTEImpl[MT]
-object CTE extends statement.OCTEImpl
+object CTE extends statement.OCTEImpl {
+  def apply[MT <: MetaTypes](
+    definitions: OrderedMap[AutoCTELabel, CTE.Definition[MT]],
+    useQuery: Statement[MT]
+  ): CTE[MT] = {
+    val result = unvalidated(definitions, useQuery)
+    CTE.validateBasedOnIdentity(result)
+    result
+  }
+
+  def unvalidated[MT <: MetaTypes](
+    definitions: OrderedMap[AutoCTELabel, CTE.Definition[MT]],
+    useQuery: Statement[MT]
+  ): CTE[MT] = {
+    new CTE(definitions, useQuery)
+  }
+}
 
 case class Values[MT <: MetaTypes](
   labels: OrderedSet[AutoColumnLabel],

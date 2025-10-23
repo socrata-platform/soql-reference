@@ -176,23 +176,12 @@ object Debug {
     }
 
     def readFrom(buffer: ReadBuffer): Debug =
-      buffer.version match {
-        case Version.V5 =>
-          Debug(
-            sql = buffer.read[Option[Sql.Format]](),
-            explain = buffer.read[Option[Explain]](),
-            inhibitRun = buffer.read[Boolean](),
-            useCache = buffer.read[Boolean](),
-            rollupStats = default.rollupStats
-          )
-        case Version.V6 =>
-          Debug(
-            sql = buffer.read[Option[Sql.Format]](),
-            explain = buffer.read[Option[Explain]](),
-            inhibitRun = buffer.read[Boolean](),
-            useCache = buffer.read[Boolean](),
-            rollupStats = buffer.read[Boolean]()
-          )
-      }
+      Debug(
+        sql = buffer.read[Option[Sql.Format]](),
+        explain = buffer.read[Option[Explain]](),
+        inhibitRun = buffer.read[Boolean](),
+        useCache = buffer.read[Boolean](),
+        rollupStats = buffer.read[Boolean]()
+      )
   }
 }

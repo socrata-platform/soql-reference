@@ -6,7 +6,7 @@ import scala.collection.compat._
 import org.slf4j.LoggerFactory
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.collection.OrderedMap
+import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ColumnName, Provenance}
 
 object RollupRewriter {
@@ -188,9 +188,9 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
 
   private def rollupAtomicFrom(from: AtomicFrom): Seq[(AtomicFrom, Set[RollupId])] = {
     from match {
-      case FromStatement(stmt, label, resourceName, alias) =>
+      case FromStatement(stmt, label, resourceName, canonicalName, alias) =>
         rollup(stmt).map { case (stmt, rollupIds) =>
-          (FromStatement(stmt, label, resourceName, alias), rollupIds)
+          (FromStatement(stmt, label, resourceName, canonicalName, alias), rollupIds)
         }
       case other =>
         Nil
@@ -240,7 +240,7 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
       )
 
     rollup(target, prefixesAllowed = false).map { case (rewritten, rollupIds) =>
-      (FromStatement(rewritten, newTable, None, None), columnMap, rollupIds)
+      (FromStatement(rewritten, newTable, None, None, None), columnMap, rollupIds)
     }
   }
 
@@ -263,8 +263,8 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
           case CombinedTables(_op, left, right) =>
             go(left)
             go(right)
-          case CTE(_defLbl, _defAlias, defQ, _matHint, useQ) =>
-            go(defQ)
+          case CTE(defns, useQ) =>
+            for(defn <- defns.valuesIterator) { go(defn.query) }
             go(useQ)
           case Values(_labels, values) =>
             for {
@@ -325,6 +325,7 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
         from match {
           case _ : FromSingleRow => ()
           case _ : FromTable => ()
+          case _ : FromCTE => ()
           case fs: FromStatement => go(fs.statement)
         }
     }
@@ -348,8 +349,9 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
       stmt match {
         case ct@CombinedTables(_op, left, right) =>
           ct.copy(left = goStmt(left), right = goStmt(right))
-        case cte@CTE(_defLbl, _defAlias, defQ, _matHint, useQ) =>
-          cte.copy(definitionQuery = goStmt(defQ), useQuery = goStmt(useQ))
+        case CTE(defns, useQ) =>
+          val newDefns = defns.withValuesMapped { defn => defn.copy(query = goStmt(defn.query)) }
+          CTE(newDefns, goStmt(useQ))
         case v@Values(_labels, values) =>
           v.copy(values = values.map { row => row.map(goExpr(_)) })
         case Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
@@ -380,6 +382,7 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
         case fs: FromStatement => fs.copy(statement = goStmt(fs.statement))
         case fsr: FromSingleRow => fsr
         case ft: FromTable => ft
+        case fc: FromCTE => fc
       }
 
     def goDistinct(distinct: Distinctiveness): Distinctiveness = {

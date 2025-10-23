@@ -47,7 +47,7 @@ trait TestHelper { this: Assertions =>
 
   def xtest(s: String)(f: => Any): Unit = {}
 
-  def tableFinder(items: ((Int, String), Thing[Int, TestType])*) = new MockTableFinder[TestMT](items.toMap)
+  def tableFinder(items: ((Int, String), Thing[Int, TestType])*) = MockTableFinder[TestMT](items : _*)
 
   def isLiteralTrue(e: Expr[TestMT]) =
     e match {
@@ -131,27 +131,27 @@ trait TestHelper { this: Assertions =>
           onFail.onTableFinderError(err)
       }
 
-    def saved(tf: TF, ctx: String)(implicit onFail: OnFail): AnalysisBuilder =
-      saved(tf, ctx, UserParameters.empty)(onFail)
+    def saved(tf: TF, scope: Int, ctx: String)(implicit onFail: OnFail): AnalysisBuilder =
+      saved(tf, scope, ctx, UserParameters.empty)(onFail)
 
-    def saved(tf: TF, ctx: String, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): AnalysisBuilder =
-      apply(tf, params, onFail)(_.findTables(0, rn(ctx)))
+    def saved(tf: TF, scope: Int, ctx: String, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): AnalysisBuilder =
+      apply(tf, params, onFail)(_.findTables(scope, rn(ctx)))
 
-    def analyze(tf: TF, ctx: String, query: String)(implicit onFail: OnFail): AnalysisBuilder =
-      analyze(tf, ctx, query, UserParameters.empty)(onFail)
+    def analyze(tf: TF, scope: Int, ctx: String, query: String)(implicit onFail: OnFail): AnalysisBuilder =
+      analyze(tf, scope, ctx, query, UserParameters.empty)(onFail)
 
-    def analyze(tf: TF, ctx: String, query: String, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): AnalysisBuilder =
-      apply(tf, params, onFail)(_.findTables(0, rn(ctx), query, specFor(params.unqualified)))
+    def analyze(tf: TF, scope: Int, ctx: String, query: String, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): AnalysisBuilder =
+      apply(tf, params, onFail)(_.findTables(scope, rn(ctx), query, specFor(params.unqualified)))
 
-    def analyze(tf: TF, ctx: String, query: String, canonicalName: CanonicalName, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): AnalysisBuilder = {
-      AnalysisBuilder(tf, params, onFail)(_.findTables(0, rn(ctx), query, Map.empty, canonicalName))
+    def analyze(tf: TF, scope: Int, ctx: String, query: String, canonicalName: CanonicalName, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): AnalysisBuilder = {
+      AnalysisBuilder(tf, params, onFail)(_.findTables(scope, rn(ctx), query, Map.empty, canonicalName))
     }
 
-    def analyze(tf: TF, query: String)(implicit onFail: OnFail): AnalysisBuilder =
-      analyze(tf, query, UserParameters.empty)(onFail)
+    def analyze(tf: TF, scope: Int, query: String)(implicit onFail: OnFail): AnalysisBuilder =
+      analyze(tf, scope, query, UserParameters.empty)(onFail)
 
-    def analyze(tf: TF, query: String, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): AnalysisBuilder =
-      apply(tf, params, onFail)(_.findTables(0, query, specFor(params.unqualified)))
+    def analyze(tf: TF, scope: Int, query: String, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): AnalysisBuilder =
+      apply(tf, params, onFail)(_.findTables(scope, query, specFor(params.unqualified)))
   }
 
   class AnalysisBuilder(
@@ -184,33 +184,33 @@ trait TestHelper { this: Assertions =>
   }
 
   def analyzeSaved(tf: TF, ctx: String)(implicit onFail: OnFail): SoQLAnalysis[TestMT] = {
-    AnalysisBuilder.saved(tf, ctx)(onFail).finishAnalysis
+    AnalysisBuilder.saved(tf, 0, ctx)(onFail).finishAnalysis
   }
 
   def analyzeSaved(tf: TF, ctx: String, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): SoQLAnalysis[TestMT] = {
-    AnalysisBuilder.saved(tf, ctx, params)(onFail).finishAnalysis
+    AnalysisBuilder.saved(tf, 0, ctx, params)(onFail).finishAnalysis
   }
 
   def analyze(tf: TF, ctx: String, query: String)(implicit onFail: OnFail): SoQLAnalysis[TestMT] = {
-    AnalysisBuilder.analyze(tf, ctx, query, UserParameters.empty)(onFail).finishAnalysis
+    AnalysisBuilder.analyze(tf, 0, ctx, query, UserParameters.empty)(onFail).finishAnalysis
   }
 
   def analyze(tf: TF, ctx: String, query: String, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): SoQLAnalysis[TestMT] = {
-    AnalysisBuilder.analyze(tf, ctx, query, params)(onFail).finishAnalysis
+    AnalysisBuilder.analyze(tf, 0, ctx, query, params)(onFail).finishAnalysis
   }
 
   def analyze(tf: TF, ctx: String, query: String, canonicalName: CanonicalName, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): SoQLAnalysis[TestMT] = {
-    AnalysisBuilder.analyze(tf, ctx, query, canonicalName, params)(onFail).
+    AnalysisBuilder.analyze(tf, 0, ctx, query, canonicalName, params)(onFail).
       finishAnalysis
   }
 
   def analyze(tf: TF, query: String)(implicit onFail: OnFail): SoQLAnalysis[TestMT] = {
-    AnalysisBuilder.analyze(tf, query, UserParameters.empty)(onFail).
+    AnalysisBuilder.analyze(tf, 0, query, UserParameters.empty)(onFail).
       finishAnalysis
   }
 
   def analyze(tf: TF, query: String, params: UserParameters[TestType, TestValue])(implicit onFail: OnFail): SoQLAnalysis[TestMT] = {
-    AnalysisBuilder.analyze(tf, query, params)(onFail).
+    AnalysisBuilder.analyze(tf, 0, query, params)(onFail).
       finishAnalysis
   }
 

@@ -3,6 +3,7 @@ package com.socrata.soql.analyzer2
 private[analyzer2] class RelabelState(provider: LabelProvider) {
   private val tableLabels = new scala.collection.mutable.HashMap[AutoTableLabel, AutoTableLabel]
   private val columnLabels = new scala.collection.mutable.HashMap[AutoColumnLabel, AutoColumnLabel]
+  private val cteLabels = new scala.collection.mutable.HashMap[AutoCTELabel, AutoCTELabel]
 
   def convert(label: AutoTableLabel): AutoTableLabel =
     tableLabels.get(label) match {
@@ -29,6 +30,16 @@ private[analyzer2] class RelabelState(provider: LabelProvider) {
       case None =>
         val fresh = provider.columnLabel()
         columnLabels += label -> fresh
+        fresh
+    }
+
+  def convert(label: AutoCTELabel): AutoCTELabel =
+    cteLabels.get(label) match {
+      case Some(rename) =>
+        rename
+      case None =>
+        val fresh = provider.cteLabel()
+        cteLabels += label -> fresh
         fresh
     }
 }

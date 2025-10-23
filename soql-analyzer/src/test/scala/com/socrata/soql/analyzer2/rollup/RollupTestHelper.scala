@@ -121,6 +121,7 @@ trait RollupTestHelper extends TestHelper { this: Assertions =>
     val id: Int,
     val statement: Statement[TestMT],
     val resourceName: types.ScopedResourceName[TestMT],
+    val canonicalName: CanonicalName,
     val databaseName: types.DatabaseTableName[TestMT]
   ) extends RollupInfo[TestMT, Int] {
     override def databaseColumnNameOfIndex(i: Int) = DatabaseColumnName(s"c${i+1}")
@@ -133,7 +134,7 @@ trait RollupTestHelper extends TestHelper { this: Assertions =>
         case Right(a) => a
         case Left(e) => fail(e.toString)
       }
-      new TestRollupInfo(id, analysis.statement, ScopedResourceName(0, ResourceName(name)), DatabaseTableName(name))
+      new TestRollupInfo(id, analysis.statement, ScopedResourceName(0, ResourceName(name)), CanonicalName(name), DatabaseTableName(name))
     }
   }
 

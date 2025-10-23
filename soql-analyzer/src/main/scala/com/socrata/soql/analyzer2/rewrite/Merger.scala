@@ -9,6 +9,8 @@ import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.analyzer2._
 
 class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends StatementUniverse[MT] {
+  type ACTEs = AvailableCTEs[Unit]
+
   private implicit val cvDoc = new HasDoc[CV] {
     override def docOf(v: CV) = com.socrata.prettyprint.Doc(v.toString)
   }
@@ -20,31 +22,33 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
   }
 
   def merge(stmt: Statement): Statement = {
-    val r = doMerge(stmt)
+    val r = doMerge(AvailableCTEs.empty, stmt)
     debug("finished", r)
     debugDone()
     r
   }
 
-  private def doMerge(stmt: Statement): Statement =
+  private def doMerge(availableCTEs: ACTEs, stmt: Statement): Statement =
     stmt match {
       case c@CombinedTables(_, left, right) =>
         debug("combined tables")
-        c.copy(left = doMerge(left), right = doMerge(right))
-      case cte@CTE(_defLabel, _defAlias, defQ, _label, useQ) =>
-        // TODO: maybe make this not a CTE at all, sometimes?
+        c.copy(left = doMerge(availableCTEs, left), right = doMerge(availableCTEs, right))
+      case CTE(defns, useQ) =>
         debug("CTE")
-        cte.copy(definitionQuery = doMerge(defQ), useQuery = doMerge(useQ))
+        val (newACTEs, newDefns) = availableCTEs.collect(defns) { (aCTEs, query) =>
+          ((), doMerge(aCTEs, query))
+        }
+        CTE(newDefns, doMerge(newACTEs, useQ))
       case v: Values =>
         debug("values")
         v
       case select: Select =>
         debug("select")
-        select.copy(from = mergeFrom(select.from)) match {
-          case b@Select(_, _, Unjoin(FromStatement(a: Select, aLabel, aResourceName, aAlias), bRejoin), _, _, _, _, _, _, _, _) =>
+        select.copy(from = mergeFrom(availableCTEs, select.from)) match {
+          case b@Select(_, _, Unjoin(FromStatement(a: Select, aLabel, aResourceName, aCanonicalName, aAlias), bRejoin), _, _, _, _, _, _, _, _) =>
             // This privileges the first query in b's FROM because our
             // queries are frequently constructed in a chain.
-            mergeSelects(a, aLabel, aResourceName, aAlias, b, bRejoin) match {
+            mergeSelects(availableCTEs, a, aLabel, aResourceName, aAlias, b, bRejoin) match {
               case None =>
                 debug("declined to merge")
                 b
@@ -61,22 +65,23 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
         }
     }
 
-  private def mergeFrom(from: From): From = {
+  private def mergeFrom(availableCTEs: ACTEs, from: From): From = {
     from.map[MT](
-      mergeAtomicFrom,
-      (jt, lat, left, right, on) => Join(jt, lat, left, mergeAtomicFrom(right), on)
+      mergeAtomicFrom(availableCTEs, _),
+      (jt, lat, left, right, on) => Join(jt, lat, left, mergeAtomicFrom(availableCTEs, right), on)
     )
   }
 
-  private def mergeAtomicFrom(from: AtomicFrom): AtomicFrom = {
+  private def mergeAtomicFrom(availableCTEs: ACTEs, from: AtomicFrom): AtomicFrom = {
     from match {
-      case s@FromStatement(stmt, _, _, _) => s.copy(statement = doMerge(stmt))
+      case s@FromStatement(stmt, _, _, _, _) => s.copy(statement = doMerge(availableCTEs, stmt))
+      case fc: FromCTE => availableCTEs.rebase(fc)
       case other => other
     }
   }
 
   private type ExprRewriter = Expr => Expr
-  private type FromRewriter = (From, ExprRewriter) => From
+  private type FromRewriter = (ACTEs, From, ExprRewriter) => From
 
   private object Unjoin {
     // case ... join@Unjoin(leftmost, rebuild) ... =>
@@ -93,36 +98,45 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
       def loop(here: From, stack: List[FromRewriter]): (AtomicFrom, List[FromRewriter]) = {
         here match {
           case atom: AtomicFrom => (atom, stack)
-          case Join(jt, lat, left, right, on) => loop(left, { (newLeft: From, xform: ExprRewriter) => Join(jt, lat, newLeft, if(lat) rewrite(right, xform) else right, xform(on)) } :: stack)
+          case Join(jt, lat, left, right, on) => loop(left, { (availableCTEs: ACTEs, newLeft: From, xform: ExprRewriter) => Join(jt, lat, newLeft, if(lat) rewrite(availableCTEs, right, xform) else availableCTEs.rebaseAllAtomic(right), xform(on)) } :: stack)
         }
       }
 
       val (leftmost, stack) = loop(x, Nil)
-      Some((leftmost, { (from, rewriteExpr) => stack.foldLeft(from) { (acc, build) => build(acc, rewriteExpr) } }))
+      Some((leftmost, { (aCTEs, from, rewriteExpr) => stack.foldLeft(from) { (acc, build) => build(aCTEs, acc, rewriteExpr) } }))
     }
   }
 
-  private def rewrite(from: AtomicFrom, xform: ExprRewriter): AtomicFrom =
+  private def rewrite(availableCTEs: ACTEs, from: AtomicFrom, xform: ExprRewriter): AtomicFrom =
     from match {
-      case fs@FromStatement(s, _, _, _) => fs.copy(statement = rewrite(s, xform))
+      case fs@FromStatement(s, _, _, _, _) => fs.copy(statement = rewrite(availableCTEs, s, xform))
+      case fc: FromCTE => availableCTEs.rebase(fc)
       case other => other
     }
 
-  private def rewrite(s: Statement, xform: ExprRewriter): Statement =
+  private def rewrite(availableCTEs: ACTEs, s: Statement, xform: ExprRewriter): Statement =
     s match {
       case Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) =>
         Select(
           rewrite(distinctiveness, xform),
           rewrite(selectList, xform),
           from.map(
-            rewrite(_, xform),
-            (jt, lat, left, right, on) => Join(jt, lat, left, rewrite(right, xform), xform(on))
+            rewrite(availableCTEs, _, xform),
+            (jt, lat, left, right, on) => Join(jt, lat, left, rewrite(availableCTEs, right, xform), xform(on))
           ),
           where.map(xform), groupBy.map(xform), having.map(xform), orderBy.map { ob => ob.copy(expr=xform(ob.expr)) },
           limit, offset, search, hint)
       case Values(labels, vs) => Values(labels, vs.map(_.map(xform)))
-      case CombinedTables(op, left, right) => CombinedTables(op, rewrite(left, xform), rewrite(right, xform))
-      case CTE(defLbl, defAlias, defQ, useLbl, useQ) => CTE(defLbl, defAlias, rewrite(defQ, xform), useLbl, rewrite(useQ, xform))
+      case CombinedTables(op, left, right) =>
+        CombinedTables(op, rewrite(availableCTEs, left, xform), rewrite(availableCTEs, right, xform))
+      case CTE(defns, useQ) =>
+        val (newAvailableCTEs, newDefns) = availableCTEs.collect(defns) { (aCTEs, query) =>
+          ((), rewrite(aCTEs, query, xform))
+        }
+        CTE(
+          newDefns,
+          rewrite(newAvailableCTEs, useQ, xform)
+        )
     }
   private def rewrite(d: Distinctiveness, xform: ExprRewriter): Distinctiveness =
     d match {
@@ -133,6 +147,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
     d.withValuesMapped { ne => ne.copy(expr = xform(ne.expr)) }
 
   private def mergeSelects(
+    availableCTEs: ACTEs,
     a: Select, aLabel: AutoTableLabel, aResourceName: Option[ScopedResourceName], aAlias: Option[ResourceName],
     b: Select, bRejoin: FromRewriter
   ): Option[Statement] = {
@@ -159,7 +174,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
             a.copy(
               distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
               selectList = selectList,
-              from = bRejoin(a.from, replaceRefs(aLabel, a.selectedExprs, _)),
+              from = bRejoin(availableCTEs, a.from, replaceRefs(aLabel, a.selectedExprs, _)),
               orderBy = orderByVsDistinct(a.orderBy, selectList.withValuesMapped(_.expr), bDistinct),
               limit = newLim,
               offset = newOff,
@@ -174,7 +189,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
           Some(a.copy(
                  distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
                  selectList = selectList,
-                 from = bRejoin(a.from, replaceRefs(aLabel, a.selectedExprs, _)),
+                 from = bRejoin(availableCTEs, a.from, replaceRefs(aLabel, a.selectedExprs, _)),
                  where = mergeWhereLike(aLabel, a.selectedExprs, aWhere, bWhere),
                  orderBy = mergeOrderBy(aLabel, a.selectedExprs, orderByVsDistinct(aOrder, selectList.withValuesMapped(_.expr), bDistinct), bOrder),
                  limit = bLim,
@@ -188,7 +203,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
           Some(Select(
                  distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
                  selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
-                 from = bRejoin(aFrom, replaceRefs(aLabel, a.selectedExprs, _)),
+                 from = bRejoin(availableCTEs, aFrom, replaceRefs(aLabel, a.selectedExprs, _)),
                  where = mergeWhereLike(aLabel, a.selectedExprs, aWhere, bWhere),
                  groupBy = mergeGroupBy(aLabel, a.selectedExprs, bGroup),
                  having = mergeWhereLike(aLabel, a.selectedExprs, None, bHaving),
@@ -205,7 +220,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
             Select(
               distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
               selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
-              from = bRejoin(aFrom, replaceRefs(aLabel, a.selectedExprs, _)),
+              from = bRejoin(availableCTEs, aFrom, replaceRefs(aLabel, a.selectedExprs, _)),
               where = aWhere,
               groupBy = aGroup,
               having = mergeWhereLike(aLabel, a.selectedExprs, aHaving, bWhere),

@@ -6,7 +6,7 @@ import scala.annotation.tailrec
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.analyzer2._
-import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer, Version}
 import com.socrata.soql.collection._
 import com.socrata.soql.environment.{ResourceName, ScopedResourceName}
 import com.socrata.soql.functions.MonomorphicFunction
@@ -16,6 +16,8 @@ import DocUtils._
 trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
   type Self[MT <: MetaTypes] = FromStatement[MT]
   def asSelf = this
+
+  lazy val referencedCTEs = statement.referencedCTEs
 
   def schema = statement.schema.map { case (acl, Statement.SchemaEntry(_, typ, hint, isSynthetic)) =>
     From.SchemaEntry(label, acl, typ, hint, isSynthetic = isSynthetic)
@@ -38,7 +40,7 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
   ): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
-      case FromStatement(thatStatement, thatLabel, thatResourceName, thatAlias) =>
+      case FromStatement(thatStatement, thatLabel, thatResourceName, thatCanonicalName, thatAlias) =>
         state.tryAssociate(this.label, thatLabel) &&
           recurseStmt(this.statement, state, Some(this.label), Some(thatLabel), thatStatement)
         // don't care about aliases
@@ -49,7 +51,7 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
   private[analyzer2] final def findVerticalSlice(state: IsomorphismState, that: From[MT]): Boolean =
     // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
-      case FromStatement(thatStatement, thatLabel, thatResourceName, thatAlias) =>
+      case FromStatement(thatStatement, thatLabel, thatResourceName, thatCanonicalName, thatAlias) =>
         state.tryAssociate(this.label, thatLabel) &&
           this.statement.findVerticalSlice(state, Some(this.label), Some(thatLabel), thatStatement)
         // don't care about aliases
@@ -90,6 +92,8 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
 
   private[analyzer2] def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
     (statement.doDebugDoc.encloseNesting(d"(", d")") +#+ d"AS" +#+ label.debugDoc.annotate(Annotation.TableAliasDefinition[MT](alias, label))).annotate(Annotation.TableDefinition[MT](label))
+
+  override def nonlocalColumnReferences = statement.nonlocalColumnReferences
 }
 
 trait OFromStatementImpl { this: FromStatement.type =>
@@ -98,6 +102,7 @@ trait OFromStatementImpl { this: FromStatement.type =>
       buffer.write(from.statement)
       buffer.write(from.label)
       buffer.write(from.resourceName)
+      buffer.write(from.canonicalName)
       buffer.write(from.alias)
     }
   }
@@ -105,11 +110,23 @@ trait OFromStatementImpl { this: FromStatement.type =>
   implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope], ctReadable: Readable[MT#ColumnType], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[FromStatement[MT]] =
     new Readable[FromStatement[MT]] with MetaTypeHelper[MT] {
       def readFrom(buffer: ReadBuffer): FromStatement[MT] =
-        FromStatement(
-          statement = buffer.read[Statement[MT]](),
-          label = buffer.read[AutoTableLabel](),
-          resourceName = buffer.read[Option[ScopedResourceName[RNS]]](),
-          alias = buffer.read[Option[ResourceName]]()
-        )
+        buffer.version match {
+          case Version.V6 =>
+            FromStatement(
+              statement = buffer.read[Statement[MT]](),
+              label = buffer.read[AutoTableLabel](),
+              resourceName = buffer.read[Option[ScopedResourceName[RNS]]](),
+              canonicalName = None,
+              alias = buffer.read[Option[ResourceName]]()
+            )
+          case Version.V7 =>
+            FromStatement(
+              statement = buffer.read[Statement[MT]](),
+              label = buffer.read[AutoTableLabel](),
+              resourceName = buffer.read[Option[ScopedResourceName[RNS]]](),
+              canonicalName = buffer.read[Option[CanonicalName]](),
+              alias = buffer.read[Option[ResourceName]]()
+            )
+        }
     }
 }

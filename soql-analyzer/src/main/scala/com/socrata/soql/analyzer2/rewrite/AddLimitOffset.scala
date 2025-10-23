@@ -14,7 +14,7 @@ class AddLimitOffset[MT <: MetaTypes] private (labelProvider: LabelProvider) ext
           OrderedMap() ++ stmt.schema.iterator.map { case (colLabel, Statement.SchemaEntry(name, typ, hint, isSynthetic)) =>
             labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newTableLabel, colLabel, typ)(AtomicPositionInfo.Synthetic), name, hint = None, isSynthetic = isSynthetic)
           },
-          FromStatement(stmt, newTableLabel, None, None),
+          FromStatement(stmt, newTableLabel, None, None, None),
           None,
           Nil,
           None,
@@ -25,7 +25,7 @@ class AddLimitOffset[MT <: MetaTypes] private (labelProvider: LabelProvider) ext
           Set.empty
         )
 
-      case cte@CTE(defLabel, defAlias, defQuery, matHint, useQuery) =>
+      case cte@CTE(defs, useQuery) =>
         cte.copy(useQuery = rewriteStatement(useQuery, desiredLimit, desiredOffset))
 
       case sel@Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, oldLimit, oldOffset, search, hint) =>

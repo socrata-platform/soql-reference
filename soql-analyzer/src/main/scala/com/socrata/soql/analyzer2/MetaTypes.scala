@@ -144,7 +144,10 @@ trait StatementUniverse[MT <: MetaTypes] extends ExpressionUniverse[MT] with Lab
   type FromTable = analyzer2.FromTable[MT]
   type FromSingleRow = analyzer2.FromSingleRow[MT]
   type FromStatement = analyzer2.FromStatement[MT]
+  type FromCTE = analyzer2.FromCTE[MT]
 
   type Distinctiveness = analyzer2.Distinctiveness[MT]
   type NamedExpr = analyzer2.NamedExpr[MT]
+
+  type AvailableCTEs[T] = analyzer2.AvailableCTEs[MT, T]
 }

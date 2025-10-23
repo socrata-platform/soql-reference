@@ -1,26 +1,35 @@
 package com.socrata.soql.analyzer2.rewrite
 
+import scala.annotation.tailrec
+
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
+import com.socrata.soql.collection._
 
-class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.AutoTableLabel[MT], Set[types.ColumnLabel[MT]]]) extends StatementUniverse[MT] {
+class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[AutoTableLabel, Set[types.ColumnLabel[MT]]]) extends StatementUniverse[MT] {
+  type ACTEs = AvailableCTEs[Unit]
+
   // myLabel being "None" means "keep all of my output columns,
   // whether or not they appear to be used".  This is for both the
   // top-level (where of course all the columns will be used by
   // whatever's running the query) as well as inside CombinedTables,
   // where the operation combining the tables will care about
   // apparently-unused columns.
-  def rewriteStatement(stmt: Statement, myLabel: Option[AutoTableLabel]): (Statement, Boolean) = {
+  def rewriteStatement(availableCTEs: ACTEs, stmt: Statement, myLabel: Option[AutoTableLabel]): (Statement, Boolean) = {
     stmt match {
       case CombinedTables(op, left, right) =>
-        val (newLeft, removedAnythingLeft) = rewriteStatement(left, None)
-        val (newRight, removedAnythingRight) = rewriteStatement(right, None)
+        val (newLeft, removedAnythingLeft) = rewriteStatement(availableCTEs, left, None)
+        val (newRight, removedAnythingRight) = rewriteStatement(availableCTEs, right, None)
         (CombinedTables(op, newLeft, newRight), removedAnythingLeft || removedAnythingRight)
 
-      case CTE(defLabel, defAlias, defQuery, materializedHint, useQuery) =>
-        val (newDefQuery, removedAnythingDef) = rewriteStatement(defQuery, Some(defLabel))
-        val (newUseQuery, removedAnythingUse) = rewriteStatement(useQuery, myLabel)
-        (CTE(defLabel, defAlias, newDefQuery, materializedHint, newUseQuery), removedAnythingDef || removedAnythingUse)
+      case CTE(defns, useQuery) =>
+        val (removedAnythingDefns, newAvailableCTEs, newDefns) = availableCTEs.foldCollect(defns, false) { (removedAnything, aCTE, query) =>
+          val (newStmt, newRemoved) = rewriteStatement(aCTE, query, None)
+          (removedAnything || newRemoved, (), newStmt)
+        }
+
+        val (newUseQuery, removedAnythingUse) = rewriteStatement(newAvailableCTEs, useQuery, myLabel)
+        (CTE(newDefns, newUseQuery), removedAnythingDefns || removedAnythingUse)
 
       case v@Values(_, _) =>
         (v, false)
@@ -36,7 +45,7 @@ class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.
         }
         val removedAnythingSelectList = selectList.size != newSelectList.size
 
-        val (newFrom, removedAnythingFrom) = rewriteFrom(from)
+        val (newFrom, removedAnythingFrom) = rewriteFrom(availableCTEs, from)
         val candidate = stmt.copy(selectList = newSelectList, from = newFrom)
         if(candidate.isAggregated != stmt.isAggregated) {
           // this is a super-extreme edge case, but consider
@@ -54,23 +63,24 @@ class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.
     }
   }
 
-  def rewriteFrom(from: From): (From, Boolean) = {
+  def rewriteFrom(availableCTEs: ACTEs, from: From): (From, Boolean) = {
     from.reduceMap[Boolean, MT](
-      rewriteAtomicFrom(_).swap,
+      rewriteAtomicFrom(availableCTEs, _).swap,
       { (removedAnythingLeft, joinType, lateral, left, right, on) =>
-        val (newRight, removedAnythingRight) = rewriteAtomicFrom(right)
+        val (newRight, removedAnythingRight) = rewriteAtomicFrom(availableCTEs, right)
         (removedAnythingLeft || removedAnythingRight, Join(joinType, lateral, left, newRight, on))
       }
     ).swap
   }
 
-  def rewriteAtomicFrom(from: AtomicFrom): (AtomicFrom, Boolean) = {
+  def rewriteAtomicFrom(availableCTEs: ACTEs, from: AtomicFrom): (AtomicFrom, Boolean) = {
     from match {
       case ft: FromTable => (ft, false)
       case fsr: FromSingleRow => (fsr, false)
-      case FromStatement(stmt, label, resourceName, alias) =>
-        val (newStmt, removedAnything) = rewriteStatement(stmt, Some(label))
-        (FromStatement(newStmt, label, resourceName, alias), removedAnything)
+      case fc: FromCTE => (availableCTEs.rebase(fc), false)
+      case FromStatement(stmt, label, resourceName, canonicalName, alias) =>
+        val (newStmt, removedAnything) = rewriteStatement(availableCTEs, stmt, Some(label))
+        (FromStatement(newStmt, label, resourceName, canonicalName, alias), removedAnything)
     }
   }
 }
@@ -78,9 +88,10 @@ class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.
 /** Remove columns that are not useful from inner selects.
   * SelectListReferences must not be present (this is unchecked!!). */
 object RemoveUnusedColumns {
+  @tailrec
   def apply[MT <: MetaTypes](stmt: Statement[MT]): Statement[MT] = {
     val (newStmt, removedAnything) =
-      new RemoveUnusedColumns[MT](stmt.columnReferences).rewriteStatement(stmt, None)
+      new RemoveUnusedColumns[MT](stmt.columnReferences).rewriteStatement(AvailableCTEs.empty, stmt, None)
     if(removedAnything) {
       this(newStmt)
     } else {

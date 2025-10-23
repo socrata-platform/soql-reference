@@ -26,17 +26,27 @@ object OptionalBoolean {
 
 sealed abstract class Thing[+RNS, +CT]
 case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT] {
+  private var canonicalName_ : Option[String] = None
   private var orderings_ : List[(String, Boolean, Boolean)] = Nil
   private var hiddenColumns_ : Set[String] = Set.empty
   private var primaryKeys_ : List[Seq[String]] = Nil
   private var outputColumnHints_ : Map[ColumnName, JValue] = Map.empty
 
   private def copyVars[CT2 >: CT](that: D[CT2]): Unit = {
+    this.canonicalName_ = that.canonicalName_
     this.orderings_ = that.orderings_
     this.hiddenColumns_ = that.hiddenColumns_
     this.primaryKeys_ = that.primaryKeys_
     this.outputColumnHints_ = that.outputColumnHints_
   }
+
+  def withCanonicalName(name: String): D[CT] = {
+    val result = D(schema: _*)
+    result.copyVars(this)
+    result.canonicalName_ = Some(name)
+    result
+  }
+  def canonicalName = canonicalName_
 
   def withOrdering(column: String, ascending: Boolean = true, nullLast: OptionalBoolean = OptionalBoolean.Unprovided): D[CT] = {
     val result = D(schema : _*)
@@ -132,13 +142,13 @@ case class U[+RNS, CT](scope: RNS, soql: String, params: (String, CT)*) extends 
 }
 
 object MockTableFinder {
-  def empty[MT <: MetaTypes](implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) = new MockTableFinder[MT](Map.empty)
-  def apply[MT <: MetaTypes](items: ((MT#ResourceNameScope, String), Thing[MT#ResourceNameScope, MT#ColumnType])*)(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) = new MockTableFinder[MT](items.toMap)
+  def empty[MT <: MetaTypes](implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) = new MockTableFinder[MT](OrderedMap.empty)
+  def apply[MT <: MetaTypes](items: ((MT#ResourceNameScope, String), Thing[MT#ResourceNameScope, MT#ColumnType])*)(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) = new MockTableFinder[MT](OrderedMap() ++ items)
   def apply[MT <: MetaTypes](items: UnparsedFoundTables[MT])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) = UnparsedTableMap.asMockTableFinder(items.tableMap)
   def apply[MT <: MetaTypes](items: FoundTables[MT])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl): MockTableFinder[MT] = this(items.asUnparsedFoundTables)
 
   private sealed abstract class JThing[+RNS, +CT]
-  private case class JD[+CT](schema: Seq[(String, CT)], orderings: Option[Seq[(String, Boolean, Boolean)]], hiddenColumns: Option[Seq[String]], primaryKeys: Option[Seq[Seq[String]]]) extends JThing[Nothing, CT]
+  private case class JD[+CT](schema: Seq[(String, CT)], canonicalName: Option[String], orderings: Option[Seq[(String, Boolean, Boolean)]], hiddenColumns: Option[Seq[String]], primaryKeys: Option[Seq[Seq[String]]]) extends JThing[Nothing, CT]
   private case class JQ[+RNS,+CT](scope: Option[RNS], parent: String, soql: String, params: Map[String, CT], canonicalName: Option[String], hiddenColumns: Option[Seq[String]]) extends JThing[RNS, CT]
   private case class JU[+RNS,+CT](scope: Option[RNS], soql: String, params: Seq[(String, CT)], canonicalName: Option[String], hiddenColumns: Option[Seq[String]]) extends JThing[RNS, CT]
 
@@ -158,12 +168,16 @@ object MockTableFinder {
       def decode(x: JValue) =
         JsonDecode.fromJValue[Map[RNS, Map[String, JThing[RNS, CT]]]](x).map { m =>
           new MockTableFinder(
-            m.iterator.flatMap { case (rns, jthings) =>
+            OrderedMap() ++ m.iterator.flatMap { case (rns, jthings) =>
               jthings.map { case (name, jthing) =>
                 val thing = jthing match {
-                  case JD(schema, orderings, hiddenColumns, pks) =>
+                  case JD(schema, canonicalName, orderings, hiddenColumns, pks) =>
                     pks.getOrElse(Nil).foldLeft(
-                      orderings.getOrElse(Nil).foldLeft(D(schema : _*)) { (d, orderDir) =>
+                      orderings.getOrElse(Nil).foldLeft(
+                        canonicalName.foldLeft(D(schema : _*)) { (d, cname) =>
+                          d.withCanonicalName(cname)
+                        }
+                      ) { (d, orderDir) =>
                         d.withOrdering(orderDir._1, orderDir._2)
                       }.withHiddenColumns(hiddenColumns.getOrElse(Nil) : _*)
                     ) { (dataset, pk) => dataset.withPrimaryKey(pk: _*) }
@@ -177,7 +191,7 @@ object MockTableFinder {
 
                 (rns, name) -> thing
               }
-            }.toMap
+            }
           )
         }
     }
@@ -206,6 +220,7 @@ object MockTableFinder {
                     case d@D(schema @ _*) =>
                       JD(
                         schema,
+                        d.canonicalName,
                         Some(d.orderings).filter(_.nonEmpty),
                         Some(d.hiddenColumns.toSeq).filter(_.nonEmpty),
                         Some(d.primaryKeys).filter(_.nonEmpty)
@@ -237,15 +252,20 @@ object MockTableFinder {
     }
 }
 
-class MockTableFinder[MT <: MetaTypes](private val raw: Map[(MT#ResourceNameScope, String), Thing[MT#ResourceNameScope, MT#ColumnType]])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) extends TableFinder[MT] {
-  private val tables: Map[ScopedResourceName, FinderTableDescription] = raw.iterator.map { case ((scope, rawResourceName), thing) =>
+class MockTableFinder[MT <: MetaTypes](private val raw: OrderedMap[(MT#ResourceNameScope, String), Thing[MT#ResourceNameScope, MT#ColumnType]])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) extends TableFinder[MT] {
+  private val tables: Map[ScopedResourceName, FinderTableDescription] = raw.iterator.zipWithIndex.map { case (((scope, rawResourceName), thing), idx) =>
+    // canonical names need to be unique within the whole tablefinder
+    // (not just the scope) so unless the user has specified a
+    // particular CN, generate one from the index.
+    def defaultCanonicalName = s"cn_$idx"
+
     val converted = thing match {
       case d@D(rawSchema @ _*) =>
         val hiddenColumns = d.hiddenColumns.map(ColumnName(_))
         val outputColumnHints = d.outputColumnHints
         Dataset(
           DatabaseTableName(rawResourceName),
-          CanonicalName(rawResourceName),
+          CanonicalName(d.canonicalName.getOrElse(defaultCanonicalName)),
           OrderedMap() ++ rawSchema.iterator.map { case (rawColumnName, ct) =>
             val cn = ColumnName(rawColumnName)
             DatabaseColumnName[MT#DatabaseColumnNameImpl](cn.caseFolded) -> DatasetColumnInfo(cn, ct, hidden = hiddenColumns(cn), hint = outputColumnHints.get(cn))
@@ -256,7 +276,7 @@ class MockTableFinder[MT <: MetaTypes](private val raw: Map[(MT#ResourceNameScop
       case q@Q(scope, parent, soql, params @ _*) =>
         Query(
           scope,
-          CanonicalName(q.canonicalName.getOrElse(rawResourceName)),
+          CanonicalName(q.canonicalName.getOrElse(defaultCanonicalName)),
           ResourceName(parent),
           soql,
           params.iterator.map { case (k, v) => HoleName(k) -> v }.toMap,
@@ -266,7 +286,7 @@ class MockTableFinder[MT <: MetaTypes](private val raw: Map[(MT#ResourceNameScop
       case u@U(scope, soql, params @ _*) =>
         TableFunction(
           scope,
-          CanonicalName(u.canonicalName.getOrElse(rawResourceName)),
+          CanonicalName(u.canonicalName.getOrElse(defaultCanonicalName)),
           soql,
           OrderedMap() ++ params.iterator.map { case (k,v) => HoleName(k) -> v },
           u.hiddenColumns

@@ -39,7 +39,7 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
           OrderedMap() ++ ct.schema.iterator.map { case (columnLabel, Statement.SchemaEntry(name, typ, hint, isSynthetic)) =>
             labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newTableLabel, columnLabel, typ)(AtomicPositionInfo.Synthetic), name, hint = None, isSynthetic = isSynthetic)
           },
-          FromStatement(ct, newTableLabel, None, None),
+          FromStatement(ct, newTableLabel, None, None, None),
           None,
           Nil,
           None,
@@ -50,7 +50,7 @@ class ImposeOrdering[MT <: MetaTypes] private (labelProvider: LabelProvider, isO
           Set.empty
         )
 
-      case cte@CTE(defLabel, defAlias, defQuery, materializedHint, useQuery) =>
+      case cte@CTE(defs, useQuery) =>
         cte.copy(useQuery = rewriteStatement(useQuery))
 
       case v@Values(_, _) =>

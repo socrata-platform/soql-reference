@@ -18,6 +18,8 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
 
   def unique = if(values.tail.isEmpty) LazyList(Nil) else LazyList.empty
 
+  def referencedCTEs = Set.empty[AutoCTELabel]
+
   val schema: OrderedMap[AutoColumnLabel, Statement.SchemaEntry[MT]] =
     OrderedMap() ++ values.head.iterator.zip(labels.iterator).zipWithIndex.map { case ((expr, label), idx) =>
       label -> Statement.SchemaEntry(ColumnName(s"column_${idx+1}"), expr.typ, hint = None, isSynthetic = false)
@@ -144,6 +146,12 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
   private[analyzer2] def doLabelMap(state: LabelMapState[MT]): Unit = {
     // no interior queries, nothing to do
   }
+
+  override lazy val nonlocalColumnReferences =
+    // All column references are automatically foreign
+    values.foldLeft(Map.empty[AutoTableLabel, Set[ColumnLabel]]) { (acc, row) =>
+      row.foldLeft(acc) { (acc, expr) => Util.mergeColumnSet(acc, expr.columnReferences) }
+    }
 }
 
 trait OValuesImpl { this: Values.type =>

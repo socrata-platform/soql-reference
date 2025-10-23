@@ -5,30 +5,33 @@ import scala.collection.{mutable => scm}
 
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
+import com.socrata.soql.collection._
 import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.functions.MonomorphicFunction
 
 class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extends StatementUniverse[MT] {
+  type ACTEs = AvailableCTEs[Seq[(AutoColumnLabel, CT, Boolean, Boolean)]]
+
   // "wantOutputOrdered" == "if this statement can be rewritten to
   // preserve the ordering of its underlying query, do so".
   // "wantOrderingColumns" == "The caller needs column from this table
   // to order itself".  Note that just because the caller wants a
   // thing, it will not necessarily get it!
-  def rewriteStatement(stmt: Statement, wantOutputOrdered: Boolean, wantOrderingColumns: Boolean): (Seq[(AutoColumnLabel, CT, Boolean, Boolean)], Statement) = {
+  def rewriteStatement(availableCTEs: ACTEs, stmt: Statement, wantOutputOrdered: Boolean, wantOrderingColumns: Boolean): (Seq[(AutoColumnLabel, CT, Boolean, Boolean)], Statement) = {
     stmt match {
       case CombinedTables(op, left, right) =>
         // table ops never preserve ordering
-        (Nil, CombinedTables(op, rewriteStatement(left, false, false)._2, rewriteStatement(right, false, false)._2))
+        (Nil, CombinedTables(op, rewriteStatement(availableCTEs, left, false, false)._2, rewriteStatement(availableCTEs, right, false, false)._2))
 
-      case cte@CTE(defLabel, defAlias, defQuery, matHint, useQuery) =>
-        val (orderingColumns, newUseQuery) = rewriteStatement(useQuery, wantOutputOrdered, wantOrderingColumns)
+      case CTE(defns, useQuery) =>
+        val (newAvailableCTEs, newDefinitions) = availableCTEs.collect(defns) { (aCTEs, query) =>
+          rewriteStatement(aCTEs, query, true, true)
+        }
+        val (orderingColumns, newUseQuery) = rewriteStatement(newAvailableCTEs, useQuery, wantOutputOrdered, wantOrderingColumns)
 
         (
           orderingColumns,
-          cte.copy(
-            definitionQuery = rewriteStatement(defQuery, true, false)._2,
-            useQuery = newUseQuery
-          )
+          CTE(newDefinitions, newUseQuery)
         )
 
       case v@Values(_, _) =>
@@ -49,8 +52,8 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extend
           created
         }
 
-        val wantSubqueryOrdered = wantOutputOrdered && !select.isAggregated && distinctiveness == Distinctiveness.Indistinct()
-        val (extraOrdering, newFrom) = rewriteFrom(from, wantSubqueryOrdered, wantSubqueryOrdered)
+        val wantSubqueryOrdered = (wantOutputOrdered || select.isWindowed) && !select.isAggregated && distinctiveness == Distinctiveness.Indistinct()
+        val (extraOrdering, newFrom) = rewriteFrom(availableCTEs, from, wantSubqueryOrdered, wantSubqueryOrdered)
 
         // We will at the very least want to add the ordering
         // columns from the subquery onto the end of our order-by...
@@ -104,28 +107,47 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extend
     }
   }
 
-  def rewriteFrom(from: From, wantOutputOrdered: Boolean, wantOrderingColumns: Boolean): (Seq[OrderBy], From) = {
+  private def rewriteFrom(availableCTEs: ACTEs, from: From, wantOutputOrdered: Boolean, wantOrderingColumns: Boolean): (Seq[OrderBy], From) = {
     from match {
       case join: Join =>
         // JOIN builds a new table, which is unordered (hence (false,
         // false) and why this entire rewriteFrom method isn't just a
         // call to from.map
         val result = join.map[MT](
-          rewriteAtomicFrom(_, false, false)._2,
-          { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, rewriteAtomicFrom(right, false, false)._2, on) }
+          rewriteAtomicFrom(availableCTEs, _, false, false)._2,
+          { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, rewriteAtomicFrom(availableCTEs, right, false, false)._2, on) }
         )
         (Nil, result)
       case af: AtomicFrom =>
-        rewriteAtomicFrom(af, wantOutputOrdered, wantOrderingColumns)
+        rewriteAtomicFrom(availableCTEs, af, wantOutputOrdered, wantOrderingColumns)
     }
   }
 
-  def rewriteAtomicFrom(from: AtomicFrom, wantOutputOrdered: Boolean, wantOrderingColumns: Boolean): (Seq[OrderBy], AtomicFrom) = {
+  private def rewriteAtomicFrom(availableCTEs: ACTEs, from: AtomicFrom, wantOutputOrdered: Boolean, wantOrderingColumns: Boolean): (Seq[OrderBy], AtomicFrom) = {
     from match {
       case ft: FromTable => (Nil, ft)
       case fs: FromSingleRow => (Nil, fs)
-      case fs@FromStatement(stmt, label, resourceName, alias) =>
-        val (orderColumn, newStmt) = rewriteStatement(stmt, wantOutputOrdered, wantOrderingColumns)
+      case fc: FromCTE =>
+        availableCTEs.ctes.get(fc.cteLabel) match {
+          case Some(cteInfo) =>
+            val newCTE = availableCTEs.rebase(fc)
+            val orderingColumns =
+              if(wantOrderingColumns) {
+                cteInfo.extra.map { case (col, typ, asc, nullLast) => OrderBy(VirtualColumn[MT](newCTE.label, col, typ)(AtomicPositionInfo.Synthetic), asc, nullLast) }
+              } else {
+                Nil
+              }
+            (orderingColumns, newCTE)
+          case None =>
+            // This shouldn't actually happen, but if it does, we just
+            // didn't rewrite anything.  If it does happen, it means
+            // the rewrite pass was applied to something that wasn't a
+            // top-level statement, and it references a CTE defined in
+            // the higher level to which the pass has no access.
+            (Nil, fc)
+        }
+      case fs@FromStatement(stmt, label, resourceName, canonicalName, alias) =>
+        val (orderColumn, newStmt) = rewriteStatement(availableCTEs, stmt, wantOutputOrdered, wantOrderingColumns)
         (orderColumn.map { case (col, typ, asc, nullLast) => OrderBy(VirtualColumn(label, col, typ)(AtomicPositionInfo.Synthetic), asc, nullLast) }, fs.copy(statement = newStmt))
     }
   }
@@ -135,10 +157,10 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider) extend
   * SelectListReferences must not be present (this is unchecked!!). */
 object PreserveOrdering {
   def apply[MT <: MetaTypes](labelProvider: LabelProvider, stmt: Statement[MT]): Statement[MT] = {
-    new PreserveOrdering[MT](labelProvider).rewriteStatement(stmt, true, false)._2
+    new PreserveOrdering[MT](labelProvider).rewriteStatement(AvailableCTEs.empty, stmt, true, false)._2
   }
 
   def withExtraOutputColumns[MT <: MetaTypes](labelProvider: LabelProvider, stmt: Statement[MT]): Statement[MT] = {
-    new PreserveOrdering[MT](labelProvider).rewriteStatement(stmt, true, true)._2
+    new PreserveOrdering[MT](labelProvider).rewriteStatement(AvailableCTEs.empty, stmt, true, true)._2
   }
 }

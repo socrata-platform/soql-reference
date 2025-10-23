@@ -48,6 +48,7 @@ class SoQLApproximation[MT <: MetaTypes] private (ops: SoQLApproximation.MetaOps
                 case ft: FromTable => ast.JoinTable(TableName(ops.databaseTableName(ft.tableName), Some(convertAutoTableLabel(ft.label))))
                 case fsr: FromSingleRow => ast.JoinTable(TableName(TableName.SingleRow, Some(convertAutoTableLabel(fsr.label))))
                 case fs: FromStatement => ast.JoinQuery(convertStmt(fs.statement), convertAutoTableLabel(fs.label))
+                case fc: FromCTE => ast.JoinQuery(convertStmt(fc.basedOn), convertAutoTableLabel(fc.label))
               }
               (leftmost, ast.Join(convertJoinType(typ), newRight, convertExpr(on), lateral) :: joinsReversed)
             }
@@ -73,6 +74,7 @@ class SoQLApproximation[MT <: MetaTypes] private (ops: SoQLApproximation.MetaOps
             case ft: FromTable => Some(TableName(ops.databaseTableName(ft.tableName), Some(convertAutoTableLabel(ft.label))))
             case fsr: FromSingleRow => Some(TableName(TableName.SingleRow, Some(convertAutoTableLabel(fsr.label))))
             case fs: FromStatement => None
+            case fc: FromCTE => None
           },
           joinsReversed.reverse,
           where.map(convertExpr),
@@ -87,6 +89,7 @@ class SoQLApproximation[MT <: MetaTypes] private (ops: SoQLApproximation.MetaOps
 
         from0 match {
           case fs: FromStatement => PipeQuery(convertStmt(fs.statement), Leaf(baseSelect.copy(from = Some(TableName(TableName.This, Some(convertAutoTableLabel(fs.label)))))))
+          case fc: FromCTE => PipeQuery(convertStmt(fc.basedOn), Leaf(baseSelect.copy(from = Some(TableName(TableName.This, Some(convertAutoTableLabel(fc.label)))))))
           case _ : FromTable => Leaf(baseSelect)
           case _ : FromSingleRow => Leaf(baseSelect)
         }

@@ -19,6 +19,8 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
 
   // This is mainly a sample rewrite pass; `merge` does a lot more.
 
+  type ACTEs = AvailableCTEs[Unit]
+
   private def isTrivialExpr(e: Expr) =
     e match {
       case _ : Column => true
@@ -34,15 +36,17 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
   //      tables (even if doing so could be semantics-preserving)
   //      because a table's columns have DatabaseTableNames and
   //      a select's columns have AutoColumnLabels.
-  def rewriteStatement(stmt: Statement): Statement = {
+  def rewriteStatement(availableCTEs: ACTEs, stmt: Statement): Statement = {
     stmt match {
       case CombinedTables(op, left, right) =>
-        CombinedTables(op, rewriteStatement(left), rewriteStatement(right))
+        CombinedTables(op, rewriteStatement(availableCTEs, left), rewriteStatement(availableCTEs, right))
 
-      case CTE(defLabel, defAlias, defQuery, materializedHint, useQuery) =>
-        val newDefQuery = rewriteStatement(defQuery)
-        val newUseQuery = rewriteStatement(useQuery)
-        CTE(defLabel, defAlias, newDefQuery, materializedHint, newUseQuery)
+      case CTE(defns, useQuery) =>
+        val (newAvailableCTEs, newDefns) = availableCTEs.collect(defns) { (aCTEs, query) =>
+          ((), rewriteStatement(aCTEs, query))
+        }
+        val newUseQuery = rewriteStatement(newAvailableCTEs, useQuery)
+        CTE(newDefns, newUseQuery)
 
       case v@Values(_, _) =>
         v
@@ -50,10 +54,10 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
       case originalSel@Select(Distinctiveness.Indistinct(), originalSelectList, from, None, Nil, None, Nil, None, None, None, hints)
           if hints.isEmpty && originalSelectList.values.forall { se => isTrivialExpr(se.expr) }
           =>
-        rewriteFrom(from) match {
+        rewriteFrom(availableCTEs, from) match {
           case FromStatement(
             newSel@Select(Distinctiveness.Indistinct() | Distinctiveness.On(_), newSelectList, _from, _where, _groupBy, _having, _orderBy, _limit, _offset, None, _hint),
-            label, _resourceName, _alias
+            label, _resourceName, _canonicalName, _alias
           ) =>
             newSel.copy(
               selectList = originalSelectList.withValuesMapped { se =>
@@ -78,30 +82,31 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
             )
 
           case other =>
-            originalSel.copy(from = other)
+            originalSel.copy(from = availableCTEs.rebaseAll(other))
         }
 
       case sel: Select =>
-        sel.copy(from = rewriteFrom(sel.from))
+        sel.copy(from = rewriteFrom(availableCTEs, sel.from))
     }
   }
 
-  def rewriteFrom(from: From): From = {
+  def rewriteFrom(availableCTEs: ACTEs, from: From): From = {
     from.map[MT](
-      rewriteAtomicFrom,
+      rewriteAtomicFrom(availableCTEs, _),
       { (joinType, lateral, left, right, on) =>
-        val newRight = rewriteAtomicFrom(right)
+        val newRight = rewriteAtomicFrom(availableCTEs, right)
         Join(joinType, lateral, left, newRight, on)
       }
     )
   }
 
-  def rewriteAtomicFrom(from: AtomicFrom): AtomicFrom = {
+  def rewriteAtomicFrom(availableCTEs: ACTEs, from: AtomicFrom): AtomicFrom = {
     from match {
       case ft: FromTable => ft
       case fsr: FromSingleRow => fsr
-      case fs@FromStatement(stmt, _label, _resourceName, _alias) =>
-        fs.copy(statement = rewriteStatement(stmt))
+      case fc: FromCTE => availableCTEs.rebase(fc)
+      case fs@FromStatement(stmt, _label, _resourceName, _canonicalName, _alias) =>
+        fs.copy(statement = rewriteStatement(availableCTEs, stmt))
     }
   }
 }
@@ -110,6 +115,6 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
   * columns from some single subselect, with no other action". */
 object RemoveTrivialSelects {
   def apply[MT <: MetaTypes](stmt: Statement[MT]): Statement[MT] = {
-    new RemoveTrivialSelects[MT]().rewriteStatement(stmt)
+    new RemoveTrivialSelects[MT]().rewriteStatement(AvailableCTEs.empty, stmt)
   }
 }

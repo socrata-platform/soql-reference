@@ -64,12 +64,12 @@ class ExprSqlizer[MT <: MetaTypes with MetaTypesExt](
     override def sqlize(e: Expr): ExprSql = {
       e match {
         case pc@PhysicalColumn(tbl, _tableName, col, typ) =>
-          val trueType = availableSchemas(tbl)(col)
+          val trueType = availableSchemas.instantiated(tbl)(col)
           assert(trueType.typ == typ)
           assert(trueType.isExpanded)
           sqlizerCtx.repFor(typ).physicalColumnRef(pc)
         case vc@VirtualColumn(tbl, col, typ) =>
-          val trueType = availableSchemas(tbl)(col)
+          val trueType = availableSchemas.instantiated(tbl)(col)
           assert(trueType.typ == typ)
           sqlizerCtx.repFor(typ).virtualColumnRef(vc, isExpanded = trueType.isExpanded)
         case nl@NullLiteral(typ) =>

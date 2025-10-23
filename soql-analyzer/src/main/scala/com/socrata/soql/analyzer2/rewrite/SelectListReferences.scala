@@ -2,46 +2,53 @@ package com.socrata.soql.analyzer2.rewrite
 
 import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
+import com.socrata.soql.collection._
 
 class SelectListReferences[MT <: MetaTypes] private () extends StatementUniverse[MT] {
-  abstract class Transform {
-    def rewriteSelect(select: Select): Select
+  type ACTEs = AvailableCTEs[Unit]
 
-    def rewriteStatement(stmt: Statement): Statement = {
+  abstract class Transform {
+    def rewriteSelect(availableCTEs: ACTEs, select: Select): Select
+
+    def rewriteStatement(availableCTEs: ACTEs, stmt: Statement): Statement = {
       stmt match {
         case CombinedTables(op, left, right) =>
-          CombinedTables(op, rewriteStatement(left), rewriteStatement(right))
+          CombinedTables(op, rewriteStatement(availableCTEs, left), rewriteStatement(availableCTEs, right))
 
-        case CTE(defLabel, defAlias, defQuery, materializedHint, useQuery) =>
-          CTE(defLabel, defAlias, rewriteStatement(defQuery), materializedHint, rewriteStatement(useQuery))
+        case CTE(defns, useQuery) =>
+          val (newAvailableCTEs, newDefns) = availableCTEs.collect(defns) { (aCTEs, query) =>
+            ((), rewriteStatement(aCTEs, query))
+          }
+          CTE(newDefns, rewriteStatement(newAvailableCTEs, useQuery))
 
         case v@Values(_, _) =>
           v
 
         case select: Select =>
-          rewriteSelect(select)
+          rewriteSelect(availableCTEs, select)
       }
     }
 
-    def rewriteFrom(from: From): From = {
+    def rewriteFrom(availableCTEs: ACTEs, from: From): From = {
       from.map[MT](
-        rewriteAtomicFrom(_),
-        { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, rewriteAtomicFrom(right), on) }
+        rewriteAtomicFrom(availableCTEs, _),
+        { (joinType, lateral, left, right, on) => Join(joinType, lateral, left, rewriteAtomicFrom(availableCTEs, right), on) }
       )
     }
 
-    def rewriteAtomicFrom(from: AtomicFrom): AtomicFrom = {
+    def rewriteAtomicFrom(availableCTEs: ACTEs, from: AtomicFrom): AtomicFrom = {
       from match {
         case ft: FromTable => ft
         case fsr: FromSingleRow => fsr
-        case fs@FromStatement(stmt, label, resourceName, alias) =>
-          fs.copy(statement = rewriteStatement(stmt))
+        case fc: FromCTE => availableCTEs.rebase(fc)
+        case fs@FromStatement(stmt, label, resourceName, canonicalName, alias) =>
+          fs.copy(statement = rewriteStatement(availableCTEs, stmt))
       }
     }
   }
 
   object Use extends Transform {
-    override def rewriteSelect(select: Select): Select = {
+    override def rewriteSelect(availableCTEs: ACTEs, select: Select): Select = {
       val Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) = select
 
       val selectListIndices = selectList.valuesIterator.map(_.expr).toVector.zipWithIndex.reverseIterator.toMap
@@ -63,7 +70,7 @@ class SelectListReferences[MT <: MetaTypes] private () extends StatementUniverse
           case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(numericateExpr))
           case x@(Distinctiveness.Indistinct() | Distinctiveness.FullyDistinct()) => x
         },
-        from = rewriteFrom(from),
+        from = rewriteFrom(availableCTEs, from),
         groupBy = groupBy.map(numericateExpr),
         orderBy = orderBy.map { ob => ob.copy(expr = numericateExpr(ob.expr)) }
       )
@@ -71,7 +78,7 @@ class SelectListReferences[MT <: MetaTypes] private () extends StatementUniverse
   }
 
   object Unuse extends Transform {
-    override def rewriteSelect(select: Select): Select = {
+    override def rewriteSelect(availableCTEs: ACTEs, select: Select): Select = {
       val Select(distinctiveness, selectList, from, where, groupBy, having, orderBy, limit, offset, search, hint) = select
 
       val selectListIndices = selectList.valuesIterator.map(_.expr).toVector
@@ -90,7 +97,7 @@ class SelectListReferences[MT <: MetaTypes] private () extends StatementUniverse
           case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(unnumericateExpr))
           case x@(Distinctiveness.Indistinct() | Distinctiveness.FullyDistinct()) => x
         },
-        from = rewriteFrom(from),
+        from = rewriteFrom(availableCTEs, from),
         groupBy = groupBy.map(unnumericateExpr),
         orderBy = orderBy.map { ob => ob.copy(expr = unnumericateExpr(ob.expr)) }
       )
@@ -108,10 +115,10 @@ class SelectListReferences[MT <: MetaTypes] private () extends StatementUniverse
   */
 object SelectListReferences {
   def use[MT <: MetaTypes](stmt: Statement[MT]): Statement[MT] = {
-    new SelectListReferences[MT]().Use.rewriteStatement(stmt)
+    new SelectListReferences[MT]().Use.rewriteStatement(AvailableCTEs.empty, stmt)
   }
 
   def unuse[MT <: MetaTypes](stmt: Statement[MT]): Statement[MT] = {
-    new SelectListReferences[MT]().Unuse.rewriteStatement(stmt)
+    new SelectListReferences[MT]().Unuse.rewriteStatement(AvailableCTEs.empty, stmt)
   }
 }

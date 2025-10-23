@@ -58,6 +58,7 @@ trait SoQLRollupTestHelper extends FunSuite with MustMatchers with StatementUniv
     val id: Int,
     val statement: Statement,
     val resourceName: types.ScopedResourceName[MT],
+    val canonicalName: CanonicalName,
     val databaseName: types.DatabaseTableName[MT]
   ) extends RollupInfo[MT, Int] {
     override def databaseColumnNameOfIndex(i: Int) = DatabaseColumnName(s"c${i+1}")
@@ -70,7 +71,7 @@ trait SoQLRollupTestHelper extends FunSuite with MustMatchers with StatementUniv
         case Right(a) => a
         case Left(e) => fail(e.toString)
       }
-      new SoQLRollupInfo(id, analysis.statement, ScopedResourceName(0, ResourceName(name)), DatabaseTableName(name))
+      new SoQLRollupInfo(id, analysis.statement, ScopedResourceName(0, ResourceName(name)), CanonicalName(name), DatabaseTableName(name))
     }
   }
 

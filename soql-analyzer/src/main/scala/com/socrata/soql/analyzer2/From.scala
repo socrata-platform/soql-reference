@@ -31,6 +31,8 @@ sealed abstract class From[MT <: MetaTypes] extends LabelUniverse[MT] {
   // into a corner?
   def unique: LazyList[Seq[Column[MT]]]
 
+  def referencedCTEs: Set[AutoCTELabel]
+
   def schema: Seq[From.SchemaEntry[MT]]
   lazy val schemaByTableColumn: Map[(AutoTableLabel, ColumnLabel), From.SchemaEntry[MT]] = locally {
     def atomicFromSchema(af: AtomicFrom[MT]) =
@@ -141,6 +143,10 @@ sealed abstract class From[MT <: MetaTypes] extends LabelUniverse[MT] {
         (combine(s, j), j)
       }
     )._1
+
+  // All columns in this From which reference tables from outside this From
+  def nonlocalColumnReferences: Map[AutoTableLabel, Set[ColumnLabel]]
+  final def containsNonlocalColumnReferences = !nonlocalColumnReferences.isEmpty
 }
 
 object From {
@@ -167,6 +173,9 @@ object From {
         case fsr: FromSingleRow[MT] =>
           buffer.write(3)
           buffer.write(fsr)
+        case fc: FromCTE[MT] =>
+          buffer.write(4)
+          buffer.write(fc)
       }
     }
   }
@@ -178,6 +187,7 @@ object From {
         case 1 => buffer.read[FromTable[MT]]()
         case 2 => buffer.read[FromStatement[MT]]()
         case 3 => buffer.read[FromSingleRow[MT]]()
+        case 4 => buffer.read[FromCTE[MT]]()
         case other => fail("Unknown from tag " + other)
       }
     }
@@ -201,12 +211,27 @@ object AtomicFrom extends from.OAtomicFromImpl
 case class FromTable[MT <: MetaTypes](
   tableName: types.DatabaseTableName[MT],
   definiteResourceName: types.ScopedResourceName[MT],
+  definiteCanonicalName: CanonicalName,
   alias: Option[ResourceName],
   label: AutoTableLabel,
   columns: OrderedMap[types.DatabaseColumnName[MT], FromTable.ColumnInfo[MT]],
   primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]]
 ) extends AtomicFrom[MT] with from.FromTableImpl[MT]
 object FromTable extends from.OFromTableImpl
+
+// This has a rather unfortunate non-local semi-requirement that
+// rewrite passes MUST uphold: the `basedOn` will be `eq` to a query
+// that is defined in some parent CTE statement node.  It is checked
+// in the `CTE` constructor.
+case class FromCTE[MT <: MetaTypes](
+  cteLabel: AutoCTELabel,
+  label: AutoTableLabel,
+  basedOn: Statement[MT],
+  definiteResourceName: types.ScopedResourceName[MT],
+  canonicalName: CanonicalName,
+  alias: Option[ResourceName]
+) extends AtomicFrom[MT] with from.FromCTEImpl[MT]
+object FromCTE extends from.OFromCTEImpl
 
 // "alias" is optional here because of chained soql; actually having a
 // real subselect syntactically requires an alias, but `select ... |>
@@ -216,6 +241,7 @@ case class FromStatement[MT <: MetaTypes](
   statement: Statement[MT],
   label: AutoTableLabel,
   resourceName: Option[types.ScopedResourceName[MT]],
+  canonicalName: Option[CanonicalName],
   alias: Option[ResourceName]
 ) extends AtomicFrom[MT] with from.FromStatementImpl[MT]
 object FromStatement extends from.OFromStatementImpl

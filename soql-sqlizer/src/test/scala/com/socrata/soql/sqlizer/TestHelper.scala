@@ -67,6 +67,7 @@ object TestHelper {
     override def gensymPrefix: String = "g"
     protected override def idxPrefix: String ="idx"
     protected override def autoTablePrefix: String = "x"
+    protected override def autoCTEPrefix: String = "c"
     protected override def autoColumnPrefix: String = "i"
   }
 
@@ -86,7 +87,7 @@ trait TestHelper { this: Assertions =>
   def xtest(name: String)(test: => Any): Unit = {}
 
   def tableFinder(items: ((Int, String), Thing[Int, TestType])*) =
-    new MockTableFinder[TestMT](items.toMap)
+    MockTableFinder[TestMT](items : _*)
 
   val TestProvenanceMapper = TestHelper.TestProvenanceMapper
   val TestExprSqlFactory = TestHelper.TestExprSqlFactory

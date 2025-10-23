@@ -42,68 +42,78 @@ object IsomorphismState {
   }
 
   class View[MT <: MetaTypes] private[IsomorphismState](
-    forwardTables: Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
-    backwardTables: Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
-    forwardColumns: DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])],
-    backwardColumns: DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])]
+    forwardTables: Map[AutoTableLabel, AutoTableLabel],
+    backwardTables: Map[AutoTableLabel, AutoTableLabel],
+    forwardColumns: DMap[(Option[AutoTableLabel], types.ColumnLabel[MT])],
+    backwardColumns: DMap[(Option[AutoTableLabel], types.ColumnLabel[MT])],
+    forwardCTEs: Map[AutoCTELabel, AutoCTELabel],
+    backwardCTEs: Map[AutoCTELabel, AutoCTELabel]
   ) extends LabelUniverse[MT] {
     def reverse: View[MT] =
-      new View(backwardTables, forwardTables, backwardColumns, forwardColumns)
+      new View(backwardTables, forwardTables, backwardColumns, forwardColumns, backwardCTEs, forwardCTEs)
 
     private[analyzer2] def renameForward(t: AutoTableLabel): AutoTableLabel = forwardTables.getOrElse(t, t)
     private[analyzer2] def renameBackward(t: AutoTableLabel): AutoTableLabel = backwardTables.getOrElse(t, t)
 
-    private[analyzer2] def renameForward[T <: AutoTableLabel, C <: ColumnLabel](t: Option[T], c: C): (Option[T], C) =
+    private[analyzer2] def renameForward[C <: ColumnLabel](t: Option[AutoTableLabel], c: C): (Option[AutoTableLabel], C) =
       forwardColumns.getOrElse((t, c), (t, c))
-    private[analyzer2] def renameBackward[T <: AutoTableLabel, C <: ColumnLabel](t: Option[T], c: C): (Option[T], C) =
+    private[analyzer2] def renameBackward[C <: ColumnLabel](t: Option[AutoTableLabel], c: C): (Option[AutoTableLabel], C) =
       backwardColumns.getOrElse((t, c), (t, c))
 
     private[analyzer2] def extend: IsomorphismState =
-      new IsomorphismState(forwardTables, backwardTables, forwardColumns, backwardColumns)
+      new IsomorphismState(
+        forwardTables, backwardTables,
+        forwardColumns, backwardColumns,
+        forwardCTEs, backwardCTEs
+      )
 
     override def toString =
-      s"IsomorphismState(\n  $forwardTables,\n  $backwardTables,\n  $forwardColumns, $backwardColumns\n)"
+      s"IsomorphismState(\n  $forwardTables,\n  $backwardTables,\n  $forwardColumns, $backwardColumns\n,  $forwardCTEs, $backwardCTEs\n)"
   }
 
   object View {
     def empty[MT <: MetaTypes] =
-      new View[MT](Map.empty, Map.empty, DMap.empty, DMap.empty)
+      new View[MT](Map.empty, Map.empty, DMap.empty, DMap.empty, Map.empty, Map.empty)
   }
 }
 
 class IsomorphismState[MT <: MetaTypes] private (
-  private var forwardTables: Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
-  private var backwardTables: Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
-  private var forwardColumns: IsomorphismState.DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])],
-  private var backwardColumns: IsomorphismState.DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])]
+  private var forwardTables: Map[AutoTableLabel, AutoTableLabel],
+  private var backwardTables: Map[AutoTableLabel, AutoTableLabel],
+  private var forwardColumns: IsomorphismState.DMap[(Option[AutoTableLabel], types.ColumnLabel[MT])],
+  private var backwardColumns: IsomorphismState.DMap[(Option[AutoTableLabel], types.ColumnLabel[MT])],
+  private var forwardCTEs: Map[types.AutoCTELabel[MT], types.AutoCTELabel[MT]],
+  private var backwardCTEs: Map[types.AutoCTELabel[MT], types.AutoCTELabel[MT]]
 ) extends LabelUniverse[MT] {
-  private[analyzer2] def this() = this(Map.empty, Map.empty, new IsomorphismState.DMap, new IsomorphismState.DMap)
+  private[analyzer2] def this() = this(Map.empty, Map.empty, new IsomorphismState.DMap, new IsomorphismState.DMap, Map.empty, Map.empty)
 
   private [analyzer2] def attempt(f: IsomorphismState => Boolean): Boolean = {
-    val clone = new IsomorphismState(forwardTables, backwardTables, forwardColumns, backwardColumns)
+    val clone = new IsomorphismState(forwardTables, backwardTables, forwardColumns, backwardColumns, forwardCTEs, backwardCTEs)
     val result = f(clone)
     if(result) {
       this.forwardTables = clone.forwardTables
       this.backwardTables = clone.backwardTables
       this.forwardColumns = clone.forwardColumns
       this.backwardColumns = clone.backwardColumns
+      this.forwardCTEs = clone.forwardCTEs
+      this.backwardCTEs = clone.backwardCTEs
     }
     result
   }
 
-  def finish = new IsomorphismState.View(forwardTables, backwardTables, forwardColumns, backwardColumns)
+  def finish = new IsomorphismState.View(forwardTables, backwardTables, forwardColumns, backwardColumns, forwardCTEs, backwardCTEs)
 
   def mapFrom(table: Option[AutoTableLabel], col: ColumnLabel): Option[(Option[AutoTableLabel], ColumnLabel)] =
     forwardColumns.get((table, col))
 
-  def tryAssociate(tableA: AutoTableLabel, tableB: AutoTableLabel): Boolean = {
-    (tableA, tableB) match {
-      case (ta: AutoTableLabel, tb: AutoTableLabel) =>
-        tryIntern(ta, tb)
-      case _ =>
-        false
-    }
-  }
+  def alreadyAssociated(cteA: AutoCTELabel, cteB: AutoCTELabel): Boolean =
+    forwardCTEs.get(cteA) == Some(cteB)
+
+  def tryAssociate(tableA: AutoTableLabel, tableB: AutoTableLabel): Boolean =
+    tryIntern(tableA, tableB)
+
+  def tryAssociate(cteA: AutoCTELabel, cteB: AutoCTELabel): Boolean =
+    tryIntern(cteA, cteB)
 
   def tryAssociate(tableA: Option[AutoTableLabel], columnA: ColumnLabel, tableB: Option[AutoTableLabel], columnB: ColumnLabel): Boolean = {
     (tableA, tableB) match {
@@ -130,7 +140,7 @@ class IsomorphismState[MT <: MetaTypes] private (
     }
   }
 
-  private def tryIntern[T <: AutoTableLabel](tableA: T, tableB: T): Boolean = {
+  private def tryIntern(tableA: AutoTableLabel, tableB: AutoTableLabel): Boolean = {
     (forwardTables.get(tableA), backwardTables.get(tableB)) match {
       case (None, None) =>
         forwardTables += tableA -> tableB
@@ -143,7 +153,7 @@ class IsomorphismState[MT <: MetaTypes] private (
     }
   }
 
-  private def tryIntern[T <: AutoTableLabel](tableA: Option[T], tableB: Option[T]): Boolean = {
+  private def tryIntern(tableA: Option[AutoTableLabel], tableB: Option[AutoTableLabel]): Boolean = {
     (tableA, tableB) match {
       case (Some(ta), Some(tb)) => tryIntern(ta, tb)
       case (None, None) => true
@@ -151,7 +161,7 @@ class IsomorphismState[MT <: MetaTypes] private (
     }
   }
 
-  private def tryIntern[T <: AutoTableLabel, C <: ColumnLabel](tableA: Option[T], columnA: C, tableB: Option[T], columnB: C): Boolean = {
+  private def tryIntern[C <: ColumnLabel](tableA: Option[AutoTableLabel], columnA: C, tableB: Option[AutoTableLabel], columnB: C): Boolean = {
     (forwardColumns.get((tableA, columnA)), backwardColumns.get((tableB, columnB))) match {
       case (None, None) if tryIntern(tableA, tableB) =>
         forwardColumns += (tableA, columnA) -> (tableB, columnB)
@@ -159,6 +169,19 @@ class IsomorphismState[MT <: MetaTypes] private (
         true
       case (Some((tb, cb)), Some((ta, ca))) =>
         ta == tableA && tb == tableB && ca == columnA && cb == columnB
+      case _ =>
+        false
+    }
+  }
+
+  private def tryIntern(cteA: AutoCTELabel, cteB: AutoCTELabel): Boolean = {
+    (forwardCTEs.get(cteA), backwardCTEs.get(cteB)) match {
+      case (None, None) =>
+        forwardCTEs += cteA -> cteB
+        backwardCTEs += cteB -> cteA
+        true
+      case (Some(b), Some(a)) =>
+        a == cteA && b == cteB
       case _ =>
         false
     }
