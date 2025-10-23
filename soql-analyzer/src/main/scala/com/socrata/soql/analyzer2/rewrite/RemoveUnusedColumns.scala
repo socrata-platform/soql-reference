@@ -6,7 +6,7 @@ import com.socrata.soql.analyzer2
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection._
 
-class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[types.AutoTableLabel[MT], Set[types.ColumnLabel[MT]]]) extends StatementUniverse[MT] {
+class RemoveUnusedColumns[MT <: MetaTypes] private (columnReferences: Map[AutoTableLabel, Set[types.ColumnLabel[MT]]]) extends StatementUniverse[MT] {
   type ACTEs = AvailableCTEs[Unit]
 
   // myLabel being "None" means "keep all of my output columns,

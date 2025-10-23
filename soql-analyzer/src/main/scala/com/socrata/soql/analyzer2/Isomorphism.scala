@@ -78,10 +78,10 @@ object IsomorphismState {
 }
 
 class IsomorphismState[MT <: MetaTypes] private (
-  private var forwardTables: Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
-  private var backwardTables: Map[types.AutoTableLabel[MT], types.AutoTableLabel[MT]],
-  private var forwardColumns: IsomorphismState.DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])],
-  private var backwardColumns: IsomorphismState.DMap[(Option[types.AutoTableLabel[MT]], types.ColumnLabel[MT])],
+  private var forwardTables: Map[AutoTableLabel, AutoTableLabel],
+  private var backwardTables: Map[AutoTableLabel, AutoTableLabel],
+  private var forwardColumns: IsomorphismState.DMap[(Option[AutoTableLabel], types.ColumnLabel[MT])],
+  private var backwardColumns: IsomorphismState.DMap[(Option[AutoTableLabel], types.ColumnLabel[MT])],
   private var forwardCTEs: Map[types.AutoCTELabel[MT], types.AutoCTELabel[MT]],
   private var backwardCTEs: Map[types.AutoCTELabel[MT], types.AutoCTELabel[MT]]
 ) extends LabelUniverse[MT] {
