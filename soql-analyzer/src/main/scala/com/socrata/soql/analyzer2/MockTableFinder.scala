@@ -24,7 +24,9 @@ object OptionalBoolean {
   }
 }
 
-sealed abstract class Thing[+RNS, +CT]
+sealed abstract class Thing[+RNS, +CT] {
+  def canonicalName: Option[String]
+}
 case class D[+CT](schema: (String, CT)*) extends Thing[Nothing, CT] {
   private var canonicalName_ : Option[String] = None
   private var orderings_ : List[(String, Boolean, Boolean)] = Nil
@@ -253,47 +255,57 @@ object MockTableFinder {
 }
 
 class MockTableFinder[MT <: MetaTypes](private val raw: OrderedMap[(MT#ResourceNameScope, String), Thing[MT#ResourceNameScope, MT#ColumnType]])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) extends TableFinder[MT] {
-  private val tables: Map[ScopedResourceName, FinderTableDescription] = raw.iterator.zipWithIndex.map { case (((scope, rawResourceName), thing), idx) =>
+  private val tables: Map[ScopedResourceName, FinderTableDescription] = locally {
     // canonical names need to be unique within the whole tablefinder
     // (not just the scope) so unless the user has specified a
-    // particular CN, generate one from the index.
-    def defaultCanonicalName = s"cn_$idx"
-
-    val converted = thing match {
-      case d@D(rawSchema @ _*) =>
-        val hiddenColumns = d.hiddenColumns.map(ColumnName(_))
-        val outputColumnHints = d.outputColumnHints
-        Dataset(
-          DatabaseTableName(rawResourceName),
-          CanonicalName(d.canonicalName.getOrElse(defaultCanonicalName)),
-          OrderedMap() ++ rawSchema.iterator.map { case (rawColumnName, ct) =>
-            val cn = ColumnName(rawColumnName)
-            DatabaseColumnName[MT#DatabaseColumnNameImpl](cn.caseFolded) -> DatasetColumnInfo(cn, ct, hidden = hiddenColumns(cn), hint = outputColumnHints.get(cn))
-          },
-          d.orderings.map { case (col, asc, nullLast) => Ordering(DatabaseColumnName(ColumnName(col).caseFolded), asc, nullLast) },
-          d.primaryKeys.map(_.map { col => DatabaseColumnName[MT#DatabaseColumnNameImpl](ColumnName(col).caseFolded) })
-        )
-      case q@Q(scope, parent, soql, params @ _*) =>
-        Query(
-          scope,
-          CanonicalName(q.canonicalName.getOrElse(defaultCanonicalName)),
-          ResourceName(parent),
-          soql,
-          params.iterator.map { case (k, v) => HoleName(k) -> v }.toMap,
-          q.hiddenColumns,
-          q.outputColumnHints
-        )
-      case u@U(scope, soql, params @ _*) =>
-        TableFunction(
-          scope,
-          CanonicalName(u.canonicalName.getOrElse(defaultCanonicalName)),
-          soql,
-          OrderedMap() ++ params.iterator.map { case (k,v) => HoleName(k) -> v },
-          u.hiddenColumns
-        )
+    // particular CN, generate one from the resource name, ensuring it
+    // doesn't collide with any other CN.
+    var knownCanonicalNames = raw.iterator.flatMap { case (_, thing) => thing.canonicalName }.toSet
+    def canonicalNameForResourceName(rn: String) = {
+      val r = (Iterator.single(rn) ++ Iterator.from(1).map { i => s"${rn}_${i}" })
+        .dropWhile(knownCanonicalNames(_))
+        .next()
+      knownCanonicalNames += r
+      r
     }
-    ScopedResourceName(scope, ResourceName(rawResourceName)) -> converted
-  }.toMap
+
+    raw.iterator.map { case ((scope, rawResourceName), thing) =>
+      val converted = thing match {
+        case d@D(rawSchema @ _*) =>
+          val hiddenColumns = d.hiddenColumns.map(ColumnName(_))
+          val outputColumnHints = d.outputColumnHints
+          Dataset(
+            DatabaseTableName(rawResourceName),
+            CanonicalName(d.canonicalName.getOrElse(canonicalNameForResourceName(rawResourceName))),
+            OrderedMap() ++ rawSchema.iterator.map { case (rawColumnName, ct) =>
+              val cn = ColumnName(rawColumnName)
+              DatabaseColumnName[MT#DatabaseColumnNameImpl](cn.caseFolded) -> DatasetColumnInfo(cn, ct, hidden = hiddenColumns(cn), hint = outputColumnHints.get(cn))
+            },
+            d.orderings.map { case (col, asc, nullLast) => Ordering(DatabaseColumnName(ColumnName(col).caseFolded), asc, nullLast) },
+            d.primaryKeys.map(_.map { col => DatabaseColumnName[MT#DatabaseColumnNameImpl](ColumnName(col).caseFolded) })
+          )
+        case q@Q(scope, parent, soql, params @ _*) =>
+          Query(
+            scope,
+            CanonicalName(q.canonicalName.getOrElse(canonicalNameForResourceName(rawResourceName))),
+            ResourceName(parent),
+            soql,
+            params.iterator.map { case (k, v) => HoleName(k) -> v }.toMap,
+            q.hiddenColumns,
+            q.outputColumnHints
+          )
+        case u@U(scope, soql, params @ _*) =>
+          TableFunction(
+            scope,
+            CanonicalName(u.canonicalName.getOrElse(canonicalNameForResourceName(rawResourceName))),
+            soql,
+            OrderedMap() ++ params.iterator.map { case (k,v) => HoleName(k) -> v },
+            u.hiddenColumns
+          )
+      }
+      ScopedResourceName(scope, ResourceName(rawResourceName)) -> converted
+    }.toMap
+  }
 
   protected def lookup(name: ScopedResourceName): Either[LookupError, FinderTableDescription] = {
     tables.get(name) match {
