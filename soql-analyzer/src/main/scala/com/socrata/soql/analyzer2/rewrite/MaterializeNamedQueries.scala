@@ -93,6 +93,9 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
         // column, but we might be able to do so to some internal
         // query, so keep collecting them
         collectNamedQueries(stmt)
+      case FromStatement(stmt, _, _, None, _) =>
+        // This is not a named query, but we can recurse
+        collectNamedQueries(stmt)
       case FromStatement(stmt, _, _, Some(cn), _) =>
         NamedQueries.retrieveCached(cn, stmt) match {
           case None =>
