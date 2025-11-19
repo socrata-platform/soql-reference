@@ -4,7 +4,8 @@ metadata:
   name: soql-reference
   description: |
     This library defines SoQL. It provides type definitions and utilities such
-    as analyzers and parsers for Socrata's SoQL query language.
+    as analyzers and parsers for Socrata's SoQL query language. If you're
+    looking for information about 'joins', this is the place.
   links:
     - title: "On the Interpretation of SoQL"
       url: "https://socrata.atlassian.net/wiki/spaces/PD/pages/2478702783/On+the+Interpretation+of+SoQL"
