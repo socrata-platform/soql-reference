@@ -3,8 +3,10 @@ kind: Component
 metadata:
   name: soql-reference
   description: |
-    This library defines SoQL. It provides type definitions and utilities such
-    as analyzers and parsers for Socrata's SoQL query language.
+    This library defines SoQL (SOcrata Query Language). It provides type
+    definitions and utilities such as analyzers and parsers for Socrata's SoQL
+    query language. Some keywords to make this entity more searchable - joins,
+    unions, filters, group bys, sqlization.
   links:
     - title: "On the Interpretation of SoQL"
       url: "https://socrata.atlassian.net/wiki/spaces/PD/pages/2478702783/On+the+Interpretation+of+SoQL"
