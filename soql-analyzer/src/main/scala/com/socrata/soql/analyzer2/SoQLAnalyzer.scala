@@ -178,17 +178,17 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     }
 
     def analyze(scope: RNS, query: FoundTables.Query[MT]): Statement = {
-      val ctx = Ctx(scope, None, None, primaryTableName(scope, query), Environment.empty, Map.empty, Set.empty, Map.empty, preserveSystemColumnsRequested)
+      val ctx = Ctx(scope, None, None, primaryTableName(scope, query), Environment.empty, Map.empty, Set.empty, Map.empty, preserveSystemColumnsRequested, None)
       val from =
         query match {
           case FoundTables.Saved(rn) =>
             analyzeForFrom(ctx.scopedResourceName, ScopedResourceName(scope, rn), None, NoPosition)
           case FoundTables.InContext(rn, q, _, parameters) =>
             val from = analyzeForFrom(ctx.scopedResourceName, ScopedResourceName(scope, rn), None, NoPosition)
-            analyzeStatement(ctx, q, ImplicitFrom.Required(from, Some(rn)))
+            analyzeStatement(ctx.copy(context = Some(from)), q, ImplicitFrom.Required(from, Some(rn)))
           case FoundTables.InContextImpersonatingSaved(rn, q, _, parameters, impersonating) =>
             val from = analyzeForFrom(ctx.scopedResourceName, ScopedResourceName(scope, rn), None, NoPosition)
-            analyzeStatement(ctx.copy(canonicalName = Some(impersonating)), q, ImplicitFrom.Required(from, Some(rn)))
+            analyzeStatement(ctx.copy(canonicalName = Some(impersonating), context = Some(from)), q, ImplicitFrom.Required(from, Some(rn)))
           case FoundTables.Standalone(q, _, parameters) =>
             analyzeStatement(ctx, q, ImplicitFrom.None)
         }
@@ -356,7 +356,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             // so this is basedOn |> parsed
             // so we want to use "basedOn" as the implicit "from" for "parsed"
             val from = analyzeForFrom(source, ScopedResourceName(scope, basedOn), None, NoPosition /* Yes, actually NoPosition here */)
-            analyzeStatement(Ctx(scope, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, outputColumnHints, true), parsed, ImplicitFrom.Required(from, Some(basedOn)))
+            analyzeStatement(Ctx(scope, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, outputColumnHints, true, Some(from)), parsed, ImplicitFrom.Required(from, Some(basedOn)))
           case TableDescription.TableFunction(_, _, _, _, _, _) =>
             parameterlessTableFunction(source, name.name, position)
         }
@@ -392,7 +392,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       outputColumnHints: Map[ColumnName, JValue],
       // Whether we should attempt to preserve system columns from our
       // primary input table.
-      attemptToPreserveSystemColumns: Boolean
+      attemptToPreserveSystemColumns: Boolean,
+      context: Option[AtomicFrom]
     ) {
       private def error(e: SoQLAnalyzerError[RNS]): Nothing =
         throw Bail(e)
@@ -422,7 +423,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         }
       def noDataSource(position: Position): Nothing =
         error(Error.FromRequired(Source.nonSynthetic(scopedResourceName, position)))
-      def chainWithFrom(position: Position): Nothing =
+      def fromForbidden(position: Position): Nothing =
         error(Error.FromForbidden(Source.nonSynthetic(scopedResourceName, position)))
       def fromThisWithoutContext(position: Position): Nothing =
         error(Error.FromThisWithoutContext(Source.nonSynthetic(scopedResourceName, position)))
@@ -477,11 +478,12 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 udfParams = ctx.udfParams,
                 hiddenColumns = Set.empty,
                 outputColumnHints = Map.empty,
-                attemptToPreserveSystemColumns = preserveSystemColumnsRequested
+                attemptToPreserveSystemColumns = preserveSystemColumnsRequested,
+                context = ctx.context
               ),
               left, from0
             )
-          analyzeStatement(ctx, right, ImplicitFrom.Required(analyzedLeft, None))
+          analyzeStatement(ctx.copy(context = Some(analyzedLeft)), right, ImplicitFrom.Required(analyzedLeft, None))
         case other: TrueOp[ast.Select] =>
           analyzeTableOp(ctx, other, from0)
       }
@@ -498,7 +500,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           udfParams = ctx.udfParams,
           hiddenColumns = Set.empty,
           outputColumnHints = ctx.outputColumnHints,
-          attemptToPreserveSystemColumns = false
+          attemptToPreserveSystemColumns = false,
+          context = ctx.context
         )
 
       val lhsFrom = from0.optionalize(left = true)
@@ -508,7 +511,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
 
       if(from0.isInstanceOf[ImplicitFrom.Required] && !lhsFrom.forced && !rhsFrom.forced) {
         /* TODO: NEED POS INFO FROM AST - and what is the right position for saying "no one of these table-func'd subselects used the input query? */
-        ctx.chainWithFrom(NoPosition)
+        ctx.fromForbidden(NoPosition)
       }
 
       if(lhs.schema.values.map(_.typ) != rhs.schema.values.map(_.typ)) {
@@ -957,7 +960,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           } else {
             // chained query: {something} |> select ... from somethingThatIsNotThis
             // this is an error
-            ctx.chainWithFrom(NoPosition /* TODO: NEED POS INFO FROM AST */)
+            ctx.fromForbidden(NoPosition /* TODO: NEED POS INFO FROM AST */)
           }
         case (optionalPrev: ImplicitFrom.Optional, Some(tn)) =>
           tn.aliasWithoutPrefix.foreach(ensureLegalAlias(ctx, _, NoPosition /* TODO: NEED POS INFO FROM AST */))
@@ -1055,8 +1058,16 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       js match {
         case ast.JoinTable(tn) =>
           tn.aliasWithoutPrefix.foreach(ensureLegalAlias(ctx, _, NoPosition /* TODO: NEED POS INFO FROM AST */))
-          analyzeForFrom(ctx.scopedResourceName, ScopedResourceName(ctx.scope, ResourceName(tn.nameWithoutPrefix)), ctx.canonicalName, NoPosition /* TODO: NEED POS INFO FROM AST */).
-            reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
+          val rn = ResourceName(tn.nameWithoutPrefix)
+          val alias = tn.aliasWithoutPrefix.map(ResourceName(_)).getOrElse(rn)
+          if(rn == SoQLAnalyzer.This) {
+            ctx.context.getOrElse {
+              ctx.fromForbidden(NoPosition /* TODO: NEED POS INFO FROM AST */)
+            }.relabel(labelProvider).reAlias(Some(alias))
+          } else {
+            analyzeForFrom(ctx.scopedResourceName, ScopedResourceName(ctx.scope, ResourceName(tn.nameWithoutPrefix)), ctx.canonicalName, NoPosition /* TODO: NEED POS INFO FROM AST */).
+              reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
+          }
         case ast.JoinQuery(select, rawAlias) =>
           val alias = rawAlias.substring(1)
           ensureLegalAlias(ctx, alias, NoPosition /* TODO: NEED POS INFO FROM AST */)
@@ -1069,7 +1080,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             udfParams = ctx.udfParams,
             hiddenColumns = Set.empty,
             outputColumnHints = Map.empty,
-            attemptToPreserveSystemColumns = preserveSystemColumnsRequested
+            attemptToPreserveSystemColumns = preserveSystemColumnsRequested,
+            context = ctx.context // this lets you filter the context in a subquery
           )
           analyzeStatement(subCtx, select, ImplicitFrom.None).reAlias(Some(ResourceName(alias)))
         case ast.JoinFunc(tn, params) =>
@@ -1129,7 +1141,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 udfParams = innerUdfParams,
                 hiddenColumns = hiddenColumns,
                 outputColumnHints = Map.empty,
-                attemptToPreserveSystemColumns = callerCtx.attemptToPreserveSystemColumns
+                attemptToPreserveSystemColumns = callerCtx.attemptToPreserveSystemColumns,
+                context = None
               )
 
               val useQuery = analyzeStatement(udfCtx, parsed, ImplicitFrom.None)
@@ -1175,7 +1188,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 udfParams = Map.empty,
                 hiddenColumns = hiddenColumns,
                 outputColumnHints = Map.empty,
-                attemptToPreserveSystemColumns = callerCtx.attemptToPreserveSystemColumns
+                attemptToPreserveSystemColumns = callerCtx.attemptToPreserveSystemColumns,
+                context = None
               )
 
               analyzeStatement(udfCtx, parsed, ImplicitFrom.None)

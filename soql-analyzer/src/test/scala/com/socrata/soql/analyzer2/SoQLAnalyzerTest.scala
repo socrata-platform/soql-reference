@@ -1437,4 +1437,20 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     fromTable.primaryKeys must be (Seq(Seq(DatabaseColumnName(":id"))))
   }
 
+  test("multiple references to @this") {
+    val tf = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val expectedAnalysis = locally {
+      val Right(ft) = tf.findTables(0, rn("ds1"), "select num as left_num, @right.num as right_num join @ds1 as @right on text = @right.text", Map.empty)
+      val Right(analysis) = analyzer(ft, UserParameters.empty)
+      analysis
+    }
+
+    val Right(ft) = tf.findTables(0, rn("ds1"), "select @left.num as left_num, @right.num as right_num from @this as @left join @this as @right on @left.text = @right.text", Map.empty)
+    val Right(analysis) = analyzer(ft, UserParameters.empty)
+
+    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
 }
