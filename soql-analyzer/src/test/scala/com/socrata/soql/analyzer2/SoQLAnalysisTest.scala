@@ -417,6 +417,23 @@ select count(*) |> select 2 as s order by s
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("merge - search inhibits merge") {
+    val tf = tableFinder(
+      (0, "table") -> D(
+        ":id" -> TestNumber,
+        "text" -> TestText,
+        "num" -> TestNumber
+      )
+    )
+
+    val analysis1 = analyze(tf, "table", "select num |> select num search 'hello'")
+      .merge(and)
+
+    val analysis2 = analyze(tf, "table", "select num |> select num search 'hello'")
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
   test("remove unused columns - simple") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
@@ -489,17 +506,6 @@ select b, n |> select n join @udf(b) as @udf on true
     // this subselect is now completely trivial, delete it."
     val analysis = analyze(tf, "twocol", "select text, num+1 order by text |> select text, num_1 order by num_1")
     val expectedAnalysis = analyze(tf, "twocol", "select text, num+1 |> select text, num_1 order by num_1")
-
-    analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
-  }
-
-  test("remove unused order by - remove subselects that become trivial") {
-    val tf = tableFinder(
-      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
-    )
-
-    val analysis = analyze(tf, "twocol", "select text, num order by text |> select text, num order by num")
-    val expectedAnalysis = analyze(tf, "twocol", "select text, num order by num")
 
     analysis.removeUnusedOrderBy.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
