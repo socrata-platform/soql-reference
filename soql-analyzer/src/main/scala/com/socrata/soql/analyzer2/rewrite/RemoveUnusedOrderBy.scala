@@ -7,8 +7,6 @@ import com.socrata.soql.collection._
 class RemoveUnusedOrderBy[MT <: MetaTypes] private () extends StatementUniverse[MT] {
   type ACTEs = AvailableCTEs[Unit]
 
-  case class Result(statement: Statement)
-
   def rewriteStatement(availableCTEs: ACTEs, stmt: Statement, callerCaresAboutOrder: Boolean): Statement = {
     stmt match {
       case CombinedTables(op, left, right) =>
