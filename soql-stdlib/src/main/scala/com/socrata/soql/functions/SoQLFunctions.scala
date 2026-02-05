@@ -14,7 +14,7 @@ sealed abstract class SoQLFunctions
 object SoQLFunctions {
   private val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLFunctions])
 
-  import SoQLTypeClasses.{Ordered, Equatable, NumLike, RealNumLike, GeospatialLike, TimestampLike, PointLike, LineLike, PolygonLike}
+  import SoQLTypeClasses.{Ordered, Equatable, NumLike, RealNumLike, GeospatialLike, TimestampLike, PointLike, LineLike, PolygonLike, Stringable}
   private val AllTypes = CovariantSet.from(SoQLType.typesByName.values.toSet)
 
   val NoDocs = "No documentation available"
@@ -101,7 +101,7 @@ object SoQLFunctions {
     NoDocs
   ).hidden // Required by the old sqlizer (not a real function, requires a string literal); not necessary in the new-sqlizer
 
-  val Concat = f("||", SpecialFunctions.Operator("||"), Map.empty, Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))(
+  val Concat = f("||", SpecialFunctions.Operator("||"), Map("a" -> Stringable, "b" -> Stringable), Seq(VariableType("a"), VariableType("b")), Seq.empty, FixedType(SoQLText))(
     "Concatenate two strings", Example("Concatenate two strings", "'first' || 'second' as concat", ""), Example("Concatenate with columns", "col_a || 'second' as concat", "")
   )
   val Gte = f(">=", SpecialFunctions.Operator(">="), Map("a" -> Ordered), Seq(VariableType("a"), VariableType("a")), Seq.empty, FixedType(SoQLBoolean))(
@@ -895,13 +895,6 @@ object SoQLFunctions {
   val TextToRowVersion = mf("text to rowver", SpecialFunctions.Cast(SoQLVersion.name), Seq(SoQLText), Seq.empty, SoQLVersion)(
     NoDocs
   ).hidden // required by the old-sqlizer (not a real function, requires a string literal); not necessary in the new
-
-  val RowIdentifierToText = mf("rid to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLID), Seq.empty, SoQLText)(
-    NoDocs
-  ).hidden
-  val RowVersionToText = mf("rowver to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLVersion), Seq.empty, SoQLText)(
-    NoDocs
-  ).hidden
 
   val Iif = f("iif", FunctionName("iif"), Map.empty,
     Seq(FixedType(SoQLBoolean), VariableType("a"), VariableType("a")),
