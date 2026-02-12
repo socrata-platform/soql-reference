@@ -23,6 +23,7 @@ object TestFunctionSqlizer extends FuncallSqlizer[TestHelper.TestMT] {
     TestFunctions.Plus -> sqlizeBinaryOp("+"),
     TestFunctions.Times -> sqlizeBinaryOp("*"),
     TestFunctions.Or -> sqlizeBinaryOp("OR"),
+    TestFunctions.And -> sqlizeBinaryOp("AND"),
     TestFunctions.Compress -> compress,
     TestFunctions.NonTrivialFunctionWhichProducesAnExpandedCompoundValue -> sqlizeExpandedFunction,
     TestFunctions.Concat -> sqlizeBinaryOp("||"),

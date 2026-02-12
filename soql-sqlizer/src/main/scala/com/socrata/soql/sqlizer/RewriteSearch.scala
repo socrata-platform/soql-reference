@@ -13,6 +13,8 @@ abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
 {
   val searchBeforeQuery: Boolean
 
+  val pushDownSearches: Boolean = false
+
   def apply(stmt: Statement): Statement = rewriteStatement(stmt)
 
   // Produce a term that can be used to create an index on a table with the given schema
@@ -30,8 +32,25 @@ abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
       case s@Select(_distinctiveness, _selectList, rawFrom, where, _groupBy, _having, _orderBy, _limit, _offset, Some(search), _hint) =>
         val from = rewriteFrom(rawFrom)
         if(searchBeforeQuery) {
-          val additionalTerm = rewriteSearch(from, search)
-          s.copy(from = from, where = Some(where.fold(additionalTerm)(mkAnd(additionalTerm, _))), search = None)
+          val withPushedDownSearch =
+            // Try pushing the search down to the base dataset to act
+            // as a kind of pre-filter.  Note this isn't actually 100%
+            // invisible!  If a search query relied on two columns
+            // being adjacent to each other in the search, it's
+            // possible that a row would get eliminated by the
+            // pushed-down search which would not be eliminated by
+            // only the un-pushed-down search.  But I'd call any such
+            // cross-cell searching working a bug anyway, and I think
+            // "able to use the index" is more important.
+            if(pushDownSearches) pushDownSearch(from, search)
+            else from
+
+          val additionalTerm = rewriteSearch(withPushedDownSearch, search)
+          s.copy(
+            from = withPushedDownSearch,
+            where = Some(where.fold(additionalTerm)(mkAnd(additionalTerm, _))),
+            search = None
+          )
         } else {
           // This is Complicated because I feel like such a search
           // should apply after everything _except_ the
@@ -47,6 +66,41 @@ abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
         }
       case s: Select =>
         s.copy(from = rewriteFrom(s.from))
+    }
+
+  private def pushDownSearch(from: From, search: String): From =
+    from match {
+      case fs: FromStatement => fs.copy(statement = pushDownSearch(fs.statement, search))
+      case other => other
+    }
+
+  private def pushDownSearch(stmt: Statement, search: String): Statement =
+    stmt match {
+      case sel: Select if isLocallySimpleFilter(sel) =>
+        sel.from match {
+          case _: FromTable => // bottom layer!
+            assert(sel.search.isEmpty) // At this point, any preexisting search should have been eliminated
+            rewriteStatement(sel.copy(search = Some(search)))
+          case other =>
+            sel.copy(from = pushDownSearch(other, search))
+        }
+      case other =>
+        other
+    }
+
+  // A simple filter is a select of just untransformed column
+  // references with no aggregation or windowing, but possibly with
+  // filtering (including limit/offset) or ordering
+  private def isLocallySimpleFilter(sel: Select): Boolean = {
+    !sel.isAggregated &&
+      !sel.isWindowed &&
+      sel.selectList.valuesIterator.map(_.expr).forall(isPurePassthrough)
+  }
+
+  private def isPurePassthrough(e: Expr) =
+    e match {
+      case _: Column => true
+      case _ => false
     }
 
   private def rewriteFrom(from: From): From =
