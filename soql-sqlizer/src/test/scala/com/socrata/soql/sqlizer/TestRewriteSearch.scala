@@ -32,6 +32,8 @@ object TestRewriteSearch extends RewriteSearch[TestHelper.TestMT] {
 
   override val searchBeforeQuery = true
 
+  override val pushDownSearches = true
+
   override def compareDatabseColumnNames(a: DatabaseColumnName, b: DatabaseColumnName): Boolean = {
     val DatabaseColumnName(aStr: String) = a
     val DatabaseColumnName(bStr: String) = b

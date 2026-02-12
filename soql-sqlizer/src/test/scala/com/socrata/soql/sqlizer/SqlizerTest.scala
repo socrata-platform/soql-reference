@@ -388,6 +388,57 @@ class SqlizerTest extends FunSuite with MustMatchers with TestHelper with Sqlize
     sqlish must equal ("""SELECT 1 FROM table1 AS x1 WHERE false""")
   }
 
+  test("search, pushdown") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "a" -> TestText,
+        "b" -> TestText,
+        "c" -> TestText
+      ),
+      (0, "view1") -> Q(
+        0, "table1",
+        "select a, b where a = b order by a"
+      )
+    )
+    val soql = "select from @view1 search 'foo'"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("""SELECT 1 FROM (SELECT x1.a AS i1, x1.b AS i2 FROM table1 AS x1 WHERE (search(prepare_haystack(((((coalesce(x1.a, text "")) || (text " ")) || (coalesce(x1.b, text ""))) || (text " ")) || (coalesce(x1.c, text ""))), prepare_needle(text "foo"))) AND ((x1.a) = (x1.b)) ORDER BY x1.a ASC NULLS LAST) AS x2 WHERE search(prepare_haystack(((coalesce(x2.i1, text "")) || (text " ")) || (coalesce(x2.i2, text ""))), prepare_needle(text "foo"))""")
+  }
+
+  test("search, pushdown blocked by grouping") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "a" -> TestText,
+        "b" -> TestText,
+        "c" -> TestText
+      ),
+      (0, "view1") -> Q(
+        0, "table1",
+        "select a, b group by a, b"
+      )
+    )
+    val soql = "select from @view1 search 'foo'"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("""SELECT 1 FROM (SELECT x1.a AS i1, x1.b AS i2 FROM table1 AS x1 GROUP BY x1.a, x1.b) AS x2 WHERE search(prepare_haystack(((coalesce(x2.i1, text "")) || (text " ")) || (coalesce(x2.i2, text ""))), prepare_needle(text "foo"))""")
+  }
+
+  test("search, pushdown blocked by nontrivial function") {
+    val tf = tableFinder(
+      (0, "table1") -> D(
+        "a" -> TestText,
+        "b" -> TestText,
+        "c" -> TestText
+      ),
+      (0, "view1") -> Q(
+        0, "table1",
+        "select a || b"
+      )
+    )
+    val soql = "select from @view1 search 'foo'"
+    val sqlish = analyze(tf, soql).layoutSingleLine.toString
+    sqlish must equal ("""SELECT 1 FROM (SELECT (x1.a) || (x1.b) AS i1 FROM table1 AS x1) AS x2 WHERE search(prepare_haystack(coalesce(x2.i1, text "")), prepare_needle(text "foo"))""")
+  }
+
   test("union sqlizes as UNION") {
     val tf = tableFinder(
       (0, "table1") -> D(
