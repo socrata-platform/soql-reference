@@ -90,10 +90,13 @@ abstract class RewriteSearch[MT <: MetaTypes with MetaTypesExt]
 
   // A simple filter is a select of just untransformed column
   // references with no aggregation or windowing, but possibly with
-  // filtering (including limit/offset) or ordering
+  // filtering (excluding limit/offset which occur after filtering) or
+  // ordering
   private def isLocallySimpleFilter(sel: Select): Boolean = {
     !sel.isAggregated &&
       !sel.isWindowed &&
+      sel.limit.isEmpty &&
+      sel.offset.isEmpty &&
       sel.selectList.valuesIterator.map(_.expr).forall(isPurePassthrough)
   }
 
