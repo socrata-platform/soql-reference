@@ -28,6 +28,7 @@ sealed abstract class Expr[MT <: MetaTypes] extends Product with LabelUniverse[M
   val position: PositionInfo
 
   val size: Int
+  val distinctTypes: Set[CT]
 
   def isAggregated: Boolean
   def isWindowed: Boolean
@@ -116,6 +117,8 @@ object Expr {
 
 sealed abstract class AtomicExpr[MT <: MetaTypes] extends Expr[MT] with Product { this: HashedExpr =>
   type Self[MT <: MetaTypes] <: AtomicExpr[MT]
+
+  lazy val distinctTypes = Set(typ)
 
   override val position: AtomicPositionInfo
 }

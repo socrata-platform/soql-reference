@@ -53,6 +53,10 @@ trait AggregateFunctionCallImpl[MT <: MetaTypes] { this: AggregateFunctionCall[M
         false
     }
 
+  lazy val distinctTypes =
+    args.foldLeft(Set(typ)) { (acc, arg) => acc ++ arg.distinctTypes } ++
+      filter.foldLeft(Set.empty[CT]) { (acc, f) => acc ++ f.distinctTypes }
+
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]): Self[MT2] =
     AggregateFunctionCall(
       function = state.changesOnlyLabels.convertCTOnly(function),
