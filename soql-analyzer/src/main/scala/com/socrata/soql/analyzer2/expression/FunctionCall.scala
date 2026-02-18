@@ -40,6 +40,9 @@ trait FunctionCallImpl[MT <: MetaTypes] { this: FunctionCall[MT] =>
         false
     }
 
+  lazy val distinctTypes =
+    args.foldLeft(Set(typ)) { (acc, arg) => acc ++ arg.distinctTypes }
+
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     this.copy(
       function = state.changesOnlyLabels.convertCTOnly(function),

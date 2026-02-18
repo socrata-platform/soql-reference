@@ -67,6 +67,12 @@ trait WindowedFunctionCallImpl[MT <: MetaTypes] { this: WindowedFunctionCall[MT]
         false
     }
 
+  lazy val distinctTypes =
+    args.foldLeft(Set(typ)) { (acc, arg) => acc ++ arg.distinctTypes } ++
+      filter.foldLeft(Set.empty[CT]) { (acc, f) => acc ++ f.distinctTypes } ++
+      partitionBy.foldLeft(Set.empty[CT]) { (acc, pb) => acc ++ pb.distinctTypes } ++
+      orderBy.foldLeft(Set.empty[CT]) { (acc, ob) => acc ++ ob.expr.distinctTypes }
+
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     copy[MT2](
       function = state.changesOnlyLabels.convertCTOnly(function),

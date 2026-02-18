@@ -76,8 +76,10 @@ class Typechecker[MT <: MetaTypes](
 
     for { e <- exprs } {
       acc.get(e.typ) match {
-        case Some(e2) if e2.size <= e.size =>
+        case Some(e2) if e2.size < e.size =>
           // the smaller (or at least most-preferred) is already chosen
+        case Some(e2) if e2.size == e.size && e2.distinctTypes.size <= e.distinctTypes.size =>
+          // the most parsimonious (or at least most-preferred) is already chosen
         case Some(_) | None =>
           acc += e.typ -> e
       }
