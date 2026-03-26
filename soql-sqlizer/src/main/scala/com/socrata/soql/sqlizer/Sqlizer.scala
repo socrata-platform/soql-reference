@@ -656,7 +656,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
           (d"(" ++ sql ++ d")", schema)
 
         case FromSingleRow(_label, _alias) =>
-          (d"(SELECT)", OrderedMap.empty)
+          (d"(SELECT 1)", OrderedMap.empty)
 
         case FromCTE(cteLabel, _label, _basedOn, _rn, _cn, _alias) =>
           (namespace.cteLabel(cteLabel), availableSchemas.potential(cteLabel))
