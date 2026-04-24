@@ -338,6 +338,12 @@ object SoQLFunctions {
     "Return the largest of its arguments, ignoring nulls"
   )
 
+  val BoolAnd = f("bool_and", FunctionName("bool_and"), Map.empty, Seq(FixedType(SoQLBoolean)), Seq.empty, FixedType(SoQLBoolean), FunctionType.Aggregate)(
+    "Return true if all the values of the group are true"
+  )
+  val BoolOr = f("bool_or", FunctionName("bool_or"), Map.empty, Seq(FixedType(SoQLBoolean)), Seq.empty, FixedType(SoQLBoolean), FunctionType.Aggregate)(
+    "Return true if at least one of the values of the group is true"
+  )
   val Min = f("min", FunctionName("min"), Map("a" -> (Ordered - SoQLBoolean)), Seq(VariableType("a")), Seq.empty, VariableType("a"), FunctionType.Aggregate)(
     "Return the minimum of a given set of values"
   )
