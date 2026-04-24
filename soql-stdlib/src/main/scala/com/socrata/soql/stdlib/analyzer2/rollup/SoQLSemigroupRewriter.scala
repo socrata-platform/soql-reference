@@ -45,7 +45,19 @@ class SoQLSemigroupRewriter[MT <: MetaTypes with ({type ColumnType = SoQLType; t
       )(FuncallPositionInfo.Synthetic)
     }
 
+  private def monomorphic(f: Function[CT]): (Function[CT], Expr => Expr) =
+    f -> { expr =>
+      AggregateFunctionCall[MT](
+        f.monomorphic.get,
+        Seq(expr),
+        false,
+        None
+      )(FuncallPositionInfo.Synthetic)
+    }
+
   private val semigroupMap = Seq[(Function[CT], Expr => Expr)](
+    monomorphic(SoQLFunctions.BoolAnd),
+    monomorphic(SoQLFunctions.BoolOr),
     simple(SoQLFunctions.Max, "a"),
     simple(SoQLFunctions.Min, "a"),
     simple(SoQLFunctions.Sum, "a"),
@@ -56,6 +68,8 @@ class SoQLSemigroupRewriter[MT <: MetaTypes with ({type ColumnType = SoQLType; t
   }.toMap
 
   private val semilattices = Seq[Function[CT]](
+    SoQLFunctions.BoolAnd,
+    SoQLFunctions.BoolOr,
     SoQLFunctions.Max,
     SoQLFunctions.Min
   ).map(_.identity).toSet
