@@ -35,4 +35,9 @@ object SoQLTypeClasses {
   val NumLike = CovariantSet[SoQLType](SoQLNumber, SoQLDouble)
   val RealNumLike = CovariantSet[SoQLType](SoQLNumber, SoQLDouble)
   val TimestampLike = CovariantSet[SoQLType](SoQLFixedTimestamp, SoQLFloatingTimestamp)
+
+  val Stringable = CovariantSet[SoQLType](SoQLType.allTypes.toSeq.filter {
+    case SoQLID | SoQLVersion => false
+    case _ => true
+  } : _*)
 }
