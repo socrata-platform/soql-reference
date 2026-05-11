@@ -84,4 +84,98 @@ class RollupRewriterTest extends FunSuite with MustMatchers with RollupTestHelpe
     val Right(expectedRollupAnalysis) = analyzer(expectedRollupFT, UserParameters.empty)
     stmt must be (isomorphicTo(expectedRollupAnalysis.statement))
   }
+
+  test("Repeated query") {
+    val tf = tableFinder(
+      (0, "base") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "d1") -> Q(0, "base", "select text, sum(num) as s group by text"),
+      (0, "d2") -> Q(0, "base", "select text, sum(num) as s group by text"),
+
+      (0, "rollup1") -> D("c1" -> TestText, "c2" -> TestNumber).withPrimaryKey("c1")
+    )
+
+    val Right(foundTables) = tf.findTables(0, ResourceName("d1"), "select text, @d2.s join @d2 on text = @d2.text", Map.empty)
+    val Right(analysis) = analyzer(foundTables, UserParameters.empty)
+
+    val expr = new TestRollupRewriter(
+      analysis.labelProvider,
+      Seq(
+        TestRollupInfo(0, "rollup1", tf, "select text, sum(num) from @base group by text")
+      )
+    )
+
+    val rewritten = expr.rollup(analysis.statement)
+
+    // There are six candidates:
+    //    use rollup on the left in a subselect
+    //    use rollup on the right in a subselect
+    //    use rollup on both in a subselect
+    //    use rollup on the left without a subselecct
+    //    use rollup on the right without a subselect
+    //    use rollup on both without a subselect
+    // Annoyingly none of them can be directly implemented in soql,
+    // we'll have to RemoveTrivialJoins the @single_row references to
+    // get the actual isomorphism.
+    val candidates = Seq(
+      """select @q.text, @q.s from
+        |  @single_row
+        |  join (
+        |    select @left.text as text, @right.c1 as text2, @right.c2 as s
+        |    from
+        |      @single_row
+        |      join (select text, sum(num) as s from @base group by text) as @left on true
+        |      join (select c1, c2 from @rollup1) as @right on @left.text = @right.c1
+        |  ) as @q on true""",
+
+      """select @q.text, @q.s from
+        |  @single_row
+        |  join (
+        |    select @left.c1 as text, @right.text as text2, @right.s as s
+        |    from
+        |      @single_row
+        |      join (select c1, c2 from @rollup1) as @left on true
+        |      join (select text, sum(num) as s from @base group by text) as @right on @left.c1 = @right.text
+        |  ) as @q on true""",
+
+      """select @q.text, @q.s from
+        |  @single_row
+        |  join (
+        |    select @left.c1 as text, @right.c1 as text2, @right.c2 as s
+        |    from
+        |      @single_row
+        |      join (select c1, c2 from @rollup1) as @left on true
+        |      join (select c1, c2 from @rollup1) as @right on @left.c1 = @right.c1
+        |  ) as @q on true""",
+
+      """select @left.text, @right.c2 from
+        |  @single_row
+        |  join (select text, sum(num) as s from @base group by text) as @left on true
+        |  join (select c1, c2 from @rollup1) as @right on @left.text = @right.c1""",
+
+      """select @left.c1, @right.s from
+        |  @single_row
+        |  join (select c1, c2 from @rollup1) as @left on true
+        |  join (select text, sum(num) as s from @base group by text) as @right on @left.c1 = @right.text""",
+
+      """select @left.c1, @right.c2 from
+        |  @single_row
+        |  join (select c1, c2 from @rollup1) as @left on true
+        |  join (select c1, c2 from @rollup1) as @right on @left.c1 = @right.c1"""
+    ).map(_.stripMargin)
+
+    rewritten.size must be (candidates.size)
+
+    for(((stmt, rollups), candidate) <- rewritten.zip(candidates)) {
+      rollups must equal (Set(0))
+      val Right(expectedRollupFT) = tf.findTables(0, candidate, Map.empty)
+      val Right(expectedRollupAnalysis) = analyzer(expectedRollupFT, UserParameters.empty)
+        .map(_.removeTrivialJoins { e =>
+           e match {
+             case LiteralValue(TestBoolean(true)) => true
+             case _ => false
+           }
+        })
+      stmt must be (isomorphicTo(expectedRollupAnalysis.statement))
+    }
+  }
 }
