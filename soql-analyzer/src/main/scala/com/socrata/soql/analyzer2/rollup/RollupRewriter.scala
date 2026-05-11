@@ -344,7 +344,12 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
     r
   }
 
-  private def fixupColumnReferences(sel: Select, columnMap: Map[Col, VirtCol]): Statement = {
+  private def cleanMap(map: Map[Col, VirtCol], label: AutoTableLabel): Map[Col, VirtCol] =
+    map.filter { case (_, targetCol) =>
+      targetCol.table != label
+    }
+
+  private def fixupColumnReferences(stmt: Statement, columnMap: Map[Col, VirtCol]): Statement = {
     def goStmt(stmt: Statement): Statement = {
       stmt match {
         case ct@CombinedTables(_op, left, right) =>
@@ -377,13 +382,14 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
         (joinType, lateral, left, right, on) => Join(joinType, lateral, left, goAtomicFrom(right), goExpr(on))
       )
 
-    def goAtomicFrom(af: AtomicFrom): AtomicFrom =
+    def goAtomicFrom(af: AtomicFrom): AtomicFrom = {
       af match {
-        case fs: FromStatement => fs.copy(statement = goStmt(fs.statement))
+        case fs: FromStatement => fs.copy(statement = fixupColumnReferences(fs.statement, cleanMap(columnMap, fs.label)))
         case fsr: FromSingleRow => fsr
         case ft: FromTable => ft
         case fc: FromCTE => fc
       }
+    }
 
     def goDistinct(distinct: Distinctiveness): Distinctiveness = {
       distinct match {
@@ -438,6 +444,6 @@ class RollupRewriter[MT <: MetaTypes, RollupId](
     def goNamedExpr(ne: NamedExpr): NamedExpr =
       ne.copy(expr = goExpr(ne.expr))
 
-    goStmt(sel)
+    goStmt(stmt)
   }
 }
