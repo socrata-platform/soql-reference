@@ -888,12 +888,6 @@ object SoQLFunctions {
   val JsonToText = mf("json to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLJson), Seq.empty, SoQLText)(
     NoDocs
   )
-  val JsonToNumber = mf("json to number", SpecialFunctions.Cast(SoQLNumber.name), Seq(SoQLJson), Seq.empty, SoQLNumber)(
-    NoDocs
-  ).deprecated // not implemented; if implemented it would be fundamentally different from json to text
-  val JsonToBool = mf("json to bool", SpecialFunctions.Cast(SoQLBoolean.name), Seq(SoQLJson), Seq.empty, SoQLBoolean)(
-    NoDocs
-  ).deprecated // not implemented; if implemented it would be fundamentally different from json to text
 
   val TextToRowIdentifier = mf("text to rid", SpecialFunctions.Cast(SoQLID.name), Seq(SoQLText), Seq.empty, SoQLID)(
     NoDocs
