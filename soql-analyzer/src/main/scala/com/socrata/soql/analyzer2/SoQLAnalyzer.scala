@@ -273,7 +273,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     }
 
     def fromTable(srn: ScopedResourceName, desc: TableDescription.Dataset[MT]): AtomicFrom = {
-      if(desc.ordering.isEmpty) {
+      val withoutWrapper = if(desc.ordering.isEmpty) {
         val hiddenColumns: Set[DatabaseColumnName] =
           desc.schema.iterator.flatMap { case (databaseColumnName, FromTable.ColumnInfo(name, _, _)) =>
             if(desc.hiddenColumns(name)) Some(databaseColumnName)
@@ -339,6 +339,13 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           None
         )
       }
+
+      desc.wrappingQuery match {
+        case None =>
+          withoutWrapper
+        case Some(wq) =>
+          analyzeStatement(Ctx(wq.scope, None, None, primaryTableName(srn), Environment.empty, Map.empty, Set.empty, Map.empty, true), wq.parsed, ImplicitFrom.Required(withoutWrapper, Some(srn.name)))
+      }
     }
 
     def analyzeForFrom(source: Option[ScopedResourceName], name: ScopedResourceName, canonicalName: Option[CanonicalName], position: Position): AtomicFrom = {
@@ -356,7 +363,13 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             // so this is basedOn |> parsed |> wq
             // so we want to use "basedOn" as the implicit "from" for "parsed"
             val from = analyzeForFrom(source, ScopedResourceName(scope, basedOn), None, NoPosition /* Yes, actually NoPosition here */)
-            analyzeStatement(Ctx(scope, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, outputColumnHints, true), parsed, ImplicitFrom.Required(from, Some(basedOn)))
+            val middle = analyzeStatement(Ctx(scope, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, outputColumnHints, true), parsed, ImplicitFrom.Required(from, Some(basedOn)))
+            wq match {
+              case None =>
+                middle
+              case Some(wq) =>
+                analyzeStatement(Ctx(wq.scope, None, None, primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, Set.empty, Map.empty, true), wq.parsed, ImplicitFrom.Required(middle, Some(name.name)))
+            }
           case TableDescription.TableFunction(_, _, _, _, _, _, _) =>
             parameterlessTableFunction(source, name.name, position)
         }
@@ -1096,7 +1109,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           // we're rewriting the UDF from
           //    @bleh(x, y, z)
           // to
-          //    select * from (values (x,y,z)) join lateral (udfexpansion) on true
+          //    select * from (values (x,y,z)) join lateral (udfexpansion |> wq) on true
           // Possibly we'll want a rewrite pass that inlines constants and
           // maybe simple column references into the udf expansion,
 
@@ -1132,7 +1145,13 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 attemptToPreserveSystemColumns = callerCtx.attemptToPreserveSystemColumns
               )
 
-              val useQuery = analyzeStatement(udfCtx, parsed, ImplicitFrom.None)
+              val unwrappedUseQuery = analyzeStatement(udfCtx, parsed, ImplicitFrom.None)
+              val useQuery = wq match {
+                case None =>
+                  unwrappedUseQuery
+                case Some(wq) =>
+                  analyzeStatement(Ctx(wq.scope, None, None, udfCtx.primaryTableName, Environment.empty, innerUdfParams, Set.empty, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name)))
+              }
 
               FromStatement(
                 Select(
@@ -1178,7 +1197,13 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 attemptToPreserveSystemColumns = callerCtx.attemptToPreserveSystemColumns
               )
 
-              analyzeStatement(udfCtx, parsed, ImplicitFrom.None)
+              val unwrappedUseQuery = analyzeStatement(udfCtx, parsed, ImplicitFrom.None)
+              wq match {
+                case None =>
+                  unwrappedUseQuery
+                case Some(wq) =>
+                  analyzeStatement(Ctx(wq.scope, None, None, udfCtx.primaryTableName, Environment.empty, Map.empty, Set.empty, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name)))
+              }
           }
         case _ =>
           // Non-UDF
