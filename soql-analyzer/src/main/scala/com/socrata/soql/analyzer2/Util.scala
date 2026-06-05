@@ -84,4 +84,13 @@ private[analyzer2] object Util {
       acc + (table -> newCols)
     }
   }
+
+  implicit class OptionEitherExt[A, B](private val underlying: Option[Either[A, B]]) extends AnyVal {
+    def transposeOptionEither: Either[A, Option[B]] =
+      underlying match {
+        case Some(Left(a)) => Left(a)
+        case Some(Right(b)) => Right(Some(b))
+        case None => Right(None)
+      }
+  }
 }

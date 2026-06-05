@@ -323,12 +323,15 @@ class MockTableFinder[MT <: MetaTypes](private val raw: OrderedMap[(MT#ResourceN
         TableDescription.Query[MT](
           scope, canonicalName, parent,
           ParserUtil.parseWithoutContext(soql, parserParameters.copy(allowHoles = false)).getOrElse(throw new Exception("broken soql fixture 1")),
-          soql, params, hiddenColumns, outputColumnHints)
+          soql, params, hiddenColumns, outputColumnHints,
+          None
+        )
       case TableFunction(scope, canonicalName, soql, params, hiddenColumns) =>
         TableDescription.TableFunction[MT](
           scope, canonicalName,
           ParserUtil.parseWithoutContext(soql, parserParameters.copy(allowHoles = true)).getOrElse(throw new Exception("broken soql fixture 2")),
-          soql, params, hiddenColumns
+          soql, params, hiddenColumns,
+          None
         )
     }
   }

@@ -19,17 +19,12 @@ class UnparsedTableMap[MT <: MetaTypes] private[analyzer2] (private val underlyi
 
   type Self[MT <: MetaTypes] = UnparsedTableMap[MT]
 
-  private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, TableMap[MT]] =
+  private[analyzer2] def parse(params: AbstractParser.Parameters): Either[(LexerParserException, Seq[String], String), TableMap[MT]] =
     Right(new TableMap(underlying.iterator.map { case (rns, m) =>
       rns -> m.iterator.map { case (rn, utd) =>
-        utd match {
-          case UnparsedTableDescription.Dataset(name, canonicalName, schema, ordering, pk) =>
-            rn -> TableDescription.Dataset(name, canonicalName, schema, ordering, pk)
-          case other: UnparsedTableDescription.SoQLUnparsedTableDescription[MT] =>
-            other.parse(params) match {
-              case Right(ptd) => rn -> ptd
-              case Left(e) => return Left(e)
-            }
+        utd.parse(params) match {
+          case Right(ptd) => rn -> ptd
+          case Left(e) => return Left(e)
         }
       }.toMap
     }.toMap))
@@ -48,7 +43,7 @@ class UnparsedTableMap[MT <: MetaTypes] private[analyzer2] (private val underlyi
   def allTableDescriptions =
     for {
       tablesForScope <- underlying.valuesIterator
-      d@UnparsedTableDescription.Dataset(_, _, _, _, _) <- tablesForScope.valuesIterator
+      d@UnparsedTableDescription.Dataset(_, _, _, _, _, _) <- tablesForScope.valuesIterator
     } yield d
 
   def get(name: ScopedResourceName) = underlying.get(name.scope).flatMap(_.get(name.name))
@@ -72,9 +67,10 @@ object UnparsedTableMap {
     new mocktablefinder.MockTableFinder[MT](
       OrderedMap() ++ self.underlying.iterator.flatMap { case (rns, resources) =>
         resources.iterator.map { case (rn, desc) =>
+          // TODO: attach the wrapping queries to the MTF!!!
           val thing =
             desc match {
-              case UnparsedTableDescription.Dataset(_name, canonicalName, schema, ordering, pks) =>
+              case UnparsedTableDescription.Dataset(_name, canonicalName, schema, ordering, pks, wq) =>
                 val base =
                   mocktablefinder.D(schema.valuesIterator.map { case TableDescription.DatasetColumnInfo(n, t, _, _) => n.name -> t }.toSeq : _*).
                     withHiddenColumns(schema.valuesIterator.filter(_.hidden).map(_.name.name).toSeq : _*).
@@ -90,12 +86,12 @@ object UnparsedTableMap {
                     base.withOrdering(schema(ordering.column).name.name, ordering.ascending)
                   }
                 ) { (dataset, pk) => dataset.withPrimaryKey(pk.map(schema(_).name.name) : _*) }
-              case UnparsedTableDescription.Query(scope, canonicalName, basedOn, soql, parameters, hiddenColumns, outputColumnHints) =>
+              case UnparsedTableDescription.Query(scope, canonicalName, basedOn, soql, parameters, hiddenColumns, outputColumnHints, wq) =>
                 mocktablefinder.Q(scope, basedOn.name, soql, parameters.toSeq.map { case (hn, ct) => hn.name -> ct } : _*).
                   withCanonicalName(canonicalName.name).
                   withHiddenColumns(hiddenColumns.map(_.name).toSeq : _*).
                   withOutputColumnHints(outputColumnHints.map { case (k, v) => k.name -> v}.toSeq : _*)
-              case UnparsedTableDescription.TableFunction(scope, canonicalName, soql, parameters, hiddenColumns) =>
+              case UnparsedTableDescription.TableFunction(scope, canonicalName, soql, parameters, hiddenColumns, wq) =>
                 mocktablefinder.U(scope, soql, parameters.toSeq.map { case (hn, ct) => hn.name -> ct } : _*).
                   withCanonicalName(canonicalName.name).
                   withHiddenColumns(hiddenColumns.map(_.name).toSeq : _*)

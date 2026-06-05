@@ -352,12 +352,12 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         tableMap.find(name) match {
           case ds: TableDescription.Dataset[MT] =>
             fromTable(name, ds)
-          case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters, hiddenColumns, outputColumnHints) =>
-            // so this is basedOn |> parsed
+          case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters, hiddenColumns, outputColumnHints, wq) =>
+            // so this is basedOn |> parsed |> wq
             // so we want to use "basedOn" as the implicit "from" for "parsed"
             val from = analyzeForFrom(source, ScopedResourceName(scope, basedOn), None, NoPosition /* Yes, actually NoPosition here */)
             analyzeStatement(Ctx(scope, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, outputColumnHints, true), parsed, ImplicitFrom.Required(from, Some(basedOn)))
-          case TableDescription.TableFunction(_, _, _, _, _, _) =>
+          case TableDescription.TableFunction(_, _, _, _, _, _, _) =>
             parameterlessTableFunction(source, name.name, position)
         }
       }
@@ -1089,7 +1089,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     def analyzeUDF(callerCtx: Ctx, resource: ResourceName, params: Seq[ast.Expression]): AtomicFrom = {
       val udfScopedResourceName = ScopedResourceName(callerCtx.scope, resource)
       tableMap.find(udfScopedResourceName) match {
-        case TableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs, hiddenColumns) =>
+        case TableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs, hiddenColumns, wq) =>
           if(params.length != paramSpecs.size) {
             callerCtx.incorrectNumberOfParameters(resource, expected = paramSpecs.size, got = params.length, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
           }

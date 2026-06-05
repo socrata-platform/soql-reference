@@ -131,7 +131,7 @@ class TableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[
   def allTableDescriptions =
     for {
       tablesForScope <- underlying.valuesIterator
-      d@TableDescription.Dataset(_, _, _, _, _) <- tablesForScope.valuesIterator
+      d@TableDescription.Dataset(_, _, _, _, _, _) <- tablesForScope.valuesIterator
     } yield d
 
   override def toString = "TableMap(" + underlying + ")"

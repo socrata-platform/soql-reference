@@ -14,6 +14,7 @@ import com.socrata.soql.parsing.standalone_exceptions.LexerParserException
 import com.socrata.soql.parsing.AbstractParser
 import com.socrata.soql.BinaryTree
 import com.socrata.soql.analyzer2
+import com.socrata.soql.analyzer2.Util.OptionEitherExt
 
 // This class exists purely to be the JSON-serialized form of
 // TableDescriptions, but it can also be used by something that
@@ -25,9 +26,31 @@ sealed trait UnparsedTableDescription[MT <: MetaTypes] extends TableDescriptionL
     tableName: DatabaseTableName => types.DatabaseTableName[MT2],
     columnName: (DatabaseTableName, DatabaseColumnName) => types.DatabaseColumnName[MT2]
   )(implicit changesOnlyLabels: MetaTypes.ChangesOnlyLabels[MT, MT2]): UnparsedTableDescription[MT2]
+
+  val wrappingQuery: Option[UnparsedTableDescription.WrappingQuery[MT]]
+  private[analyzer2] def parse(params: AbstractParser.Parameters): Either[(LexerParserException, Seq[String], String), TableDescription[MT]]
 }
 
 object UnparsedTableDescription {
+  case class WrappingQuery[MT <: MetaTypes](
+    scope: MT#ResourceNameScope,
+    soql: String,
+    parameters: Map[HoleName, MT#ColumnType]
+  ) extends LabelUniverse[MT] {
+    private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): WrappingQuery[MT2] =
+      WrappingQuery(
+        scopeMap(scope),
+        soql,
+        parameters.asInstanceOf[Map[HoleName, MT2#ColumnType]] // SAFETY: ColumnType isn't changing,
+      )
+    def rewriteDatabaseNames[MT2 <: MetaTypes](implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]) =
+      this.asInstanceOf[WrappingQuery[MT2]] // SAFETY: no labels in here
+  }
+  object WrappingQuery {
+    implicit def encode[MT <: MetaTypes](implicit encRNS: JsonEncode[MT#ResourceNameScope], encCT: JsonEncode[MT#ColumnType]) = AutomaticJsonEncodeBuilder[WrappingQuery[MT]]
+    implicit def decode[MT <: MetaTypes](implicit decRNS: JsonDecode[MT#ResourceNameScope], decCT: JsonDecode[MT#ColumnType]) = AutomaticJsonDecodeBuilder[WrappingQuery[MT]]
+  }
+
   implicit def jEncode[MT <: MetaTypes](implicit encRNS: JsonEncode[MT#ResourceNameScope], encCT: JsonEncode[MT#ColumnType], encDTN: JsonEncode[MT#DatabaseTableNameImpl], encDCN: JsonEncode[MT#DatabaseColumnNameImpl]) =
     SimpleHierarchyEncodeBuilder[UnparsedTableDescription[MT]](InternalTag("type")).
       branch[Dataset[MT]]("dataset")(Dataset.encode[MT], implicitly).
@@ -47,7 +70,8 @@ object UnparsedTableDescription {
     canonicalName: CanonicalName,
     columns: OrderedMap[types.DatabaseColumnName[MT], types.TableDescription.DatasetColumnInfo[MT]],
     ordering: Seq[TableDescription.Ordering[MT]],
-    primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]]
+    primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]],
+    wrappingQuery: Option[WrappingQuery[MT]]
   ) extends UnparsedTableDescription[MT] with TableDescriptionLike.Dataset[MT] {
     val hiddenColumns = columns.values.flatMap { case TableDescription.DatasetColumnInfo(name, _, hidden, _) =>
       if(hidden) Some(name) else None
@@ -57,7 +81,32 @@ object UnparsedTableDescription {
     // fires while json-decoding
     require(ordering.forall { o => columns.contains(o.column) })
 
-    private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]) = this
+    private[analyzer2] def parse(params: AbstractParser.Parameters) =
+      for {
+        parsedWrappingQuery <- wrappingQuery.map { wq =>
+          ParserUtil.parseWithoutContext(wq.soql, params.copy(allowHoles = false))
+            .left.map((_, Seq("wrappingQuery", "soql"), wq.soql))
+            .map(TableDescription.WrappingQuery(wq.scope, _, wq.soql, wq.parameters))
+        }.transposeOptionEither
+      } yield {
+        TableDescription.Dataset[MT](
+          name,
+          canonicalName,
+          columns,
+          ordering,
+          primaryKeys,
+          parsedWrappingQuery
+        )
+      }
+
+    private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): Dataset[MT2] =
+      copy[MT2](
+        name = ev.convertDTN(name),
+        columns = columns.asInstanceOf, // SAFETY: No scopes in the columns
+        ordering = ordering.asInstanceOf, // safety: No scopes in the labesl,
+        primaryKeys = primaryKeys.map(_.map(ev.convertDCN)),
+        wrappingQuery = wrappingQuery.map(_.rewriteScopes[MT2](scopeMap))
+      )
 
     private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
       tableName: DatabaseTableName => types.DatabaseTableName[MT2],
@@ -74,12 +123,13 @@ object UnparsedTableDescription {
         ordering.map { case TableDescription.Ordering(dcn, ascending, nullLast) =>
           TableDescription.Ordering(columnName(name, dcn), ascending, nullLast)
         },
-        primaryKeys.map(_.map(columnName(name, _)))
+        primaryKeys.map(_.map(columnName(name, _))),
+        wrappingQuery.map(_.rewriteDatabaseNames[MT2])
       )
     }
   }
   object Dataset {
-    private[UnparsedTableDescription] def encode[MT <: MetaTypes](implicit encCT: JsonEncode[MT#ColumnType], encDTN: JsonEncode[MT#DatabaseTableNameImpl], encDCN: JsonEncode[MT#DatabaseColumnNameImpl]): JsonEncode[Dataset[MT]] =
+    private[UnparsedTableDescription] def encode[MT <: MetaTypes](implicit encRNS: JsonEncode[MT#ResourceNameScope], encCT: JsonEncode[MT#ColumnType], encDTN: JsonEncode[MT#DatabaseTableNameImpl], encDCN: JsonEncode[MT#DatabaseColumnNameImpl]): JsonEncode[Dataset[MT]] =
       new JsonEncode[Dataset[MT]] with LabelUniverse[MT] {
         implicit val schemaEncode = OrderedMapHelper.jsonEncode[DatabaseColumnName, TableDescription.DatasetColumnInfo[CT]]
         val encoder = AutomaticJsonEncodeBuilder[Dataset[MT]]
@@ -87,18 +137,13 @@ object UnparsedTableDescription {
         def encode(ds: Dataset[MT]): JValue = encoder.encode(ds)
       }
 
-    private[UnparsedTableDescription] def decode[MT <: MetaTypes](implicit decCT: JsonDecode[MT#ColumnType], decDTN: JsonDecode[MT#DatabaseTableNameImpl], decDCN: JsonDecode[MT#DatabaseColumnNameImpl]): JsonDecode[Dataset[MT]] =
+    private[UnparsedTableDescription] def decode[MT <: MetaTypes](implicit decRNS: JsonDecode[MT#ResourceNameScope], decCT: JsonDecode[MT#ColumnType], decDTN: JsonDecode[MT#DatabaseTableNameImpl], decDCN: JsonDecode[MT#DatabaseColumnNameImpl]): JsonDecode[Dataset[MT]] =
       new JsonDecode[Dataset[MT]] with LabelUniverse[MT] {
         implicit val schemaDecode = OrderedMapHelper.jsonDecode[DatabaseColumnName, TableDescription.DatasetColumnInfo[CT]]
         val decoder = AutomaticJsonDecodeBuilder[Dataset[MT]]
 
         def decode(v: JValue) = decoder.decode(v)
       }
-  }
-
-  sealed trait SoQLUnparsedTableDescription[MT <: MetaTypes] extends UnparsedTableDescription[MT] {
-    def soql: String
-    private[analyzer2] def parse(params: AbstractParser.Parameters): Either[LexerParserException, TableDescription[MT]]
   }
 
   case class Query[MT <: MetaTypes](
@@ -109,24 +154,34 @@ object UnparsedTableDescription {
     parameters: Map[HoleName, MT#ColumnType],
     hiddenColumns: Set[ColumnName],
     @AllowMissing("Map.empty")
-    outputColumnHints: Map[ColumnName, JValue]
-  ) extends SoQLUnparsedTableDescription[MT] {
+    outputColumnHints: Map[ColumnName, JValue],
+    wrappingQuery: Option[WrappingQuery[MT]]
+  ) extends UnparsedTableDescription[MT] {
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): Query[MT2] =
       copy(
         scope = scopeMap(scope),
-        parameters = parameters.asInstanceOf[Map[HoleName, MT2#ColumnType]] // SAFETY: ColumnType isn't changing
+        parameters = parameters.asInstanceOf[Map[HoleName, MT2#ColumnType]], // SAFETY: ColumnType isn't changing
+        wrappingQuery = wrappingQuery.map(_.rewriteScopes[MT2](scopeMap))
       )
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
-      ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = false)).map { parsed =>
+      for {
+        parsedSoql <- ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = false)).left.map((_, Seq("soql"), soql))
+        parsedWrappingQuery <- wrappingQuery.map { wq =>
+          ParserUtil.parseWithoutContext(wq.soql, params.copy(allowHoles = false))
+            .left.map((_, Seq("wrappingQuerySoql", "soql"), wq.soql))
+            .map(TableDescription.WrappingQuery(wq.scope, _, wq.soql, wq.parameters))
+        }.transposeOptionEither
+      } yield {
         TableDescription.Query[MT](
           scope,
           canonicalName,
           basedOn,
-          parsed,
+          parsedSoql,
           soql,
           parameters,
           hiddenColumns,
-          outputColumnHints
+          outputColumnHints,
+          parsedWrappingQuery
         )
       }
 
@@ -149,23 +204,33 @@ object UnparsedTableDescription {
     canonicalName: CanonicalName, // This is the canonical name of this UDF; it is assumed to be unique across scopes
     soql: String,
     parameters: OrderedMap[HoleName, MT#ColumnType],
-    hiddenColumns: Set[ColumnName]
-  ) extends SoQLUnparsedTableDescription[MT] {
+    hiddenColumns: Set[ColumnName],
+    wrappingQuery: Option[WrappingQuery[MT]]
+  ) extends UnparsedTableDescription[MT] {
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): TableFunction[MT2] =
       copy(
         scope = scopeMap(scope),
-        parameters = parameters.asInstanceOf[OrderedMap[HoleName, MT2#ColumnType]] // SAFETY: ColumnType isn't changing
+        parameters = parameters.asInstanceOf[OrderedMap[HoleName, MT2#ColumnType]], // SAFETY: ColumnType isn't changing
+        wrappingQuery = wrappingQuery.map(_.rewriteScopes[MT2](scopeMap))
       )
 
     private[analyzer2] def parse(params: AbstractParser.Parameters) =
-      ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = true)).map { parsed =>
+      for {
+        parsedSoql <- ParserUtil.parseWithoutContext(soql, params.copy(allowHoles = true)).left.map((_, Seq("soql"), soql))
+        parsedWrappingQuery <- wrappingQuery.map { wq =>
+          ParserUtil.parseWithoutContext(wq.soql, params.copy(allowHoles = false))
+            .left.map((_, Seq("wrappingQuery","soql"), wq.soql))
+            .map(TableDescription.WrappingQuery(wq.scope, _, wq.soql, wq.parameters))
+        }.transposeOptionEither
+      } yield {
         TableDescription.TableFunction(
           scope,
           canonicalName,
-          parsed,
+          parsedSoql,
           soql,
           parameters,
-          hiddenColumns
+          hiddenColumns,
+          parsedWrappingQuery
         )
       }
 
