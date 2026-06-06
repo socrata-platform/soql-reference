@@ -1437,4 +1437,21 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     fromTable.primaryKeys must be (Seq(Seq(DatabaseColumnName(":id"))))
   }
 
+  test("base dataset wrapping query") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber).withWrappingQuery(0, "select * where num > 5")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"), "select text, num+num", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select * where num > 5 |> select text, num+num", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
 }
