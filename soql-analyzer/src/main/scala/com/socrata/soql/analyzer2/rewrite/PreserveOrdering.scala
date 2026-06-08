@@ -9,7 +9,7 @@ import com.socrata.soql.collection._
 import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.functions.MonomorphicFunction
 
-class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider, untilIdentity: Option[AutoTableLabel]) extends StatementUniverse[MT] {
+class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider, stop: FromStatement[MT] => Boolean) extends StatementUniverse[MT] {
   type ACTEs = AvailableCTEs[Seq[(AutoColumnLabel, CT, Boolean, Boolean)]]
 
   // "wantOutputOrdered" == "if this statement can be rewritten to
@@ -152,7 +152,7 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider, untilI
             (Nil, fc)
         }
       case fs@FromStatement(stmt, label, resourceName, canonicalName, alias) =>
-        val actuallyWantOutputOrdered = wantOutputOrdered && untilIdentity.fold(false)(_ != label)
+        val actuallyWantOutputOrdered = wantOutputOrdered && !stop(fs)
         val (orderColumn, newStmt) = rewriteStatement(availableCTEs, stmt, actuallyWantOutputOrdered, wantOrderingColumns)
         (orderColumn.map { case (col, typ, asc, nullLast) => OrderBy(VirtualColumn(label, col, typ)(AtomicPositionInfo.Synthetic), asc, nullLast) }, fs.copy(statement = newStmt))
     }
@@ -163,14 +163,14 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider, untilI
   * SelectListReferences must not be present (this is unchecked!!). */
 object PreserveOrdering {
   def apply[MT <: MetaTypes](labelProvider: LabelProvider, stmt: Statement[MT]): Statement[MT] = {
-    new PreserveOrdering[MT](labelProvider, None).rewriteStatement(AvailableCTEs.empty, stmt, true, false)._2
+    new PreserveOrdering[MT](labelProvider, _ => false).rewriteStatement(AvailableCTEs.empty, stmt, true, false)._2
   }
 
   def withExtraOutputColumns[MT <: MetaTypes](labelProvider: LabelProvider, stmt: Statement[MT]): Statement[MT] = {
-    new PreserveOrdering[MT](labelProvider, None).rewriteStatement(AvailableCTEs.empty, stmt, true, true)._2
+    new PreserveOrdering[MT](labelProvider, _ => false).rewriteStatement(AvailableCTEs.empty, stmt, true, true)._2
   }
 
-  def bounded[MT <: MetaTypes](labelProvider: LabelProvider, stmt: Statement[MT], bound: AutoTableLabel): Statement[MT] = {
-    new PreserveOrdering[MT](labelProvider, Some(bound)).rewriteStatement(AvailableCTEs.empty, stmt, true, false)._2
+  def bounded[MT <: MetaTypes](labelProvider: LabelProvider, stmt: Statement[MT], stop: FromStatement[MT] => Boolean): Statement[MT] = {
+    new PreserveOrdering[MT](labelProvider, stop).rewriteStatement(AvailableCTEs.empty, stmt, true, false)._2
   }
 }

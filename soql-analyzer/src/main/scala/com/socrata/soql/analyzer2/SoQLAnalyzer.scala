@@ -344,17 +344,27 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case None =>
           withoutWrapper
         case Some(wq) =>
-          wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(srn), None, primaryTableName(srn), Environment.empty, Map.empty, Set.empty, Map.empty, true), wq.parsed, ImplicitFrom.Required(withoutWrapper, Some(srn.name))), withoutWrapper)
+          wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(srn), None, primaryTableName(srn), Environment.empty, Map.empty, Set.empty, Map.empty, true), wq.parsed, ImplicitFrom.Required(withoutWrapper, Some(srn.name))), withoutWrapper.label, srn)
       }
     }
 
-    def wrappedOrdering[F <: AtomicFrom](from: F, bound: AtomicFrom): F = {
+    def wrappedOrdering[F <: AtomicFrom](from: F, wrappedLabel: AutoTableLabel, activeResource: ScopedResourceName): F = {
       from match {
         case fs: FromStatement =>
-          // Using PreserveOrdering here isn't _perfect_ because it
-          // will recurse into other named queries that the wrapping
-          // query references, but it's better than nothing
-          fs.copy(statement = rewrite.PreserveOrdering.bounded(labelProvider, fs.statement, bound.label))
+          // we want to stop when we leave the wrapped query - either
+          // when we reach the wrapped query, or when the wrapping
+          // query reaches some other resource.
+          //
+          // This isn't _completely_ ideal - if the wrapping query is
+          // complex, it will preserve ordering within the wrapping
+          // query where such preservation isn't necessary, but most
+          // wrapping queries are expected to be simple filters, so it
+          // should work.
+          def stop(otherFrom: FromStatement): Boolean = {
+            otherFrom.label == wrappedLabel || otherFrom.resourceName != Some(activeResource)
+          }
+
+          fs.copy(statement = rewrite.PreserveOrdering.bounded(labelProvider, fs.statement, stop))
             .asInstanceOf[F] // ick.  Is there a better way to do this?  (this will work only as long as there are no subclasses of FromStatement)
         case _ =>
           from
@@ -381,7 +391,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               case None =>
                 middle
               case Some(wq) =>
-                wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, Set.empty, Map.empty, true), wq.parsed, ImplicitFrom.Required(middle, Some(name.name))), middle)
+                wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, Set.empty, Map.empty, true), wq.parsed, ImplicitFrom.Required(middle, Some(name.name))), middle.label, name)
             }
           case TableDescription.TableFunction(_, _, _, _, _, _, _) =>
             parameterlessTableFunction(toSource(position), name.name)
@@ -1169,7 +1179,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 case None =>
                   unwrappedUseQuery
                 case Some(wq) =>
-                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, innerUdfParams, Set.empty, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name))), unwrappedUseQuery)
+                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, innerUdfParams, Set.empty, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name))), unwrappedUseQuery.label, udfScopedResourceName)
               }
 
               FromStatement(
@@ -1222,7 +1232,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 case None =>
                   unwrappedUseQuery
                 case Some(wq) =>
-                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, Map.empty, Set.empty, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name))), unwrappedUseQuery)
+                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, Map.empty, Set.empty, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name))), unwrappedUseQuery.label, udfScopedResourceName)
               }
           }
         case _ =>
