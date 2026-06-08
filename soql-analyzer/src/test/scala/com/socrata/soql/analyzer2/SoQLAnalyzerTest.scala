@@ -1533,4 +1533,47 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
      source must be (Source.Synthetic)
   }
+
+   test("Ordering is preserved through a wrapping query on a table") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+        .withOrdering("text")
+        .withWrappingQuery(0, "select * where num > 5")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+        .withOrdering("text")
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"), "select text, num+num", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select * where num > 5 order by text |> select text, num+num", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+   test("Ordering is preserved through a wrapping query on a query, up to the query itself") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+        .withOrdering("text"),
+      (0, "q") -> Q(0, "ds1", "select text, num * num as numsq order by numsq")
+        .withWrappingQuery(0, "select * where text = 'hello'")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+        .withOrdering("text")
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("q"))
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select text, num * num as numsq order by numsq |> select * where text = 'hello' order by numsq", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
 }
