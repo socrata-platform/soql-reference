@@ -1658,4 +1658,21 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       .map(_.removeTrivialJoins(isLiteralTrue)) // need to get rid of the first `from @single_row`
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
+
+  test("Wrapper queries must have the same schema as their underlying table") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+        .withWrappingQuery(0, "select text")
+      )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"))
+    analyzer(ft1, UserParameters.empty) match {
+      case Left(SoQLAnalyzerError.WrappingQuerySchemaMismatch(source)) =>
+        source must equal (Source.Saved(ScopedResourceName(0, rn("ds1")), NoPosition))
+      case Left(err) =>
+        fail("Unexpected error: " + err)
+      case Right(_) =>
+        fail("Unexpected success")
+    }
+  }
 }

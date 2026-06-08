@@ -126,6 +126,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     sealed abstract class ImplicitFrom {
       def optionalize(left: Boolean): ImplicitFrom
       def forced: Boolean
+      def requiredSchema: Option[Seq[(ColumnName, CT)]]
+      def withoutRequiredSchema: ImplicitFrom
     }
     object ImplicitFrom {
       // "none" means "there is no implicit FROM; the current soql
@@ -134,14 +136,17 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       case object None extends ImplicitFrom {
         def optionalize(left: Boolean) = this
         def forced = true
+        def requiredSchema = Option.empty
+        def withoutRequiredSchema = this
       }
       // "required" means "there is an implicit FROM; the current soql
       // query _must not_ provide one that queries something else, but
       // _may_ do "FROM @this AS @alias", or if the parent query was
       // named, "FROM @that-name [AS @alias]"
-      case class Required(from: AtomicFrom, named: Option[ResourceName]) extends ImplicitFrom {
+      case class Required(from: AtomicFrom, named: Option[ResourceName], requiredSchema: Option[Seq[(ColumnName, CT)]]) extends ImplicitFrom {
         def optionalize(left: Boolean) = new Optional(from, left)
         def forced = true
+        def withoutRequiredSchema = copy(requiredSchema = Option.empty)
       }
       // "optional" means "there is an implicit FROM, but it is not
       // required to be used in the current context; the current soql
@@ -174,6 +179,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         }
         def optionalize(newLeft: Boolean) = new Optional(underlying, leftmost && newLeft, forcedOnce)
         def forced = forcedOnce.get
+        def requiredSchema = Option.empty
+        def withoutRequiredSchema = this
       }
     }
 
@@ -185,10 +192,10 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             analyzeForFrom(ctx.toSource, ScopedResourceName(scope, rn), None, NoPosition)
           case FoundTables.InContext(rn, q, _, parameters) =>
             val from = analyzeForFrom(ctx.toSource, ScopedResourceName(scope, rn), None, NoPosition)
-            analyzeStatement(ctx, q, ImplicitFrom.Required(from, Some(rn)))
+            analyzeStatement(ctx, q, ImplicitFrom.Required(from, Some(rn), requiredSchema = None))
           case FoundTables.InContextImpersonatingSaved(rn, q, _, parameters, impersonating) =>
             val from = analyzeForFrom(ctx.toSource, ScopedResourceName(scope, rn), None, NoPosition)
-            analyzeStatement(ctx.copy(canonicalName = Some(impersonating)), q, ImplicitFrom.Required(from, Some(rn)))
+            analyzeStatement(ctx.copy(canonicalName = Some(impersonating)), q, ImplicitFrom.Required(from, Some(rn), requiredSchema = None))
           case FoundTables.Standalone(q, _, parameters) =>
             analyzeStatement(ctx, q, ImplicitFrom.None)
         }
@@ -349,7 +356,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             if(dci.hidden) Set(dci.name)
             else None
           }.toSet
-          wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(srn), None, primaryTableName(srn), Environment.empty, Map.empty, hiddenColumns, Map.empty, true), wq.parsed, ImplicitFrom.Required(withoutWrapper, Some(srn.name))), withoutWrapper.label, srn)
+          wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(srn), None, primaryTableName(srn), Environment.empty, Map.empty, hiddenColumns, Map.empty, true), wq.parsed, ImplicitFrom.Required(withoutWrapper, Some(srn.name), requiredSchema = Some(schemaOf(withoutWrapper)))), withoutWrapper.label, srn)
       }
     }
 
@@ -391,12 +398,12 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             // so this is basedOn |> parsed |> wq
             // so we want to use "basedOn" as the implicit "from" for "parsed"
             val from = analyzeForFrom(toSource, ScopedResourceName(scope, basedOn), None, NoPosition /* Yes, actually NoPosition here */)
-            val middle = analyzeStatement(Ctx(scope, Source.Saved(name, _), Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, if(wq.isDefined) Set.empty else hiddenColumns, outputColumnHints, true), parsed, ImplicitFrom.Required(from, Some(basedOn)))
+            val middle = analyzeStatement(Ctx(scope, Source.Saved(name, _), Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, if(wq.isDefined) Set.empty else hiddenColumns, outputColumnHints, true), parsed, ImplicitFrom.Required(from, Some(basedOn), requiredSchema = None))
             wq match {
               case None =>
                 middle
               case Some(wq) =>
-                wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, Map.empty, true), wq.parsed, ImplicitFrom.Required(middle, Some(name.name))), middle.label, name)
+                wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, Map.empty, true), wq.parsed, ImplicitFrom.Required(middle, Some(name.name), requiredSchema = Some(schemaOf(middle)))), middle.label, name)
             }
           case TableDescription.TableFunction(_, _, _, _, _, _, _) =>
             parameterlessTableFunction(toSource(position), name.name)
@@ -523,9 +530,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 outputColumnHints = Map.empty,
                 attemptToPreserveSystemColumns = preserveSystemColumnsRequested
               ),
-              left, from0
+              left, from0.withoutRequiredSchema
             )
-          analyzeStatement(ctx, right, ImplicitFrom.Required(analyzedLeft, None))
+          analyzeStatement(ctx, right, ImplicitFrom.Required(analyzedLeft, None, from0.requiredSchema))
         case other: TrueOp[ast.Select] =>
           analyzeTableOp(ctx, other, from0)
       }
@@ -565,6 +572,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
 
       val combined = CombinedTables(opify(op), lhs, rhs)
+      checkRequiredSchema(ctx.scopedResourceName, combined, from0.requiredSchema)
+
       val fromCombined = FromStatement(combined, labelProvider.tableLabel(), ctx.scopedResourceName, ctx.canonicalName, None)
       if(ctx.hiddenColumns.isEmpty) {
         fromCombined
@@ -621,6 +630,17 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           Nil
       }
 
+    def checkRequiredSchema(srn: Option[ScopedResourceName], stmt: Statement, requiredSchema: Option[Seq[(ColumnName, CT)]]): Unit = {
+      for(rs <- requiredSchema) {
+        if(stmt.schema.valuesIterator.map { se => (se.name, se.typ) }.toSeq != rs) {
+          val source = srn match {
+            case Some(name) => Source.Saved(name, NoPosition)
+            case None => Source.Anonymous(NoPosition) // this shouldn't ever actually happen
+          }
+          throw Bail(Error.WrappingQuerySchemaMismatch(source))
+        }
+      }
+    }
 
     def addSystemColumnsIfDesired(select: Select, attemptToPreserveSystemColumns: Boolean): Select =
       aggregateMerge match {
@@ -812,6 +832,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
 
       verifyAggregatesAndWindowFunctions(ctx, stmt)
 
+      checkRequiredSchema(ctx.scopedResourceName, stmt, from0.requiredSchema)
+
       if(ctx.hiddenColumns.isEmpty) {
         FromStatement(stmt, labelProvider.tableLabel(), ctx.scopedResourceName, ctx.canonicalName, None)
       } else {
@@ -993,7 +1015,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case (ImplicitFrom.None, None) =>
           // No required context and no from given; this is an error
           ctx.noDataSource(NoPosition /* TODO: NEED POS INFO FROM AST */)
-        case (ImplicitFrom.Required(prev, maybeName), Some(tn)) =>
+        case (ImplicitFrom.Required(prev, maybeName, _), Some(tn)) =>
           tn.aliasWithoutPrefix.foreach(ensureLegalAlias(ctx, _, NoPosition /* TODO: NEED POS INFO FROM AST */))
           val rn = ResourceName(tn.nameWithoutPrefix)
           if(rn == SoQLAnalyzer.This || Some(rn) == maybeName) {
@@ -1029,7 +1051,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             // n.b., sometable may actually be a query
             fromNamedTable(rn, alias)
           }
-        case (ImplicitFrom.Required(input, _), None) =>
+        case (ImplicitFrom.Required(input, _, _), None) =>
           // chained query: {something} |> {the thing we're analyzing}
           input.reAlias(None)
         case (opt: ImplicitFrom.Optional, None) =>
@@ -1184,7 +1206,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 case None =>
                   unwrappedUseQuery
                 case Some(wq) =>
-                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, innerUdfParams, hiddenColumns, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name))), unwrappedUseQuery.label, udfScopedResourceName)
+                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, innerUdfParams, hiddenColumns, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name), requiredSchema = Some(schemaOf(unwrappedUseQuery)))), unwrappedUseQuery.label, udfScopedResourceName)
               }
 
               FromStatement(
@@ -1237,7 +1259,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 case None =>
                   unwrappedUseQuery
                 case Some(wq) =>
-                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, Map.empty, hiddenColumns, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name))), unwrappedUseQuery.label, udfScopedResourceName)
+                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, Map.empty, hiddenColumns, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name), requiredSchema = Some(schemaOf(unwrappedUseQuery)))), unwrappedUseQuery.label, udfScopedResourceName)
               }
           }
         case _ =>
@@ -1245,6 +1267,11 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           callerCtx.parametersForNonUdf(resource, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
       }
     }
+
+    def schemaOf(from: From): Seq[(ColumnName, CT)] =
+      from.schema.iterator.map { case se =>
+        se.name -> se.typ
+      }.toSeq
 
     def typecheck(
       ctx: Ctx,

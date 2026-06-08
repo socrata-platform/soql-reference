@@ -421,6 +421,33 @@ object SoQLAnalyzerError {
     }
   }
 
+  case class WrappingQuerySchemaMismatch[RNS](
+    source: Source[RNS]
+  ) extends TextualSoQLAnalyzerError[RNS]
+  object WrappingQuerySchemaMismatch {
+    private val tag = "soql.analyzer.wrapping-query-schema-mismatch"
+
+    @AutomaticJsonCodec
+    private case class Fields()
+
+    implicit def encode[RNS: JsonEncode] = new SoQLErrorEncode[WrappingQuerySchemaMismatch[RNS]] {
+      override val code = tag
+      def encode(err: WrappingQuerySchemaMismatch[RNS]) =
+        result(Fields(), s"Wrapping queries must produce the same schema as their wrapped query", err.source)
+    }
+
+    implicit def decode[RNS: JsonDecode] = new SoQLErrorDecode[WrappingQuerySchemaMismatch[RNS]] {
+      override val code = tag
+      def decode(v: EncodedError) =
+        for {
+          fields <- data[Fields](v)
+          source <- source[RNS](v)
+        } yield {
+          WrappingQuerySchemaMismatch(source)
+        }
+    }
+  }
+
   case class IncorrectNumberOfUdfParameters[+RNS](
     source: Source[RNS],
     udf: ResourceName,
@@ -1311,6 +1338,7 @@ object SoQLAnalyzerError {
   ): SoQLErrorCodec.ErrorCodecs[T] =
     AliasAnalysisError.errorCodecsMinusNoSuchColumn[RNS, T](TypecheckError.errorCodecs[RNS, T](codecs))
       .branch[InvalidParameterType]
+      .branch[WrappingQuerySchemaMismatch[RNS]]
       .branch[ExpectedBoolean[RNS]]
       .branch[IncorrectNumberOfUdfParameters[RNS]]
       .branch[DistinctOnNotPrefixOfOrderBy[RNS]]
