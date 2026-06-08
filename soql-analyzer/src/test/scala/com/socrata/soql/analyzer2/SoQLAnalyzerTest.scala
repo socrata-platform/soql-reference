@@ -1522,4 +1522,15 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
+
+   test("type errors in wrapping queries are marked as having synthetic sources") {
+     val tf = tableFinder(
+       (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber).withWrappingQuery(0, "select * where num > 'hello'")
+     )
+
+     val Right(ft) = tf.findTables(0, rn("ds1"), "select text, num+num", Map.empty)
+     val Left(SoQLAnalyzerError.TypecheckError.TypeMismatch(source, _, _)) = analyzer(ft, UserParameters.empty)
+
+     source must be (Source.Synthetic)
+  }
 }

@@ -10,12 +10,12 @@ import com.socrata.soql.functions.FunctionType
 import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, FunctionCallTypechecker, Passed, TypeMismatchFailure}
 
 class Typechecker[MT <: MetaTypes](
-  sourceName: Option[types.ScopedResourceName[MT]],
+  toSource: Position => Source[MT#ResourceNameScope],
   canonicalName: Option[CanonicalName],
   primaryTable: Option[Provenance],
   env: Environment[MT],
   namedExprs: Map[ColumnName, Expr[MT]],
-  udfParams: Map[HoleName, (Option[types.ScopedResourceName[MT]], Position) => Expr[MT]],
+  udfParams: Map[HoleName, Source[MT#ResourceNameScope] => Expr[MT]],
   userParameters: UserParameters[MT#ColumnType, MT#ColumnValue],
   typeInfo: TypeInfo2[MT],
   functionInfo: FunctionInfo[MT#ColumnType]
@@ -53,7 +53,7 @@ class Typechecker[MT <: MetaTypes](
           val candidates = exprs.filter(_.typ == t)
           if(candidates.isEmpty) {
             return Left(
-              TypeMismatch(Source.nonSynthetic(sourceName, pos), Set(typeInfo.typeNameFor(t)), typeInfo.typeNameFor(mostPreferredType(exprs.iterator.map(_.typ).toSet)))
+              TypeMismatch(toSource(pos), Set(typeInfo.typeNameFor(t)), typeInfo.typeNameFor(mostPreferredType(exprs.iterator.map(_.typ).toSet)))
             )
           }
           candidates
@@ -155,31 +155,31 @@ class Typechecker[MT <: MetaTypes](
       case col@ast.ColumnOrAliasRef(None, name) =>
         namedExprs.get(name) match {
           case Some(prechecked) =>
-            Right(Seq(prechecked.reReference(Source.nonSynthetic(sourceName, col.position))))
+            Right(Seq(prechecked.reReference(toSource(col.position))))
           case None =>
             env.lookup(name) match {
-              case None => Left(NoSuchColumn(Source.nonSynthetic(sourceName, col.position), None, name, Util.possibilitiesFor(env, namedExprs.keysIterator, None, name)))
+              case None => Left(NoSuchColumn(toSource(col.position), None, name, Util.possibilitiesFor(env, namedExprs.keysIterator, None, name)))
               case Some(Environment.LookupResult.Virtual(table, column, typ)) =>
-                Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(Source.nonSynthetic(sourceName, col.position)))))
+                Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(toSource(col.position)))))
               case Some(Environment.LookupResult.Physical(tableName, tableLabel, column, typ)) =>
-                Right(Seq(PhysicalColumn[MT](tableLabel, tableName, column, typ)(new AtomicPositionInfo(Source.nonSynthetic(sourceName, col.position)))))
+                Right(Seq(PhysicalColumn[MT](tableLabel, tableName, column, typ)(new AtomicPositionInfo(toSource(col.position)))))
             }
         }
       case col@ast.ColumnOrAliasRef(Some(qual), name) =>
         val trueQual = ResourceName(qual.substring(TableName.PrefixIndex))
         env.lookup(trueQual, name) match {
-          case None => Left(NoSuchColumn(Source.nonSynthetic(sourceName, col.position), Some(trueQual), name, Util.possibilitiesFor(env, namedExprs.keysIterator, Some(trueQual), name)))
+          case None => Left(NoSuchColumn(toSource(col.position), Some(trueQual), name, Util.possibilitiesFor(env, namedExprs.keysIterator, Some(trueQual), name)))
           case Some(Environment.LookupResult.Virtual(table, column, typ)) =>
-            Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(Source.nonSynthetic(sourceName, col.position)))))
+            Right(Seq(VirtualColumn(table, column, typ)(new AtomicPositionInfo(toSource(col.position)))))
           case Some(Environment.LookupResult.Physical(tableName, tableLabel, column, typ)) =>
-            Right(Seq(PhysicalColumn[MT](tableLabel, tableName, column, typ)(new AtomicPositionInfo(Source.nonSynthetic(sourceName, col.position)))))
+            Right(Seq(PhysicalColumn[MT](tableLabel, tableName, column, typ)(new AtomicPositionInfo(toSource(col.position)))))
         }
       case l: ast.Literal =>
-        squash(typeInfo.potentialExprs(l, sourceName, primaryTable), l.position)
+        squash(typeInfo.potentialExprs(l, toSource, primaryTable), l.position)
       case hole@ast.Hole.UDF(name) =>
         udfParams.get(name) match {
-          case Some(expr) => Right(Seq(expr(sourceName, hole.position)))
-          case None => Left(UnknownUDFParameter(Source.nonSynthetic(sourceName, hole.position), name))
+          case Some(expr) => Right(Seq(expr(toSource(hole.position))))
+          case None => Left(UnknownUDFParameter(toSource(hole.position), name))
         }
       case hole@ast.Hole.SavedQuery(name, view) =>
         userParameter(view.map(CanonicalName), name, hole.position)
@@ -198,9 +198,9 @@ class Typechecker[MT <: MetaTypes](
       }
 
     paramSet.flatMap(_.get(name)) match {
-      case Some(UserParameters.Null(t)) => Right(Seq(NullLiteral(t)(new AtomicPositionInfo(Source.nonSynthetic(sourceName, position)))))
-      case Some(UserParameters.Value(v)) => Right(Seq(LiteralValue(v)(new AtomicPositionInfo(Source.nonSynthetic(sourceName, position)))(typeInfo.hasType)))
-      case None => Left(UnknownUserParameter(Source.nonSynthetic(sourceName, position), canonicalView, name))
+      case Some(UserParameters.Null(t)) => Right(Seq(NullLiteral(t)(new AtomicPositionInfo(toSource(position)))))
+      case Some(UserParameters.Value(v)) => Right(Seq(LiteralValue(v)(new AtomicPositionInfo(toSource(position)))(typeInfo.hasType)))
+      case None => Left(UnknownUserParameter(toSource(position), canonicalView, name))
     }
   }
 
@@ -217,7 +217,7 @@ class Typechecker[MT <: MetaTypes](
       val typedOrderings = w.orderings.map { ob =>
         val typedExpr = finalCheck(ob.expression, None)
         if(!typeInfo.isOrdered(typedExpr.typ)) {
-          return Left(UnorderedOrderBy(Source.nonSynthetic(sourceName, ob.expression.position), typeInfo.typeNameFor(typedExpr.typ)))
+          return Left(UnorderedOrderBy(toSource(ob.expression.position), typeInfo.typeNameFor(typedExpr.typ)))
         }
         OrderBy(typedExpr, ob.ascending, ob.nullLast)
       }
@@ -229,7 +229,7 @@ class Typechecker[MT <: MetaTypes](
     val options = functionInfo.functionsWithArity(name, typedParameters.length)
 
     if(options.isEmpty) {
-      return Left(NoSuchFunction(Source.nonSynthetic(sourceName, fc.functionNamePosition), name, typedParameters.length))
+      return Left(NoSuchFunction(toSource(fc.functionNamePosition), name, typedParameters.length))
     }
 
     val (failed, resolved) = divide(funcallTypechecker.resolveOverload(options, typedParameters.map(_.map(_.typ).toSet))) {
@@ -239,7 +239,7 @@ class Typechecker[MT <: MetaTypes](
 
     if(resolved.isEmpty) {
       val TypeMismatchFailure(expected, found, idx) = failed.maxBy(_.idx)
-      return Left(TypeMismatch(Source.nonSynthetic(sourceName, parameters(idx).position), expected.map(typeInfo.typeNameFor), typeInfo.typeNameFor(mostPreferredType(found))))
+      return Left(TypeMismatch(toSource(parameters(idx).position), expected.map(typeInfo.typeNameFor), typeInfo.typeNameFor(mostPreferredType(found))))
     }
 
     val potentials = resolved.flatMap { f =>
@@ -267,17 +267,17 @@ class Typechecker[MT <: MetaTypes](
           case (Some(boolExpr), None) =>
             f.functionType match {
               case FunctionType.Window(_) =>
-                return Left(RequiresWindow(Source.nonSynthetic(sourceName, fc.functionNamePosition), fc.functionName))
+                return Left(RequiresWindow(toSource(fc.functionNamePosition), fc.functionName))
               case FunctionType.Normal =>
-                return Left(NonAggregateFunction(Source.nonSynthetic(sourceName, fc.functionNamePosition), fc.functionName))
+                return Left(NonAggregateFunction(toSource(fc.functionNamePosition), fc.functionName))
               case FunctionType.Aggregate =>
-                AggregateFunctionCall(f, params, false, Some(boolExpr))(new FuncallPositionInfo(Source.nonSynthetic(sourceName, fc.position), fc.functionNamePosition))
+                AggregateFunctionCall(f, params, false, Some(boolExpr))(new FuncallPositionInfo(toSource(fc.position), fc.functionNamePosition))
             }
           case (maybeFilter, Some((partitions, orderings, frames))) =>
             val frameAllowed =
               f.functionType match {
                 case FunctionType.Normal =>
-                  return Left(NonWindowFunction(Source.nonSynthetic(sourceName, fc.functionNamePosition), fc.functionName))
+                  return Left(NonWindowFunction(toSource(fc.functionNamePosition), fc.functionName))
                 case FunctionType.Aggregate =>
                   true
                 case FunctionType.Window(frameAllowed) =>
@@ -285,7 +285,7 @@ class Typechecker[MT <: MetaTypes](
               }
 
             if(fc.distinct) {
-              return Left(DistinctWithOver(Source.nonSynthetic(sourceName, fc.functionNamePosition)))
+              return Left(DistinctWithOver(toSource(fc.functionNamePosition)))
             }
 
             // blearghhh ok so the parser does in fact parse this
@@ -351,13 +351,13 @@ class Typechecker[MT <: MetaTypes](
                       val (end, rest3) = frameBound(rest2)
 
                       if(start == FrameBound.UnboundedFollowing) {
-                        return Left(IllegalStartFrameBound(Source.nonSynthetic(sourceName, frames.head.position), start.text))
+                        return Left(IllegalStartFrameBound(toSource(frames.head.position), start.text))
                       }
                       if(end == FrameBound.UnboundedPreceding) {
-                        return Left(IllegalEndFrameBound(Source.nonSynthetic(sourceName, rest2.head.position), end.text))
+                        return Left(IllegalEndFrameBound(toSource(rest2.head.position), end.text))
                       }
                       if(start.level > end.level) {
-                        return Left(MismatchedFrameBound(Source.nonSynthetic(sourceName, rest2.head.position), start.text, end.text))
+                        return Left(MismatchedFrameBound(toSource(rest2.head.position), start.text, end.text))
                       }
 
                       val excl = optFrameExclusion(rest3)
@@ -366,7 +366,7 @@ class Typechecker[MT <: MetaTypes](
                       val (start, rest1) = frameBound(rest)
 
                       if(start == FrameBound.UnboundedFollowing) {
-                        return Left(IllegalStartFrameBound(Source.nonSynthetic(sourceName, frames.head.position), start.text))
+                        return Left(IllegalStartFrameBound(toSource(frames.head.position), start.text))
                       }
 
                       val excl = optFrameExclusion(rest1)
@@ -379,22 +379,22 @@ class Typechecker[MT <: MetaTypes](
               }
 
             if(parsedFrames.map(_.context) == FrameContext.Groups && orderings.isEmpty) {
-              return Left(GroupsRequiresOrderBy(Source.nonSynthetic(sourceName, frames.head.position)))
+              return Left(GroupsRequiresOrderBy(toSource(frames.head.position)))
             }
 
             if(parsedFrames.isDefined && !frameAllowed) {
               // TODO: reject once we've verified that this isn't being used by anything
             }
 
-            WindowedFunctionCall(f, params, maybeFilter, partitions, orderings, parsedFrames)(new FuncallPositionInfo(Source.nonSynthetic(sourceName, fc.position), fc.functionNamePosition))
+            WindowedFunctionCall(f, params, maybeFilter, partitions, orderings, parsedFrames)(new FuncallPositionInfo(toSource(fc.position), fc.functionNamePosition))
           case (None, None) =>
             f.functionType match {
               case FunctionType.Window(_) =>
-                return Left(RequiresWindow(Source.nonSynthetic(sourceName, fc.functionNamePosition), fc.functionName))
+                return Left(RequiresWindow(toSource(fc.functionNamePosition), fc.functionName))
               case FunctionType.Aggregate =>
-                AggregateFunctionCall(f, params, false, None)(new FuncallPositionInfo(Source.nonSynthetic(sourceName, fc.position), fc.functionNamePosition))
+                AggregateFunctionCall(f, params, false, None)(new FuncallPositionInfo(toSource(fc.position), fc.functionNamePosition))
               case FunctionType.Normal =>
-                FunctionCall(f, params)(new FuncallPositionInfo(Source.nonSynthetic(sourceName, fc.position), fc.functionNamePosition))
+                FunctionCall(f, params)(new FuncallPositionInfo(toSource(fc.position), fc.functionNamePosition))
             }
         }
       }
