@@ -26,9 +26,10 @@ object OptionalBoolean {
 
 sealed abstract class Thing[+RNS, +CT] {
   def canonicalName: Option[String]
+  def withWrappingQuery[RNS2 >: RNS, CT2 >: CT](scope: RNS2, soql: String): Thing[RNS2, CT2]
 }
 
-case class MockWrappingQuery[+RNS, +CT](scope: RNS, soql: String, params: Map[String, CT])
+case class MockWrappingQuery[+RNS, +CT](scope: RNS, soql: String)
 
 case class D[+RNS, +CT](schema: (String, CT)*) extends Thing[RNS, CT] { self =>
   private var canonicalName_ : Option[String] = None
@@ -95,9 +96,13 @@ case class D[+RNS, +CT](schema: (String, CT)*) extends Thing[RNS, CT] { self =>
   }
   def outputColumnHints = outputColumnHints_
 
-  def withWrappingQuery[RNS2 >: RNS, CT2 >: CT](scope: RNS2, soql: String, params: (String, CT2)*): D[RNS2, CT2] = {
+  def withWrappingQuery[RNS2 >: RNS, CT2 >: CT](scope: RNS2, soql: String): D[RNS2, CT2] = {
+    // otherwise these can be shadowed by the subclass
+    val wqScope = scope
+    val wqSoql = soql
+
     val result = new D[RNS2, CT2](this.schema : _*) {
-      override val wrappingQuery = Some(MockWrappingQuery(scope, soql, params.toMap))
+      override val wrappingQuery = Some(MockWrappingQuery(wqScope, wqSoql))
     }
     result.copyVars(this)
     result
@@ -148,9 +153,13 @@ case class Q[+RNS, +CT](scope: RNS, parent: String, soql: String, params: (Strin
   }
   def outputColumnHints = outputColumnHints_
 
-  def withWrappingQuery[RNS2 >: RNS, CT2 >: CT](scope: RNS2, soql: String, params: (String, CT2)*): Q[RNS2, CT2] = {
+  def withWrappingQuery[RNS2 >: RNS, CT2 >: CT](scope: RNS2, soql: String): Q[RNS2, CT2] = {
+    // otherwise these can be shadowed by the subclass
+    val wqScope = scope
+    val wqSoql = soql
+
     val result = new Q[RNS2, CT2](this.scope, this.parent, this.soql, this.params : _*) {
-      override val wrappingQuery = Some(MockWrappingQuery(scope, soql, params.toMap))
+      override val wrappingQuery = Some(MockWrappingQuery(wqScope, wqSoql))
     }
     result.copyVars(this)
     result
@@ -189,9 +198,13 @@ case class U[+RNS, +CT](scope: RNS, soql: String, params: (String, CT)*) extends
   }
   def hiddenColumns = hiddenColumns_
 
-  def withWrappingQuery[RNS2 >: RNS, CT2 >: CT](scope: RNS2, soql: String, params: (String, CT2)*): U[RNS2, CT2] = {
+  def withWrappingQuery[RNS2 >: RNS, CT2 >: CT](scope: RNS2, soql: String): U[RNS2, CT2] = {
+    // otherwise these can be shadowed by the subclass
+    val wqScope = scope
+    val wqSoql = soql
+
     val result = new U[RNS2, CT2](this.scope, this.soql, this.params : _*) {
-      override val wrappingQuery = Some(MockWrappingQuery(scope, soql, params.toMap))
+      override val wrappingQuery = Some(MockWrappingQuery(wqScope, wqSoql))
     }
     result.copyVars(this)
     result
@@ -204,16 +217,16 @@ object MockTableFinder {
   def apply[MT <: MetaTypes](items: UnparsedFoundTables[MT])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) = UnparsedTableMap.asMockTableFinder(items.tableMap)
   def apply[MT <: MetaTypes](items: FoundTables[MT])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl): MockTableFinder[MT] = this(items.asUnparsedFoundTables)
 
-  private case class JWQ[+RNS,+CT](scope: Option[RNS], soql: String, params: Map[String, CT])
+  private case class JWQ[+RNS](scope: Option[RNS], soql: String)
 
   private sealed abstract class JThing[+RNS, +CT]
-  private case class JD[+RNS, +CT](schema: Seq[(String, CT)], canonicalName: Option[String], orderings: Option[Seq[(String, Boolean, Boolean)]], hiddenColumns: Option[Seq[String]], primaryKeys: Option[Seq[Seq[String]]], wrappingQuery: Option[JWQ[RNS, CT]]) extends JThing[RNS, CT]
-  private case class JQ[+RNS,+CT](scope: Option[RNS], parent: String, soql: String, params: Map[String, CT], canonicalName: Option[String], hiddenColumns: Option[Seq[String]], wrappingQuery: Option[JWQ[RNS, CT]]) extends JThing[RNS, CT]
-  private case class JU[+RNS,+CT](scope: Option[RNS], soql: String, params: Seq[(String, CT)], canonicalName: Option[String], hiddenColumns: Option[Seq[String]], wrappingQuery: Option[JWQ[RNS, CT]]) extends JThing[RNS, CT]
+  private case class JD[+RNS, +CT](schema: Seq[(String, CT)], canonicalName: Option[String], orderings: Option[Seq[(String, Boolean, Boolean)]], hiddenColumns: Option[Seq[String]], primaryKeys: Option[Seq[Seq[String]]], wrappingQuery: Option[JWQ[RNS]]) extends JThing[RNS, CT]
+  private case class JQ[+RNS,+CT](scope: Option[RNS], parent: String, soql: String, params: Map[String, CT], canonicalName: Option[String], hiddenColumns: Option[Seq[String]], wrappingQuery: Option[JWQ[RNS]]) extends JThing[RNS, CT]
+  private case class JU[+RNS,+CT](scope: Option[RNS], soql: String, params: Seq[(String, CT)], canonicalName: Option[String], hiddenColumns: Option[Seq[String]], wrappingQuery: Option[JWQ[RNS]]) extends JThing[RNS, CT]
 
   implicit def jDecode[MT <: MetaTypes](implicit rnsFieldDecode: FieldDecode[MT#ResourceNameScope], rnsDecode: JsonDecode[MT#ResourceNameScope], ctDecode: JsonDecode[MT#ColumnType], dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl): JsonDecode[MockTableFinder[MT]] =
     new JsonDecode[MockTableFinder[MT]] with MetaTypeHelper[MT] {
-      private implicit val jwqDecode = AutomaticJsonDecodeBuilder[JWQ[RNS, CT]]
+      private implicit val jwqDecode = AutomaticJsonDecodeBuilder[JWQ[RNS]]
 
       private implicit val jdDecode = AutomaticJsonDecodeBuilder[JD[RNS, CT]]
       private implicit val jqDecode = AutomaticJsonDecodeBuilder[JQ[RNS, CT]]
@@ -244,21 +257,21 @@ object MockTableFinder {
                         }.withHiddenColumns(hiddenColumns.getOrElse(Nil) : _*)
                       ) { (dataset, pk) => dataset.withPrimaryKey(pk: _*) }
                     ) { (ds, jwq) =>
-                      ds.withWrappingQuery(jwq.scope.getOrElse(rns), jwq.soql, jwq.params.toSeq : _*)
+                      ds.withWrappingQuery(jwq.scope.getOrElse(rns), jwq.soql)
                     }
                   case JQ(scopeOpt, parent, soql, params, cname, hiddenColumns, wq) =>
                     val result = Q(scopeOpt.getOrElse(rns), parent, soql, params.toSeq : _*)
                     wq.foldLeft(
                       cname.fold(result)(result.withCanonicalName).withHiddenColumns(hiddenColumns.getOrElse(Nil) : _*)
                     ) { (q, jwq) =>
-                      q.withWrappingQuery(jwq.scope.getOrElse(rns), jwq.soql, jwq.params.toSeq : _*)
+                      q.withWrappingQuery(jwq.scope.getOrElse(rns), jwq.soql)
                     }
                   case JU(scopeOpt, soql, params, cname, hiddenColumns, wq) =>
                     val result = U(scopeOpt.getOrElse(rns), soql, params : _*)
                     wq.foldLeft(
                       cname.fold(result)(result.withCanonicalName).withHiddenColumns(hiddenColumns.getOrElse(Nil) : _*)
                     ) { (u, jwq) =>
-                      u.withWrappingQuery(jwq.scope.getOrElse(rns), jwq.soql, jwq.params.toSeq : _*)
+                      u.withWrappingQuery(jwq.scope.getOrElse(rns), jwq.soql)
                     }
                 }
 
@@ -271,7 +284,7 @@ object MockTableFinder {
 
   implicit def jEncode[MT <: MetaTypes](implicit rnsFieldEncode: FieldEncode[MT#ResourceNameScope], rnsEncode: JsonEncode[MT#ResourceNameScope], ctEncode: JsonEncode[MT#ColumnType]): JsonEncode[MockTableFinder[MT]] =
     new JsonEncode[MockTableFinder[MT]] with MetaTypeHelper[MT] {
-      private implicit val jwqEncode = AutomaticJsonEncodeBuilder[JWQ[RNS, CT]]
+      private implicit val jwqEncode = AutomaticJsonEncodeBuilder[JWQ[RNS]]
 
       private implicit val jdEncode = AutomaticJsonEncodeBuilder[JD[RNS, CT]]
       private implicit val jqEncode = AutomaticJsonEncodeBuilder[JQ[RNS, CT]]
@@ -300,7 +313,7 @@ object MockTableFinder {
                         Some(d.hiddenColumns.toSeq).filter(_.nonEmpty),
                         Some(d.primaryKeys).filter(_.nonEmpty),
                         d.wrappingQuery.map { wq =>
-                          JWQ[RNS, CT](Some(wq.scope).filter(_ != rns), wq.soql, wq.params.toMap)
+                          JWQ[RNS](Some(wq.scope).filter(_ != rns), wq.soql)
                         }
                       )
                     case q@Q(scope, parent, soql, params@_*) =>
@@ -312,7 +325,7 @@ object MockTableFinder {
                         q.canonicalName.filter(_ != name),
                         Some(q.hiddenColumns.map(_.name).toSeq).filter(_.nonEmpty),
                         q.wrappingQuery.map { wq =>
-                          JWQ[RNS, CT](Some(wq.scope).filter(_ != rns), wq.soql, wq.params.toMap)
+                          JWQ[RNS](Some(wq.scope).filter(_ != rns), wq.soql)
                         }
                       )
                     case u@U(scope, soql, params@_*) =>
@@ -323,7 +336,7 @@ object MockTableFinder {
                         u.canonicalName.filter(_ != name),
                         Some(u.hiddenColumns.map(_.name).toSeq).filter(_.nonEmpty),
                         u.wrappingQuery.map { wq =>
-                          JWQ[RNS, CT](Some(wq.scope).filter(_ != rns), wq.soql, wq.params.toMap)
+                          JWQ[RNS](Some(wq.scope).filter(_ != rns), wq.soql)
                         }
                       )
                   }
@@ -339,7 +352,7 @@ object MockTableFinder {
 class MockTableFinder[MT <: MetaTypes](private val raw: OrderedMap[(MT#ResourceNameScope, String), Thing[MT#ResourceNameScope, MT#ColumnType]])(implicit dtnIsString: String =:= MT#DatabaseTableNameImpl, dcnIsString: String =:= MT#DatabaseColumnNameImpl) extends TableFinder[MT] {
 
   private def toTableFinder(wq: MockWrappingQuery[ResourceNameScope, ColumnType]): WrappingQuery =
-    WrappingQuery(wq.scope, wq.soql, wq.params.iterator.map { case (name, typ) => HoleName(name) -> typ }.toMap)
+    WrappingQuery(wq.scope, wq.soql)
 
   private val tables: Map[ScopedResourceName, FinderTableDescription] = locally {
     // canonical names need to be unique within the whole tablefinder

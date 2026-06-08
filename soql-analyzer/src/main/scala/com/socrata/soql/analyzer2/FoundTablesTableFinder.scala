@@ -21,7 +21,7 @@ class FoundTablesTableFinder[MT <: MetaTypes](foundTables: UnparsedFoundTables[M
               },
               ds.primaryKeys,
               ds.wrappingQuery.map { wq =>
-                WrappingQuery(wq.scope, wq.soql, wq.parameters)
+                WrappingQuery(wq.scope, wq.soql)
               }
             )
             foundDataset(name, converted)
@@ -35,7 +35,7 @@ class FoundTablesTableFinder[MT <: MetaTypes](foundTables: UnparsedFoundTables[M
               q.hiddenColumns,
               q.outputColumnHints,
               q.wrappingQuery.map { wq =>
-                WrappingQuery(wq.scope, wq.soql, wq.parameters)
+                WrappingQuery(wq.scope, wq.soql)
               }
             )
             foundQuery(name, converted)
@@ -47,7 +47,7 @@ class FoundTablesTableFinder[MT <: MetaTypes](foundTables: UnparsedFoundTables[M
               tf.parameters,
               tf.hiddenColumns,
               tf.wrappingQuery.map { wq =>
-                WrappingQuery(wq.scope, wq.soql, wq.parameters)
+                WrappingQuery(wq.scope, wq.soql)
               }
             )
             foundTableFunction(name, converted)

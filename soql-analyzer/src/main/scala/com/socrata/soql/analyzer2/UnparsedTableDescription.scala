@@ -34,14 +34,12 @@ sealed trait UnparsedTableDescription[MT <: MetaTypes] extends TableDescriptionL
 object UnparsedTableDescription {
   case class WrappingQuery[MT <: MetaTypes](
     scope: MT#ResourceNameScope,
-    soql: String,
-    parameters: Map[HoleName, MT#ColumnType]
+    soql: String
   ) extends LabelUniverse[MT] {
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): WrappingQuery[MT2] =
       WrappingQuery(
         scopeMap(scope),
-        soql,
-        parameters.asInstanceOf[Map[HoleName, MT2#ColumnType]] // SAFETY: ColumnType isn't changing,
+        soql
       )
     def rewriteDatabaseNames[MT2 <: MetaTypes](implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]) =
       this.asInstanceOf[WrappingQuery[MT2]] // SAFETY: no labels in here
@@ -86,7 +84,7 @@ object UnparsedTableDescription {
         parsedWrappingQuery <- wrappingQuery.map { wq =>
           ParserUtil.parseWithoutContext(wq.soql, params.copy(allowHoles = false))
             .left.map((_, Seq("wrappingQuery", "soql"), wq.soql))
-            .map(TableDescription.WrappingQuery(wq.scope, _, wq.soql, wq.parameters))
+            .map(TableDescription.WrappingQuery(wq.scope, _, wq.soql))
         }.transposeOptionEither
       } yield {
         TableDescription.Dataset[MT](
@@ -169,7 +167,7 @@ object UnparsedTableDescription {
         parsedWrappingQuery <- wrappingQuery.map { wq =>
           ParserUtil.parseWithoutContext(wq.soql, params.copy(allowHoles = false))
             .left.map((_, Seq("wrappingQuerySoql", "soql"), wq.soql))
-            .map(TableDescription.WrappingQuery(wq.scope, _, wq.soql, wq.parameters))
+            .map(TableDescription.WrappingQuery(wq.scope, _, wq.soql))
         }.transposeOptionEither
       } yield {
         TableDescription.Query[MT](
@@ -220,7 +218,7 @@ object UnparsedTableDescription {
         parsedWrappingQuery <- wrappingQuery.map { wq =>
           ParserUtil.parseWithoutContext(wq.soql, params.copy(allowHoles = false))
             .left.map((_, Seq("wrappingQuery","soql"), wq.soql))
-            .map(TableDescription.WrappingQuery(wq.scope, _, wq.soql, wq.parameters))
+            .map(TableDescription.WrappingQuery(wq.scope, _, wq.soql))
         }.transposeOptionEither
       } yield {
         TableDescription.TableFunction(

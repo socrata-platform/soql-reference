@@ -45,20 +45,18 @@ object TableDescription {
   case class WrappingQuery[MT <: MetaTypes](
     scope: MT#ResourceNameScope,
     parsed: BinaryTree[ast.Select],
-    unparsed: String,
-    parameters: Map[HoleName, MT#ColumnType]
+    unparsed: String
   ) extends LabelUniverse[MT] {
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): WrappingQuery[MT2] =
       WrappingQuery(
         scopeMap(scope),
         parsed,
-        unparsed,
-        parameters.asInstanceOf[Map[HoleName, MT2#ColumnType]] // SAFETY: ColumnType isn't changing,
+        unparsed
       )
     def rewriteDatabaseNames[MT2 <: MetaTypes](implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]) =
       this.asInstanceOf[WrappingQuery[MT2]] // SAFETY: no labels in here
 
-    def asUnparsedWrappingQuery = UnparsedTableDescription.WrappingQuery[MT](scope, unparsed, parameters)
+    def asUnparsedWrappingQuery = UnparsedTableDescription.WrappingQuery[MT](scope, unparsed)
   }
 
   private[analyzer2] def jsonEncode[MT <: MetaTypes](implicit enc: JsonEncode[UnparsedTableDescription[MT]]) =

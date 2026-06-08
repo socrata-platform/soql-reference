@@ -368,7 +368,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               case None =>
                 middle
               case Some(wq) =>
-                analyzeStatement(Ctx(wq.scope, None, None, primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, Set.empty, Map.empty, true), wq.parsed, ImplicitFrom.Required(middle, Some(name.name)))
+                analyzeStatement(Ctx(wq.scope, None, Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, Set.empty, Map.empty, true), wq.parsed, ImplicitFrom.Required(middle, Some(name.name)))
             }
           case TableDescription.TableFunction(_, _, _, _, _, _, _) =>
             parameterlessTableFunction(source, name.name, position)

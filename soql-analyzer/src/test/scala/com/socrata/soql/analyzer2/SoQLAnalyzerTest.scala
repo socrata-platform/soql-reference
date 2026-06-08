@@ -24,7 +24,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       }
   }
 
-  test("alias analysis qualifiers are correct") {
+   test("alias analysis qualifiers are correct") {
     val tf = MockTableFinder.empty[TestMT]
     val Right(start) = tf.findTables(0, "select @bleh.whatever from @single_row", Map.empty)
     analyzer(start, UserParameters.empty) match {
@@ -37,7 +37,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("simple contextless") {
+   test("simple contextless") {
     val tf = MockTableFinder.empty[TestMT]
 
     // Getting rid of parents, literal coersions, function overloading, disambiguation....
@@ -103,7 +103,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val Select(Distinctiveness.Indistinct(), _, _, None, Nil, None, Nil, None, None, None, _) = select
   }
 
-  test("simple context") {
+   test("simple context") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withCanonicalName("a")
     )
@@ -164,7 +164,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val Select(Distinctiveness.Indistinct(), _, _, None, Nil, None, Nil, None, None, None, _) = select
   }
 
-  test("untagged parameters in anonymous soql - impersonating a saved query") {
+   test("untagged parameters in anonymous soql - impersonating a saved query") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -196,7 +196,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
   }
 
-  test("untagged parameters in anonymous soql - anonymous parameters") {
+   test("untagged parameters in anonymous soql - anonymous parameters") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -225,7 +225,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
   }
 
-  test("untagged parameters in anonymous soql - redirected parameters") {
+   test("untagged parameters in anonymous soql - redirected parameters") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -253,7 +253,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
   }
 
-  test("dataset ordering - direct select") {
+   test("dataset ordering - direct select") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withCanonicalName("a").withOrdering("text")
     )
@@ -294,7 +294,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
   }
 
 
-  test("dataset ordering - nested select") {
+   test("dataset ordering - nested select") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withCanonicalName("a").withOrdering("text")
     )
@@ -348,7 +348,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
   }
 
-  test("distinct on - ignores permutations") {
+   test("distinct on - ignores permutations") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -356,7 +356,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     // didn't throw an exception, good
   }
 
-  test("distinct on - requires prefix match") {
+   test("distinct on - requires prefix match") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -375,7 +375,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("distinct on - allows extra order bys") {
+   test("distinct on - allows extra order bys") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -383,7 +383,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analyze(tf, "aaaa-aaaa", "select distinct on (text, num) 5 order by num, text, num*2")
   }
 
-  test("UDF - no parameter") {
+   test("UDF - no parameter") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withCanonicalName("a"),
       (0, "bbbb-bbbb") -> D("user" -> TestText, "allowed" -> TestBoolean).withCanonicalName("b"),
@@ -490,7 +490,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
   }
 
-  test("UDF - referencing outer column") {
+   test("UDF - referencing outer column") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withCanonicalName("a"),
       (0, "bbbb-bbbb") -> D("user" -> TestText, "allowed" -> TestBoolean).withCanonicalName("b"),
@@ -597,7 +597,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
   }
 
-  test("UDF - some parameters are function calls") {
+   test("UDF - some parameters are function calls") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withCanonicalName("a"),
       (0, "bbbb-bbbb") -> U(0, "select ?a, ?b, ?c, ?d from @single_row", "d" -> TestText, "c" -> TestNumber, "b" -> TestBoolean, "a" -> TestText).withCanonicalName("b")
@@ -716,7 +716,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
   }
 
-  test("logical positions - alias expansion") {
+   test("logical positions - alias expansion") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber)
     )
@@ -749,7 +749,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
   }
 
-  test("Cannot reference non-explicitly-aliased foreign columns") {
+   test("Cannot reference non-explicitly-aliased foreign columns") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
       (0, "bbbb-bbbb") -> D("x" -> TestNumber)
@@ -770,7 +770,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("A non-aliased qualified column does not shadow local names") {
+   test("A non-aliased qualified column does not shadow local names") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
       (0, "bbbb-bbbb") -> D("n1" -> TestNumber, "n2" -> TestNumber)
@@ -783,7 +783,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("can refer to qualified column expressions with an explicit alias") {
+   test("can refer to qualified column expressions with an explicit alias") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
       (0, "bbbb-bbbb") -> D("n1" -> TestNumber, "n2" -> TestNumber)
@@ -796,7 +796,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("logical positions - udf parameters") {
+   test("logical positions - udf parameters") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
       (0, "bbbb-bbbb") -> U(0, "select 1 from @single-row where ?x = 5", "x" -> TestNumber)
@@ -831,7 +831,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     )
   }
 
-  test("Hidden columns - an unordered table") {
+   test("Hidden columns - an unordered table") {
     val tf1 = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber).withHiddenColumns("n2")
     )
@@ -845,7 +845,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 
-  test("Hidden columns - table with a hidden ordering") {
+   test("Hidden columns - table with a hidden ordering") {
     val tf1 = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber).withHiddenColumns("n2").withOrdering("n2")
     )
@@ -859,7 +859,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 
-  test("Hidden columns - within a query on a sorted table") {
+   test("Hidden columns - within a query on a sorted table") {
     val tf1 = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber).withHiddenColumns("n2").withOrdering("n2")
     )
@@ -873,7 +873,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 
-  test("Hidden columns - within a UDF") {
+   test("Hidden columns - within a UDF") {
     val tf1 = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
       (0, "udf") -> U(0, "select n1, n2 from @aaaa-aaaa where n2 = ?x", "x" -> TestNumber).withHiddenColumns("n2")
@@ -889,7 +889,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 
-  test("Hidden columns - indistinct") {
+   test("Hidden columns - indistinct") {
     val tf1 = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
       (0, "q") -> Q(0, "aaaa-aaaa", "select n1, n2 order by n2 limit 5 offset 6").withHiddenColumns("n2")
@@ -905,7 +905,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 
-  test("Hidden columns - distinct on") {
+   test("Hidden columns - distinct on") {
     val tf1 = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
       (0, "q") -> Q(0, "aaaa-aaaa", "select distinct on(n2) n1, n2 order by n2").withHiddenColumns("n2")
@@ -921,7 +921,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 
-  test("Hidden columns - distinct") {
+   test("Hidden columns - distinct") {
     val tf1 = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
       (0, "q") -> Q(0, "aaaa-aaaa", "select distinct n1, n2, n1 + n2 order by n2 limit 5 offset 6").withHiddenColumns("n2")
@@ -937,7 +937,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 
-  test("Hidden columns - union") {
+   test("Hidden columns - union") {
     val tf1 = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
       (0, "bbbb-bbbb") -> D("n3" -> TestNumber, "n4" -> TestNumber, "n5" -> TestNumber),
@@ -955,7 +955,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 
-  test("fully distinct requires selected order by") {
+   test("fully distinct requires selected order by") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber),
     )
@@ -974,7 +974,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("preserve system columns - simple") {
+   test("preserve system columns - simple") {
     val tf = tableFinder(
       (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
     )
@@ -987,7 +987,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("preserve system columns - partially selected") {
+   test("preserve system columns - partially selected") {
     val tf = tableFinder(
       (0, "twocol") -> D(":id" -> TestNumber, ":version" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
     )
@@ -1000,7 +1000,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("preserve system columns - distinct blocks") {
+   test("preserve system columns - distinct blocks") {
     val tf = tableFinder(
       (0, "twocol") -> D(":id" -> TestNumber, ":version" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
     )
@@ -1013,7 +1013,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("preserve system columns - table ops block") {
+   test("preserve system columns - table ops block") {
     val tf = tableFinder(
       (0, "twocol") -> D(":id" -> TestNumber, ":version" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
     )
@@ -1026,7 +1026,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("preserve system columns - aggregating") {
+   test("preserve system columns - aggregating") {
     val tf = tableFinder(
       (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber)
     )
@@ -1040,7 +1040,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement.schema.find(_._2.name == cn(":id")) must not be empty
   }
 
-  test("preserve system columns - udf") {
+   test("preserve system columns - udf") {
     val tf = tableFinder(
       (0, "twocol") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber),
       (0, "udf") -> U(0, "select num from @twocol where text = ?t", "t" -> TestText),
@@ -1056,7 +1056,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement.schema.find(_._2.name == cn(":id")) must not be empty
   }
 
-  test("case expression gets rewritten to case function") {
+   test("case expression gets rewritten to case function") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withOrdering("text")
     )
@@ -1067,7 +1067,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement must be (isomorphicTo(analysis2.statement))
   }
 
-  test("cannot use OVER with count(distinct)") {
+   test("cannot use OVER with count(distinct)") {
     val tf = tableFinder(
       (0, "aaaa-aaaa") -> D("text" -> TestText, "num" -> TestNumber).withOrdering("text")
     )
@@ -1082,7 +1082,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("Can use @this on the RHS of a table op") {
+   test("Can use @this on the RHS of a table op") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "q") -> Q(0, "ds", "select text as t, num*2 as n"),
@@ -1097,7 +1097,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 
-  test("Can use nothing on the RHS of a table op") {
+   test("Can use nothing on the RHS of a table op") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "q") -> Q(0, "ds", "select text as t, num*2 as n"),
@@ -1112,7 +1112,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 
-  test("Can use @this on the LHS of a table op") {
+   test("Can use @this on the LHS of a table op") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "q") -> Q(0, "ds", "select text as t, num*2 as n"),
@@ -1127,7 +1127,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 
-  test("Can use nothing on the LHS of a table op") {
+   test("Can use nothing on the LHS of a table op") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "q") -> Q(0, "ds", "select text as t, num*2 as n"),
@@ -1142,7 +1142,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 
-  test("Must use the context _somewhere_ in a contextual table op") {
+   test("Must use the context _somewhere_ in a contextual table op") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "q") -> Q(0, "ds", "select text as t, num*2 as n"),
@@ -1153,7 +1153,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val Left(SoQLAnalyzerError.FromForbidden(_)) = analyzer(ft, UserParameters.empty)
   }
 
-  test("May refer to the parent by name") {
+   test("May refer to the parent by name") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber)
     )
@@ -1169,7 +1169,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("May not ignore the parent") {
+   test("May not ignore the parent") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "ds2") -> D("text" -> TestText, "num" -> TestNumber)
@@ -1179,7 +1179,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val Left(SoQLAnalyzerError.FromForbidden(_)) = analyzer(ft, UserParameters.empty)
   }
 
-  test("hints get piped through - originating in a table") {
+   test("hints get piped through - originating in a table") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber).withOutputColumnHints("num" -> j"true"),
       (0, "q") -> Q(0, "ds", "select num as a, num*2 as b"),
@@ -1192,7 +1192,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true"), None, None, None))
   }
 
-  test("hints directly on a table") {
+   test("hints directly on a table") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber).withOutputColumnHints("num" -> j"true")
     )
@@ -1203,7 +1203,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(None, Some(j"true")))
   }
 
-  test("hints get piped through - originating in a query") {
+   test("hints get piped through - originating in a query") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "q") -> Q(0, "ds", "select num as a, num*2 as b").withOutputColumnHints("b" -> j"true"),
@@ -1216,7 +1216,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(None, Some(j"true"), None, None))
   }
 
-  test("hints can be overridden") {
+   test("hints can be overridden") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber).withOutputColumnHints("num" -> j"true"),
       (0, "q") -> Q(0, "ds", "select num as a, num*2 as b").withOutputColumnHints("a" -> j"false"),
@@ -1229,7 +1229,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"false"), None, None, None))
   }
 
-  test("errors in anonymous soql have an anonymous source") {
+   test("errors in anonymous soql have an anonymous source") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "q") -> Q(0, "ds", "select num as a, num*2 as b")
@@ -1244,7 +1244,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("errors in saved soql referenced by anonymous soql have a saved source") {
+   test("errors in saved soql referenced by anonymous soql have a saved source") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "q") -> Q(0, "ds", "select not_found")
@@ -1259,7 +1259,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("errors in saved soql referenced by saved soql have a saved source") {
+   test("errors in saved soql referenced by saved soql have a saved source") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "q") -> Q(0, "ds", "select not_found"),
@@ -1275,7 +1275,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("errors in saved subselect soql referenced directly have a saved source") {
+   test("errors in saved subselect soql referenced directly have a saved source") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "q") -> Q(0, "ds", "select 1 join (select not_found from @single_row) as x on true")
@@ -1290,7 +1290,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("errors in a parameterless udf soql referenced directly have a saved source") {
+   test("errors in a parameterless udf soql referenced directly have a saved source") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "udf") -> U(0, "select not_found from @single_row"),
@@ -1306,7 +1306,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("errors in a parametered udf soql referenced directly have a saved source") {
+   test("errors in a parametered udf soql referenced directly have a saved source") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "udf") -> U(0, "select not_found from @single_row", "x" -> TestNumber),
@@ -1322,7 +1322,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("errors in a udf parameter have the right source") {
+   test("errors in a udf parameter have the right source") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "udf") -> U(0, "select ?x from @single_row", "x" -> TestNumber),
@@ -1338,7 +1338,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("errors on the left hand side of a a pipe have the right source") {
+   test("errors on the left hand side of a a pipe have the right source") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "q") -> Q(0, "ds", "select not_found |> select *")
@@ -1353,7 +1353,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("errors on the right hand side of a a pipe have the right source") {
+   test("errors on the right hand side of a a pipe have the right source") {
     val tf = tableFinder(
       (0, "ds") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "q") -> Q(0, "ds", "select * |> select not_found")
@@ -1368,7 +1368,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     }
   }
 
-  test("An ON clause can reference output columns which only include references to tables here or left of here") {
+   test("An ON clause can reference output columns which only include references to tables here or left of here") {
     val tf = tableFinder(
       (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "ds2") -> D("hello" -> TestText, "world" -> TestNumber),
@@ -1379,7 +1379,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val Right(_) = analyzer(ft, UserParameters.empty)
   }
 
-  test("An ON clause can NOT reference output columns which include references to tables right of here") {
+   test("An ON clause can NOT reference output columns which include references to tables right of here") {
     val tf = tableFinder(
       (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "ds2") -> D("hello" -> TestText, "world" -> TestNumber),
@@ -1391,7 +1391,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     badColName must equal(cn("t"))
   }
 
-  test("An explicit LATERAL on a UDF call is ignored if it's not required") {
+   test("An explicit LATERAL on a UDF call is ignored if it's not required") {
     val tf = tableFinder(
       (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "ds2") -> D("another_text" -> TestText, "another_num" -> TestNumber),
@@ -1407,7 +1407,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     from.lateral must be (false)
   }
 
-  test("An absent LATERAL on a UDF call is provided if it is required") {
+   test("An absent LATERAL on a UDF call is provided if it is required") {
     val tf = tableFinder(
       (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
       (0, "ds2") -> D("another_text" -> TestText, "another_num" -> TestNumber),
@@ -1423,7 +1423,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     from.lateral must be (true)
   }
 
-  test("Hidden columns get removed from primary-key sets during analysis") {
+   test("Hidden columns get removed from primary-key sets during analysis") {
     val tf = tableFinder(
       (0, "ds1") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withHiddenColumns("text").withPrimaryKey(":id").withPrimaryKey("text")
     )
@@ -1437,7 +1437,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     fromTable.primaryKeys must be (Seq(Seq(DatabaseColumnName(":id"))))
   }
 
-  test("base dataset wrapping query") {
+   test("base dataset wrapping query") {
     val tf1 = tableFinder(
       (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber).withWrappingQuery(0, "select * where num > 5")
     )
@@ -1451,6 +1451,74 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
     val Right(ft2) = tf2.findTables(0, rn("ds1"), "select * where num > 5 |> select text, num+num", Map.empty)
     val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+   test("a wrapping query can access a parameterized view's parameters") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds1", "select * where text = param('t')", "t" -> TestText)
+        .withWrappingQuery(0, "select * where num > 5 and param('t') = 'gnu'")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("q"), "select text, num+num", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters[TestType, TestValue](
+                                      Map(canon("q") -> Map(hn("t") -> UserParameters.Value(TestText("hello"))))
+                                    ))
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select * where text = 'hello' |> select * where num > 5 and 'hello' = 'gnu' |> select text, num + num", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+   test("a wrapping query can access a table function's parameters") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "ds2") -> D("text2" -> TestText, "num2" -> TestNumber),
+      (0, "u") -> U(0, "select * from @ds2 where text2 = ?t", "t" -> TestText)
+        .withWrappingQuery(0, "select * where num2 > 5 and ?t = 'gnu'")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "ds2") -> D("text2" -> TestText, "num2" -> TestNumber),
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"), "select *, @u.* from @this as @t join @u(text) on true", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(
+      0, rn("ds1"),
+      """select *, @u.*
+        |  from @this as @t
+        |  join lateral (
+        |    select @u.*
+        |      from @single_row
+        |      join lateral (
+        |        select @t.text as t
+        |          from @single_row
+        |      ) as @params
+        |      on true
+        |      join lateral (
+        |        select *
+        |          from @ds2
+        |          where text2 = @params.t
+        |        |>
+        |        select *
+        |          where num2 > 5 and @params.t = 'gnu'
+        |      ) as @u on true
+        |  ) as @u
+        |  on true""".stripMargin,
+      Map.empty
+    )
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+      .map(_.removeTrivialJoins(isLiteralTrue)) // need to get rid of the 'from @single_row`
 
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }

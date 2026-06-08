@@ -41,7 +41,7 @@ trait TableFinder[MT <: MetaTypes] {
 
   case class DatasetColumnInfo(name: ColumnName, typ: ColumnType, hidden: Boolean, hint: Option[JValue])
 
-  case class WrappingQuery(scope: ResourceNameScope, soql: String, parameters: Map[HoleName, ColumnType])
+  case class WrappingQuery(scope: ResourceNameScope, soql: String)
 
   /** A base dataset, or a saved query which is being analyzed opaquely. */
   case class Dataset(
@@ -227,7 +227,7 @@ trait TableFinder[MT <: MetaTypes] {
           parsedWrappingQuery <- wrappingQuery match {
             case None => Right(None)
             case Some(wq) => parse(None, wq.soql, false).map { parsed =>
-              Some(TableDescription.WrappingQuery[MT](wq.scope, parsed, wq.soql, wq.parameters))
+              Some(TableDescription.WrappingQuery[MT](wq.scope, parsed, wq.soql))
             }
           }
         } yield {
@@ -250,7 +250,7 @@ trait TableFinder[MT <: MetaTypes] {
           parsedWrappingQuery <- wrappingQuery match {
             case None => Right(None)
             case Some(wq) => parse(None, wq.soql, false).map { parsed =>
-              Some(TableDescription.WrappingQuery[MT](wq.scope, parsed, wq.soql, wq.parameters))
+              Some(TableDescription.WrappingQuery[MT](wq.scope, parsed, wq.soql))
             }
           }
         } yield {
@@ -262,7 +262,7 @@ trait TableFinder[MT <: MetaTypes] {
           parsedWrappingQuery <- wrappingQuery match {
             case None => Right(None)
             case Some(wq) => parse(None, wq.soql, true).map { parsed =>
-              Some(TableDescription.WrappingQuery[MT](wq.scope, parsed, wq.soql, wq.parameters))
+              Some(TableDescription.WrappingQuery[MT](wq.scope, parsed, wq.soql))
             }
           }
         } yield {
