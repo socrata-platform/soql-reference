@@ -276,7 +276,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       val withoutWrapper = if(desc.ordering.isEmpty) {
         val hiddenColumns: Set[DatabaseColumnName] =
           desc.schema.iterator.flatMap { case (databaseColumnName, FromTable.ColumnInfo(name, _, _)) =>
-            if(desc.hiddenColumns(name)) Some(databaseColumnName)
+            // if there is a wrapper, hidden columns will be handled at that point
+            if(desc.wrappingQuery.isEmpty && desc.hiddenColumns(name)) Some(databaseColumnName)
             else None
           }.toSet
 
@@ -344,7 +345,11 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case None =>
           withoutWrapper
         case Some(wq) =>
-          wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(srn), None, primaryTableName(srn), Environment.empty, Map.empty, Set.empty, Map.empty, true), wq.parsed, ImplicitFrom.Required(withoutWrapper, Some(srn.name))), withoutWrapper.label, srn)
+          val hiddenColumns = desc.columns.valuesIterator.flatMap { dci =>
+            if(dci.hidden) Set(dci.name)
+            else None
+          }.toSet
+          wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(srn), None, primaryTableName(srn), Environment.empty, Map.empty, hiddenColumns, Map.empty, true), wq.parsed, ImplicitFrom.Required(withoutWrapper, Some(srn.name))), withoutWrapper.label, srn)
       }
     }
 
@@ -386,12 +391,12 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             // so this is basedOn |> parsed |> wq
             // so we want to use "basedOn" as the implicit "from" for "parsed"
             val from = analyzeForFrom(toSource, ScopedResourceName(scope, basedOn), None, NoPosition /* Yes, actually NoPosition here */)
-            val middle = analyzeStatement(Ctx(scope, Source.Saved(name, _), Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, outputColumnHints, true), parsed, ImplicitFrom.Required(from, Some(basedOn)))
+            val middle = analyzeStatement(Ctx(scope, Source.Saved(name, _), Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, if(wq.isDefined) Set.empty else hiddenColumns, outputColumnHints, true), parsed, ImplicitFrom.Required(from, Some(basedOn)))
             wq match {
               case None =>
                 middle
               case Some(wq) =>
-                wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, Set.empty, Map.empty, true), wq.parsed, ImplicitFrom.Required(middle, Some(name.name))), middle.label, name)
+                wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, Map.empty, true), wq.parsed, ImplicitFrom.Required(middle, Some(name.name))), middle.label, name)
             }
           case TableDescription.TableFunction(_, _, _, _, _, _, _) =>
             parameterlessTableFunction(toSource(position), name.name)
@@ -1169,7 +1174,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 primaryTableName = primaryTableName(udfScope, parsed),
                 enclosingEnv = Environment.empty,
                 udfParams = innerUdfParams,
-                hiddenColumns = hiddenColumns,
+                hiddenColumns = if(wq.isDefined) Set.empty else hiddenColumns,
                 outputColumnHints = Map.empty,
                 attemptToPreserveSystemColumns = callerCtx.attemptToPreserveSystemColumns
               )
@@ -1179,7 +1184,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 case None =>
                   unwrappedUseQuery
                 case Some(wq) =>
-                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, innerUdfParams, Set.empty, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name))), unwrappedUseQuery.label, udfScopedResourceName)
+                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, innerUdfParams, hiddenColumns, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name))), unwrappedUseQuery.label, udfScopedResourceName)
               }
 
               FromStatement(
@@ -1222,7 +1227,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 primaryTableName = primaryTableName(udfScope, parsed),
                 enclosingEnv = Environment.empty,
                 udfParams = Map.empty,
-                hiddenColumns = hiddenColumns,
+                hiddenColumns = if(wq.isDefined) Set.empty else hiddenColumns,
                 outputColumnHints = Map.empty,
                 attemptToPreserveSystemColumns = callerCtx.attemptToPreserveSystemColumns
               )
@@ -1232,7 +1237,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 case None =>
                   unwrappedUseQuery
                 case Some(wq) =>
-                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, Map.empty, Set.empty, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name))), unwrappedUseQuery.label, udfScopedResourceName)
+                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, Map.empty, hiddenColumns, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name))), unwrappedUseQuery.label, udfScopedResourceName)
               }
           }
         case _ =>

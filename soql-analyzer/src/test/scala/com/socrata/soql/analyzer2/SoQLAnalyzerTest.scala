@@ -1518,7 +1518,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       Map.empty
     )
     val Right(analysis2) = analyzer(ft2, UserParameters.empty)
-      .map(_.removeTrivialJoins(isLiteralTrue)) // need to get rid of the 'from @single_row`
+      .map(_.removeTrivialJoins(isLiteralTrue)) // need to get rid of the first 'from @single_row`
 
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
@@ -1574,6 +1574,88 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val Right(ft2) = tf2.findTables(0, rn("ds1"), "select text, num * num as numsq order by numsq |> select * where text = 'hello' order by numsq", Map.empty)
     val Right(analysis2) = analyzer(ft2, UserParameters.empty)
 
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Hidden-column resolution on tables is deferred until after wrapping queries are generated") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+        .withHiddenColumns("text")
+        .withWrappingQuery(0, "select * where text = 'hello'")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"), "select * order by num", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select num where text = 'hello' |> select num order by num", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Hidden-column resolution on queries is deferred until after wrapping queries are generated") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds1", "select text, num * num as numsq order by text")
+        .withHiddenColumns("text")
+        .withWrappingQuery(0, "select * where text = 'hello'")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("q"), "select * order by numsq", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select text, num * num as numsq order by text |> select numsq where text = 'hello' order by text |> select numsq order by numsq", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Hidden-column resolution on UDFs is deferred until after wrapping queries are generated") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "ds2") -> D("text2" -> TestText, "num2" -> TestNumber),
+      (0, "u") -> U(0, "select text2, num2 * num2 as num2sq from @ds2 where text2 = ?t order by text2", "t" -> TestText)
+        .withHiddenColumns("text2")
+        .withWrappingQuery(0, "select text2, num2sq where num2sq > 5")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "ds2") -> D("text2" -> TestText, "num2" -> TestNumber),
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"), "select *, @u.* from @this as @t join @u(text) on true", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(
+      0, rn("ds1"),
+      """select
+        |  text, num, @u.num2sq
+        |  from
+        |    @this as @t
+        |    join lateral (
+        |      select @u.*
+        |      from @single_row
+        |      join lateral (
+        |        select @t.text as t from @single_row
+        |      ) as @params on true
+        |      join lateral (
+        |        select text2, num2 * num2 as num2sq from @ds2 where text2 = @params.t order by text2
+        |        |> select num2sq where num2sq > 5 order by text2
+        |      ) as @u on true
+        |    ) as @u on true""".stripMargin,
+      Map.empty
+    )
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+      .map(_.removeTrivialJoins(isLiteralTrue)) // need to get rid of the first `from @single_row`
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
 }
