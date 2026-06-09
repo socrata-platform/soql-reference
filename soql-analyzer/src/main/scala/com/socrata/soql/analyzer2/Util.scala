@@ -2,6 +2,7 @@ package com.socrata.soql.analyzer2
 
 import com.socrata.soql.ast
 import com.socrata.soql.environment.{ColumnName, ResourceName, ScopedResourceName, TableName}
+import com.socrata.soql.collection.{OrderedMap, OrderedSet}
 import com.socrata.soql.{BinaryTree, Leaf, Compound}
 
 import SoQLAnalyzerError.TypecheckError.NoSuchColumn
@@ -92,5 +93,31 @@ private[analyzer2] object Util {
         case Some(Right(b)) => Right(Some(b))
         case None => Right(None)
       }
+  }
+
+  def reorderSchema[MT <: MetaTypes](
+    currentSchema: OrderedMap[AutoColumnLabel, Statement.SchemaEntry[MT]],
+    targetSchema: Seq[(ColumnName, MT#ColumnType)]
+  ): Option[Seq[AutoColumnLabel]] = {
+    val labelsByName = currentSchema.iterator.map { case (label, ent) =>
+      (ent.name, (label, ent.typ))
+    }.toMap
+    if(targetSchema.size != labelsByName.size) return None
+
+    val desiredLabels = for {
+      (name, typ) <- targetSchema
+    } yield {
+      val (label, desiredTyp) = labelsByName.get(name).getOrElse {
+        return None
+      }
+
+      if(typ != desiredTyp) {
+        return None
+      }
+
+      label
+    }
+
+    Some(desiredLabels.toVector)
   }
 }

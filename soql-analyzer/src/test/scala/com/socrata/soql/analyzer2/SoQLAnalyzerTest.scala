@@ -1675,4 +1675,23 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         fail("Unexpected success")
     }
   }
+
+  test("Wrapper is rewritten to have the same order as the underlying query") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+        .withWrappingQuery(0, "select num, text")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"))
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select text, num", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
 }

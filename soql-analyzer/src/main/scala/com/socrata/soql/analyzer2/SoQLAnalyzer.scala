@@ -571,8 +571,11 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         )
       }
 
-      val combined = CombinedTables(opify(op), lhs, rhs)
-      checkRequiredSchema(ctx.scopedResourceName, combined, from0.requiredSchema)
+      val combinedPossiblyWrongOrder = CombinedTables(opify(op), lhs, rhs)
+      val combined = from0.requiredSchema match {
+        case None => combinedPossiblyWrongOrder
+        case Some(targetSchema) => combinedPossiblyWrongOrder.ensureSchema(labelProvider, targetSchema).getOrElse(wrappingQuerySchemaMismatch(ctx.scopedResourceName))
+      }
 
       val fromCombined = FromStatement(combined, labelProvider.tableLabel(), ctx.scopedResourceName, ctx.canonicalName, None)
       if(ctx.hiddenColumns.isEmpty) {
@@ -630,16 +633,12 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           Nil
       }
 
-    def checkRequiredSchema(srn: Option[ScopedResourceName], stmt: Statement, requiredSchema: Option[Seq[(ColumnName, CT)]]): Unit = {
-      for(rs <- requiredSchema) {
-        if(stmt.schema.valuesIterator.map { se => (se.name, se.typ) }.toSeq != rs) {
-          val source = srn match {
-            case Some(name) => Source.Saved(name, NoPosition)
-            case None => Source.Anonymous(NoPosition) // this shouldn't ever actually happen
-          }
-          throw Bail(Error.WrappingQuerySchemaMismatch(source))
-        }
+    def wrappingQuerySchemaMismatch(srn: Option[ScopedResourceName]): Nothing = {
+      val source = srn match {
+        case Some(name) => Source.Saved(name, NoPosition)
+        case None => Source.Anonymous(NoPosition) // this shouldn't ever actually happen
       }
+      throw Bail(Error.WrappingQuerySchemaMismatch(source))
     }
 
     def addSystemColumnsIfDesired(select: Select, attemptToPreserveSystemColumns: Boolean): Select =
@@ -808,7 +807,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         labelProvider.columnLabel() -> NamedExpr(expr, cn, ctx.outputColumnHints.get(cn), isSynthetic = false)
       }
 
-      val stmt = addSystemColumnsIfDesired(Select(
+      val stmtPossiblyWrongOrder = addSystemColumnsIfDesired(Select(
         checkedDistinct,
         selectList,
         completeFrom.typecheckOnClauses(ctx, finalState.referencableNamedExprs),
@@ -830,9 +829,12 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         }.toSet
       ), attemptToPreserveSystemColumns = ctx.attemptToPreserveSystemColumns)
 
-      verifyAggregatesAndWindowFunctions(ctx, stmt)
+      verifyAggregatesAndWindowFunctions(ctx, stmtPossiblyWrongOrder)
 
-      checkRequiredSchema(ctx.scopedResourceName, stmt, from0.requiredSchema)
+      val stmt = from0.requiredSchema match {
+        case None => stmtPossiblyWrongOrder
+        case Some(targetSchema) => stmtPossiblyWrongOrder.ensureSchema(labelProvider, targetSchema).getOrElse(wrappingQuerySchemaMismatch(ctx.scopedResourceName))
+      }
 
       if(ctx.hiddenColumns.isEmpty) {
         FromStatement(stmt, labelProvider.tableLabel(), ctx.scopedResourceName, ctx.canonicalName, None)

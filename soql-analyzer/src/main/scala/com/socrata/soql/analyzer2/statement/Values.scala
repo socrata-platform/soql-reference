@@ -7,7 +7,7 @@ import com.socrata.prettyprint.prelude._
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.{ColumnName, ResourceName}
+import com.socrata.soql.environment.{ColumnName, ResourceName, Source}
 import com.socrata.soql.functions.MonomorphicFunction
 
 import DocUtils._
@@ -152,6 +152,21 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
     values.foldLeft(Map.empty[AutoTableLabel, Set[ColumnLabel]]) { (acc, row) =>
       row.foldLeft(acc) { (acc, expr) => Util.mergeColumnSet(acc, expr.columnReferences) }
     }
+
+  private[analyzer2] override def ensureSchema(labelProvider: LabelProvider, targetSchema: Seq[(ColumnName, CT)]): Option[Statement[MT]] = {
+    for(ordering <- Util.reorderSchema(schema, targetSchema)) yield {
+      val myLabel = labelProvider.tableLabel()
+      Select(
+        Distinctiveness.Indistinct(),
+        OrderedMap() ++ ordering.iterator.map { sourceLabel =>
+          val sourceEnt = schema(sourceLabel)
+          labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](myLabel, sourceLabel, sourceEnt.typ)(new AtomicPositionInfo(Source.Synthetic)), sourceEnt.name, sourceEnt.hint, sourceEnt.isSynthetic)
+        },
+        FromStatement(this, myLabel, None, None, None),
+        None, Nil, None, Nil, None, None, None, Set.empty
+      )
+    }
+  }
 }
 
 trait OValuesImpl { this: Values.type =>
