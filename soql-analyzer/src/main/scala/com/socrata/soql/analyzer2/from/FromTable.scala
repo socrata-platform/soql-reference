@@ -59,19 +59,17 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
     that: From[MT],
     recurseStmt: (Statement[MT], IsomorphismState, Option[AutoTableLabel], Option[AutoTableLabel], Statement[MT]) => Boolean
   ): Boolean =
-    // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
       case FromTable(thatTableName, thatResourceName, thatCanonicalName, thatAlias, thatLabel, thatColumns, thatPrimaryKeys) =>
         this.tableName == thatTableName &&
           // don't care about aliases
-          state.tryAssociate(this.label, thatLabel) &&
-          this.columns.size == thatColumns.size &&
-          this.columns.iterator.zip(thatColumns.iterator).forall { case ((thisColName, thisEntry), (thatColName, thatEntry)) =>
-            thisColName == thatColName &&
-              thisEntry.typ == thatEntry.typ
-            // don't care about the entry's name.  Or hints?
-          } &&
-          this.primaryKeys.toSet == thatPrimaryKeys.toSet
+          state.tryAssociate(this.label, thatLabel)
+
+        // we're going to assume that if two tables have the same
+        // database name, then they are the same table.  That's what
+        // having the same database name _means_.  So we won't compare
+        // our schemas etc, because those depend on things like
+        // hidden-column resolution.
       case _ =>
         false
     }
@@ -81,6 +79,10 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
       case FromTable(thatTableName, thatResourceName, thatCanonicalName, thatAlias, thatLabel, thatColumns, thatPrimaryKeys) =>
         this.tableName == thatTableName &&
           state.tryAssociate(this.label, thatLabel) &&
+          // But we _will_ compare schemas for vertical-slice
+          // resolution, because here we're asking "can we use B to
+          // answer everything A could be used for", and that _does_
+          // depend on the presence of columns.
           this.columns.forall { case (thisColName, thisEntry) =>
             // We care about column database names and types, but not
             // human names.

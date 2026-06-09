@@ -1694,4 +1694,23 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
 
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
+
+  test("Wrapper is rewritten to have the same order as the underlying query, even in the presence of hidden columns") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("a" -> TestText, "b" -> TestNumber, "c" -> TestBoolean)
+        .withHiddenColumns("b")
+        .withWrappingQuery(0, "select c, b, a")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("a" -> TestText, "b" -> TestNumber, "c" -> TestBoolean)
+        .withHiddenColumns("b")
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"))
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select a, c", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+  }
 }
