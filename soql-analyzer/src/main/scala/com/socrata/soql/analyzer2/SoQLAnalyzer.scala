@@ -280,73 +280,66 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     }
 
     def fromTable(srn: ScopedResourceName, desc: TableDescription.Dataset[MT]): AtomicFrom = {
-      val withoutWrapper = if(desc.ordering.isEmpty) {
-        val hiddenColumns: Set[DatabaseColumnName] =
-          desc.schema.iterator.flatMap { case (databaseColumnName, FromTable.ColumnInfo(name, _, _)) =>
-            // if there is a wrapper, hidden columns will be handled at that point
-            if(desc.wrappingQuery.isEmpty && desc.hiddenColumns(name)) Some(databaseColumnName)
-            else None
-          }.toSet
+      val from = FromTable(
+        desc.name,
+        srn,
+        desc.canonicalName,
+        None,
+        labelProvider.tableLabel(),
+        columns = desc.schema,
+        primaryKeys = desc.primaryKeys
+      )
 
-        FromTable(
-          desc.name,
-          srn,
-          desc.canonicalName,
-          None,
-          labelProvider.tableLabel(),
-          columns = desc.schema.filter { case (databaseColumnName, _) => !hiddenColumns(databaseColumnName) },
-          primaryKeys = desc.primaryKeys.filter(_.forall(!hiddenColumns(_)))
-        )
-      } else {
-        for(TableDescription.Ordering(col, _ascending, _nullLast) <- desc.ordering) {
-          val typ = desc.schema(col).typ
-          if(!typeInfo.isOrdered(typ)) {
-            // should this be Synthetic instead of saved...?
-            throw Bail(SoQLAnalyzerError.TypecheckError.UnorderedOrderBy(Source.Saved(srn, NoPosition), typeInfo.typeNameFor(typ)))
-          }
+      for(TableDescription.Ordering(col, _ascending, _nullLast) <- desc.ordering) {
+        val typ = desc.schema(col).typ
+        if(!typeInfo.isOrdered(typ)) {
+          // should this be Synthetic instead of saved...?
+          throw Bail(SoQLAnalyzerError.TypecheckError.UnorderedOrderBy(Source.Saved(srn, NoPosition), typeInfo.typeNameFor(typ)))
         }
-
-        val from = FromTable(
-          desc.name,
-          srn,
-          desc.canonicalName,
-          None,
-          labelProvider.tableLabel(),
-          columns = desc.schema,
-          primaryKeys = desc.primaryKeys
-        )
-
-        val columnLabels = from.columns.map { case _ => labelProvider.columnLabel() }
-
-        FromStatement(
-          Select(
-            Distinctiveness.Indistinct(),
-            selectList = OrderedMap() ++ from.columns.iterator.zip(columnLabels.iterator).flatMap { case ((dcn, FromTable.ColumnInfo(name, typ, _hint)), outputLabel) =>
-              if(desc.hiddenColumns(name)) {
-                None
-              } else {
-                Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.Synthetic), name, hint = None, isSynthetic = false))
-              }
-            },
-            from,
-            None,
-            Nil,
-            None,
-            desc.ordering.map { case TableDescription.Ordering(dcn, ascending, nullLast) =>
-              val FromTable.ColumnInfo(_, typ, _) = from.columns(dcn)
-              OrderBy(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.Synthetic), ascending = ascending, nullLast = nullLast)
-            },
-            None,
-            None,
-            None,
-            Set.empty
-          ),
-          labelProvider.tableLabel(),
-          Some(srn),
-          Some(desc.canonicalName),
-          None
-        )
       }
+
+      val withoutWrapper =
+        if((desc.hiddenColumns.isEmpty || desc.wrappingQuery.isDefined) && desc.ordering.isEmpty) {
+          // No need to wrap the FromTable in a select to satisfy
+          // hidden or default sorts (if there's a wrapper query, it
+          // will be responsible for hiding the hidden columns)
+          from
+        } else {
+          val columnLabels = from.columns.map { case _ => labelProvider.columnLabel() }
+
+          FromStatement(
+            Select(
+              Distinctiveness.Indistinct(),
+              // remove hidden columns, unless there's a wrapping
+              // query (in which case they'll be removed at that
+              // layer)
+              selectList = OrderedMap() ++ from.columns.iterator.zip(columnLabels.iterator).flatMap { case ((dcn, FromTable.ColumnInfo(name, typ, _hint)), outputLabel) =>
+                if(desc.wrappingQuery.isEmpty && desc.hiddenColumns(name)) {
+                  None
+                } else {
+                  Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.Synthetic), name, hint = None, isSynthetic = false))
+                }
+              },
+              from,
+              None,
+              Nil,
+              None,
+              // apply default ordering
+              desc.ordering.map { case TableDescription.Ordering(dcn, ascending, nullLast) =>
+                val FromTable.ColumnInfo(_, typ, _) = from.columns(dcn)
+                OrderBy(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.Synthetic), ascending = ascending, nullLast = nullLast)
+              },
+              None,
+              None,
+              None,
+              Set.empty
+            ),
+            labelProvider.tableLabel(),
+            Some(srn),
+            Some(desc.canonicalName),
+            None
+          )
+        }
 
       desc.wrappingQuery match {
         case None =>

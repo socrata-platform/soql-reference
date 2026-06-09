@@ -838,9 +838,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis1 = analyzeSaved(tf1, "aaaa-aaaa")
 
     val tf2 = tableFinder(
-      (0, "aaaa-aaaa") -> D("n1" -> TestNumber)
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber)
     )
-    val analysis2 = analyzeSaved(tf2, "aaaa-aaaa")
+    val analysis2 = analyze(tf2, "aaaa-aaaa", "select n1", UserParameters.empty)
 
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
@@ -854,7 +854,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val tf2 = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber)
     )
-    val analysis2 = analyze(tf2, "aaaa-aaaa", "select n1 order by n2").merge(TestFunctions.And.monomorphic.get)
+    val analysis2 = analyze(tf2, "aaaa-aaaa", "select n1 order by n2")
 
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
@@ -1428,13 +1428,14 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       (0, "ds1") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withHiddenColumns("text").withPrimaryKey(":id").withPrimaryKey("text")
     )
 
-    val Right(ft) = tf.findTables(0, rn("ds1"), "select *", Map.empty)
+    val Right(ft) = tf.findTables(0, rn("ds1"))
     val Right(analysis) = analyzer(ft, UserParameters.empty)
+    val select = analysis.statement.asInstanceOf[Select[TestMT]] // wrapper query to remove the text column
 
-    val select = analysis.statement.asInstanceOf[Select[TestMT]]
-    val fromTable = select.from.asInstanceOf[FromTable[TestMT]]
+    select.from must be (a[FromTable[_]])
 
-    fromTable.primaryKeys must be (Seq(Seq(DatabaseColumnName(":id"))))
+    val Seq(Seq(idColumnLabel)) = select.unique
+    select.schema(idColumnLabel).name must be (cn(":id"))
   }
 
   test("base dataset wrapping query") {
