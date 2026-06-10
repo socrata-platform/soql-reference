@@ -102,6 +102,14 @@ trait TableFinder[MT <: MetaTypes] {
     // This is the topmost point in the callstack where the loop started
     def loopSource(canonicalName: CanonicalName): Option[Source[ResourceNameScope]]
   }
+
+  private sealed abstract class SelectName
+  private object SelectName {
+    case object Synthetic extends SelectName
+    case object Anonymous extends SelectName
+    case class Named(name: ScopedResourceName) extends SelectName
+  }
+
   private object CallerStack {
     case object Empty extends CallerStack {
       def callstackSet: Set[CanonicalName] = Set.empty
@@ -362,13 +370,6 @@ trait TableFinder[MT <: MetaTypes] {
           acc <- walkTree(scope, treeName, c.right, acc, stack)
         } yield acc
     }
-  }
-
-  sealed abstract class SelectName
-  object SelectName {
-    case object Synthetic extends SelectName
-    case object Anonymous extends SelectName
-    case class Named(name: ScopedResourceName) extends SelectName
   }
 
   private def walkSelect(scope: ResourceNameScope, selectName: SelectName, s: ast.Select, acc0: TableMap, stack: CallStack): Result[TableMap] = {
