@@ -126,6 +126,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     sealed abstract class ImplicitFrom {
       def optionalize(left: Boolean): ImplicitFrom
       def forced: Boolean
+      def requiredSchema: Option[Seq[(ColumnName, CT)]]
+      def withoutRequiredSchema: ImplicitFrom
     }
     object ImplicitFrom {
       // "none" means "there is no implicit FROM; the current soql
@@ -134,14 +136,17 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       case object None extends ImplicitFrom {
         def optionalize(left: Boolean) = this
         def forced = true
+        def requiredSchema = Option.empty
+        def withoutRequiredSchema = this
       }
       // "required" means "there is an implicit FROM; the current soql
       // query _must not_ provide one that queries something else, but
       // _may_ do "FROM @this AS @alias", or if the parent query was
       // named, "FROM @that-name [AS @alias]"
-      case class Required(from: AtomicFrom, named: Option[ResourceName]) extends ImplicitFrom {
+      case class Required(from: AtomicFrom, named: Option[ResourceName], requiredSchema: Option[Seq[(ColumnName, CT)]]) extends ImplicitFrom {
         def optionalize(left: Boolean) = new Optional(from, left)
         def forced = true
+        def withoutRequiredSchema = copy(requiredSchema = Option.empty)
       }
       // "optional" means "there is an implicit FROM, but it is not
       // required to be used in the current context; the current soql
@@ -174,21 +179,23 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         }
         def optionalize(newLeft: Boolean) = new Optional(underlying, leftmost && newLeft, forcedOnce)
         def forced = forcedOnce.get
+        def requiredSchema = Option.empty
+        def withoutRequiredSchema = this
       }
     }
 
     def analyze(scope: RNS, query: FoundTables.Query[MT]): Statement = {
-      val ctx = Ctx(scope, None, None, primaryTableName(scope, query), Environment.empty, Map.empty, Set.empty, Map.empty, preserveSystemColumnsRequested)
+      val ctx = Ctx(scope, Source.Anonymous(_), None, None, primaryTableName(scope, query), Environment.empty, Map.empty, Set.empty, Map.empty, preserveSystemColumnsRequested)
       val from =
         query match {
           case FoundTables.Saved(rn) =>
-            analyzeForFrom(ctx.scopedResourceName, ScopedResourceName(scope, rn), None, NoPosition)
+            analyzeForFrom(ctx.toSource, ScopedResourceName(scope, rn), None, NoPosition)
           case FoundTables.InContext(rn, q, _, parameters) =>
-            val from = analyzeForFrom(ctx.scopedResourceName, ScopedResourceName(scope, rn), None, NoPosition)
-            analyzeStatement(ctx, q, ImplicitFrom.Required(from, Some(rn)))
+            val from = analyzeForFrom(ctx.toSource, ScopedResourceName(scope, rn), None, NoPosition)
+            analyzeStatement(ctx, q, ImplicitFrom.Required(from, Some(rn), requiredSchema = None))
           case FoundTables.InContextImpersonatingSaved(rn, q, _, parameters, impersonating) =>
-            val from = analyzeForFrom(ctx.scopedResourceName, ScopedResourceName(scope, rn), None, NoPosition)
-            analyzeStatement(ctx.copy(canonicalName = Some(impersonating)), q, ImplicitFrom.Required(from, Some(rn)))
+            val from = analyzeForFrom(ctx.toSource, ScopedResourceName(scope, rn), None, NoPosition)
+            analyzeStatement(ctx.copy(canonicalName = Some(impersonating)), q, ImplicitFrom.Required(from, Some(rn), requiredSchema = None))
           case FoundTables.Standalone(q, _, parameters) =>
             analyzeStatement(ctx, q, ImplicitFrom.None)
         }
@@ -273,92 +280,126 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     }
 
     def fromTable(srn: ScopedResourceName, desc: TableDescription.Dataset[MT]): AtomicFrom = {
-      if(desc.ordering.isEmpty) {
-        val hiddenColumns: Set[DatabaseColumnName] =
-          desc.schema.iterator.flatMap { case (databaseColumnName, FromTable.ColumnInfo(name, _, _)) =>
-            if(desc.hiddenColumns(name)) Some(databaseColumnName)
-            else None
-          }.toSet
+      val from = FromTable(
+        desc.name,
+        srn,
+        desc.canonicalName,
+        None,
+        labelProvider.tableLabel(),
+        columns = desc.schema,
+        primaryKeys = desc.primaryKeys
+      )
 
-        FromTable(
-          desc.name,
-          srn,
-          desc.canonicalName,
-          None,
-          labelProvider.tableLabel(),
-          columns = desc.schema.filter { case (databaseColumnName, _) => !hiddenColumns(databaseColumnName) },
-          primaryKeys = desc.primaryKeys.filter(_.forall(!hiddenColumns(_)))
-        )
-      } else {
-        for(TableDescription.Ordering(col, _ascending, _nullLast) <- desc.ordering) {
-          val typ = desc.schema(col).typ
-          if(!typeInfo.isOrdered(typ)) {
-            // should this be Synthetic instead of saved...?
-            throw Bail(SoQLAnalyzerError.TypecheckError.UnorderedOrderBy(Source.Saved(srn, NoPosition), typeInfo.typeNameFor(typ)))
-          }
+      for(TableDescription.Ordering(col, _ascending, _nullLast) <- desc.ordering) {
+        val typ = desc.schema(col).typ
+        if(!typeInfo.isOrdered(typ)) {
+          // should this be Synthetic instead of saved...?
+          throw Bail(SoQLAnalyzerError.TypecheckError.UnorderedOrderBy(Source.Saved(srn, NoPosition), typeInfo.typeNameFor(typ)))
+        }
+      }
+
+      val withoutWrapper =
+        if((desc.hiddenColumns.isEmpty || desc.wrappingQuery.isDefined) && desc.ordering.isEmpty) {
+          // No need to wrap the FromTable in a select to satisfy
+          // hidden or default sorts (if there's a wrapper query, it
+          // will be responsible for hiding the hidden columns)
+          from
+        } else {
+          val columnLabels = from.columns.map { case _ => labelProvider.columnLabel() }
+
+          FromStatement(
+            Select(
+              Distinctiveness.Indistinct(),
+              // remove hidden columns, unless there's a wrapping
+              // query (in which case they'll be removed at that
+              // layer)
+              selectList = OrderedMap() ++ from.columns.iterator.zip(columnLabels.iterator).flatMap { case ((dcn, FromTable.ColumnInfo(name, typ, _hint)), outputLabel) =>
+                if(desc.wrappingQuery.isEmpty && desc.hiddenColumns(name)) {
+                  None
+                } else {
+                  Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.Synthetic), name, hint = None, isSynthetic = false))
+                }
+              },
+              from,
+              None,
+              Nil,
+              None,
+              // apply default ordering
+              desc.ordering.map { case TableDescription.Ordering(dcn, ascending, nullLast) =>
+                val FromTable.ColumnInfo(_, typ, _) = from.columns(dcn)
+                OrderBy(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.Synthetic), ascending = ascending, nullLast = nullLast)
+              },
+              None,
+              None,
+              None,
+              Set.empty
+            ),
+            labelProvider.tableLabel(),
+            Some(srn),
+            Some(desc.canonicalName),
+            None
+          )
         }
 
-        val from = FromTable(
-          desc.name,
-          srn,
-          desc.canonicalName,
-          None,
-          labelProvider.tableLabel(),
-          columns = desc.schema,
-          primaryKeys = desc.primaryKeys
-        )
-
-        val columnLabels = from.columns.map { case _ => labelProvider.columnLabel() }
-
-        FromStatement(
-          Select(
-            Distinctiveness.Indistinct(),
-            selectList = OrderedMap() ++ from.columns.iterator.zip(columnLabels.iterator).flatMap { case ((dcn, FromTable.ColumnInfo(name, typ, _hint)), outputLabel) =>
-              if(desc.hiddenColumns(name)) {
-                None
-              } else {
-                Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.Synthetic), name, hint = None, isSynthetic = false))
-              }
-            },
-            from,
-            None,
-            Nil,
-            None,
-            desc.ordering.map { case TableDescription.Ordering(dcn, ascending, nullLast) =>
-              val FromTable.ColumnInfo(_, typ, _) = from.columns(dcn)
-              OrderBy(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.Synthetic), ascending = ascending, nullLast = nullLast)
-            },
-            None,
-            None,
-            None,
-            Set.empty
-          ),
-          labelProvider.tableLabel(),
-          Some(srn),
-          Some(desc.canonicalName),
-          None
-        )
+      desc.wrappingQuery match {
+        case None =>
+          withoutWrapper
+        case Some(wq) =>
+          val hiddenColumns = desc.columns.valuesIterator.flatMap { dci =>
+            if(dci.hidden) Set(dci.name)
+            else None
+          }.toSet
+          wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(srn), None, primaryTableName(srn), Environment.empty, Map.empty, hiddenColumns, Map.empty, true), wq.parsed, ImplicitFrom.Required(withoutWrapper, Some(srn.name), requiredSchema = Some(schemaOf(withoutWrapper)))), withoutWrapper.label, srn)
       }
     }
 
-    def analyzeForFrom(source: Option[ScopedResourceName], name: ScopedResourceName, canonicalName: Option[CanonicalName], position: Position): AtomicFrom = {
+    def wrappedOrdering[F <: AtomicFrom](from: F, wrappedLabel: AutoTableLabel, activeResource: ScopedResourceName): F = {
+      from match {
+        case fs: FromStatement =>
+          // we want to stop when we leave the wrapped query - either
+          // when we reach the wrapped query, or when the wrapping
+          // query reaches some other resource.
+          //
+          // This isn't _completely_ ideal - if the wrapping query is
+          // complex, it will preserve ordering within the wrapping
+          // query where such preservation isn't necessary, but most
+          // wrapping queries are expected to be simple filters, so it
+          // should work.
+          def stop(otherFrom: FromStatement): Boolean = {
+            otherFrom.label == wrappedLabel || otherFrom.resourceName != Some(activeResource)
+          }
+
+          fs.copy(statement = rewrite.PreserveOrdering.bounded(labelProvider, fs.statement, stop))
+            .asInstanceOf[F] // ick.  Is there a better way to do this?  (this will work only as long as there are no subclasses of FromStatement)
+        case _ =>
+          from
+      }
+    }
+
+    def analyzeForFrom(toSource: Position => Source, name: ScopedResourceName, canonicalName: Option[CanonicalName], position: Position): AtomicFrom = {
       if(name.name == SoQLAnalyzer.SingleRow) {
         FromSingleRow(labelProvider.tableLabel(), None)
       } else if(name.name == SoQLAnalyzer.This) {
         // analyzeSelection will handle @this in the correct
         // position...
-        illegalThisReference(source, position)
+        illegalThisReference(toSource(position))
       } else {
         tableMap.find(name) match {
           case ds: TableDescription.Dataset[MT] =>
             fromTable(name, ds)
-          case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters, hiddenColumns, outputColumnHints) =>
-            // so this is basedOn |> parsed
+          case TableDescription.Query(scope, canonicalName, basedOn, parsed, _unparsed, parameters, hiddenColumns, outputColumnHints, wq) =>
+            // so this is basedOn |> parsed |> wq
             // so we want to use "basedOn" as the implicit "from" for "parsed"
-            val from = analyzeForFrom(source, ScopedResourceName(scope, basedOn), None, NoPosition /* Yes, actually NoPosition here */)
-            analyzeStatement(Ctx(scope, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, outputColumnHints, true), parsed, ImplicitFrom.Required(from, Some(basedOn)))
-          case TableDescription.TableFunction(_, _, _, _, _, _) =>
-            parameterlessTableFunction(source, name.name, position)
+            val from = analyzeForFrom(toSource, ScopedResourceName(scope, basedOn), None, NoPosition /* Yes, actually NoPosition here */)
+            val middle = analyzeStatement(Ctx(scope, Source.Saved(name, _), Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, if(wq.isDefined) Set.empty else hiddenColumns, outputColumnHints, true), parsed, ImplicitFrom.Required(from, Some(basedOn), requiredSchema = None))
+            wq match {
+              case None =>
+                middle
+              case Some(wq) =>
+                wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, Map.empty, true), wq.parsed, ImplicitFrom.Required(middle, Some(name.name), requiredSchema = Some(schemaOf(middle)))), middle.label, name)
+            }
+          case TableDescription.TableFunction(_, _, _, _, _, _, _) =>
+            parameterlessTableFunction(toSource(position), name.name)
         }
       }
     }
@@ -373,6 +414,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       // necessarily the same as the scope above if we're crossing a
       // scope boundary!  This is just used to decorate the typed trees
       // with source information.
+      toSource: Position => Source,
+      // This is used when decorating Froms with the resource name
       scopedResourceName: Option[ScopedResourceName],
       // The canonical name of the source of the soql currently being
       // analyzed.  This is used to look up unqualified user
@@ -384,7 +427,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       // column-names can be matched to input columns.
       enclosingEnv: Environment[MT],
       // Any UDF parameters available for the current soql.
-      udfParams: Map[HoleName, (Option[ScopedResourceName], Position) => Expr],
+      udfParams: Map[HoleName, Source => Expr],
       // What output columns generated by the current SoQL should be
       // marked as hidden.
       hiddenColumns: Set[ColumnName],
@@ -398,9 +441,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         throw Bail(e)
 
       def expectedBoolean(expr: ast.Expression, got: CT): Nothing =
-        error(Error.ExpectedBoolean(Source.nonSynthetic(scopedResourceName, expr.position), typeInfo.typeNameFor(got)))
+        error(Error.ExpectedBoolean(toSource(expr.position), typeInfo.typeNameFor(got)))
       def incorrectNumberOfParameters(forUdf: ResourceName, expected: Int, got: Int, position: Position): Nothing =
-        error(Error.IncorrectNumberOfUdfParameters(Source.nonSynthetic(scopedResourceName, position), forUdf, expected, got))
+        error(Error.IncorrectNumberOfUdfParameters(toSource(position), forUdf, expected, got))
       def distinctOnMustBePrefixOfOrderBy(source: Source): Nothing =
         error(Error.DistinctOnNotPrefixOfOrderBy(source))
       def orderByMustBeSelected(source: Source): Nothing =
@@ -410,30 +453,30 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       def unorderedOrderBy(typ: CT, source: Source): Nothing =
         error(Error.TypecheckError.UnorderedOrderBy(source, typeInfo.typeNameFor(typ)))
       def parametersForNonUdf(name: ResourceName, position: Position): Nothing =
-        error(Error.ParametersForNonUDF(Source.nonSynthetic(scopedResourceName, position), name))
+        error(Error.ParametersForNonUDF(toSource(position), name))
       def addScopeError(e: AddScopeError, position: Position): Nothing =
         e match {
           case AddScopeError.NameExists(n) =>
-            error(Error.TableAliasAlreadyExists(Source.nonSynthetic(scopedResourceName, position), n))
+            error(Error.TableAliasAlreadyExists(toSource(position), n))
           case AddScopeError.MultipleImplicit =>
             // This shouldn't be able to occur from user input - the
             // grammar disallows it.
             throw new Exception("Multiple implicit tables??")
         }
       def noDataSource(position: Position): Nothing =
-        error(Error.FromRequired(Source.nonSynthetic(scopedResourceName, position)))
+        error(Error.FromRequired(toSource(position)))
       def chainWithFrom(position: Position): Nothing =
-        error(Error.FromForbidden(Source.nonSynthetic(scopedResourceName, position)))
+        error(Error.FromForbidden(toSource(position)))
       def fromThisWithoutContext(position: Position): Nothing =
-        error(Error.FromThisWithoutContext(Source.nonSynthetic(scopedResourceName, position)))
+        error(Error.FromThisWithoutContext(toSource(position)))
       def tableOpTypeMismatch(left: OrderedMap[ColumnName, CT], right: OrderedMap[ColumnName, CT], position: Position): Nothing =
-        error(Error.TableOperationTypeMismatch(Source.nonSynthetic(scopedResourceName, position), left.valuesIterator.map(typeInfo.typeNameFor).toVector, right.valuesIterator.map(typeInfo.typeNameFor).toVector))
+        error(Error.TableOperationTypeMismatch(toSource(position), left.valuesIterator.map(typeInfo.typeNameFor).toVector, right.valuesIterator.map(typeInfo.typeNameFor).toVector))
       def literalNotAllowedInGroupBy(pos: Position): Nothing =
-        error(Error.LiteralNotAllowedInGroupBy(Source.nonSynthetic(scopedResourceName, pos)))
+        error(Error.LiteralNotAllowedInGroupBy(toSource(pos)))
       def literalNotAllowedInOrderBy(pos: Position): Nothing =
-        error(Error.LiteralNotAllowedInOrderBy(Source.nonSynthetic(scopedResourceName, pos)))
+        error(Error.LiteralNotAllowedInOrderBy(toSource(pos)))
       def literalNotAllowedInDistinctOn(pos: Position): Nothing =
-        error(Error.LiteralNotAllowedInDistinctOn(Source.nonSynthetic(scopedResourceName, pos)))
+        error(Error.LiteralNotAllowedInDistinctOn(toSource(pos)))
       def aggregateFunctionNotAllowed(name: FunctionName, source: Source): Nothing =
         error(Error.AggregateFunctionNotAllowed(source, name))
       def ungroupedColumnReference(source: Source): Nothing =
@@ -441,20 +484,20 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       def windowFunctionNotAllowed(name: FunctionName, source: Source): Nothing =
         error(Error.WindowFunctionNotAllowed(source, name))
       def reservedTableName(name: ResourceName, pos: Position): Nothing =
-        error(Error.ReservedTableName(Source.nonSynthetic(scopedResourceName, pos), name))
+        error(Error.ReservedTableName(toSource(pos), name))
       def augmentAliasAnalysisException(aae: AliasAnalysisException): Nothing = {
         import com.socrata.soql.{exceptions => SE}
 
         aae match {
           case SE.RepeatedException(name, pos) =>
-            error(Error.AliasAnalysisError.RepeatedExclusion(Source.nonSynthetic(scopedResourceName, pos), name))
+            error(Error.AliasAnalysisError.RepeatedExclusion(toSource(pos), name))
           case SE.CircularAliasDefinition(name, pos) =>
-            error(Error.AliasAnalysisError.CircularAliasDefinition(Source.nonSynthetic(scopedResourceName, pos), name))
+            error(Error.AliasAnalysisError.CircularAliasDefinition(toSource(pos), name))
           case SE.DuplicateAlias(name, pos) =>
-            error(Error.AliasAnalysisError.DuplicateAlias(Source.nonSynthetic(scopedResourceName, pos), name))
+            error(Error.AliasAnalysisError.DuplicateAlias(toSource(pos), name))
           case nsc@SE.NoSuchColumn(name, pos) =>
             val qual = nsc.asInstanceOf[SE.NoSuchColumn.RealNoSuchColumn].qualifier.map(_.substring(1)).map(ResourceName(_)) // ew
-            error(Error.TypecheckError.NoSuchColumn(Source.nonSynthetic(scopedResourceName, pos), qual, name, Util.possibilitiesFor(enclosingEnv, Iterator.empty, qual, name)))
+            error(Error.TypecheckError.NoSuchColumn(toSource(pos), qual, name, Util.possibilitiesFor(enclosingEnv, Iterator.empty, qual, name)))
           case SE.NoSuchTable(_, _) =>
             throw new Exception("Alias analysis doesn't actually throw NoSuchTable")
         }
@@ -470,6 +513,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             analyzeStatement(
               Ctx(
                 scope = ctx.scope,
+                toSource = ctx.toSource,
                 scopedResourceName = ctx.scopedResourceName,
                 canonicalName = ctx.canonicalName,
                 primaryTableName = ctx.primaryTableName,
@@ -479,9 +523,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 outputColumnHints = Map.empty,
                 attemptToPreserveSystemColumns = preserveSystemColumnsRequested
               ),
-              left, from0
+              left, from0.withoutRequiredSchema
             )
-          analyzeStatement(ctx, right, ImplicitFrom.Required(analyzedLeft, None))
+          analyzeStatement(ctx, right, ImplicitFrom.Required(analyzedLeft, None, from0.requiredSchema))
         case other: TrueOp[ast.Select] =>
           analyzeTableOp(ctx, other, from0)
       }
@@ -491,8 +535,9 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       val subCtx =
         Ctx(
           scope = ctx.scope,
-          scopedResourceName = None,
-          canonicalName = None,
+          toSource = ctx.toSource,
+          scopedResourceName = ctx.scopedResourceName,
+          canonicalName = ctx.canonicalName,
           primaryTableName = ctx.primaryTableName,
           enclosingEnv = ctx.enclosingEnv,
           udfParams = ctx.udfParams,
@@ -519,7 +564,12 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         )
       }
 
-      val combined = CombinedTables(opify(op), lhs, rhs)
+      val combinedPossiblyWrongOrder = CombinedTables(opify(op), lhs, rhs)
+      val combined = from0.requiredSchema match {
+        case None => combinedPossiblyWrongOrder
+        case Some(targetSchema) => combinedPossiblyWrongOrder.ensureSchema(labelProvider, targetSchema).getOrElse(wrappingQuerySchemaMismatch(ctx.scopedResourceName))
+      }
+
       val fromCombined = FromStatement(combined, labelProvider.tableLabel(), ctx.scopedResourceName, ctx.canonicalName, None)
       if(ctx.hiddenColumns.isEmpty) {
         fromCombined
@@ -576,6 +626,13 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
           Nil
       }
 
+    def wrappingQuerySchemaMismatch(srn: Option[ScopedResourceName]): Nothing = {
+      val source = srn match {
+        case Some(name) => Source.Saved(name, NoPosition)
+        case None => Source.Anonymous(NoPosition) // this shouldn't ever actually happen
+      }
+      throw Bail(Error.WrappingQuerySchemaMismatch(source))
+    }
 
     def addSystemColumnsIfDesired(select: Select, attemptToPreserveSystemColumns: Boolean): Select =
       aggregateMerge match {
@@ -743,7 +800,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         labelProvider.columnLabel() -> NamedExpr(expr, cn, ctx.outputColumnHints.get(cn), isSynthetic = false)
       }
 
-      val stmt = addSystemColumnsIfDesired(Select(
+      val stmtPossiblyWrongOrder = addSystemColumnsIfDesired(Select(
         checkedDistinct,
         selectList,
         completeFrom.typecheckOnClauses(ctx, finalState.referencableNamedExprs),
@@ -765,7 +822,12 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         }.toSet
       ), attemptToPreserveSystemColumns = ctx.attemptToPreserveSystemColumns)
 
-      verifyAggregatesAndWindowFunctions(ctx, stmt)
+      verifyAggregatesAndWindowFunctions(ctx, stmtPossiblyWrongOrder)
+
+      val stmt = from0.requiredSchema match {
+        case None => stmtPossiblyWrongOrder
+        case Some(targetSchema) => stmtPossiblyWrongOrder.ensureSchema(labelProvider, targetSchema).getOrElse(wrappingQuerySchemaMismatch(ctx.scopedResourceName))
+      }
 
       if(ctx.hiddenColumns.isEmpty) {
         FromStatement(stmt, labelProvider.tableLabel(), ctx.scopedResourceName, ctx.canonicalName, None)
@@ -940,7 +1002,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       // analyzer wants from right to left.
 
       def fromNamedTable(rn: ResourceName, alias: ResourceName) = {
-        analyzeForFrom(ctx.scopedResourceName, ScopedResourceName(ctx.scope, rn), ctx.canonicalName, NoPosition /* TODO: NEED POS INFO FROM AST */).
+        analyzeForFrom(ctx.toSource, ScopedResourceName(ctx.scope, rn), ctx.canonicalName, NoPosition /* TODO: NEED POS INFO FROM AST */).
           reAlias(Some(alias))
       }
 
@@ -948,7 +1010,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case (ImplicitFrom.None, None) =>
           // No required context and no from given; this is an error
           ctx.noDataSource(NoPosition /* TODO: NEED POS INFO FROM AST */)
-        case (ImplicitFrom.Required(prev, maybeName), Some(tn)) =>
+        case (ImplicitFrom.Required(prev, maybeName, _), Some(tn)) =>
           tn.aliasWithoutPrefix.foreach(ensureLegalAlias(ctx, _, NoPosition /* TODO: NEED POS INFO FROM AST */))
           val rn = ResourceName(tn.nameWithoutPrefix)
           if(rn == SoQLAnalyzer.This || Some(rn) == maybeName) {
@@ -984,7 +1046,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             // n.b., sometable may actually be a query
             fromNamedTable(rn, alias)
           }
-        case (ImplicitFrom.Required(input, _), None) =>
+        case (ImplicitFrom.Required(input, _, _), None) =>
           // chained query: {something} |> {the thing we're analyzing}
           input.reAlias(None)
         case (opt: ImplicitFrom.Optional, None) =>
@@ -1055,14 +1117,15 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       js match {
         case ast.JoinTable(tn) =>
           tn.aliasWithoutPrefix.foreach(ensureLegalAlias(ctx, _, NoPosition /* TODO: NEED POS INFO FROM AST */))
-          analyzeForFrom(ctx.scopedResourceName, ScopedResourceName(ctx.scope, ResourceName(tn.nameWithoutPrefix)), ctx.canonicalName, NoPosition /* TODO: NEED POS INFO FROM AST */).
+          analyzeForFrom(ctx.toSource, ScopedResourceName(ctx.scope, ResourceName(tn.nameWithoutPrefix)), ctx.canonicalName, NoPosition /* TODO: NEED POS INFO FROM AST */).
             reAlias(Some(ResourceName(tn.aliasWithoutPrefix.getOrElse(tn.nameWithoutPrefix))))
         case ast.JoinQuery(select, rawAlias) =>
           val alias = rawAlias.substring(1)
           ensureLegalAlias(ctx, alias, NoPosition /* TODO: NEED POS INFO FROM AST */)
           val subCtx = Ctx(
             scope = ctx.scope,
-            scopedResourceName = ctx.scopedResourceName, // still in the same source-code context...
+            toSource = ctx.toSource, // still in the same source-code context...
+            scopedResourceName = ctx.scopedResourceName,
             canonicalName = ctx.canonicalName,
             primaryTableName = primaryTableName(ctx.scope, select),
             enclosingEnv = ctx.enclosingEnv,
@@ -1089,14 +1152,14 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
     def analyzeUDF(callerCtx: Ctx, resource: ResourceName, params: Seq[ast.Expression]): AtomicFrom = {
       val udfScopedResourceName = ScopedResourceName(callerCtx.scope, resource)
       tableMap.find(udfScopedResourceName) match {
-        case TableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs, hiddenColumns) =>
+        case TableDescription.TableFunction(udfScope, udfCanonicalName, parsed, _unparsed, paramSpecs, hiddenColumns, wq) =>
           if(params.length != paramSpecs.size) {
             callerCtx.incorrectNumberOfParameters(resource, expected = paramSpecs.size, got = params.length, position = NoPosition /* TODO: NEED POS INFO FROM AST */)
           }
           // we're rewriting the UDF from
           //    @bleh(x, y, z)
           // to
-          //    select * from (values (x,y,z)) join lateral (udfexpansion) on true
+          //    select * from (values (x,y,z)) join lateral (udfexpansion |> wq) on true
           // Possibly we'll want a rewrite pass that inlines constants and
           // maybe simple column references into the udf expansion,
 
@@ -1117,22 +1180,29 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               val outOfLineParamsLabel = labelProvider.tableLabel()
               val innerUdfParams =
                 outOfLineParamsQuery.schema.keys.lazyZip(typecheckedParams).map { case (colLabel, (name, expr)) =>
-                  name -> { (sourceName: Option[ScopedResourceName], p: Position) => VirtualColumn(outOfLineParamsLabel, colLabel, expr.typ)(new AtomicPositionInfo(Source.nonSynthetic(sourceName, p))) }
+                  name -> { (source: Source) => VirtualColumn(outOfLineParamsLabel, colLabel, expr.typ)(new AtomicPositionInfo(source)) }
                 }.toMap
 
               val udfCtx = Ctx(
                 scope = udfScope,
+                toSource = Source.Saved(udfScopedResourceName, _),
                 scopedResourceName = Some(udfScopedResourceName),
                 canonicalName = Some(udfCanonicalName),
                 primaryTableName = primaryTableName(udfScope, parsed),
                 enclosingEnv = Environment.empty,
                 udfParams = innerUdfParams,
-                hiddenColumns = hiddenColumns,
+                hiddenColumns = if(wq.isDefined) Set.empty else hiddenColumns,
                 outputColumnHints = Map.empty,
                 attemptToPreserveSystemColumns = callerCtx.attemptToPreserveSystemColumns
               )
 
-              val useQuery = analyzeStatement(udfCtx, parsed, ImplicitFrom.None)
+              val unwrappedUseQuery = analyzeStatement(udfCtx, parsed, ImplicitFrom.None)
+              val useQuery = wq match {
+                case None =>
+                  unwrappedUseQuery
+                case Some(wq) =>
+                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, innerUdfParams, hiddenColumns, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name), requiredSchema = Some(schemaOf(unwrappedUseQuery)))), unwrappedUseQuery.label, udfScopedResourceName)
+              }
 
               FromStatement(
                 Select(
@@ -1168,17 +1238,24 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               // additional joining.
               val udfCtx = Ctx(
                 scope = udfScope,
+                toSource = Source.Saved(udfScopedResourceName, _),
                 scopedResourceName = Some(udfScopedResourceName),
                 canonicalName = Some(udfCanonicalName),
                 primaryTableName = primaryTableName(udfScope, parsed),
                 enclosingEnv = Environment.empty,
                 udfParams = Map.empty,
-                hiddenColumns = hiddenColumns,
+                hiddenColumns = if(wq.isDefined) Set.empty else hiddenColumns,
                 outputColumnHints = Map.empty,
                 attemptToPreserveSystemColumns = callerCtx.attemptToPreserveSystemColumns
               )
 
-              analyzeStatement(udfCtx, parsed, ImplicitFrom.None)
+              val unwrappedUseQuery = analyzeStatement(udfCtx, parsed, ImplicitFrom.None)
+              wq match {
+                case None =>
+                  unwrappedUseQuery
+                case Some(wq) =>
+                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, Map.empty, hiddenColumns, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name), requiredSchema = Some(schemaOf(unwrappedUseQuery)))), unwrappedUseQuery.label, udfScopedResourceName)
+              }
           }
         case _ =>
           // Non-UDF
@@ -1186,13 +1263,18 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       }
     }
 
+    def schemaOf(from: From): Seq[(ColumnName, CT)] =
+      from.schema.iterator.map { case se =>
+        se.name -> se.typ
+      }.toSeq
+
     def typecheck(
       ctx: Ctx,
       expr: ast.Expression,
       namedExprs: Map[ColumnName, Expr],
       expectedType: Option[CT]
     ): Expr = {
-      val tc = new Typechecker(ctx.scopedResourceName, ctx.canonicalName, ctx.primaryTableName, ctx.enclosingEnv, namedExprs, ctx.udfParams, userParameters, typeInfo, functionInfo)
+      val tc = new Typechecker(ctx.toSource, ctx.canonicalName, ctx.primaryTableName, ctx.enclosingEnv, namedExprs, ctx.udfParams, userParameters, typeInfo, functionInfo)
       tc(expr, expectedType) match {
         case Right(e) => e
         case Left(err) => augmentTypecheckException(err)
@@ -1253,8 +1335,8 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
       throw Bail(tce)
   }
 
-  def illegalThisReference(source: Option[ScopedResourceName], position: Position): Nothing =
-    throw Bail(Error.IllegalThisReference(Source.nonSynthetic(source, position)))
-  def parameterlessTableFunction(source: Option[ScopedResourceName], name: ResourceName, position: Position): Nothing =
-    throw Bail(Error.ParameterlessTableFunction(Source.nonSynthetic(source, position), name))
+  def illegalThisReference(source: Source): Nothing =
+    throw Bail(Error.IllegalThisReference(source))
+  def parameterlessTableFunction(source: Source, name: ResourceName): Nothing =
+    throw Bail(Error.ParameterlessTableFunction(source, name))
 }

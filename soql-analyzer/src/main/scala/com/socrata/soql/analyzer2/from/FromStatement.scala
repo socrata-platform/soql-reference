@@ -19,8 +19,8 @@ trait FromStatementImpl[MT <: MetaTypes] { this: FromStatement[MT] =>
 
   lazy val referencedCTEs = statement.referencedCTEs
 
-  def schema = statement.schema.map { case (acl, Statement.SchemaEntry(_, typ, hint, isSynthetic)) =>
-    From.SchemaEntry(label, acl, typ, hint, isSynthetic = isSynthetic)
+  def schema = statement.schema.map { case (acl, Statement.SchemaEntry(name, typ, hint, isSynthetic)) =>
+    From.SchemaEntry(label, acl, name, typ, hint, isSynthetic = isSynthetic)
   }.toVector
 
   private[analyzer2] val scope: Scope[MT] = new Scope.Virtual[MT](label, statement.schema.withValuesMapped(_.asNameEntry))

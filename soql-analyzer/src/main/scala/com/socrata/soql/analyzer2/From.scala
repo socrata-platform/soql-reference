@@ -9,7 +9,7 @@ import com.rojoma.json.v3.ast.JValue
 import com.socrata.prettyprint.prelude._
 
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.ResourceName
+import com.socrata.soql.environment.{ResourceName, ColumnName}
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.analyzer2
@@ -153,6 +153,7 @@ object From {
   case class SchemaEntry[MT <: MetaTypes](
     table: AutoTableLabel,
     column: types.ColumnLabel[MT],
+    name: ColumnName,
     typ: types.ColumnType[MT],
     hint: Option[JValue],
     isSynthetic: Boolean

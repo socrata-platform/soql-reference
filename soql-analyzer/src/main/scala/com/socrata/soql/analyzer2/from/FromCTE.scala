@@ -26,7 +26,7 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
 
   lazy val schema = basedOn.schema.iterator.map { case (columnLabel, ent) =>
     From.SchemaEntry(
-      label, columnLabel, ent.typ, ent.hint,
+      label, columnLabel, ent.name, ent.typ, ent.hint,
       ent.isSynthetic
     )
   }.toVector

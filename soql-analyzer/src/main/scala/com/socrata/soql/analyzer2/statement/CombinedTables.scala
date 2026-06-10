@@ -7,7 +7,7 @@ import com.socrata.prettyprint.prelude._
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.ResourceName
+import com.socrata.soql.environment.{ResourceName, ColumnName}
 import com.socrata.soql.functions.MonomorphicFunction
 
 import DocUtils._
@@ -153,6 +153,15 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
 
   override def nonlocalColumnReferences =
     Util.mergeColumnSet(left.nonlocalColumnReferences, right.nonlocalColumnReferences)
+
+  private[analyzer2] override def ensureSchema(labelProvider: LabelProvider, schema: Seq[(ColumnName, CT)]): Option[Self[MT]] = {
+    for {
+      newLeft <- left.ensureSchema(labelProvider, schema)
+      newRight <- right.ensureSchema(labelProvider, schema)
+    } yield {
+      CombinedTables(op, newLeft, newRight)
+    }
+  }
 }
 
 trait OCombinedTablesImpl { this: CombinedTables.type =>

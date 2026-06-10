@@ -22,9 +22,9 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
   def find(predicate: Expr[MT] => Boolean) = None
   def contains(e: Expr[MT]): Boolean = false
 
-  def schema = columns.iterator.map { case (dcn, FromTable.ColumnInfo(_, typ, hint)) =>
+  def schema = columns.iterator.map { case (dcn, FromTable.ColumnInfo(name, typ, hint)) =>
     From.SchemaEntry(
-      label, dcn, typ, hint,
+      label, dcn, name, typ, hint,
       isSynthetic = false // table columns are never synthetic
     )
   }.toVector
@@ -59,19 +59,22 @@ trait FromTableImpl[MT <: MetaTypes] { this: FromTable[MT] =>
     that: From[MT],
     recurseStmt: (Statement[MT], IsomorphismState, Option[AutoTableLabel], Option[AutoTableLabel], Statement[MT]) => Boolean
   ): Boolean =
-    // TODO: make this constant-stack if it ever gets used outside of tests
     that match {
       case FromTable(thatTableName, thatResourceName, thatCanonicalName, thatAlias, thatLabel, thatColumns, thatPrimaryKeys) =>
         this.tableName == thatTableName &&
-          // don't care about aliases
-          state.tryAssociate(this.label, thatLabel) &&
           this.columns.size == thatColumns.size &&
           this.columns.iterator.zip(thatColumns.iterator).forall { case ((thisColName, thisEntry), (thatColName, thatEntry)) =>
             thisColName == thatColName &&
               thisEntry.typ == thatEntry.typ
             // don't care about the entry's name.  Or hints?
-          } &&
-          this.primaryKeys.toSet == thatPrimaryKeys.toSet
+          }
+          state.tryAssociate(this.label, thatLabel)
+
+        // we're going to assume that if two tables have the same
+        // database name, then they are the same table.  That's what
+        // having the same database name _means_.  So we won't compare
+        // our schemas etc, because those depend on things like
+        // hidden-column resolution.
       case _ =>
         false
     }

@@ -41,30 +41,20 @@ trait TableFinder[MT <: MetaTypes] {
 
   case class DatasetColumnInfo(name: ColumnName, typ: ColumnType, hidden: Boolean, hint: Option[JValue])
 
+  case class WrappingQuery(scope: ResourceNameScope, soql: String)
+
   /** A base dataset, or a saved query which is being analyzed opaquely. */
   case class Dataset(
     databaseName: types.DatabaseTableName[MT],
     canonicalName: CanonicalName,
     schema: OrderedMap[types.DatabaseColumnName[MT], DatasetColumnInfo],
     ordering: Seq[Ordering],
-    primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]]
+    primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]],
+    wrappingQuery: Option[WrappingQuery]
   ) extends FinderTableDescription {
     require(schema.valuesIterator.map(_.name).toSet.size == schema.size)
     require(ordering.forall { ordering => schema.contains(ordering.column) })
     require(primaryKeys.forall { pk => pk.forall { pkCol => schema.contains(pkCol) } })
-
-    private[analyzer2] def toParsed =
-      TableDescription.Dataset[MT](
-        databaseName,
-        canonicalName,
-        schema.map { case (cl, DatasetColumnInfo(cn, ct, hidden, hint)) =>
-          cl -> TableDescription.DatasetColumnInfo(cn, ct, hidden, hint)
-        },
-        ordering.map { case Ordering(column, ascending, nullLast) =>
-          TableDescription.Ordering(column, ascending, nullLast)
-        },
-        primaryKeys
-      )
   }
   /** A saved query, with any parameters it (non-transitively!) defines. */
   case class Query(
@@ -74,7 +64,8 @@ trait TableFinder[MT <: MetaTypes] {
     soql: String,
     parameters: Map[HoleName, ColumnType],
     hiddenColumns: Set[ColumnName],
-    outputColumnHints: Map[ColumnName, JValue]
+    outputColumnHints: Map[ColumnName, JValue],
+    wrappingQuery: Option[WrappingQuery]
   ) extends FinderTableDescription {
   }
   /** A saved table query ("UDF"), with any parameters it defines for itself. */
@@ -83,7 +74,8 @@ trait TableFinder[MT <: MetaTypes] {
     canonicalName: CanonicalName,
     soql: String,
     parameters: OrderedMap[HoleName, ColumnType],
-    hiddenColumns: Set[ColumnName]
+    hiddenColumns: Set[ColumnName],
+    wrappingQuery: Option[WrappingQuery]
   ) extends FinderTableDescription
 
   type ScopedResourceName = com.socrata.soql.environment.ScopedResourceName[ResourceNameScope]
@@ -228,18 +220,65 @@ trait TableFinder[MT <: MetaTypes] {
     }
   }
 
+  private[analyzer2] def convertToTableDescription(scopedName: ScopedResourceName, ftd: FinderTableDescription): Result[TableDescription[MT]] = {
+    ftd match {
+      case Dataset(databaseName, canonicalName, schema, ordering, primaryKeys, wrappingQuery) =>
+        for {
+          parsedWrappingQuery <- wrappingQuery match {
+            case None => Right(None)
+            case Some(wq) => parse(None, wq.soql, false).map { parsed =>
+              Some(TableDescription.WrappingQuery[MT](wq.scope, parsed, wq.soql))
+            }
+          }
+        } yield {
+          TableDescription.Dataset[MT](
+            databaseName,
+            canonicalName,
+            schema.map { case (cl, DatasetColumnInfo(cn, ct, hidden, hint)) =>
+              cl -> TableDescription.DatasetColumnInfo(cn, ct, hidden, hint)
+            },
+            ordering.map { case Ordering(column, ascending, nullLast) =>
+              TableDescription.Ordering(column, ascending, nullLast)
+            },
+            primaryKeys,
+            parsedWrappingQuery
+          )
+        }
+      case Query(scope, canonicalName, basedOn, text, params, hiddenColumns, outputColumnHints, wrappingQuery) =>
+        for {
+          parsedQuery <- parse(Some(scopedName), text, false)
+          parsedWrappingQuery <- wrappingQuery match {
+            case None => Right(None)
+            case Some(wq) => parse(None, wq.soql, false).map { parsed =>
+              Some(TableDescription.WrappingQuery[MT](wq.scope, parsed, wq.soql))
+            }
+          }
+        } yield {
+          TableDescription.Query[MT](scope, canonicalName, basedOn, parsedQuery, text, params, hiddenColumns, outputColumnHints, parsedWrappingQuery)
+        }
+      case TableFunction(scope, canonicalName, text, params, hiddenColumns, wrappingQuery) =>
+        for {
+          parsedQuery <- parse(Some(scopedName), text, true)
+          parsedWrappingQuery <- wrappingQuery match {
+            case None => Right(None)
+            case Some(wq) => parse(None, wq.soql, true).map { parsed =>
+              Some(TableDescription.WrappingQuery[MT](wq.scope, parsed, wq.soql))
+            }
+          }
+        } yield {
+          TableDescription.TableFunction[MT](scope, canonicalName, parsedQuery, text, params, hiddenColumns, parsedWrappingQuery)
+        }
+    }
+  }
+
   // A helper that lifts the abstract function into the Result world
   private def doLookup(
     scopedName: ScopedResourceName, // the name of the thing we're looking up
     caller: Option[Source[ResourceNameScope]] // the location of the reference of `scopedName`
   ): Result[TableDescription[MT]] = {
     lookup(scopedName) match {
-      case Right(ds: Dataset) =>
-        Right(ds.toParsed)
-      case Right(Query(scope, canonicalName, basedOn, text, params, hiddenColumns, outputColumnHints)) =>
-        parse(Some(scopedName), text, false).map(TableDescription.Query[MT](scope, canonicalName, basedOn, _, text, params, hiddenColumns, outputColumnHints))
-      case Right(TableFunction(scope, canonicalName, text, params, hiddenColumns)) =>
-        parse(Some(scopedName), text, true).map(TableDescription.TableFunction[MT](scope, canonicalName, _, text, params, hiddenColumns))
+      case Right(ftd) =>
+        convertToTableDescription(scopedName, ftd)
       case Left(LookupError.NotFound) =>
         Left(TableFinderError.NotFound(caller, scopedName.name))
       case Left(LookupError.PermissionDenied) =>
@@ -282,14 +321,25 @@ trait TableFinder[MT <: MetaTypes] {
 
   def walkDesc(scopedName: ScopedResourceName, desc: TableDescription[MT], acc: TableMap, stack: CallStack): Result[TableMap] = {
     desc match {
-      case TableDescription.Dataset(_, _, _, _, _) => Right(acc)
-      case TableDescription.Query(scope, canonicalName, basedOn, tree, _unparsed, _params, _hiddenColumns, _outputColumnHints) =>
+      case TableDescription.Dataset(_, _, _, _, _, None) => Right(acc)
+      case TableDescription.Dataset(_, _, _, _, _, Some(wq)) => walkTree(wq.scope, SelectName.Synthetic, wq.parsed, acc, stack)
+      case TableDescription.Query(scope, canonicalName, basedOn, tree, _unparsed, _params, _hiddenColumns, _outputColumnHints, wq) =>
         for {
           acc <- walkFromName(ScopedResourceName(scope, basedOn), acc, CallerStack.Implicit(stack))
-          acc <- walkTree(scope, Some(scopedName), tree, acc, stack)
+          acc <- walkTree(scope, SelectName.Named(scopedName), tree, acc, stack)
+          acc <- wq match {
+            case None => Right(acc)
+            case Some(wq) => walkTree(wq.scope, SelectName.Synthetic, wq.parsed, acc, stack)
+          }
         } yield acc
-      case TableDescription.TableFunction(scope, canonicalName, tree, _unparsed, _params, _hiddenColumns) =>
-        walkTree(scope, Some(scopedName), tree, acc, stack)
+      case TableDescription.TableFunction(scope, canonicalName, tree, _unparsed, _params, _hiddenColumns, wq) =>
+        for {
+          acc <- walkTree(scope, SelectName.Named(scopedName), tree, acc, stack)
+          acc <- wq match {
+            case None => Right(acc)
+            case Some(wq) => walkTree(wq.scope, SelectName.Synthetic, wq.parsed, acc, stack)
+          }
+        } yield acc
     }
   }
 
@@ -297,13 +347,13 @@ trait TableFinder[MT <: MetaTypes] {
   private def walkSoQL(scope: ResourceNameScope, context: (BinaryTree[ast.Select], String) => FoundTables.Query[MT], text: String, acc: TableMap, stack: CallStack): Result[FoundTables[MT]] = {
     for {
       tree <- parse(None, text, udfParamsAllowed = false)
-      acc <- walkTree(scope, None, tree, acc, stack)
+      acc <- walkTree(scope, SelectName.Anonymous, tree, acc, stack)
     } yield {
       FoundTables[MT](acc, scope, context(tree, text), parserParameters)
     }
   }
 
-  private def walkTree(scope: ResourceNameScope, treeName: Option[ScopedResourceName], bt: BinaryTree[ast.Select], acc: TableMap, stack: CallStack): Result[TableMap] = {
+  private def walkTree(scope: ResourceNameScope, treeName: SelectName, bt: BinaryTree[ast.Select], acc: TableMap, stack: CallStack): Result[TableMap] = {
     bt match {
       case Leaf(s) => walkSelect(scope, treeName, s, acc, stack)
       case c: Compound[ast.Select] =>
@@ -314,7 +364,14 @@ trait TableFinder[MT <: MetaTypes] {
     }
   }
 
-  private def walkSelect(scope: ResourceNameScope, selectName: Option[ScopedResourceName], s: ast.Select, acc0: TableMap, stack: CallStack): Result[TableMap] = {
+  sealed abstract class SelectName
+  object SelectName {
+    case object Synthetic extends SelectName
+    case object Anonymous extends SelectName
+    case class Named(name: ScopedResourceName) extends SelectName
+  }
+
+  private def walkSelect(scope: ResourceNameScope, selectName: SelectName, s: ast.Select, acc0: TableMap, stack: CallStack): Result[TableMap] = {
     val ast.Select(
       _distinct,
       _selection,
@@ -332,8 +389,14 @@ trait TableFinder[MT <: MetaTypes] {
 
     var acc = acc0
 
-    def effectiveSource(pos: Position) =
-      Some(Source.nonSynthetic(selectName, pos))
+    def effectiveSource(pos: Position) = {
+      val source = selectName match {
+        case SelectName.Named(name) => Source.nonSynthetic(Some(name), pos)
+        case SelectName.Anonymous => Source.nonSynthetic(None, pos)
+        case SelectName.Synthetic => Source.Synthetic
+      }
+      Some(source)
+    }
 
     for(tn <- from) {
       val scopedName = ScopedResourceName(scope, ResourceName(tn.nameWithoutPrefix))

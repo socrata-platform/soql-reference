@@ -42,6 +42,23 @@ sealed trait TableDescription[MT <: MetaTypes] extends TableDescriptionLike with
 }
 
 object TableDescription {
+  case class WrappingQuery[MT <: MetaTypes](
+    scope: MT#ResourceNameScope,
+    parsed: BinaryTree[ast.Select],
+    unparsed: String
+  ) extends LabelUniverse[MT] {
+    private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): WrappingQuery[MT2] =
+      WrappingQuery(
+        scopeMap(scope),
+        parsed,
+        unparsed
+      )
+    def rewriteDatabaseNames[MT2 <: MetaTypes](implicit ev: MetaTypes.ChangesOnlyLabels[MT, MT2]) =
+      this.asInstanceOf[WrappingQuery[MT2]] // SAFETY: no labels in here
+
+    def asUnparsedWrappingQuery = UnparsedTableDescription.WrappingQuery[MT](scope, unparsed)
+  }
+
   private[analyzer2] def jsonEncode[MT <: MetaTypes](implicit enc: JsonEncode[UnparsedTableDescription[MT]]) =
     new JsonEncode[TableDescription[MT]] {
       def encode(x: TableDescription[MT]) =
@@ -51,13 +68,10 @@ object TableDescription {
   private[analyzer2] def jsonDecode[MT <: MetaTypes](parserParameters: AbstractParser.Parameters)(implicit dec: JsonDecode[UnparsedTableDescription[MT]]) =
     new JsonDecode[TableDescription[MT]] {
       def decode(x: JValue) =
-        JsonDecode.fromJValue[UnparsedTableDescription[MT]](x).flatMap {
-          case c: UnparsedTableDescription.SoQLUnparsedTableDescription[MT] =>
-            c.parse(parserParameters).left.map { _ =>
-              DecodeError.InvalidValue(JString(c.soql)).prefix("soql")
-            }
-          case UnparsedTableDescription.Dataset(name, canonicalName, schema, ordering, primaryKey) =>
-            Right(Dataset[MT](name, canonicalName, schema, ordering, primaryKey))
+        JsonDecode.fromJValue[UnparsedTableDescription[MT]](x).flatMap { unparsed =>
+          unparsed.parse(parserParameters).left.map { case (err, fields, text) =>
+            fields.reverse.foldLeft[DecodeError](DecodeError.InvalidValue(JString(text)))(_.prefix(_))
+          }
         }
     }
 
@@ -78,7 +92,8 @@ object TableDescription {
     canonicalName: CanonicalName,
     columns: OrderedMap[types.DatabaseColumnName[MT], DatasetColumnInfo[MT#ColumnType]],
     ordering: Seq[Ordering[MT]],
-    primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]]
+    primaryKeys: Seq[Seq[types.DatabaseColumnName[MT]]],
+    wrappingQuery: Option[WrappingQuery[MT]]
   ) extends TableDescription[MT] with TableDescriptionLike.Dataset[MT] {
     for(o <- ordering) {
       require(columns.contains(o.column), "Ordering not in dataset")
@@ -101,7 +116,14 @@ object TableDescription {
     require(ordering.forall { o => columns.contains(o.column) })
 
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): TableDescription[MT2] =
-      this.asInstanceOf[TableDescription[MT2]] // SAFETY: We only care about the NameImpls and ColumnType, neither of which are changing
+      Dataset[MT2](
+        ev.convertDTN(name),
+        canonicalName,
+        columns.asInstanceOf, // SAFETY: None of
+        ordering.asInstanceOf, // these things
+        primaryKeys.asInstanceOf, // contain scopes
+        wrappingQuery.map(_.rewriteScopes[MT2](scopeMap))
+      )
 
     private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
       tableName: DatabaseTableName => types.DatabaseTableName[MT2],
@@ -118,12 +140,13 @@ object TableDescription {
         ordering.map { case TableDescription.Ordering(dcn, ascending, nullLast) =>
           TableDescription.Ordering(columnName(name, dcn), ascending, nullLast)
         },
-        primaryKeys.map(_.map(columnName(name, _)))
+        primaryKeys.map(_.map(columnName(name, _))),
+        wrappingQuery.map(_.rewriteDatabaseNames[MT2])
       )
     }
 
     def asUnparsedTableDescription =
-      UnparsedTableDescription.Dataset(name, canonicalName, columns, ordering, primaryKeys)
+      UnparsedTableDescription.Dataset(name, canonicalName, columns, ordering, primaryKeys, wrappingQuery.map(_.asUnparsedWrappingQuery))
 
     def directlyReferencedTables: Set[types.ScopedResourceName[MT]] =
       Set.empty
@@ -137,12 +160,14 @@ object TableDescription {
     unparsed: String,
     parameters: Map[HoleName, MT#ColumnType],
     hiddenColumns: Set[ColumnName],
-    outputColumnHints: Map[ColumnName, JValue]
+    outputColumnHints: Map[ColumnName, JValue],
+    wrappingQuery: Option[WrappingQuery[MT]]
   ) extends TableDescription[MT] {
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): Query[MT2] =
       copy(
         scope = scopeMap(scope),
-        parameters = parameters.asInstanceOf[Map[HoleName, MT2#ColumnType]] // SAFETY: ColumnType isn't changing
+        parameters = parameters.asInstanceOf[Map[HoleName, MT2#ColumnType]], // SAFETY: ColumnType isn't changing
+        wrappingQuery = wrappingQuery.map(_.rewriteScopes[MT2](scopeMap))
       )
 
     private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
@@ -152,7 +177,7 @@ object TableDescription {
       this.asInstanceOf[Query[MT2]] // SAFETY: ColumnType isn't changing
 
     def asUnparsedTableDescription =
-      UnparsedTableDescription.Query(scope, canonicalName, basedOn, unparsed, parameters, hiddenColumns, outputColumnHints)
+      UnparsedTableDescription.Query(scope, canonicalName, basedOn, unparsed, parameters, hiddenColumns, outputColumnHints, wrappingQuery.map(_.asUnparsedWrappingQuery))
 
     def directlyReferencedTables: Set[types.ScopedResourceName[MT]] =
       Util.walkParsed[MT](Set(ScopedResourceName(scope, basedOn)), scope, parsed)
@@ -164,12 +189,14 @@ object TableDescription {
     parsed: BinaryTree[ast.Select],
     unparsed: String,
     parameters: OrderedMap[HoleName, MT#ColumnType],
-    hiddenColumns: Set[ColumnName]
+    hiddenColumns: Set[ColumnName],
+    wrappingQuery: Option[WrappingQuery[MT]],
   ) extends TableDescription[MT] {
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): TableFunction[MT2] =
       copy(
         scope = scopeMap(scope),
-        parameters = parameters.asInstanceOf[OrderedMap[HoleName, MT2#ColumnType]] // SAFETY: ColumnType isn't changing
+        parameters = parameters.asInstanceOf[OrderedMap[HoleName, MT2#ColumnType]], // SAFETY: ColumnType isn't changing
+        wrappingQuery = wrappingQuery.map(_.rewriteScopes[MT2](scopeMap))
       )
 
     private[analyzer2] def rewriteDatabaseNames[MT2 <: MetaTypes](
@@ -179,7 +206,7 @@ object TableDescription {
       this.asInstanceOf[TableFunction[MT2]] // SAFETY: ColumnType isn't changing
 
     def asUnparsedTableDescription =
-      UnparsedTableDescription.TableFunction(scope, canonicalName, unparsed, parameters, hiddenColumns)
+      UnparsedTableDescription.TableFunction(scope, canonicalName, unparsed, parameters, hiddenColumns, wrappingQuery.map(_.asUnparsedWrappingQuery))
 
     def directlyReferencedTables: Set[types.ScopedResourceName[MT]] =
       Util.walkParsed[MT](Set.empty[types.ScopedResourceName[MT]], scope, parsed)

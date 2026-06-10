@@ -21,7 +21,7 @@ object TestTypeInfo extends TypeInfo2[TestHelper.TestMT] {
   def literalBoolean(b: Boolean, source: Source): Expr =
     LiteralValue[MT](TestBoolean(b))(new AtomicPositionInfo(source))
 
-  def potentialExprs(l: ast.Literal, source: Option[ScopedResourceName], currentPrimaryTable: Option[Provenance]): Seq[Expr] =
+  def potentialExprs(l: ast.Literal, toSource: Position => Source, currentPrimaryTable: Option[Provenance]): Seq[Expr] =
     l match {
       case ast.StringLiteral(s) =>
         val asInt: Option[CV] =
@@ -32,10 +32,10 @@ object TestTypeInfo extends TypeInfo2[TestHelper.TestMT] {
           }
         val asCompound = tryAsCompound(s)
         val asID = tryAsID(s, currentPrimaryTable)
-        Seq[Option[CV]](Some(TestText(s)), asInt, asCompound, asID).flatten.map(LiteralValue[MT](_)(new AtomicPositionInfo(Source.nonSynthetic(source, l.position))))
-      case ast.NumberLiteral(n) => Seq(LiteralValue[MT](TestNumber(n.toInt))(new AtomicPositionInfo(Source.nonSynthetic(source, l.position))))
-      case ast.BooleanLiteral(b) => Seq(LiteralValue[MT](TestBoolean(b))(new AtomicPositionInfo(Source.nonSynthetic(source, l.position))))
-      case ast.NullLiteral() => typeParameterUniverse.iterator.map(NullLiteral[MT](_)(new AtomicPositionInfo(Source.nonSynthetic(source, l.position)))).toVector
+        Seq[Option[CV]](Some(TestText(s)), asInt, asCompound, asID).flatten.map(LiteralValue[MT](_)(new AtomicPositionInfo(toSource(l.position))))
+      case ast.NumberLiteral(n) => Seq(LiteralValue[MT](TestNumber(n.toInt))(new AtomicPositionInfo(toSource(l.position))))
+      case ast.BooleanLiteral(b) => Seq(LiteralValue[MT](TestBoolean(b))(new AtomicPositionInfo(toSource(l.position))))
+      case ast.NullLiteral() => typeParameterUniverse.iterator.map(NullLiteral[MT](_)(new AtomicPositionInfo(toSource(l.position)))).toVector
     }
 
   private def tryAsID(s: String, currentPrimaryTable: Option[Provenance]): Option[CV] = {

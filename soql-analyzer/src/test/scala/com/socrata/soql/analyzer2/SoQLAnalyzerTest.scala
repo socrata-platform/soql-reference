@@ -838,9 +838,9 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val analysis1 = analyzeSaved(tf1, "aaaa-aaaa")
 
     val tf2 = tableFinder(
-      (0, "aaaa-aaaa") -> D("n1" -> TestNumber)
+      (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber)
     )
-    val analysis2 = analyzeSaved(tf2, "aaaa-aaaa")
+    val analysis2 = analyze(tf2, "aaaa-aaaa", "select n1", UserParameters.empty)
 
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
@@ -854,7 +854,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val tf2 = tableFinder(
       (0, "aaaa-aaaa") -> D("n1" -> TestNumber, "n2" -> TestNumber)
     )
-    val analysis2 = analyze(tf2, "aaaa-aaaa", "select n1 order by n2").merge(TestFunctions.And.monomorphic.get)
+    val analysis2 = analyze(tf2, "aaaa-aaaa", "select n1 order by n2")
 
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
@@ -1428,13 +1428,290 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       (0, "ds1") -> D(":id" -> TestNumber, "text" -> TestText, "num" -> TestNumber).withHiddenColumns("text").withPrimaryKey(":id").withPrimaryKey("text")
     )
 
-    val Right(ft) = tf.findTables(0, rn("ds1"), "select *", Map.empty)
+    val Right(ft) = tf.findTables(0, rn("ds1"))
     val Right(analysis) = analyzer(ft, UserParameters.empty)
+    val select = analysis.statement.asInstanceOf[Select[TestMT]] // wrapper query to remove the text column
 
-    val select = analysis.statement.asInstanceOf[Select[TestMT]]
-    val fromTable = select.from.asInstanceOf[FromTable[TestMT]]
+    select.from must be (a[FromTable[_]])
 
-    fromTable.primaryKeys must be (Seq(Seq(DatabaseColumnName(":id"))))
+    val Seq(Seq(idColumnLabel)) = select.unique
+    select.schema(idColumnLabel).name must be (cn(":id"))
   }
 
+  test("base dataset wrapping query") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber).withWrappingQuery(0, "select * where num > 5")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"), "select text, num+num", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select * where num > 5 |> select text, num+num", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("a wrapping query can access a parameterized view's parameters") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds1", "select * where text = param('t')", "t" -> TestText)
+        .withWrappingQuery(0, "select * where num > 5 and param('t') = 'gnu'")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("q"), "select text, num+num", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters[TestType, TestValue](
+                                      Map(canon("q") -> Map(hn("t") -> UserParameters.Value(TestText("hello"))))
+                                    ))
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select * where text = 'hello' |> select * where num > 5 and 'hello' = 'gnu' |> select text, num + num", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("a wrapping query can access a table function's parameters") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "ds2") -> D("text2" -> TestText, "num2" -> TestNumber),
+      (0, "u") -> U(0, "select * from @ds2 where text2 = ?t", "t" -> TestText)
+        .withWrappingQuery(0, "select * where num2 > 5 and ?t = 'gnu'")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "ds2") -> D("text2" -> TestText, "num2" -> TestNumber),
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"), "select *, @u.* from @this as @t join @u(text) on true", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(
+      0, rn("ds1"),
+      """select *, @u.*
+        |  from @this as @t
+        |  join lateral (
+        |    select @u.*
+        |      from @single_row
+        |      join lateral (
+        |        select @t.text as t
+        |          from @single_row
+        |      ) as @params
+        |      on true
+        |      join lateral (
+        |        select *
+        |          from @ds2
+        |          where text2 = @params.t
+        |        |>
+        |        select *
+        |          where num2 > 5 and @params.t = 'gnu'
+        |      ) as @u on true
+        |  ) as @u
+        |  on true""".stripMargin,
+      Map.empty
+    )
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+      .map(_.removeTrivialJoins(isLiteralTrue)) // need to get rid of the first 'from @single_row`
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("type errors in wrapping queries are marked as having synthetic sources") {
+     val tf = tableFinder(
+       (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber).withWrappingQuery(0, "select * where num > 'hello'")
+     )
+
+     val Right(ft) = tf.findTables(0, rn("ds1"), "select text, num+num", Map.empty)
+     val Left(SoQLAnalyzerError.TypecheckError.TypeMismatch(source, _, _)) = analyzer(ft, UserParameters.empty)
+
+     source must be (Source.Synthetic)
+  }
+
+  test("Ordering is preserved through a wrapping query on a table") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+        .withOrdering("text")
+        .withWrappingQuery(0, "select * where num > 5")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+        .withOrdering("text")
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"), "select text, num+num", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select * where num > 5 order by text |> select text, num+num", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Ordering is preserved through a wrapping query on a query, up to the query itself") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+        .withOrdering("text"),
+      (0, "q") -> Q(0, "ds1", "select text, num * num as numsq order by numsq")
+        .withWrappingQuery(0, "select * where text = 'hello'")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+        .withOrdering("text")
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("q"))
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select text, num * num as numsq order by numsq |> select * where text = 'hello' order by numsq", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Hidden-column resolution on tables is deferred until after wrapping queries are generated") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+        .withHiddenColumns("text")
+        .withWrappingQuery(0, "select * where text = 'hello'")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"), "select * order by num", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select num where text = 'hello' |> select num order by num", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Hidden-column resolution on queries is deferred until after wrapping queries are generated") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "q") -> Q(0, "ds1", "select text, num * num as numsq order by text")
+        .withHiddenColumns("text")
+        .withWrappingQuery(0, "select * where text = 'hello'")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("q"), "select * order by numsq", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select text, num * num as numsq order by text |> select numsq where text = 'hello' order by text |> select numsq order by numsq", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Hidden-column resolution on UDFs is deferred until after wrapping queries are generated") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "ds2") -> D("text2" -> TestText, "num2" -> TestNumber),
+      (0, "u") -> U(0, "select text2, num2 * num2 as num2sq from @ds2 where text2 = ?t order by text2", "t" -> TestText)
+        .withHiddenColumns("text2")
+        .withWrappingQuery(0, "select text2, num2sq where num2sq > 5")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber),
+      (0, "ds2") -> D("text2" -> TestText, "num2" -> TestNumber),
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"), "select *, @u.* from @this as @t join @u(text) on true", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(
+      0, rn("ds1"),
+      """select
+        |  text, num, @u.num2sq
+        |  from
+        |    @this as @t
+        |    join lateral (
+        |      select @u.*
+        |      from @single_row
+        |      join lateral (
+        |        select @t.text as t from @single_row
+        |      ) as @params on true
+        |      join lateral (
+        |        select text2, num2 * num2 as num2sq from @ds2 where text2 = @params.t order by text2
+        |        |> select num2sq where num2sq > 5 order by text2
+        |      ) as @u on true
+        |    ) as @u on true""".stripMargin,
+      Map.empty
+    )
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+      .map(_.removeTrivialJoins(isLiteralTrue)) // need to get rid of the first `from @single_row`
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Wrapper queries must have the same schema as their underlying table") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+        .withWrappingQuery(0, "select text")
+      )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"))
+    analyzer(ft1, UserParameters.empty) match {
+      case Left(SoQLAnalyzerError.WrappingQuerySchemaMismatch(source)) =>
+        source must equal (Source.Saved(ScopedResourceName(0, rn("ds1")), NoPosition))
+      case Left(err) =>
+        fail("Unexpected error: " + err)
+      case Right(_) =>
+        fail("Unexpected success")
+    }
+  }
+
+  test("Wrapper is rewritten to have the same order as the underlying query") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+        .withWrappingQuery(0, "select num, text")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"))
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select text, num", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+
+    analysis1.statement must be (isomorphicTo(analysis2.statement))
+  }
+
+  test("Wrapper is rewritten to have the same order as the underlying query, even in the presence of hidden columns") {
+    val tf1 = tableFinder(
+      (0, "ds1") -> D("a" -> TestText, "b" -> TestNumber, "c" -> TestBoolean)
+        .withHiddenColumns("b")
+        .withWrappingQuery(0, "select c, b, a")
+    )
+
+    val tf2 = tableFinder(
+      (0, "ds1") -> D("a" -> TestText, "b" -> TestNumber, "c" -> TestBoolean)
+        .withHiddenColumns("b")
+    )
+
+    val Right(ft1) = tf1.findTables(0, rn("ds1"))
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+
+    val Right(ft2) = tf2.findTables(0, rn("ds1"), "select a, c", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+  }
 }

@@ -434,6 +434,21 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
 
     acc -- localTables
   }
+
+  private[analyzer2] override def ensureSchema(labelProvider: LabelProvider, targetSchema: Seq[(ColumnName, CT)]): Option[Self[MT]] = {
+    // NOTE: This is NOT CORRECT if there are any SelectListReferences
+    // in any of the exprs in here.  In the context where this is
+    // called (in the soql analyzer, pre-rewrites) there will in fact
+    // be none.  If that ever changes, this needs to grow a call to
+    // SelectListReferences.undo() in order to remove them.
+    for(ordering <- Util.reorderSchema(schema, targetSchema)) yield {
+      copy(
+        selectList = OrderedMap() ++ ordering.map { label =>
+          label -> selectList(label)
+        }
+      )
+    }
+  }
 }
 
 trait OSelectImpl { this: Select.type =>

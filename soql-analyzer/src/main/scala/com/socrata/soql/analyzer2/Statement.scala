@@ -22,6 +22,8 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
 
   val schema: OrderedMap[AutoColumnLabel, Statement.SchemaEntry[MT]]
 
+  private[analyzer2] def ensureSchema(labelProvider: LabelProvider, schema: Seq[(ColumnName, CT)]): Option[Statement[MT]]
+
   // See the comment in From for an explanation of this.  It's just
   // labels here because, as a Statement, we don't have enough
   // information to produce a full Column.
@@ -182,11 +184,17 @@ object Statement {
   }
 }
 
+private[analyzer2] sealed trait EnsureSchemaSelf[MT <: MetaTypes] extends Statement[MT] {
+  // strengthen the contract to promise that when we ensure schema,
+  // we'll get the same kind of Statement back
+  private[analyzer2] override def ensureSchema(labelProvider: LabelProvider, schema: Seq[(ColumnName, CT)]): Option[Self[MT]]
+}
+
 case class CombinedTables[MT <: MetaTypes](
   op: TableFunc,
   left: Statement[MT],
   right: Statement[MT]
-) extends Statement[MT] with statement.CombinedTablesImpl[MT] {
+) extends Statement[MT] with EnsureSchemaSelf[MT] with statement.CombinedTablesImpl[MT] {
   require(left.schema.values.map(_.typ) == right.schema.values.map(_.typ))
 }
 object CombinedTables extends statement.OCombinedTablesImpl
@@ -199,7 +207,7 @@ object CombinedTables extends statement.OCombinedTablesImpl
 case class CTE[MT <: MetaTypes] private (
   definitions: OrderedMap[AutoCTELabel, CTE.Definition[MT]],
   useQuery: Statement[MT]
-) extends Statement[MT] with statement.CTEImpl[MT]
+) extends Statement[MT] with EnsureSchemaSelf[MT] with statement.CTEImpl[MT]
 object CTE extends statement.OCTEImpl {
   def apply[MT <: MetaTypes](
     definitions: OrderedMap[AutoCTELabel, CTE.Definition[MT]],
@@ -240,6 +248,6 @@ case class Select[MT <: MetaTypes](
   offset: Option[BigInt],
   search: Option[String],
   hint: Set[SelectHint]
-) extends Statement[MT] with statement.SelectImpl[MT]
+) extends Statement[MT] with EnsureSchemaSelf[MT] with statement.SelectImpl[MT]
 
 object Select extends statement.OSelectImpl

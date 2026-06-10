@@ -7,7 +7,7 @@ import com.socrata.prettyprint.prelude._
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
 import com.socrata.soql.collection._
-import com.socrata.soql.environment.ResourceName
+import com.socrata.soql.environment.{ColumnName, ResourceName}
 import com.socrata.soql.functions.MonomorphicFunction
 
 import DocUtils._
@@ -137,6 +137,10 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
     definitions.valuesIterator.foldLeft(useQuery.nonlocalColumnReferences) { (acc, defn) =>
       Util.mergeColumnSet(acc, defn.query.nonlocalColumnReferences)
     }
+
+  private[analyzer2] override def ensureSchema(labelProvider: LabelProvider, schema: Seq[(ColumnName, CT)]): Option[Self[MT]] = {
+    useQuery.ensureSchema(labelProvider, schema).map(CTE(definitions, _))
+  }
 }
 
 trait OCTEImpl { this: CTE.type =>
