@@ -100,9 +100,10 @@ object UnparsedTableDescription {
     private[analyzer2] def rewriteScopes[MT2 <: MetaTypes](scopeMap: Map[RNS, MT2#ResourceNameScope])(implicit ev: MetaTypes.ChangesOnlyRNS[MT, MT2]): Dataset[MT2] =
       copy[MT2](
         name = ev.convertDTN(name),
-        columns = columns.asInstanceOf, // SAFETY: No scopes in the columns
-        ordering = ordering.asInstanceOf, // safety: No scopes in the labesl,
-        primaryKeys = primaryKeys.map(_.map(ev.convertDCN)),
+        // SAFETY: None of these next thre things contain Scopes
+        columns = columns.asInstanceOf[OrderedMap[types.DatabaseColumnName[MT2], types.TableDescription.DatasetColumnInfo[MT2]]],
+        ordering = ordering.asInstanceOf[Seq[TableDescription.Ordering[MT2]]],
+        primaryKeys = primaryKeys.asInstanceOf[Seq[Seq[types.DatabaseColumnName[MT2]]]],
         wrappingQuery = wrappingQuery.map(_.rewriteScopes[MT2](scopeMap))
       )
 
