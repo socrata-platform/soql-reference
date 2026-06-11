@@ -119,9 +119,10 @@ object TableDescription {
       Dataset[MT2](
         ev.convertDTN(name),
         canonicalName,
-        columns.asInstanceOf, // SAFETY: None of
-        ordering.asInstanceOf, // these things
-        primaryKeys.asInstanceOf, // contain scopes
+        // SAFETY: None of these next three things contain Scopes
+        columns.asInstanceOf[OrderedMap[types.DatabaseColumnName[MT2], DatasetColumnInfo[MT2#ColumnType]]],
+        ordering.asInstanceOf[Seq[Ordering[MT2]]],
+        primaryKeys.asInstanceOf[Seq[Seq[types.DatabaseColumnName[MT2]]]],
         wrappingQuery.map(_.rewriteScopes[MT2](scopeMap))
       )
 
