@@ -160,13 +160,28 @@ trait ValuesImpl[MT <: MetaTypes] { this: Values[MT] =>
         Distinctiveness.Indistinct(),
         OrderedMap() ++ ordering.iterator.map { sourceLabel =>
           val sourceEnt = schema(sourceLabel)
-          labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](myLabel, sourceLabel, sourceEnt.typ)(new AtomicPositionInfo(Source.Synthetic)), sourceEnt.name, sourceEnt.hint, sourceEnt.isSynthetic)
+          labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](myLabel, sourceLabel, sourceEnt.typ)(new AtomicPositionInfo(Source.Synthetic)), sourceEnt.name, ColumnHint.Inherited, sourceEnt.isSynthetic)
         },
         FromStatement(this, myLabel, None, None, None),
         None, Nil, None, Nil, None, None, None, Set.empty
       )
     }
   }
+
+  private[analyzer2] override def withHints(labelProvider: LabelProvider, hints: Map[ColumnName, ColumnHint]) =
+    if(hints.nonEmpty) {
+      val myLabel = labelProvider.tableLabel()
+      Select(
+        Distinctiveness.Indistinct(),
+        OrderedMap() ++ schema.iterator.map { case (sourceLabel, sourceEnt) =>
+          labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](myLabel, sourceLabel, sourceEnt.typ)(new AtomicPositionInfo(Source.Synthetic)), sourceEnt.name, hints.getOrElse(sourceEnt.name, ColumnHint.Inherited), sourceEnt.isSynthetic)
+        },
+        FromStatement(this, myLabel, None, None, None),
+        None, Nil, None, Nil, None, None, None, Set.empty
+      )
+    } else {
+      this
+    }
 }
 
 trait OValuesImpl { this: Values.type =>

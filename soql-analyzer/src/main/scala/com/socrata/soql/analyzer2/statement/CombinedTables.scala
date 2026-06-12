@@ -162,6 +162,9 @@ trait CombinedTablesImpl[MT <: MetaTypes] { this: CombinedTables[MT] =>
       CombinedTables(op, newLeft, newRight)
     }
   }
+
+  private[analyzer2] override def withHints(labelProvider: LabelProvider, hints: Map[ColumnName, ColumnHint]) =
+    copy(left = left.withHints(labelProvider, hints))
 }
 
 trait OCombinedTablesImpl { this: CombinedTables.type =>

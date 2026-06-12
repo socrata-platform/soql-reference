@@ -67,7 +67,7 @@ class RemoveTrivialSelects[MT <: MetaTypes] private () extends StatementUniverse
                     NamedExpr(
                       parentSE.expr,
                       se.name,
-                      se.hint orElse parentSE.hint,
+                      se.hint orInherited parentSE.hint,
                       se.isSynthetic
                     )
                   case _ : Column =>
