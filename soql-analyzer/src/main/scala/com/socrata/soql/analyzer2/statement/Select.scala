@@ -95,17 +95,23 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
 
   lazy val schema = locally {
     selectList.withValuesMapped { case NamedExpr(expr, name, hint, isSynthetic) =>
-      def inheritedHint: Option[JValue] =
-        expr match {
-          // Why the .get here?  Because just because we have a column
-          // ref, it does not _necessarily_ come from a table in our
-          // FROM - it could come from a sibling table via a lateral
-          // join.  In that case we just won't inherit.
-          case c: Column[MT] => from.schemaByTableColumn.get((c.table, c.column)).flatMap(_.hint)
-          case _ => None
-        }
+      val materializedHint = hint match {
+        case ColumnHint.Absent =>
+          None
+        case ColumnHint.Present(v) =>
+          Some(v)
+        case ColumnHint.Inherited =>
+          expr match {
+            // Why the .get here?  Because just because we have a
+            // column ref, it does not _necessarily_ come from a table
+            // in our FROM - it could come from a sibling table via a
+            // lateral join.  In that case we just won't inherit.
+            case c: Column[MT] => from.schemaByTableColumn.get((c.table, c.column)).flatMap(_.hint)
+            case _ => None
+          }
+      }
 
-      Statement.SchemaEntry[MT](name, expr.typ, hint.orElse(inheritedHint), isSynthetic = isSynthetic)
+      Statement.SchemaEntry[MT](name, expr.typ, materializedHint, isSynthetic = isSynthetic)
     }
   }
 
@@ -449,6 +455,18 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
       )
     }
   }
+
+  private[analyzer2] override def withHints(labelProvider: LabelProvider, hints: Map[ColumnName, ColumnHint]) =
+    copy(
+      selectList = selectList.withValuesMapped { ne =>
+        hints.get(ne.name) match {
+          case None =>
+            ne
+          case Some(hint) =>
+            ne.copy(hint = hint)
+        }
+      }
+    )
 }
 
 trait OSelectImpl { this: Select.type =>

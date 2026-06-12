@@ -39,7 +39,7 @@ class LimitIfUnlimited[MT <: MetaTypes] private (labelProvider: LabelProvider) e
           Select(
             Distinctiveness.Indistinct(),
             OrderedMap() ++ stmt.schema.iterator.map { case (colLabel, Statement.SchemaEntry(name, typ, hint, isSynthetic)) =>
-              labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newTableLabel, colLabel, typ)(AtomicPositionInfo.Synthetic), name, hint = None, isSynthetic = isSynthetic)
+              labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newTableLabel, colLabel, typ)(AtomicPositionInfo.Synthetic), name, hint = ColumnHint.Inherited, isSynthetic = isSynthetic)
             },
             FromStatement(stmt, newTableLabel, None, None, None),
             None,

@@ -5,7 +5,7 @@ import com.rojoma.json.v3.ast.JValue
 import com.socrata.soql.environment.ColumnName
 import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer, Version}
 
-case class NamedExpr[MT <: MetaTypes](expr: Expr[MT], name: ColumnName, hint: Option[JValue], isSynthetic: Boolean) extends LabelUniverse[MT] {
+case class NamedExpr[MT <: MetaTypes](expr: Expr[MT], name: ColumnName, hint: ColumnHint, isSynthetic: Boolean) extends LabelUniverse[MT] {
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     this.copy(expr = expr.doRewriteDatabaseNames(state))
 
@@ -31,7 +31,7 @@ object NamedExpr {
         expr = buffer.read[Expr[MT]](),
         name = buffer.read[ColumnName](),
         isSynthetic = buffer.read[Boolean](),
-        hint = buffer.read[Option[JValue]]()
+        hint = buffer.read[ColumnHint]()
       )
     }
   }

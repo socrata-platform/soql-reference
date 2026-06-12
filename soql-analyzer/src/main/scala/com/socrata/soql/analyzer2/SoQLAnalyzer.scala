@@ -241,14 +241,14 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
         case from: FromTable =>
           selectFromFrom(
             from.columns.map { case (label, FromTable.ColumnInfo(name, typ, _hint)) =>
-              labelProvider.columnLabel() -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, label, typ)(AtomicPositionInfo.Synthetic), name, None, isSynthetic = false)
+              labelProvider.columnLabel() -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, label, typ)(AtomicPositionInfo.Synthetic), name, ColumnHint.Inherited, isSynthetic = false)
             },
             from
           )
         case from: FromCTE =>
           selectFromFrom(
             from.basedOn.schema.map { case (label, se) =>
-              labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](from.label, label, se.typ)(AtomicPositionInfo.Synthetic), se.name, None, isSynthetic = false)
+              labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](from.label, label, se.typ)(AtomicPositionInfo.Synthetic), se.name, ColumnHint.Inherited, isSynthetic = false)
             },
             from
           )
@@ -317,7 +317,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 if(desc.wrappingQuery.isEmpty && desc.hiddenColumns(name)) {
                   None
                 } else {
-                  Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.Synthetic), name, hint = None, isSynthetic = false))
+                  Some(outputLabel -> NamedExpr(PhysicalColumn[MT](from.label, from.tableName, dcn, typ)(AtomicPositionInfo.Synthetic), name, hint = ColumnHint.Inherited, isSynthetic = false))
                 }
               },
               from,
@@ -349,31 +349,34 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             if(dci.hidden) Set(dci.name)
             else None
           }.toSet
-          wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(srn), None, primaryTableName(srn), Environment.empty, Map.empty, hiddenColumns, Map.empty, true), wq.parsed, ImplicitFrom.Required(withoutWrapper, Some(srn.name), requiredSchema = Some(schemaOf(withoutWrapper)))), withoutWrapper.label, srn)
+          finalizeWrapping(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(srn), None, primaryTableName(srn), Environment.empty, Map.empty, hiddenColumns, Map.empty, true), wq.parsed, ImplicitFrom.Required(withoutWrapper, Some(srn.name), requiredSchema = Some(schemaOf(withoutWrapper)))), withoutWrapper, srn)
       }
     }
 
-    def wrappedOrdering[F <: AtomicFrom](from: F, wrappedLabel: AutoTableLabel, activeResource: ScopedResourceName): F = {
-      from match {
-        case fs: FromStatement =>
-          // we want to stop when we leave the wrapped query - either
-          // when we reach the wrapped query, or when the wrapping
-          // query reaches some other resource.
-          //
-          // This isn't _completely_ ideal - if the wrapping query is
-          // complex, it will preserve ordering within the wrapping
-          // query where such preservation isn't necessary, but most
-          // wrapping queries are expected to be simple filters, so it
-          // should work.
-          def stop(otherFrom: FromStatement): Boolean = {
-            otherFrom.label == wrappedLabel || otherFrom.resourceName != Some(activeResource)
-          }
+    def finalizeWrapping(wrappingFrom: FromStatement, wrappedFrom: AtomicFrom, activeResource: ScopedResourceName): FromStatement = {
+      // we want to stop when we leave the wrapped query - either
+      // when we reach the wrapped query, or when the wrapping
+      // query reaches some other resource.
+      //
+      // This isn't _completely_ ideal - if the wrapping query is
+      // complex, it will preserve ordering within the wrapping
+      // query where such preservation isn't necessary, but most
+      // wrapping queries are expected to be simple filters, so it
+      // should work.
 
-          fs.copy(statement = rewrite.PreserveOrdering.bounded(labelProvider, fs.statement, stop))
-            .asInstanceOf[F] // ick.  Is there a better way to do this?  (this will work only as long as there are no subclasses of FromStatement)
-        case _ =>
-          from
+      def stop(otherFrom: FromStatement): Boolean = {
+        otherFrom.label == wrappedFrom.label || otherFrom.resourceName != Some(activeResource)
       }
+
+      // Preserve the hints from the wrappedFrom.
+      val hints = wrappedFrom.schema.iterator.map { se =>
+        se.name -> ColumnHint.fromAnalyzedOption(se.hint)
+      }.toMap
+
+      wrappingFrom.copy(
+        statement = rewrite.PreserveOrdering.bounded(labelProvider, wrappingFrom.statement, stop)
+          .withHints(labelProvider, hints)
+      )
     }
 
     def analyzeForFrom(toSource: Position => Source, name: ScopedResourceName, canonicalName: Option[CanonicalName], position: Position): AtomicFrom = {
@@ -396,7 +399,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               case None =>
                 middle
               case Some(wq) =>
-                wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, Map.empty, true), wq.parsed, ImplicitFrom.Required(middle, Some(name.name), requiredSchema = Some(schemaOf(middle)))), middle.label, name)
+                finalizeWrapping(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(name), Some(canonicalName), primaryTableName(ScopedResourceName(scope, basedOn)), Environment.empty, Map.empty, hiddenColumns, Map.empty, true), wq.parsed, ImplicitFrom.Required(middle, Some(name.name), requiredSchema = Some(schemaOf(middle)))), middle, name)
             }
           case TableDescription.TableFunction(_, _, _, _, _, _, _) =>
             parameterlessTableFunction(toSource(position), name.name)
@@ -582,7 +585,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
               if(ctx.hiddenColumns(name)) {
                 None
               } else {
-                Some(labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](fromCombined.label, label, typ)(AtomicPositionInfo.Synthetic), name, hint, isSynthetic))
+                Some(labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](fromCombined.label, label, typ)(AtomicPositionInfo.Synthetic), name, ColumnHint.fromSourceOption(hint), isSynthetic))
               }
             },
             fromCombined,
@@ -645,10 +648,10 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                   None
                 } else if(select.isAggregated) {
                   aggregateMerger(name, column).map { newExpr =>
-                    labelProvider.columnLabel() -> NamedExpr(newExpr, name, hint = None, isSynthetic = true)
+                    labelProvider.columnLabel() -> NamedExpr(newExpr, name, hint = ColumnHint.Inherited, isSynthetic = true)
                   }
                 } else {
-                  Some(labelProvider.columnLabel() -> NamedExpr(column, name, hint = None, isSynthetic = true))
+                  Some(labelProvider.columnLabel() -> NamedExpr(column, name, hint = ColumnHint.Inherited, isSynthetic = true))
                 }
               }
               select.copy(selectList = newSelectList)
@@ -797,7 +800,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
 
       val selectList = OrderedMap() ++ aliasAnalysis.expressions.keysIterator.map { cn =>
         val expr = finalState.allNamedExprs(cn)
-        labelProvider.columnLabel() -> NamedExpr(expr, cn, ctx.outputColumnHints.get(cn), isSynthetic = false)
+        labelProvider.columnLabel() -> NamedExpr(expr, cn, ColumnHint.fromSourceOption(ctx.outputColumnHints.get(cn)), isSynthetic = false)
       }
 
       val stmtPossiblyWrongOrder = addSystemColumnsIfDesired(Select(
@@ -1172,7 +1175,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
             case Some(typecheckedNamesAndExprs) =>
               val outOfLineParamsQuery = Select(
                 Distinctiveness.Indistinct(),
-                OrderedMap() ++ typecheckedNamesAndExprs.iterator.map { case (holeName, expr) => labelProvider.columnLabel() -> NamedExpr(expr, ColumnName(holeName.name), hint = None, isSynthetic = true) },
+                OrderedMap() ++ typecheckedNamesAndExprs.iterator.map { case (holeName, expr) => labelProvider.columnLabel() -> NamedExpr(expr, ColumnName(holeName.name), hint = ColumnHint.Inherited, isSynthetic = true) },
                 FromSingleRow(labelProvider.tableLabel(), None),
                 None, Nil, None, Nil, None, None, None,
                 Set.empty
@@ -1201,14 +1204,14 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 case None =>
                   unwrappedUseQuery
                 case Some(wq) =>
-                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, innerUdfParams, hiddenColumns, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name), requiredSchema = Some(schemaOf(unwrappedUseQuery)))), unwrappedUseQuery.label, udfScopedResourceName)
+                  finalizeWrapping(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, innerUdfParams, hiddenColumns, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name), requiredSchema = Some(schemaOf(unwrappedUseQuery)))), unwrappedUseQuery, udfScopedResourceName)
               }
 
               FromStatement(
                 Select(
                   Distinctiveness.Indistinct(),
                   OrderedMap() ++ useQuery.statement.schema.iterator.map { case (label, Statement.SchemaEntry(name, typ, hint, isSynthetic)) =>
-                    labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](useQuery.label, label, typ)(AtomicPositionInfo.Synthetic), name, None, isSynthetic = isSynthetic)
+                    labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](useQuery.label, label, typ)(AtomicPositionInfo.Synthetic), name, ColumnHint.Inherited, isSynthetic = isSynthetic)
                   },
                   Join(
                     JoinType.Inner,
@@ -1254,7 +1257,7 @@ class SoQLAnalyzer[MT <: MetaTypes] private (
                 case None =>
                   unwrappedUseQuery
                 case Some(wq) =>
-                  wrappedOrdering(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, Map.empty, hiddenColumns, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name), requiredSchema = Some(schemaOf(unwrappedUseQuery)))), unwrappedUseQuery.label, udfScopedResourceName)
+                  finalizeWrapping(analyzeStatement(Ctx(wq.scope, _ => Source.Synthetic, Some(udfScopedResourceName), None, udfCtx.primaryTableName, Environment.empty, Map.empty, hiddenColumns, Map.empty, callerCtx.attemptToPreserveSystemColumns), wq.parsed, ImplicitFrom.Required(unwrappedUseQuery, Some(udfScopedResourceName.name), requiredSchema = Some(schemaOf(unwrappedUseQuery)))), unwrappedUseQuery, udfScopedResourceName)
               }
           }
         case _ =>

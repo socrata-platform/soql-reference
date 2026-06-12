@@ -158,28 +158,15 @@ trait OFromTableImpl { this: FromTable.type =>
 
   implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope], ctReadable: Readable[MT#ColumnType], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[FromTable[MT]] = new Readable[FromTable[MT]] with LabelUniverse[MT] {
     def readFrom(buffer: ReadBuffer): FromTable[MT] = {
-      buffer.version match {
-        case Version.V6 =>
-          FromTable(
-            tableName = buffer.read[DatabaseTableName](),
-            definiteResourceName = buffer.read[ScopedResourceName](),
-            definiteCanonicalName = CanonicalName("invalid - this is only (at time of migration) used by MaterializeNamedQueries, which will not happen in a V6 serialization"),
-            alias = buffer.read[Option[ResourceName]](),
-            label = buffer.read[AutoTableLabel](),
-            columns = buffer.read[OrderedMap[DatabaseColumnName, ColumnInfo[MT]]](),
-            primaryKeys = buffer.read[Seq[Seq[DatabaseColumnName]]]()
-          )
-        case Version.V7 =>
-            FromTable(
-              tableName = buffer.read[DatabaseTableName](),
-              definiteResourceName = buffer.read[ScopedResourceName](),
-              definiteCanonicalName = buffer.read[CanonicalName](),
-              alias = buffer.read[Option[ResourceName]](),
-              label = buffer.read[AutoTableLabel](),
-              columns = buffer.read[OrderedMap[DatabaseColumnName, ColumnInfo[MT]]](),
-              primaryKeys = buffer.read[Seq[Seq[DatabaseColumnName]]]()
-            )
-      }
+      FromTable(
+        tableName = buffer.read[DatabaseTableName](),
+        definiteResourceName = buffer.read[ScopedResourceName](),
+        definiteCanonicalName = buffer.read[CanonicalName](),
+        alias = buffer.read[Option[ResourceName]](),
+        label = buffer.read[AutoTableLabel](),
+        columns = buffer.read[OrderedMap[DatabaseColumnName, ColumnInfo[MT]]](),
+        primaryKeys = buffer.read[Seq[Seq[DatabaseColumnName]]]()
+      )
     }
   }
 }

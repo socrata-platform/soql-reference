@@ -110,23 +110,12 @@ trait OFromStatementImpl { this: FromStatement.type =>
   implicit def deserialize[MT <: MetaTypes](implicit rnsReadable: Readable[MT#ResourceNameScope], ctReadable: Readable[MT#ColumnType], exprReadable: Readable[Expr[MT]], dtnReadable: Readable[MT#DatabaseTableNameImpl], dcnReadable: Readable[MT#DatabaseColumnNameImpl]): Readable[FromStatement[MT]] =
     new Readable[FromStatement[MT]] with MetaTypeHelper[MT] {
       def readFrom(buffer: ReadBuffer): FromStatement[MT] =
-        buffer.version match {
-          case Version.V6 =>
-            FromStatement(
-              statement = buffer.read[Statement[MT]](),
-              label = buffer.read[AutoTableLabel](),
-              resourceName = buffer.read[Option[ScopedResourceName[RNS]]](),
-              canonicalName = None,
-              alias = buffer.read[Option[ResourceName]]()
-            )
-          case Version.V7 =>
-            FromStatement(
-              statement = buffer.read[Statement[MT]](),
-              label = buffer.read[AutoTableLabel](),
-              resourceName = buffer.read[Option[ScopedResourceName[RNS]]](),
-              canonicalName = buffer.read[Option[CanonicalName]](),
-              alias = buffer.read[Option[ResourceName]]()
-            )
-        }
+        FromStatement(
+          statement = buffer.read[Statement[MT]](),
+          label = buffer.read[AutoTableLabel](),
+          resourceName = buffer.read[Option[ScopedResourceName[RNS]]](),
+          canonicalName = buffer.read[Option[CanonicalName]](),
+          alias = buffer.read[Option[ResourceName]]()
+        )
     }
 }

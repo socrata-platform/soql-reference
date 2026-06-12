@@ -68,7 +68,7 @@ class PreserveUnique[MT <: MetaTypes] private (provider: LabelProvider) extends 
               }
             }
             val newColumns = additional.result().map { col =>
-              provider.columnLabel() -> NamedExpr(col, freshName("unique"), hint = None, isSynthetic = true)
+              provider.columnLabel() -> NamedExpr(col, freshName("unique"), hint = ColumnHint.Absent, isSynthetic = true)
             }
             select.copy(selectList = selectList ++ newColumns, from = newFrom)
           } else {

@@ -241,29 +241,8 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
       // statement's output column labels.
       select.copy(
         selectList = OrderedMap() ++ select.selectList.iterator.map { case (label, namedExpr) =>
-          val originalUninheritedHint = b.selectList(label).hint
-
-          val originalInheritedHint =
-            b.selectList(label).expr match {
-              // see the comment in Select#schema for why the .get here
-              case c: Column => b.from.schemaByTableColumn.get((c.table, c.column)).flatMap(_.hint)
-              case _ => None
-            }
-
-          val newUninheritedHint = namedExpr.hint
-          val newInheritedHint =
-            namedExpr.expr match {
-              // see the comment in Select#schema for why the .get here
-              case c: Column => select.from.schemaByTableColumn.get((c.table, c.column)).flatMap(_.hint)
-              case _ => None
-            }
-
-          val newHint = originalUninheritedHint orElse newUninheritedHint orElse {
-            if(originalInheritedHint != newInheritedHint) originalInheritedHint
-            else None
-          }
-
-          label -> namedExpr.copy(hint = newHint)
+          val hint = ColumnHint.fromAnalyzedOption(b.schema(label).hint)
+          label -> namedExpr.copy(hint = hint)
         }
       )
     }

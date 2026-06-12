@@ -141,6 +141,9 @@ trait CTEImpl[MT <: MetaTypes] { this: CTE[MT] =>
   private[analyzer2] override def ensureSchema(labelProvider: LabelProvider, schema: Seq[(ColumnName, CT)]): Option[Self[MT]] = {
     useQuery.ensureSchema(labelProvider, schema).map(CTE(definitions, _))
   }
+
+  private[analyzer2] override def withHints(labelProvider: LabelProvider, hints: Map[ColumnName, ColumnHint]) =
+    copy(useQuery = useQuery.withHints(labelProvider, hints))
 }
 
 trait OCTEImpl { this: CTE.type =>

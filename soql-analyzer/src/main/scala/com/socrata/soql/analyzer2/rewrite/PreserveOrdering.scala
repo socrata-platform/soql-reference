@@ -95,7 +95,7 @@ class PreserveOrdering[MT <: MetaTypes] private (provider: LabelProvider, stop: 
             selectList.find { case (label, NamedExpr(e, _, _, _)) => expr == e } match {
               case None =>
                 val columnLabel = provider.columnLabel()
-                (Some(columnLabel -> NamedExpr(expr, freshName("order"), hint = None, isSynthetic = true)), (columnLabel, expr.typ, asc, nullLast))
+                (Some(columnLabel -> NamedExpr(expr, freshName("order"), hint = ColumnHint.Absent, isSynthetic = true)), (columnLabel, expr.typ, asc, nullLast))
               case Some((columnLabel, NamedExpr(existingExpr, _, _, _))) =>
                 (None, (columnLabel, existingExpr.typ, asc, nullLast))
             }

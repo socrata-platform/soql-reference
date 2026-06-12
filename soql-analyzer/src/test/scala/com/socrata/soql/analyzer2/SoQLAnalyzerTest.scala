@@ -67,7 +67,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             )
           )(FuncallPositionInfo.Synthetic),
           cn("_5_7"),
-          None,
+          ColumnHint.Inherited,
           false
         ),
         c(2) -> NamedExpr(
@@ -79,7 +79,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             )
           )(FuncallPositionInfo.Synthetic),
           cn("hello_world"),
-          None,
+          ColumnHint.Inherited,
           false
         ),
         c(3) -> NamedExpr(
@@ -91,7 +91,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             )
           )(FuncallPositionInfo.Synthetic),
           cn("_1_2"),
-          None,
+          ColumnHint.Inherited,
           false
         )
       )
@@ -127,7 +127,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         c(1) -> NamedExpr(
           PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.Synthetic),
           cn("t"),
-          None,
+          ColumnHint.Inherited,
           false
         ),
         c(2) -> NamedExpr(
@@ -139,7 +139,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
             )
           )(FuncallPositionInfo.Synthetic),
           cn("num_num"),
-          None,
+          ColumnHint.Inherited,
           false
         )
       )
@@ -189,7 +189,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         c(1) -> NamedExpr(
           LiteralValue[TestMT](TestText("Hello world"))(AtomicPositionInfo.Synthetic),
           cn("param_gnu"),
-          None,
+          ColumnHint.Inherited,
           false
         )
       )
@@ -218,7 +218,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         c(1) -> NamedExpr(
           LiteralValue[TestMT](TestText("Hello world"))(AtomicPositionInfo.Synthetic),
           cn("param_gnu"),
-          None,
+          ColumnHint.Inherited,
           false
         )
       )
@@ -246,7 +246,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         c(1) -> NamedExpr(
           LiteralValue[TestMT](TestText("Hello world"))(AtomicPositionInfo.Synthetic),
           cn("param_gnu"),
-          None,
+          ColumnHint.Inherited,
           false
         )
       )
@@ -269,8 +269,8 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       Select[TestMT](
         Distinctiveness.Indistinct(),
         OrderedMap(
-          c(1) -> NamedExpr(PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.Synthetic), cn("text"), None, false),
-          c(2) -> NamedExpr(PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("num"), TestNumber)(AtomicPositionInfo.Synthetic), cn("num"), None, false)
+          c(1) -> NamedExpr(PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.Synthetic), cn("text"), ColumnHint.Inherited, false),
+          c(2) -> NamedExpr(PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("num"), TestNumber)(AtomicPositionInfo.Synthetic), cn("num"), ColumnHint.Inherited, false)
         ),
         FromTable[TestMT](
           dtn("aaaa-aaaa"),
@@ -310,15 +310,15 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
       Select[TestMT](
         Distinctiveness.Indistinct(),
         OrderedMap(
-          c(3) -> NamedExpr(VirtualColumn[TestMT](t(2),c(1),TestText)(AtomicPositionInfo.Synthetic),cn("text"),None,false),
-          c(4) -> NamedExpr(VirtualColumn[TestMT](t(2),c(2),TestNumber)(AtomicPositionInfo.Synthetic),cn("num"),None,false)
+          c(3) -> NamedExpr(VirtualColumn[TestMT](t(2),c(1),TestText)(AtomicPositionInfo.Synthetic),cn("text"),ColumnHint.Inherited,false),
+          c(4) -> NamedExpr(VirtualColumn[TestMT](t(2),c(2),TestNumber)(AtomicPositionInfo.Synthetic),cn("num"),ColumnHint.Inherited,false)
         ),
         FromStatement[TestMT](
           Select[TestMT](
             Distinctiveness.Indistinct(),
             OrderedMap(
-              c(1) -> NamedExpr(PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.Synthetic), cn("text"),None,false),
-              c(2) -> NamedExpr(PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("num"), TestNumber)(AtomicPositionInfo.Synthetic), cn("num"),None,false)
+              c(1) -> NamedExpr(PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.Synthetic), cn("text"),ColumnHint.Inherited,false),
+              c(2) -> NamedExpr(PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("num"), TestNumber)(AtomicPositionInfo.Synthetic), cn("num"),ColumnHint.Inherited,false)
             ),
             FromTable[TestMT](
               dtn("aaaa-aaaa"),
@@ -402,13 +402,13 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         c(4) -> NamedExpr(
           PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.Synthetic),
           cn("text"),
-          None,
+          ColumnHint.Inherited,
           false
         ),
         c(5) -> NamedExpr(
           PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("num"), TestNumber)(AtomicPositionInfo.Synthetic),
           cn("num"),
-          None,
+          ColumnHint.Inherited,
           false
         )
       )
@@ -430,7 +430,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           Select[TestMT](
             Distinctiveness.Indistinct(),
             OrderedMap(
-              c(3) -> NamedExpr(VirtualColumn[TestMT](t(5),c(2),TestNumber)(AtomicPositionInfo.Synthetic), cn("_1"),None,false)
+              c(3) -> NamedExpr(VirtualColumn[TestMT](t(5),c(2),TestNumber)(AtomicPositionInfo.Synthetic), cn("_1"),ColumnHint.Inherited,false)
             ),
             Join[TestMT](
               JoinType.Inner,
@@ -438,7 +438,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
               FromStatement[TestMT](
                 Select[TestMT](
                   Distinctiveness.Indistinct(),
-                  OrderedMap(c(1) -> NamedExpr(LiteralValue[TestMT](TestText("bob"))(AtomicPositionInfo.Synthetic), cn("user"), None, true)),
+                  OrderedMap(c(1) -> NamedExpr(LiteralValue[TestMT](TestText("bob"))(AtomicPositionInfo.Synthetic), cn("user"), ColumnHint.Inherited, true)),
                   FromSingleRow(t(2), None),
                   None, Nil, None, Nil, None, None, None, Set.empty
                 ),
@@ -448,7 +448,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                 Select[TestMT](
                   Distinctiveness.Indistinct(),
                   OrderedMap(
-                    c(2) -> NamedExpr(LiteralValue[TestMT](TestNumber(1))(AtomicPositionInfo.Synthetic),cn("_1"),None,false)
+                    c(2) -> NamedExpr(LiteralValue[TestMT](TestNumber(1))(AtomicPositionInfo.Synthetic),cn("_1"),ColumnHint.Inherited,false)
                   ),
                   FromTable[TestMT](
                     dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")), CanonicalName("b"), Some(rn("bbbb-bbbb")),
@@ -509,13 +509,13 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         c(4) -> NamedExpr(
           PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.Synthetic),
           cn("text"),
-          None,
+          ColumnHint.Inherited,
           false
         ),
         c(5) -> NamedExpr(
           PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("num"), TestNumber)(AtomicPositionInfo.Synthetic),
           cn("num"),
-          None,
+          ColumnHint.Inherited,
           false
         )
       )
@@ -537,7 +537,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           Select[TestMT](
             Distinctiveness.Indistinct(),
             OrderedMap(
-              c(3) -> NamedExpr(VirtualColumn[TestMT](t(5),c(2),TestNumber)(AtomicPositionInfo.Synthetic), cn("_1"),None,false)
+              c(3) -> NamedExpr(VirtualColumn[TestMT](t(5),c(2),TestNumber)(AtomicPositionInfo.Synthetic), cn("_1"),ColumnHint.Inherited,false)
             ),
             Join[TestMT](
               JoinType.Inner,
@@ -545,7 +545,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
               FromStatement[TestMT](
                 Select[TestMT](
                   Distinctiveness.Indistinct(),
-                  OrderedMap(c(1) -> NamedExpr(PhysicalColumn[TestMT](t(1),dtn("aaaa-aaaa"),dcn("text"),TestText)(AtomicPositionInfo.Synthetic), cn("user"), None, true)),
+                  OrderedMap(c(1) -> NamedExpr(PhysicalColumn[TestMT](t(1),dtn("aaaa-aaaa"),dcn("text"),TestText)(AtomicPositionInfo.Synthetic), cn("user"), ColumnHint.Inherited, true)),
                   FromSingleRow(t(2), None),
                   None, Nil, None, Nil, None, None, None, Set.empty
                 ),
@@ -555,7 +555,7 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                 Select[TestMT](
                   Distinctiveness.Indistinct(),
                   OrderedMap(
-                    c(2) -> NamedExpr(LiteralValue[TestMT](TestNumber(1))(AtomicPositionInfo.Synthetic),cn("_1"),None,false)
+                    c(2) -> NamedExpr(LiteralValue[TestMT](TestNumber(1))(AtomicPositionInfo.Synthetic),cn("_1"),ColumnHint.Inherited,false)
                   ),
                   FromTable[TestMT](
                     dtn("bbbb-bbbb"), ScopedResourceName(0, rn("bbbb-bbbb")), CanonicalName("b"), Some(rn("bbbb-bbbb")),
@@ -615,13 +615,13 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
         c(13) -> NamedExpr(
           PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.Synthetic),
           cn("text"),
-          None,
+          ColumnHint.Inherited,
           false
         ),
         c(14) -> NamedExpr(
           PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("num"), TestNumber)(AtomicPositionInfo.Synthetic),
           cn("num"),
-          None,
+          ColumnHint.Inherited,
           false
         )
       )
@@ -643,10 +643,10 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
           Select[TestMT](
             Distinctiveness.Indistinct(),
             OrderedMap(
-              c(9) -> NamedExpr(VirtualColumn[TestMT](t(5), c(5), TestText)(AtomicPositionInfo.Synthetic), cn("a"), None, false),
-              c(10) -> NamedExpr(VirtualColumn[TestMT](t(5), c(6), TestBoolean)(AtomicPositionInfo.Synthetic), cn("b"), None, false),
-              c(11) -> NamedExpr(VirtualColumn[TestMT](t(5), c(7), TestNumber)(AtomicPositionInfo.Synthetic), cn("c"), None, false),
-              c(12) -> NamedExpr(VirtualColumn[TestMT](t(5), c(8), TestText)(AtomicPositionInfo.Synthetic), cn("d"), None, false)
+              c(9) -> NamedExpr(VirtualColumn[TestMT](t(5), c(5), TestText)(AtomicPositionInfo.Synthetic), cn("a"), ColumnHint.Inherited, false),
+              c(10) -> NamedExpr(VirtualColumn[TestMT](t(5), c(6), TestBoolean)(AtomicPositionInfo.Synthetic), cn("b"), ColumnHint.Inherited, false),
+              c(11) -> NamedExpr(VirtualColumn[TestMT](t(5), c(7), TestNumber)(AtomicPositionInfo.Synthetic), cn("c"), ColumnHint.Inherited, false),
+              c(12) -> NamedExpr(VirtualColumn[TestMT](t(5), c(8), TestText)(AtomicPositionInfo.Synthetic), cn("d"), ColumnHint.Inherited, false)
             ),
             Join[TestMT](
               JoinType.Inner,
@@ -661,13 +661,13 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                         Seq(LiteralValue[TestMT](TestText("hello"))(AtomicPositionInfo.Synthetic))
                       )(FuncallPositionInfo.Synthetic),
                       cn("d"),
-                      None,
+                      ColumnHint.Inherited,
                       true
                     ),
                     c(2) -> NamedExpr(
                       LiteralValue[TestMT](TestNumber(5))(AtomicPositionInfo.Synthetic),
                       cn("c"),
-                      None,
+                      ColumnHint.Inherited,
                       true
                     ),
                     c(3) -> NamedExpr(
@@ -676,13 +676,13 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                         Seq(LiteralValue[TestMT](TestBoolean(true))(AtomicPositionInfo.Synthetic))
                       )(FuncallPositionInfo.Synthetic),
                       cn("b"),
-                      None,
+                      ColumnHint.Inherited,
                       true
                     ),
                     c(4) -> NamedExpr(
                       PhysicalColumn[TestMT](t(1), dtn("aaaa-aaaa"), dcn("text"), TestText)(AtomicPositionInfo.Synthetic),
                       cn("a"),
-                      None,
+                      ColumnHint.Inherited,
                       true
                     )
                   ),
@@ -695,10 +695,10 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
                 Select[TestMT](
                   Distinctiveness.Indistinct(),
                   OrderedMap(
-                    c(5) -> NamedExpr(VirtualColumn[TestMT](t(3),c(4),TestText)(AtomicPositionInfo.Synthetic), cn("a"), None, false),
-                    c(6) -> NamedExpr(VirtualColumn[TestMT](t(3),c(3),TestBoolean)(AtomicPositionInfo.Synthetic), cn("b"), None, false),
-                    c(7) -> NamedExpr(VirtualColumn[TestMT](t(3),c(2),TestNumber)(AtomicPositionInfo.Synthetic), cn("c"), None, false),
-                    c(8) -> NamedExpr(VirtualColumn[TestMT](t(3),c(1),TestText)(AtomicPositionInfo.Synthetic), cn("d"), None, false)
+                    c(5) -> NamedExpr(VirtualColumn[TestMT](t(3),c(4),TestText)(AtomicPositionInfo.Synthetic), cn("a"), ColumnHint.Inherited, false),
+                    c(6) -> NamedExpr(VirtualColumn[TestMT](t(3),c(3),TestBoolean)(AtomicPositionInfo.Synthetic), cn("b"), ColumnHint.Inherited, false),
+                    c(7) -> NamedExpr(VirtualColumn[TestMT](t(3),c(2),TestNumber)(AtomicPositionInfo.Synthetic), cn("c"), ColumnHint.Inherited, false),
+                    c(8) -> NamedExpr(VirtualColumn[TestMT](t(3),c(1),TestText)(AtomicPositionInfo.Synthetic), cn("d"), ColumnHint.Inherited, false)
                   ),
                   FromSingleRow(t(4), Some(rn("single_row"))),
                   None,Nil,None,Nil,None,None,None,Set()
@@ -1227,6 +1227,33 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val Right(analysis) = analyzer(ft, UserParameters.empty)
 
     analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"false"), None, None, None))
+  }
+
+  test("hints are attached to wrapping queries' columns even if they aren't simple column references") {
+    val tf = tableFinder(
+      (0, "ds") -> D("text" -> TestText, "num" -> TestNumber).withOutputColumnHints("num" -> j"true")
+        .withWrappingQuery(0, "select null::text as text, null::number as num")
+    )
+
+    val Right(ft) = tf.findTables(0, rn("ds"))
+    val Right(analysis) = analyzer(ft, UserParameters.empty)
+
+    analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(None, Some(j"true")))
+  }
+
+  test("a column with no hint retains no hint when wrapped, even if the wrapping query on its own would provide one") {
+    val tf = tableFinder(
+      (0, "ds1") -> D("text" -> TestText, "num" -> TestNumber)
+        .withWrappingQuery(0, "select @ds2.text, @ds2.num join @ds2 on true"),
+      (0, "ds2") -> D("text" -> TestText, "num" -> TestNumber)
+        .withOutputColumnHints("text" -> j"1", "num" -> j"2"),
+      (0, "ds3") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val Right(ft) = tf.findTables(0, rn("ds1"))
+    val Right(analysis) = analyzer(ft, UserParameters.empty)
+
+    analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(None, None))
   }
 
   test("errors in anonymous soql have an anonymous source") {

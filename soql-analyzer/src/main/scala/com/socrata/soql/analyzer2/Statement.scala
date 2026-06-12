@@ -23,6 +23,7 @@ sealed abstract class Statement[MT <: MetaTypes] extends LabelUniverse[MT] {
   val schema: OrderedMap[AutoColumnLabel, Statement.SchemaEntry[MT]]
 
   private[analyzer2] def ensureSchema(labelProvider: LabelProvider, schema: Seq[(ColumnName, CT)]): Option[Statement[MT]]
+  private[analyzer2] def withHints(labelProvider: LabelProvider, hints: Map[ColumnName, ColumnHint]): Statement[MT]
 
   // See the comment in From for an explanation of this.  It's just
   // labels here because, as a Statement, we don't have enough

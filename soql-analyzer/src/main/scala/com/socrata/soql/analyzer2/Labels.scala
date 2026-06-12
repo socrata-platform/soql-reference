@@ -41,16 +41,9 @@ object LabelProvider {
     def readFrom(buffer: ReadBuffer): LabelProvider = {
       val result = new LabelProvider
 
-      buffer.version match {
-        case Version.V6 =>
-          result.tables = buffer.read[Int]()
-          result.columns = buffer.read[Int]()
-          result.ctes = 0
-        case Version.V7 =>
-          result.tables = buffer.read[Int]()
-          result.columns = buffer.read[Int]()
-          result.ctes = buffer.read[Int]()
-      }
+      result.tables = buffer.read[Int]()
+      result.columns = buffer.read[Int]()
+      result.ctes = buffer.read[Int]()
 
       result
     }

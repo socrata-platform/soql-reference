@@ -16,7 +16,7 @@ private[rewrite] class RemoveOutputColumns[MT <: MetaTypes] (labelProvider: Labe
               if(toRemove(v)) {
                 None
               } else {
-                Some(labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newFrom.label, k, v.typ)(AtomicPositionInfo.Synthetic), v.name, v.hint, isSynthetic = v.isSynthetic))
+                Some(labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newFrom.label, k, v.typ)(AtomicPositionInfo.Synthetic), v.name, ColumnHint.fromAnalyzedOption(v.hint), isSynthetic = v.isSynthetic))
               }
             },
             newFrom,
@@ -44,7 +44,7 @@ private[rewrite] class RemoveOutputColumns[MT <: MetaTypes] (labelProvider: Labe
               if(toRemove(v)) {
                 None
               } else {
-                Some(labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newFrom.label, k, v.typ)(AtomicPositionInfo.Synthetic), v.name, v.hint, isSynthetic = v.isSynthetic))
+                Some(labelProvider.columnLabel() -> NamedExpr(VirtualColumn[MT](newFrom.label, k, v.typ)(AtomicPositionInfo.Synthetic), v.name, ColumnHint.fromAnalyzedOption(v.hint), isSynthetic = v.isSynthetic))
               }
             },
             newFrom,
