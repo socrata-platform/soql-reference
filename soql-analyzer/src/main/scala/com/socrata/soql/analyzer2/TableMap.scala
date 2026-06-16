@@ -102,9 +102,9 @@ class TableMap[MT <: MetaTypes] private[analyzer2] (private val underlying: Map[
     // scopes to our set.
 
     allScopes ++= underlying.valuesIterator.flatMap(_.valuesIterator).flatMap {
-      case _ : TableDescription.Dataset[MT] => None
-      case q: TableDescription.Query[MT] => Some(q.scope)
-      case tf: TableDescription.TableFunction[MT] => Some(tf.scope)
+      case ds : TableDescription.Dataset[MT] => ds.wrappingQuery.map(_.scope)
+      case q: TableDescription.Query[MT] => Seq(q.scope) ++ q.wrappingQuery.map(_.scope)
+      case tf: TableDescription.TableFunction[MT] => Seq(tf.scope) ++ tf.wrappingQuery.map(_.scope)
     }
 
     val oldToNew = allScopes.result().iterator.zipWithIndex.toMap
