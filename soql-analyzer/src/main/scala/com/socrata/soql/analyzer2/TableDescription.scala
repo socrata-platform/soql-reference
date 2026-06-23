@@ -42,9 +42,9 @@ sealed trait TableDescription[MT <: MetaTypes] extends TableDescriptionLike with
 
   def wrappingQuery: Option[TableDescription.WrappingQuery[MT]]
 
-  protected def directlyReferencedTablesInWrapper: Set[types.ScopedResourceName[MT]] =
-    wrappingQuery.fold(Set.empty[types.ScopedResourceName[MT]]) { wrapper =>
-      Util.walkParsed[MT](Set.empty, wrapper.scope, wrapper.parsed)
+  protected def directlyReferencedTablesInWrapper: Set[ScopedResourceName] =
+    wrappingQuery.fold(Set.empty[ScopedResourceName]) { wrapper =>
+      Util.walkParsed[MT](Set.empty[ScopedResourceName], wrapper.scope, wrapper.parsed)
     }
 }
 
