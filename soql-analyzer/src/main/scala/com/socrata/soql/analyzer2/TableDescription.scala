@@ -39,6 +39,13 @@ sealed trait TableDescription[MT <: MetaTypes] extends TableDescriptionLike with
   def directlyReferencedTables: Set[types.ScopedResourceName[MT]]
 
   def asUnparsedTableDescription: UnparsedTableDescription[MT]
+
+  def wrappingQuery: Option[TableDescription.WrappingQuery[MT]]
+
+  protected def directlyReferencedTablesInWrapper: Set[ScopedResourceName] =
+    wrappingQuery.fold(Set.empty[ScopedResourceName]) { wrapper =>
+      Util.walkParsed[MT](Set.empty[ScopedResourceName], wrapper.scope, wrapper.parsed)
+    }
 }
 
 object TableDescription {
@@ -150,7 +157,7 @@ object TableDescription {
       UnparsedTableDescription.Dataset(name, canonicalName, columns, ordering, primaryKeys, wrappingQuery.map(_.asUnparsedWrappingQuery))
 
     def directlyReferencedTables: Set[types.ScopedResourceName[MT]] =
-      Set.empty
+      directlyReferencedTablesInWrapper
   }
 
   case class Query[MT <: MetaTypes](
@@ -181,7 +188,8 @@ object TableDescription {
       UnparsedTableDescription.Query(scope, canonicalName, basedOn, unparsed, parameters, hiddenColumns, outputColumnHints, wrappingQuery.map(_.asUnparsedWrappingQuery))
 
     def directlyReferencedTables: Set[types.ScopedResourceName[MT]] =
-      Util.walkParsed[MT](Set(ScopedResourceName(scope, basedOn)), scope, parsed)
+      Util.walkParsed[MT](Set(ScopedResourceName(scope, basedOn)), scope, parsed) ++
+        directlyReferencedTablesInWrapper
   }
 
   case class TableFunction[MT <: MetaTypes](
@@ -210,7 +218,8 @@ object TableDescription {
       UnparsedTableDescription.TableFunction(scope, canonicalName, unparsed, parameters, hiddenColumns, wrappingQuery.map(_.asUnparsedWrappingQuery))
 
     def directlyReferencedTables: Set[types.ScopedResourceName[MT]] =
-      Util.walkParsed[MT](Set.empty[types.ScopedResourceName[MT]], scope, parsed)
+      Util.walkParsed[MT](Set.empty[types.ScopedResourceName[MT]], scope, parsed) ++
+        directlyReferencedTablesInWrapper
   }
 
 }
