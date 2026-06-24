@@ -162,6 +162,38 @@ select text + text, num * 2 as num from @this as t order by @t.num limit 10 offs
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("merge - refuse to duplicate nontrivial exprs that aren't top-level order or group") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", """
+select *, text||text as texttext
+|> select * order by texttext || 'foo'
+""")
+
+    val expectedAnalysis = analyze(tf, "twocol", """
+select text, num, text||text as texttext |> select text, num, texttext order by texttext || 'foo'
+""")
+  }
+
+  test("merge - do duplicate nontrivial exprs that are top-level order or group") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", """
+select *, text||text as texttext
+|> select texttext, count(*) group by texttext order by texttext
+""")
+
+    val expectedAnalysis = analyze(tf, "twocol", """
+select text || text as texttext, count(*) group by texttext order by texttext
+""")
+
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
   test("merge - distinct on ordered by different column") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
@@ -264,11 +296,11 @@ select count(*) where num = 3
     )
 
     val analysis = analyze(tf, "twocol", """
-select text, count(num) group by text |> select * where count_num = 5
+select text, count(num) group by text |> select count_num = 5
 """)
 
     val expectedAnalysis = analyze(tf, "twocol", """
-select text, count(num) as n group by text having n = 5
+select count(num) = 5 group by text
 """)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
