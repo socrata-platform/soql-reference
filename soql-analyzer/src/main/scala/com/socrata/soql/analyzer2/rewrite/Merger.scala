@@ -10,7 +10,7 @@ import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.analyzer2._
 
-class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends StatementUniverse[MT] {
+class Merger[MT <: MetaTypes](and: types.MonomorphicFunction[MT], aggressive: Boolean) extends StatementUniverse[MT] {
   type ACTEs = AvailableCTEs[Unit]
 
   private implicit val cvDoc = new HasDoc[CV] {
@@ -44,7 +44,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
       }
 
     def addRef(label: AutoTableLabel, column: AutoColumnLabel, e: Expr, site: Site): Expr = {
-      if(isNontrivial(e)) {
+      if(!aggressive && isNontrivial(e)) {
         seen.get((label, column)) match {
           case Some(originalSite) =>
             val allowDups = site match {
@@ -521,6 +521,12 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
 }
 
 object Merger {
+  def apply[MT <: MetaTypes](stmt: Statement[MT], and: types.MonomorphicFunction[MT]) =
+    new Merger(and, aggressive = false).merge(stmt)
+
+  def aggressive[MT <: MetaTypes](stmt: Statement[MT], and: types.MonomorphicFunction[MT]) =
+    new Merger(and, aggressive = true).merge(stmt)
+
   def combineLimits(aLim: Option[BigInt], aOff: Option[BigInt], bLim: Option[BigInt], bOff: Option[BigInt]): (Option[BigInt], Option[BigInt]) = {
     // ok, what we're doing here is basically finding the intersection of two segments of
     // the integers, where either segment may end at infinity.  Note that all the inputs are
