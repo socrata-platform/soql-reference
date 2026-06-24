@@ -65,6 +65,7 @@ object Pass {
   case object RemoveTrivialSelects extends Pass(semanticsPreserving = true, deep = true)
   case object ImposeOrdering extends Pass(semanticsPreserving = false, deep = true)
   case object Merge extends Pass(semanticsPreserving = true, deep = true)
+  case object MergeAggressively extends Pass(semanticsPreserving = true, deep = true)
   case object RemoveUnusedColumns extends Pass(semanticsPreserving = true, deep = true)
   case object RemoveUnusedOrderBy extends Pass(semanticsPreserving = true, deep = true)
   case object UseSelectListReferences extends Pass(semanticsPreserving = true, deep = false)
@@ -84,6 +85,7 @@ object Pass {
       .singleton("remove_trivial_selects", RemoveTrivialSelects)
       .singleton("impose_ordering", ImposeOrdering)
       .singleton("merge", Merge)
+      .singleton("merge_aggressively", MergeAggressively)
       .singleton("remove_unused_columns", RemoveUnusedColumns)
       .singleton("remove_unused_order_by", RemoveUnusedOrderBy)
       .singleton("use_select_list_references", UseSelectListReferences)
@@ -117,6 +119,7 @@ object Pass {
         case 13 => RemoveSyntheticColumns
         case 14 => RemoveSystemColumns
         case 15 => MaterializeNamedQueries
+        case 16 => MergeAggressively
         case other => fail(s"Unknown rewrite pass type $other")
       }
 
@@ -153,6 +156,8 @@ object Pass {
           buffer.write(14)
         case MaterializeNamedQueries =>
           buffer.write(15)
+        case MergeAggressively =>
+          buffer.write(16)
       }
     }
   }
