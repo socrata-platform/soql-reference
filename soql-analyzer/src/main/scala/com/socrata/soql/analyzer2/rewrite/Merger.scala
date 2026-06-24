@@ -200,7 +200,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
       val newStatement: Option[Select] =
         (a, b) match {
           case (a, b) if definitelyRequiresSubselect(a, aLabel, b) =>
-            debug("declaining to merge - definitely requires subselect")
+            debug("declining to merge - definitely requires subselect")
             None
           case (a, b@Select(bDistinct, bSelect, _oldA, None, Nil, None, Nil, bLim, bOff, None, bHint)) if !b.isAggregated =>
             // Just projection change + possibly limit/offset and
