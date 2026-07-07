@@ -49,7 +49,16 @@ class TableFinderTest extends FunSuite with MustMatchers {
     (0, "bad_deep_three") -> Q(0, "bad_deep_two", "select *").withCanonicalName("bd3"),  //  / a loop
     (0, "bad_deep_four") -> Q(0, "bad_deep_three", "select *").withCanonicalName("bd4"), // /
     (0, "bad_deep_five") -> Q(0, "bad_deep_four", "select *").withCanonicalName("bd5"),  // this one just calls into that loop
-    (1, "t1") -> D(),
+    (1, "t1") -> D().withCanonicalName("alt-t1"),
+
+    (0, "wrapped_with_join") -> Q(0, "t1", "select *")
+       .withWrappingQuery(0, "select * join @t2 on true"),
+
+    (0, "wrapped_with_self_join") -> Q(0, "t1", "select *")
+       .withWrappingQuery(0, "select * join @wrapped_with_self_join on true"),
+
+    (0, "wrapped_with_join_other_scope") -> Q(0, "t1", "select *")
+       .withWrappingQuery(1, "select * join @t1 on true"),
 
     (0, "graph_root") -> Q(0, "graph_parent_1", "select * join @graph_parent_2 on true"),
     (0, "graph_parent_1") -> Q(0, "graph_dataset_1", "select *"),
@@ -232,5 +241,24 @@ class TableFinderTest extends FunSuite with MustMatchers {
     go(tables.findTables(0, ResourceName("t1"), "select key, value join @t3 on @t3.key = key", Map.empty))
     go(tables.findTables(0, ResourceName("t1"), "select key, value join @t4(1,2,3) on @t4.key = key", Map.empty))
     go(tables.findTables(0, ResourceName("t1"), "select key, value join @t5 on @t5.key = key", Map.empty))
+  }
+
+  test("wrapping queries can reference other datasets") {
+    val Right(found) = tables.findTables(0, ResourceName("wrapped_with_join"))
+    found.tableMap.descriptions.map(x => x.canonicalName.name).toVector.sorted must be (
+      Seq("t1", "t2", "wrapped_with_join")
+    )
+  }
+
+  test("wrapping queries participate in cycle detection") {
+    val Left(TableFinderError.RecursiveQuery(_, stack)) = tables.findTables(0, ResourceName("wrapped_with_self_join"))
+    stack must equal (Seq(CanonicalName("wrapped_with_self_join"), CanonicalName("wrapped_with_self_join")))
+  }
+
+  test("wrapping queries can reference datasets in other scopes") {
+    val Right(found) = tables.findTables(0, ResourceName("wrapped_with_join_other_scope"))
+    found.tableMap.descriptions.map(x => x.canonicalName.name).toVector.sorted must be (
+      Seq("alt-t1", "t1", "wrapped_with_join_other_scope")
+    )
   }
 }

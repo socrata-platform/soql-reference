@@ -37,7 +37,11 @@ object ColumnHint {
         case Inherited =>
           buffer.write(0)
         case Present(value) =>
-          buffer.write(1)
+          // why negative 1?  Because that will get serialized the
+          // same way as the (unsigned!) tag Option uses to indicate
+          // Some-ness, and this used to be a Some.  On deserialize,
+          // we'll accept either.
+          buffer.write(-1)
           buffer.write(value)
         case Absent =>
           // this is last because columnhints in namedexprs used to be
@@ -53,7 +57,7 @@ object ColumnHint {
       buffer.read[Int]() match {
         case 0 =>
           Inherited
-        case 1 =>
+        case -1 | 1 =>
           Present(buffer.read[JValue]())
         case 2 =>
           Absent
