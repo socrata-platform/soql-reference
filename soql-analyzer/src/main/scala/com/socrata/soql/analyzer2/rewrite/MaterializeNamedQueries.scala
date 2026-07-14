@@ -32,34 +32,44 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
     // rewrites applied; it's only accessed after we're done
     // populating NamedQueries.
     lazy val rewrittenDefQuery = rewriteStatement(defQuery)
+
+    def isCandidate = reused || isExplicitlyMarkedAsMaterializable(defQuery)
   }
 
-  private object NamedQueries {
+  private object ObservedQueries {
     // The "same" canonical name can name multiple different queries,
     // because the actual query you get can (theoretically) differ
     // based on who you are.
-    private val queries = new mutable.LinkedHashMap[CanonicalName, Vector[CTEStuff]]
+    private val queries = new mutable.LinkedHashMap[Option[CanonicalName], Vector[CTEStuff]]
 
     // We only store UN-REWRITTEN queries in the cache!
-    def retrieveCached(x: CanonicalName, s: Statement): Option[CTEStuff] =
+    def retrieveCached(x: Option[CanonicalName], s: Statement): Option[CTEStuff] =
       queries.getOrElse(x, Vector.empty).find(_.defQuery.isIsomorphic(s))
 
-    def save(x: CanonicalName, s: CTEStuff): Unit = {
+    private def save(x: Option[CanonicalName], s: CTEStuff): Unit = {
       queries.get(x) match {
         case None => queries += x -> Vector(s)
         case Some(v) => queries += x -> (v :+ s)
       }
     }
 
-    def any = queries.valuesIterator.flatMap(_.iterator).exists(_.reused)
-    def things: Iterator[CTEStuff] = queries.valuesIterator.flatMap(_.iterator).filter(_.reused)
+    def save(x: CanonicalName, s: CTEStuff): Unit = {
+      save(Some(x), s)
+    }
+
+    def save(s: CTEStuff): Unit = {
+      save(None, s)
+    }
+
+    def any = queries.valuesIterator.flatMap(_.iterator).exists(_.isCandidate)
+    def things: Iterator[CTEStuff] = queries.valuesIterator.flatMap(_.iterator).filter(_.isCandidate)
   }
 
   def rewriteTopLevelStatement(stmt: Statement): Statement = {
-    collectNamedQueries(stmt)
+    collectObservedQueries(stmt)
 
-    if(NamedQueries.any) {
-      val cteDefs = OrderedMap() ++ NamedQueries.things.map { case ctestuff =>
+    if(ObservedQueries.any) {
+      val cteDefs = OrderedMap() ++ ObservedQueries.things.map { case ctestuff =>
         ctestuff.label -> CTE.Definition(None, ctestuff.rewrittenDefQuery, MaterializedHint.Default)
       }
       val newStmt = rewriteStatement(stmt)
@@ -69,38 +79,57 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
     }
   }
 
-  private def collectNamedQueries(stmt: Statement): Unit = {
+  def isExplicitlyMarkedAsMaterializable(stmt: Statement): Boolean =
+    stmt match {
+      case s: Select =>
+        s.hint(SelectHint.Materialized)
+      case _ =>
+        false
+    }
+
+  private def collectObservedQueries(stmt: Statement): Unit = {
     stmt match {
       case CombinedTables(op, left, right) =>
-        collectNamedQueries(left)
-        collectNamedQueries(right)
+        collectObservedQueries(left)
+        collectObservedQueries(right)
       case _ : CTE =>
         throw new Exception("Shouldn't see CTEs at this point")
       case v: Values =>
         // no subqueries in values
       case sel: Select =>
         sel.from.reduce[Unit](
-          collectAtomicFromNamedQueries,
-          (_, join) => collectAtomicFromNamedQueries(join.right)
+          collectAtomicFromObservedQueries,
+          (_, join) => collectAtomicFromObservedQueries(join.right)
         )
     }
   }
 
-  private def collectAtomicFromNamedQueries(f: AtomicFrom): Unit = {
+  private def collectAtomicFromObservedQueries(f: AtomicFrom): Unit = {
     f match {
       case FromStatement(stmt, _, _, _, _) if stmt.containsNonlocalColumnReferences =>
         // We can't CTEify this because it references an external
         // column, but we might be able to do so to some internal
         // query, so keep collecting them
-        collectNamedQueries(stmt)
+        collectObservedQueries(stmt)
       case FromStatement(stmt, _, _, None, _) =>
-        // This is not a named query, but we can recurse
-        collectNamedQueries(stmt)
+        // Not a named query, but if it's marked as materializable we can collect it anyway
+        if(isExplicitlyMarkedAsMaterializable(stmt)) {
+          ObservedQueries.retrieveCached(None, stmt) match {
+            case None =>
+              collectObservedQueries(stmt)
+              ObservedQueries.save(CTEStuff(labelProvider.cteLabel(), stmt))
+            case Some(ctestuff) =>
+              ctestuff.reused = true
+          }
+        } else {
+          collectObservedQueries(stmt)
+        }
+
       case FromStatement(stmt, _, _, Some(cn), _) =>
-        NamedQueries.retrieveCached(cn, stmt) match {
+        ObservedQueries.retrieveCached(Some(cn), stmt) match {
           case None =>
-            collectNamedQueries(stmt)
-            NamedQueries.save(cn, CTEStuff(labelProvider.cteLabel(), stmt))
+            collectObservedQueries(stmt)
+            ObservedQueries.save(cn, CTEStuff(labelProvider.cteLabel(), stmt))
           case Some(ctestuff) =>
             ctestuff.reused = true
         }
@@ -212,9 +241,9 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
 
   private def rewriteAtomicFrom(f: AtomicFrom): (ColumnMap, AtomicFrom) =
     f match {
-      case orig@FromStatement(stmt, label, Some(rn), Some(cn), alias) => // "Some(rn)" means this is a saved query
-        NamedQueries.retrieveCached(cn, stmt) match {
-          case Some(ctestuff) if ctestuff.reused =>
+      case orig@FromStatement(stmt, label, rn, cn, alias) if cn.isDefined || isExplicitlyMarkedAsMaterializable(stmt) =>
+        ObservedQueries.retrieveCached(cn, stmt) match {
+          case Some(ctestuff) if ctestuff.reused || isExplicitlyMarkedAsMaterializable(stmt) =>
             // ctestuff.defQuery is isomorphic to stmt, so we can line
             // up the output columns...
             assert(stmt.schema.size == ctestuff.defQuery.schema.size)
@@ -239,6 +268,8 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
             // reuse.
             (Map.empty, orig.copy(statement = rewriteStatement(stmt)))
         }
+      case orig@FromStatement(stmt, _, _, _, _) =>
+        (Map.empty, orig.copy(statement = rewriteStatement(stmt)))
       case other =>
         (Map.empty, other)
     }

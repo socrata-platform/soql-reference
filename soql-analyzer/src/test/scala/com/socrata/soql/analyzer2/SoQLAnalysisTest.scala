@@ -1583,8 +1583,8 @@ select * where first = 'Tom'
       case _ => fail("The use query's FROM should have been a join between two CTE references")
     }
 
-    useLeft.canonicalName must be (CanonicalName("outer"))
-    useRight.canonicalName must be (CanonicalName("outer"))
+    useLeft.canonicalName must be (Some(CanonicalName("outer")))
+    useRight.canonicalName must be (Some(CanonicalName("outer")))
 
     useRight.cteLabel must equal (useLeft.cteLabel)
     defs.keysIterator.indexOf(useLeft.cteLabel) must equal (1)
@@ -1600,8 +1600,8 @@ select * where first = 'Tom'
       case _ => fail("The outer cte query's FROM should have been a join between two CTE references")
     }
 
-    outerLeft.canonicalName must be (CanonicalName("inner"))
-    outerRight.canonicalName must be (CanonicalName("inner"))
+    outerLeft.canonicalName must be (Some(CanonicalName("inner")))
+    outerRight.canonicalName must be (Some(CanonicalName("inner")))
 
     outerRight.cteLabel must equal (outerLeft.cteLabel)
     defs.keysIterator.indexOf(outerLeft.cteLabel) must equal (0)
@@ -1647,8 +1647,8 @@ select * where first = 'Tom'
       case _ => fail("The use query's FROM should have been a join between two CTE references")
     }
 
-    useLeft.canonicalName must be (CanonicalName("outer"))
-    useRight.canonicalName must be (CanonicalName("outer"))
+    useLeft.canonicalName must be (Some(CanonicalName("outer")))
+    useRight.canonicalName must be (Some(CanonicalName("outer")))
 
     useRight.cteLabel must equal (useLeft.cteLabel)
     defs.keysIterator.indexOf(useLeft.cteLabel) must equal (0)
