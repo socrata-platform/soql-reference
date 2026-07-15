@@ -216,7 +216,7 @@ object RecursiveDescentParser {
   private val FILTER_SET = s(FILTER())
   private val DOT_LBRACKET_SET = s(DOT(), LBRACKET())
 
-  private val COLONCOLON_SET = s(COLONCOLON())
+  private val CAST_SET = s(COLONCOLON(), COLONBANG())
 
   // These are all collapsed into "an operator" for ease of
   // interpretation by an end-user instead of getting a bunch of
@@ -1560,8 +1560,11 @@ abstract class RecursiveDescentParser(parameters: AbstractParser.Parameters = Ab
       case op@COLONCOLON() =>
         val ParseResult(r2, (ident, identPos)) = simpleIdentifier(reader.rest)
         cast_!(r2, FunctionCall(SpecialFunctions.Cast(TypeName(ident)), Seq(arg), None)(arg.position, identPos))
+      case op@COLONBANG() =>
+        val ParseResult(r2, (ident, identPos)) = simpleIdentifier(reader.rest)
+        cast_!(r2, FunctionCall(SpecialFunctions.TypeAssert(TypeName(ident)), Seq(arg), None)(arg.position, identPos))
       case _ =>
-        reader.addAlternates(COLONCOLON_SET)
+        reader.addAlternates(CAST_SET)
         ParseResult(reader, arg)
     }
   }

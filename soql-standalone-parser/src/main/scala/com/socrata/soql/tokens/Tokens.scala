@@ -85,6 +85,7 @@ case class PERCENT() extends FormattedToken("%")
 // Misc expression-y stuff
 case class PIPEPIPE() extends FormattedToken("||")
 case class COLONCOLON() extends FormattedToken("::")
+case class COLONBANG() extends FormattedToken(":!")
 case class LPAREN() extends FormattedToken("(")
 case class RPAREN() extends FormattedToken(")")
 
