@@ -6,16 +6,7 @@ import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection._
 
-class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProvider) extends StatementUniverse[MT] {
-  // ok so, we want to walk over the Statement, and for each select,
-  // if a subquery in its FROM has a resource name we want to hoist it
-  // to the top level as a CTE and replace references to it.
-  //
-  // Despite the name of the pass, right now we're _not_ explicitly
-  // materializing the query.  Instead we're relying on PG's default
-  // heuristic (i.e., "if it's referenced more than once, materialize,
-  // otherwise don't")
-  //
+class MaterializeQueries[MT <: MetaTypes] private (labelProvider: LabelProvider) extends StatementUniverse[MT] {
   // The tricky bit is identifying when two things name the "same"
   // query, because while if two ScopedResourceNames are the same then
   // they're definitely the same thing, but if they're different they
@@ -23,8 +14,6 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
   // rather than relying on names?
 
   private case class CTEStuff(label: AutoCTELabel, defQuery: Statement) {
-    var reused = false
-
     // This is sort of gnarly flow, but, this works in two passes.
     // First, we collect all the named queries (in NamedQueries), then
     // we rewrite them using that same cache.  This lazy val lets us
@@ -32,37 +21,24 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
     // rewrites applied; it's only accessed after we're done
     // populating NamedQueries.
     lazy val rewrittenDefQuery = rewriteStatement(defQuery)
-
-    def isCandidate = reused || isExplicitlyMarkedAsMaterializable(defQuery)
   }
 
   private object ObservedQueries {
     // The "same" canonical name can name multiple different queries,
     // because the actual query you get can (theoretically) differ
     // based on who you are.
-    private val queries = new mutable.LinkedHashMap[Option[CanonicalName], Vector[CTEStuff]]
+    private val queries = new mutable.ArrayBuffer[CTEStuff]
 
     // We only store UN-REWRITTEN queries in the cache!
-    def retrieveCached(x: Option[CanonicalName], s: Statement): Option[CTEStuff] =
-      queries.getOrElse(x, Vector.empty).find(_.defQuery.isIsomorphic(s))
-
-    private def save(x: Option[CanonicalName], s: CTEStuff): Unit = {
-      queries.get(x) match {
-        case None => queries += x -> Vector(s)
-        case Some(v) => queries += x -> (v :+ s)
-      }
-    }
-
-    def save(x: CanonicalName, s: CTEStuff): Unit = {
-      save(Some(x), s)
-    }
+    def retrieveCached(s: Statement): Option[CTEStuff] =
+      queries.find(_.defQuery.isIsomorphic(s))
 
     def save(s: CTEStuff): Unit = {
-      save(None, s)
+      queries += s
     }
 
-    def any = queries.valuesIterator.flatMap(_.iterator).exists(_.isCandidate)
-    def things: Iterator[CTEStuff] = queries.valuesIterator.flatMap(_.iterator).filter(_.isCandidate)
+    def any = queries.nonEmpty
+    def things: Iterator[CTEStuff] = queries.iterator
   }
 
   def rewriteTopLevelStatement(stmt: Statement): Statement = {
@@ -70,13 +46,7 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
 
     if(ObservedQueries.any) {
       val cteDefs = OrderedMap() ++ ObservedQueries.things.map { case ctestuff =>
-        val matHint =
-          if(isExplicitlyMarkedAsMaterializable(ctestuff.rewrittenDefQuery)) {
-            MaterializedHint.Materialized
-          } else {
-            MaterializedHint.Default
-          }
-        ctestuff.label -> CTE.Definition(None, ctestuff.rewrittenDefQuery, matHint)
+        ctestuff.label -> CTE.Definition(None, ctestuff.rewrittenDefQuery, MaterializedHint.Materialized)
       }
       val newStmt = rewriteStatement(stmt)
       CTE(cteDefs, newStmt)
@@ -85,7 +55,7 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
     }
   }
 
-  def isExplicitlyMarkedAsMaterializable(stmt: Statement): Boolean =
+  def markedAsMaterializable(stmt: Statement): Boolean =
     stmt match {
       case s: Select =>
         s.hint(SelectHint.Materialized)
@@ -112,33 +82,16 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
 
   private def collectAtomicFromObservedQueries(f: AtomicFrom): Unit = {
     f match {
-      case FromStatement(stmt, _, _, _, _) if stmt.containsNonlocalColumnReferences =>
-        // We can't CTEify this because it references an external
-        // column, but we might be able to do so to some internal
-        // query, so keep collecting them
-        collectObservedQueries(stmt)
-      case FromStatement(stmt, _, _, None, _) =>
-        // Not a named query, but if it's marked as materializable we can collect it anyway
-        if(isExplicitlyMarkedAsMaterializable(stmt)) {
-          ObservedQueries.retrieveCached(None, stmt) match {
-            case None =>
-              collectObservedQueries(stmt)
-              ObservedQueries.save(CTEStuff(labelProvider.cteLabel(), stmt))
-            case Some(ctestuff) =>
-              ctestuff.reused = true
-          }
-        } else {
-          collectObservedQueries(stmt)
-        }
-
-      case FromStatement(stmt, _, _, Some(cn), _) =>
-        ObservedQueries.retrieveCached(Some(cn), stmt) match {
+      case FromStatement(stmt, _, _, _, _) if markedAsMaterializable(stmt) && !stmt.containsNonlocalColumnReferences =>
+        ObservedQueries.retrieveCached(stmt) match {
           case None =>
             collectObservedQueries(stmt)
-            ObservedQueries.save(cn, CTEStuff(labelProvider.cteLabel(), stmt))
+            ObservedQueries.save(CTEStuff(labelProvider.cteLabel(), stmt))
           case Some(ctestuff) =>
-            ctestuff.reused = true
-        }
+            // ok
+          }
+      case FromStatement(stmt, _, _, _, _) =>
+        collectObservedQueries(stmt)
       case _ =>
         ()
     }
@@ -247,9 +200,9 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
 
   private def rewriteAtomicFrom(f: AtomicFrom): (ColumnMap, AtomicFrom) =
     f match {
-      case orig@FromStatement(stmt, label, rn, cn, alias) if cn.isDefined || isExplicitlyMarkedAsMaterializable(stmt) =>
-        ObservedQueries.retrieveCached(cn, stmt) match {
-          case Some(ctestuff) if ctestuff.reused || isExplicitlyMarkedAsMaterializable(stmt) =>
+      case orig@FromStatement(stmt, label, rn, cn, alias) if markedAsMaterializable(stmt) && !stmt.containsNonlocalColumnReferences =>
+        ObservedQueries.retrieveCached(stmt) match {
+          case Some(ctestuff) =>
             // ctestuff.defQuery is isomorphic to stmt, so we can line
             // up the output columns...
             assert(stmt.schema.size == ctestuff.defQuery.schema.size)
@@ -269,9 +222,11 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
 
             (columnMap, FromCTE(ctestuff.label, label, ctestuff.rewrittenDefQuery, rn, cn, alias))
           case _ =>
-            // Not reused, so don't CTEify it.  Instead just
-            // recursively rewrite the query to catch any interior
-            // reuse.
+            // This shouldn't happen... we've checked that it is
+            // marked as materializable and doesn't contain external
+            // references, so it _should_ be cached.  But since it's
+            // not, just recursively rewrite the query to catch any
+            // interior reuse.
             (Map.empty, orig.copy(statement = rewriteStatement(stmt)))
         }
       case orig@FromStatement(stmt, _, _, _, _) =>
@@ -281,11 +236,11 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
     }
 }
 
-object MaterializeNamedQueries {
+object MaterializeQueries {
   @volatile var validationActive = false
 
   def apply[MT <: MetaTypes](labelProvider: LabelProvider, statement: Statement[MT]): Statement[MT] = {
-    val result = new MaterializeNamedQueries[MT](labelProvider).rewriteTopLevelStatement(statement)
+    val result = new MaterializeQueries[MT](labelProvider).rewriteTopLevelStatement(statement)
     assert(result.referencedCTEs == statement.referencedCTEs)
     result
   }
