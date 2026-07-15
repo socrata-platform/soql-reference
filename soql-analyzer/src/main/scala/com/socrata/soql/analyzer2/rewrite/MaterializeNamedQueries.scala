@@ -70,7 +70,13 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
 
     if(ObservedQueries.any) {
       val cteDefs = OrderedMap() ++ ObservedQueries.things.map { case ctestuff =>
-        ctestuff.label -> CTE.Definition(None, ctestuff.rewrittenDefQuery, MaterializedHint.Default)
+        val matHint =
+          if(isExplicitlyMarkedAsMaterializable(ctestuff.rewrittenDefQuery)) {
+            MaterializedHint.Materialized
+          } else {
+            MaterializedHint.Default
+          }
+        ctestuff.label -> CTE.Definition(None, ctestuff.rewrittenDefQuery, matHint)
       }
       val newStmt = rewriteStatement(stmt)
       CTE(cteDefs, newStmt)
