@@ -118,6 +118,7 @@ TableIdentifier = "@" ("-" | [:jletterdigit:])+
   // Misc expression-y stuf
   "||"  { return token(new PIPEPIPE()); }
   "::"  { return token(new COLONCOLON()); }
+  ":!"  { return token(new COLONBANG()); }
   "("   { return token(new LPAREN()); }
   ")"   { return token(new RPAREN()); }
 

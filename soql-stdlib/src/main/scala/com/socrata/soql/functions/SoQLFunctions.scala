@@ -798,6 +798,13 @@ object SoQLFunctions {
   }
   val castIdentities = castIdentitiesByType.valuesIterator.toVector
 
+  val typeAssertionsByType = OrderedMap() ++ SoQLType.typesByName.iterator.map { case (n, t) =>
+    t -> mf(":!" + n.caseFolded, SpecialFunctions.TypeAssert(n), Seq(t), Seq.empty, t)(
+      NoDocs
+    )
+  }
+  val typeAssertions = typeAssertionsByType.valuesIterator.toVector
+
   val NumberToText = mf("number to text", SpecialFunctions.Cast(SoQLText.name), Seq(SoQLNumber), Seq.empty, SoQLText)(
     NoDocs
   )
@@ -957,7 +964,7 @@ object SoQLFunctions {
       method <- getClass.getMethods
       if Modifier.isPublic(method.getModifiers) && method.getParameterTypes.length == 0 && method.getReturnType == classOf[Function[_]]
     } yield method.invoke(this).asInstanceOf[Function[SoQLType]]
-    castIdentities ++ reflectedFunctions
+    castIdentities ++ typeAssertions ++ reflectedFunctions
   }
 
   val functionsByIdentity = allFunctions.map { f => f.identity -> f }.toMap

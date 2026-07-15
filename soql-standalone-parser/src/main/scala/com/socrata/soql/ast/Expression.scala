@@ -50,6 +50,7 @@ object Expression {
         case FunctionCall(SpecialFunctions.Operator(op), Seq(arg1, arg2), _, _) => findIdentsAndLiterals(arg1) ++ Vector(op) ++ findIdentsAndLiterals(arg2)
         case FunctionCall(SpecialFunctions.Operator(_), _, _, _) => sys.error("Found a non-unary, non-binary operator: " + fc)
         case FunctionCall(SpecialFunctions.Cast(typ), Seq(arg), _, _) => findIdentsAndLiterals(arg) :+ typ.name
+        case FunctionCall(SpecialFunctions.TypeAssert(typ), Seq(arg), _, _) => findIdentsAndLiterals(arg) :+ typ.name
         case FunctionCall(SpecialFunctions.Cast(_), _, _, _) => sys.error("Found a non-unary cast: " + fc)
         case FunctionCall(SpecialFunctions.IsNull, args, _, _) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "null")
         case FunctionCall(SpecialFunctions.IsNotNull, args, _, _) => args.flatMap(findIdentsAndLiterals) ++ Vector("is", "not", "null")
@@ -169,6 +170,15 @@ object SpecialFunctions {
       case _ => None
     }
     val Regex = """^cast\$(.*)$""".r
+  }
+
+  object TypeAssert {
+    def apply(op: TypeName) = FunctionName("typeassert$" + op.name)
+    def unapply(f: FunctionName) = f.name match {
+      case Regex(x) => Some(TypeName(x))
+      case _ => None
+    }
+    val Regex = """^typeassert\$(.*)$""".r
   }
 }
 
@@ -341,6 +351,8 @@ case class FunctionCall(functionName: FunctionName, parameters: Seq[Expression],
         sys.error("Found a non-unary, non-binary operator: " + op + " at " + position)
       case SpecialFunctions.Cast(typ) if parameters.size == 1 =>
         d"${opArg(parameters(0), parenLowerOnly = true)} :: ${typ.toString}"
+      case SpecialFunctions.TypeAssert(typ) if parameters.size == 1 =>
+        d"${opArg(parameters(0), parenLowerOnly = true)} :! ${typ.toString}"
       case SpecialFunctions.Between =>
         Seq(opArg(parameters(0)), d"BETWEEN ${opArg(parameters(1))}", d"AND ${opArg(parameters(2))}").sep.hang(2)
       case SpecialFunctions.NotBetween =>
