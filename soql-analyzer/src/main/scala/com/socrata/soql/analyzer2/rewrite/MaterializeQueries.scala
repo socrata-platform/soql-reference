@@ -7,12 +7,6 @@ import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection._
 
 class MaterializeQueries[MT <: MetaTypes] private (labelProvider: LabelProvider) extends StatementUniverse[MT] {
-  // The tricky bit is identifying when two things name the "same"
-  // query, because while if two ScopedResourceNames are the same then
-  // they're definitely the same thing, but if they're different they
-  // aren't necessarily.  Perhaps we should use structural equality
-  // rather than relying on names?
-
   private case class CTEStuff(label: AutoCTELabel, defQuery: Statement) {
     // This is sort of gnarly flow, but, this works in two passes.
     // First, we collect all the named queries (in NamedQueries), then
@@ -24,9 +18,6 @@ class MaterializeQueries[MT <: MetaTypes] private (labelProvider: LabelProvider)
   }
 
   private object ObservedQueries {
-    // The "same" canonical name can name multiple different queries,
-    // because the actual query you get can (theoretically) differ
-    // based on who you are.
     private val queries = new mutable.ArrayBuffer[CTEStuff]
 
     // We only store UN-REWRITTEN queries in the cache!
