@@ -6,25 +6,8 @@ import com.socrata.soql.collection.OrderedMap
 import com.socrata.soql.analyzer2._
 import com.socrata.soql.collection._
 
-class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProvider) extends StatementUniverse[MT] {
-  // ok so, we want to walk over the Statement, and for each select,
-  // if a subquery in its FROM has a resource name we want to hoist it
-  // to the top level as a CTE and replace references to it.
-  //
-  // Despite the name of the pass, right now we're _not_ explicitly
-  // materializing the query.  Instead we're relying on PG's default
-  // heuristic (i.e., "if it's referenced more than once, materialize,
-  // otherwise don't")
-  //
-  // The tricky bit is identifying when two things name the "same"
-  // query, because while if two ScopedResourceNames are the same then
-  // they're definitely the same thing, but if they're different they
-  // aren't necessarily.  Perhaps we should use structural equality
-  // rather than relying on names?
-
+class MaterializeQueries[MT <: MetaTypes] private (labelProvider: LabelProvider) extends StatementUniverse[MT] {
   private case class CTEStuff(label: AutoCTELabel, defQuery: Statement) {
-    var reused = false
-
     // This is sort of gnarly flow, but, this works in two passes.
     // First, we collect all the named queries (in NamedQueries), then
     // we rewrite them using that same cache.  This lazy val lets us
@@ -34,33 +17,27 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
     lazy val rewrittenDefQuery = rewriteStatement(defQuery)
   }
 
-  private object NamedQueries {
-    // The "same" canonical name can name multiple different queries,
-    // because the actual query you get can (theoretically) differ
-    // based on who you are.
-    private val queries = new mutable.LinkedHashMap[CanonicalName, Vector[CTEStuff]]
+  private object ObservedQueries {
+    private val queries = new mutable.ArrayBuffer[CTEStuff]
 
     // We only store UN-REWRITTEN queries in the cache!
-    def retrieveCached(x: CanonicalName, s: Statement): Option[CTEStuff] =
-      queries.getOrElse(x, Vector.empty).find(_.defQuery.isIsomorphic(s))
+    def retrieveCached(s: Statement): Option[CTEStuff] =
+      queries.find(_.defQuery.isIsomorphic(s))
 
-    def save(x: CanonicalName, s: CTEStuff): Unit = {
-      queries.get(x) match {
-        case None => queries += x -> Vector(s)
-        case Some(v) => queries += x -> (v :+ s)
-      }
+    def save(s: CTEStuff): Unit = {
+      queries += s
     }
 
-    def any = queries.valuesIterator.flatMap(_.iterator).exists(_.reused)
-    def things: Iterator[CTEStuff] = queries.valuesIterator.flatMap(_.iterator).filter(_.reused)
+    def any = queries.nonEmpty
+    def things: Iterator[CTEStuff] = queries.iterator
   }
 
   def rewriteTopLevelStatement(stmt: Statement): Statement = {
-    collectNamedQueries(stmt)
+    collectObservedQueries(stmt)
 
-    if(NamedQueries.any) {
-      val cteDefs = OrderedMap() ++ NamedQueries.things.map { case ctestuff =>
-        ctestuff.label -> CTE.Definition(None, ctestuff.rewrittenDefQuery, MaterializedHint.Default)
+    if(ObservedQueries.any) {
+      val cteDefs = OrderedMap() ++ ObservedQueries.things.map { case ctestuff =>
+        ctestuff.label -> CTE.Definition(None, ctestuff.rewrittenDefQuery, MaterializedHint.Materialized)
       }
       val newStmt = rewriteStatement(stmt)
       CTE(cteDefs, newStmt)
@@ -69,41 +46,43 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
     }
   }
 
-  private def collectNamedQueries(stmt: Statement): Unit = {
+  def markedAsMaterializable(stmt: Statement): Boolean =
+    stmt match {
+      case s: Select =>
+        s.hint(SelectHint.Materialized)
+      case _ =>
+        false
+    }
+
+  private def collectObservedQueries(stmt: Statement): Unit = {
     stmt match {
       case CombinedTables(op, left, right) =>
-        collectNamedQueries(left)
-        collectNamedQueries(right)
+        collectObservedQueries(left)
+        collectObservedQueries(right)
       case _ : CTE =>
         throw new Exception("Shouldn't see CTEs at this point")
       case v: Values =>
         // no subqueries in values
       case sel: Select =>
         sel.from.reduce[Unit](
-          collectAtomicFromNamedQueries,
-          (_, join) => collectAtomicFromNamedQueries(join.right)
+          collectAtomicFromObservedQueries,
+          (_, join) => collectAtomicFromObservedQueries(join.right)
         )
     }
   }
 
-  private def collectAtomicFromNamedQueries(f: AtomicFrom): Unit = {
+  private def collectAtomicFromObservedQueries(f: AtomicFrom): Unit = {
     f match {
-      case FromStatement(stmt, _, _, _, _) if stmt.containsNonlocalColumnReferences =>
-        // We can't CTEify this because it references an external
-        // column, but we might be able to do so to some internal
-        // query, so keep collecting them
-        collectNamedQueries(stmt)
-      case FromStatement(stmt, _, _, None, _) =>
-        // This is not a named query, but we can recurse
-        collectNamedQueries(stmt)
-      case FromStatement(stmt, _, _, Some(cn), _) =>
-        NamedQueries.retrieveCached(cn, stmt) match {
+      case FromStatement(stmt, _, _, _, _) if markedAsMaterializable(stmt) && !stmt.containsNonlocalColumnReferences =>
+        ObservedQueries.retrieveCached(stmt) match {
           case None =>
-            collectNamedQueries(stmt)
-            NamedQueries.save(cn, CTEStuff(labelProvider.cteLabel(), stmt))
+            collectObservedQueries(stmt)
+            ObservedQueries.save(CTEStuff(labelProvider.cteLabel(), stmt))
           case Some(ctestuff) =>
-            ctestuff.reused = true
-        }
+            // ok
+          }
+      case FromStatement(stmt, _, _, _, _) =>
+        collectObservedQueries(stmt)
       case _ =>
         ()
     }
@@ -212,9 +191,9 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
 
   private def rewriteAtomicFrom(f: AtomicFrom): (ColumnMap, AtomicFrom) =
     f match {
-      case orig@FromStatement(stmt, label, Some(rn), Some(cn), alias) => // "Some(rn)" means this is a saved query
-        NamedQueries.retrieveCached(cn, stmt) match {
-          case Some(ctestuff) if ctestuff.reused =>
+      case orig@FromStatement(stmt, label, rn, cn, alias) if markedAsMaterializable(stmt) && !stmt.containsNonlocalColumnReferences =>
+        ObservedQueries.retrieveCached(stmt) match {
+          case Some(ctestuff) =>
             // ctestuff.defQuery is isomorphic to stmt, so we can line
             // up the output columns...
             assert(stmt.schema.size == ctestuff.defQuery.schema.size)
@@ -234,21 +213,25 @@ class MaterializeNamedQueries[MT <: MetaTypes] private (labelProvider: LabelProv
 
             (columnMap, FromCTE(ctestuff.label, label, ctestuff.rewrittenDefQuery, rn, cn, alias))
           case _ =>
-            // Not reused, so don't CTEify it.  Instead just
-            // recursively rewrite the query to catch any interior
-            // reuse.
+            // This shouldn't happen... we've checked that it is
+            // marked as materializable and doesn't contain external
+            // references, so it _should_ be cached.  But since it's
+            // not, just recursively rewrite the query to catch any
+            // interior reuse.
             (Map.empty, orig.copy(statement = rewriteStatement(stmt)))
         }
+      case orig@FromStatement(stmt, _, _, _, _) =>
+        (Map.empty, orig.copy(statement = rewriteStatement(stmt)))
       case other =>
         (Map.empty, other)
     }
 }
 
-object MaterializeNamedQueries {
+object MaterializeQueries {
   @volatile var validationActive = false
 
   def apply[MT <: MetaTypes](labelProvider: LabelProvider, statement: Statement[MT]): Statement[MT] = {
-    val result = new MaterializeNamedQueries[MT](labelProvider).rewriteTopLevelStatement(statement)
+    val result = new MaterializeQueries[MT](labelProvider).rewriteTopLevelStatement(statement)
     assert(result.referencedCTEs == statement.referencedCTEs)
     result
   }

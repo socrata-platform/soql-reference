@@ -11,7 +11,7 @@ import com.socrata.soql.serialize.{ReadBuffer, WriteBuffer}
 import mocktablefinder._
 
 class SoQLAnalysisTest extends FunSuite with MustMatchers with TestHelper {
-  rewrite.MaterializeNamedQueries.validationActive = true
+  rewrite.MaterializeQueries.validationActive = true
 
   val rowNumber = TestFunctions.RowNumber.monomorphic.get
   val windowFunction = TestFunctions.WindowFunction.monomorphic.get
@@ -1610,19 +1610,19 @@ select * where first = 'Tom'
     analysis.removeSystemColumns.statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
-  test("materialize nested genuinely multiply-used named queries") {
+  test("materialize nested genuinely marked queries") {
     val tf = tableFinder(
       (0, "table") -> D(
         ":id" -> TestNumber,
         "text" -> TestText,
         "num" -> TestNumber
       ),
-      (0, "inner_query") -> Q(0, "table", "select :id, text").withCanonicalName("inner"),
-      (0, "outer_query") -> Q(0, "inner_query", "select text as t1, @q.text as t2 join @inner_query as @q on true").withCanonicalName("outer")
+      (0, "inner_query") -> Q(0, "table", "select hint(materialized) :id, text").withCanonicalName("inner"),
+      (0, "outer_query") -> Q(0, "inner_query", "select hint(materialized) text as t1, @q.text as t2 join @inner_query as @q on true").withCanonicalName("outer")
     )
 
     val analysis = analyze(tf, "select @q1.t1, @q2.t2 from @outer_query as @q1 join @outer_query as @q2 on true")
-      .materializeNamedQueries
+      .materializeQueries
 
     // There is no source form for CTEs (yet) so we'll have to
     // destructure it rather than just saying "it should be isomorphic
@@ -1655,8 +1655,8 @@ select * where first = 'Tom'
       case _ => fail("The use query's FROM should have been a join between two CTE references")
     }
 
-    useLeft.canonicalName must be (CanonicalName("outer"))
-    useRight.canonicalName must be (CanonicalName("outer"))
+    useLeft.canonicalName must be (Some(CanonicalName("outer")))
+    useRight.canonicalName must be (Some(CanonicalName("outer")))
 
     useRight.cteLabel must equal (useLeft.cteLabel)
     defs.keysIterator.indexOf(useLeft.cteLabel) must equal (1)
@@ -1672,8 +1672,8 @@ select * where first = 'Tom'
       case _ => fail("The outer cte query's FROM should have been a join between two CTE references")
     }
 
-    outerLeft.canonicalName must be (CanonicalName("inner"))
-    outerRight.canonicalName must be (CanonicalName("inner"))
+    outerLeft.canonicalName must be (Some(CanonicalName("inner")))
+    outerRight.canonicalName must be (Some(CanonicalName("inner")))
 
     outerRight.cteLabel must equal (outerLeft.cteLabel)
     defs.keysIterator.indexOf(outerLeft.cteLabel) must equal (0)
@@ -1687,11 +1687,11 @@ select * where first = 'Tom'
         "num" -> TestNumber
       ),
       (0, "inner_query") -> Q(0, "table", "select :id, text").withCanonicalName("inner"),
-      (0, "outer_query") -> Q(0, "inner_query", "select text as t1").withCanonicalName("outer")
+      (0, "outer_query") -> Q(0, "inner_query", "select hint(materialized) text as t1").withCanonicalName("outer")
     )
 
     val analysis = analyze(tf, "select @q1.t1, @q2.t1 as t2 from @outer_query as @q1 join @outer_query as @q2 on true")
-      .materializeNamedQueries
+      .materializeQueries
 
     // What we're checking is that the query tree has been turned into
     // a DAG, and that the inner query is _not_ CTEified:
@@ -1719,8 +1719,8 @@ select * where first = 'Tom'
       case _ => fail("The use query's FROM should have been a join between two CTE references")
     }
 
-    useLeft.canonicalName must be (CanonicalName("outer"))
-    useRight.canonicalName must be (CanonicalName("outer"))
+    useLeft.canonicalName must be (Some(CanonicalName("outer")))
+    useRight.canonicalName must be (Some(CanonicalName("outer")))
 
     useRight.cteLabel must equal (useLeft.cteLabel)
     defs.keysIterator.indexOf(useLeft.cteLabel) must equal (0)
@@ -1746,21 +1746,21 @@ select * where first = 'Tom'
         "text" -> TestText,
         "num" -> TestNumber
       ),
-      (0, "ordered_query") -> Q(0, "table", "select text, num order by :id"),
+      (0, "ordered_query") -> Q(0, "table", "select hint(materialized) text, num order by :id"),
       (0, "outer_query_a") -> Q(0, "ordered_query", "select text, row_number() over ()"),
       (0, "outer_query_b") -> Q(0, "ordered_query", "select num, row_number() over ()"),
       (0, "joined") -> Q(0, "outer_query_a", "select text, @ocb.num join @outer_query_b as @ocb on true"),
 
-      (1, "ordered_query") -> Q(0, "table", "select text, num, :id order by :id"),
+      (1, "ordered_query") -> Q(0, "table", "select hint(materialized) text, num, :id order by :id"),
       (1, "outer_query_a") -> Q(1, "ordered_query", "select text, row_number() over () order by :id"),
       (1, "outer_query_b") -> Q(1, "ordered_query", "select num, row_number() over () order by :id"),
       (1, "joined") -> Q(1, "outer_query_a", "select text, @ocb.num join @outer_query_b as @ocb on true")
     )
 
     val analysis1 = analyze(tf, "select @oca.text, @ocb.num from @outer_query_a as @oca join @outer_query_b as @ocb on true")
-      .materializeNamedQueries.preserveOrdering
+      .materializeQueries.preserveOrdering
     val analysis2 = AnalysisBuilder.analyze(tf, 1, "select @oca.text, @ocb.num from @outer_query_a as @oca join @outer_query_b as @ocb on true").finishAnalysis
-      .materializeNamedQueries
+      .materializeQueries
 
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }
@@ -1772,21 +1772,21 @@ select * where first = 'Tom'
         "text" -> TestText,
         "num" -> TestNumber
       ),
-      (0, "ordered_query") -> Q(0, "table", "select text, num order by :id"),
+      (0, "ordered_query") -> Q(0, "table", "select hint(materialized) text, num order by :id"),
       (0, "outer_query_a") -> Q(0, "ordered_query", "select text"),
       (0, "outer_query_b") -> Q(0, "ordered_query", "select num"),
       (0, "joined") -> Q(0, "outer_query_a", "select text, @ocb.num join @outer_query_b as @ocb on true"),
 
-      (1, "ordered_query") -> Q(0, "table", "select text, num"),
+      (1, "ordered_query") -> Q(0, "table", "select hint(materialized) text, num"),
       (1, "outer_query_a") -> Q(1, "ordered_query", "select text"),
       (1, "outer_query_b") -> Q(1, "ordered_query", "select num"),
       (1, "joined") -> Q(1, "outer_query_a", "select text, @ocb.num join @outer_query_b as @ocb on true")
     )
 
     val analysis1 = analyze(tf, "select @oca.text, @ocb.num from @outer_query_a as @oca join @outer_query_b as @ocb on true")
-      .materializeNamedQueries.removeUnusedOrderBy
+      .materializeQueries.removeUnusedOrderBy
     val analysis2 = AnalysisBuilder.analyze(tf, 1, "select @oca.text, @ocb.num from @outer_query_a as @oca join @outer_query_b as @ocb on true").finishAnalysis
-      .materializeNamedQueries
+      .materializeQueries
 
     analysis1.statement must be (isomorphicTo(analysis2.statement))
   }

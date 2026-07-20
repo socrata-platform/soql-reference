@@ -228,8 +228,8 @@ case class FromCTE[MT <: MetaTypes](
   cteLabel: AutoCTELabel,
   label: AutoTableLabel,
   basedOn: Statement[MT],
-  definiteResourceName: types.ScopedResourceName[MT],
-  canonicalName: CanonicalName,
+  resourceName: Option[types.ScopedResourceName[MT]],
+  canonicalName: Option[CanonicalName],
   alias: Option[ResourceName]
 ) extends AtomicFrom[MT] with from.FromCTEImpl[MT]
 object FromCTE extends from.OFromCTEImpl
