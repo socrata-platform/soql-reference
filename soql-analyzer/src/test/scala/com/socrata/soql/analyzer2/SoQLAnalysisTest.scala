@@ -160,6 +160,47 @@ select text + text, num * 2 as num from @this as t order by @t.num limit 10 offs
 """)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
+  test("merge - refuse to duplicate nontrivial exprs that aren't top-level order or group") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", """
+select *, text||text as texttext
+|> select * order by texttext || 'foo'
+""")
+
+    val expectedAnalysis = analyze(tf, "twocol", """
+select text, num, text||text as texttext |> select text, num, texttext order by texttext || 'foo'
+""")
+
+    val expectedAnalysisAggressive = analyze(tf, "twocol", """
+select text, num, text||text as texttext order by texttext || 'foo'
+""")
+
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysisAggressive.statement))
+  }
+
+  test("merge - do duplicate nontrivial exprs that are top-level order or group") {
+    val tf = tableFinder(
+      (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
+    )
+
+    val analysis = analyze(tf, "twocol", """
+select *, text||text as texttext
+|> select texttext, count(*) group by texttext order by texttext
+""")
+
+    val expectedAnalysis = analyze(tf, "twocol", """
+select text || text as texttext, count(*) group by texttext order by texttext
+""")
+
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("merge - distinct on ordered by different column") {
@@ -176,6 +217,7 @@ select distinct text
 """)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("merge - distinct on ordered by same column") {
@@ -192,6 +234,7 @@ select distinct text order by text
 """)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("merge - unsimple distinct on ordered") {
@@ -208,6 +251,7 @@ select distinct text, num order by text, num
 """)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("merge - distinct aggregate on ordered") {
@@ -224,6 +268,7 @@ select distinct text group by text
 """)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("merge - aggregate on non-aggregate") {
@@ -240,6 +285,7 @@ select text, count(*) where num = 3 group by text
 """)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("merge - aggregate without group-by on non-aggregate") {
@@ -256,6 +302,7 @@ select count(*) where num = 3
 """)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("merge - non-aggregate on aggregate") {
@@ -264,14 +311,15 @@ select count(*) where num = 3
     )
 
     val analysis = analyze(tf, "twocol", """
-select text, count(num) group by text |> select * where count_num = 5
+select text, count(num) group by text |> select count_num = 5
 """)
 
     val expectedAnalysis = analyze(tf, "twocol", """
-select text, count(num) as n group by text having n = 5
+select count(num) = 5 group by text
 """)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("merge - simple on windowed") {
@@ -288,6 +336,7 @@ select text, row_number() over () + 1 limit 5
 """)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("merge - filter on join") {
@@ -305,6 +354,7 @@ select text, num, @ct.amount, @ct.words join @locowt as @ct on num = @ct.amount 
 """)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("merge - join on simple") {
@@ -322,6 +372,7 @@ select text, num join @locowt as ct on num = @ct.amount order by num
 """)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("merge - implicit group-by") {
@@ -338,6 +389,7 @@ select count(*), 1 as x |> select x
 """)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("merge - preserve inherited hints - hint on base") {
@@ -347,12 +399,18 @@ select count(*), 1 as x |> select x
 
     val analysis = analyze(tf, "ds", """
 select a |> select a |> select a
-""").merge(and)
+""")
 
     val expectedAnalysis = analyzeSaved(tf, "ds")
 
-    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
-    analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
+    val merged = analysis.merge(and)
+    val aggressivelyMerged = analysis.mergeAggressively(and)
+
+    merged.statement must be (isomorphicTo(expectedAnalysis.statement))
+    merged.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
+
+    aggressivelyMerged.statement must be (isomorphicTo(expectedAnalysis.statement))
+    aggressivelyMerged.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
   }
 
   test("merge - preserve inherited hints - hint on intermediate") {
@@ -363,12 +421,18 @@ select a |> select a |> select a
 
     val analysis = analyze(tf, "q", """
 select a |> select a |> select a
-""").merge(and)
+""")
 
     val expectedAnalysis = analyzeSaved(tf, "ds")
 
-    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
-    analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
+    val merged = analysis.merge(and)
+    val aggressivelyMerged = analysis.mergeAggressively(and)
+
+    merged.statement must be (isomorphicTo(expectedAnalysis.statement))
+    merged.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
+
+    aggressivelyMerged.statement must be (isomorphicTo(expectedAnalysis.statement))
+    aggressivelyMerged.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
   }
 
   test("merge - preserve inherited hints - hint on last") {
@@ -378,12 +442,18 @@ select a |> select a |> select a
       (0, "q2") -> Q(0, "q1", "select a").withOutputColumnHints("a" -> j"true")
     )
 
-    val analysis = analyzeSaved(tf, "q2").merge(and)
+    val analysis = analyzeSaved(tf, "q2")
 
     val expectedAnalysis = analyzeSaved(tf, "ds")
 
-    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
-    analysis.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
+    val merged = analysis.merge(and)
+    val aggressivelyMerged = analysis.mergeAggressively(and)
+
+    merged.statement must be (isomorphicTo(expectedAnalysis.statement))
+    merged.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
+
+    aggressivelyMerged.statement must be (isomorphicTo(expectedAnalysis.statement))
+    aggressivelyMerged.statement.schema.values.map(_.hint).toSeq must be (Seq(Some(j"true")))
   }
 
   test("merge - lateral join") {
@@ -394,11 +464,12 @@ select a |> select a |> select a
       (0, "q2") -> Q(0, "ds1", "select a, @b2.b, @b2.fk, @b2.fa from @this as t join lateral (select b, @t.key as fk, @t.a as fa from @ds2) as b2 on true")
     )
 
-    val analysis = analyzeSaved(tf, "q1").merge(and)
+    val analysis = analyzeSaved(tf, "q1")
 
     val expectedAnalysis = analyzeSaved(tf, "q2")
 
-    analysis.statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("merge - non-simple non-aggregate on implicit aggregate") {
@@ -415,6 +486,7 @@ select count(*) |> select 2 as s order by s
 """)
 
     analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("merge - search inhibits merge") {
@@ -426,12 +498,12 @@ select count(*) |> select 2 as s order by s
       )
     )
 
-    val analysis1 = analyze(tf, "table", "select num |> select num search 'hello'")
-      .merge(and)
+    val analysis = analyze(tf, "table", "select num |> select num search 'hello'")
 
-    val analysis2 = analyze(tf, "table", "select num |> select num search 'hello'")
+    val expectedAnalysis = analyze(tf, "table", "select num |> select num search 'hello'")
 
-    analysis1.statement must be (isomorphicTo(analysis2.statement))
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
   test("remove unused columns - simple") {

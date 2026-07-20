@@ -62,6 +62,8 @@ class SoQLAnalysis[MT <: MetaTypes] private (
               current.imposeOrdering(helpers.isOrderable)
             case Pass.Merge =>
               current.merge(helpers.and)
+            case Pass.MergeAggressively =>
+              current.mergeAggressively(helpers.and)
             case Pass.RemoveUnusedColumns =>
               current.removeUnusedColumns
             case Pass.RemoveUnusedOrderBy =>
@@ -175,7 +177,11 @@ class SoQLAnalysis[MT <: MetaTypes] private (
 
   /** Simplify subselects on a best-effort basis. */
   def merge(and: MonomorphicFunction[CT]): SoQLAnalysis[MT] =
-    copy(statement = new rewrite.Merger(and).merge(statement))
+    copy(statement = rewrite.Merger(statement, and))
+
+  /** Simplify subselects on a best-effort basis. */
+  def mergeAggressively(and: MonomorphicFunction[CT]): SoQLAnalysis[MT] =
+    copy(statement = rewrite.Merger.aggressive(statement, and))
 
   /** Remove columns not actually used by the query */
   def removeUnusedColumns: SoQLAnalysis[MT] =

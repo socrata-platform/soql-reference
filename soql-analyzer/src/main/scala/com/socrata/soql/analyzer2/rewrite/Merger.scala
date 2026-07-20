@@ -1,6 +1,8 @@
 package com.socrata.soql.analyzer2.rewrite
 
 import scala.annotation.tailrec
+import scala.collection.{mutable => scm}
+import scala.util.control.ControlThrowable
 import scala.util.parsing.input.NoPosition
 
 import com.socrata.soql.collection._
@@ -8,7 +10,7 @@ import com.socrata.soql.environment.ResourceName
 import com.socrata.soql.functions.MonomorphicFunction
 import com.socrata.soql.analyzer2._
 
-class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends StatementUniverse[MT] {
+class Merger[MT <: MetaTypes](and: types.MonomorphicFunction[MT], aggressive: Boolean) extends StatementUniverse[MT] {
   type ACTEs = AvailableCTEs[Unit]
 
   private implicit val cvDoc = new HasDoc[CV] {
@@ -21,34 +23,74 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
     override def docOf(v: MT#DatabaseTableNameImpl) = com.socrata.prettyprint.Doc(v.toString)
   }
 
+  private class DontOvercomplicateThings extends ControlThrowable
+
+  private sealed abstract class Site
+  private object Site {
+    case object TopLevelSelect extends Site
+    case object TopLevelGroupBy extends Site
+    case object TopLevelOrderBy extends Site
+    case object Other extends Site
+  }
+
+  private class RefTracker {
+    private val seen = scm.Map.empty[(AutoTableLabel, AutoColumnLabel), Site]
+
+    def isNontrivial(e: Expr) =
+      e match {
+        case _: Column => false
+        case _: Literal => false
+        case _ => true
+      }
+
+    def addRef(label: AutoTableLabel, column: AutoColumnLabel, e: Expr, site: Site): Expr = {
+      if(!aggressive && isNontrivial(e)) {
+        seen.get((label, column)) match {
+          case Some(originalSite) =>
+            val allowDups = site match {
+              case Site.TopLevelGroupBy | Site.TopLevelOrderBy => originalSite == Site.TopLevelSelect
+              case Site.TopLevelSelect | Site.Other => false
+            }
+            if(!allowDups) {
+              debug(s"Already saw ($label, $column) -> $e at $originalSite")
+              throw new DontOvercomplicateThings
+            }
+          case None =>
+            seen += ((label, column) -> site)
+        }
+      }
+      e
+    }
+  }
+
   def merge(stmt: Statement): Statement = {
-    val r = doMerge(AvailableCTEs.empty, stmt)
+    val r = doMerge(AvailableCTEs.empty, new RefTracker, stmt)
     debug("finished", r)
     debugDone()
     r
   }
 
-  private def doMerge(availableCTEs: ACTEs, stmt: Statement): Statement =
+  private def doMerge(availableCTEs: ACTEs, refTracker: RefTracker, stmt: Statement): Statement =
     stmt match {
       case c@CombinedTables(_, left, right) =>
         debug("combined tables")
-        c.copy(left = doMerge(availableCTEs, left), right = doMerge(availableCTEs, right))
+        c.copy(left = doMerge(availableCTEs, refTracker, left), right = doMerge(availableCTEs, refTracker, right))
       case CTE(defns, useQ) =>
         debug("CTE")
         val (newACTEs, newDefns) = availableCTEs.collect(defns) { (aCTEs, query) =>
-          ((), doMerge(aCTEs, query))
+          ((), doMerge(aCTEs, refTracker, query))
         }
-        CTE(newDefns, doMerge(newACTEs, useQ))
+        CTE(newDefns, doMerge(newACTEs, refTracker, useQ))
       case v: Values =>
         debug("values")
         v
       case select: Select =>
         debug("select")
-        select.copy(from = mergeFrom(availableCTEs, select.from)) match {
+        select.copy(from = mergeFrom(availableCTEs, refTracker, select.from)) match {
           case b@Select(_, _, Unjoin(FromStatement(a: Select, aLabel, aResourceName, aCanonicalName, aAlias), bRejoin), _, _, _, _, _, _, _, _) =>
             // This privileges the first query in b's FROM because our
             // queries are frequently constructed in a chain.
-            mergeSelects(availableCTEs, a, aLabel, aResourceName, aAlias, b, bRejoin) match {
+            mergeSelects(availableCTEs, refTracker, a, aLabel, aResourceName, aAlias, b, bRejoin) match {
               case None =>
                 debug("declined to merge")
                 b
@@ -65,16 +107,16 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
         }
     }
 
-  private def mergeFrom(availableCTEs: ACTEs, from: From): From = {
+  private def mergeFrom(availableCTEs: ACTEs, refTracker: RefTracker, from: From): From = {
     from.map[MT](
-      mergeAtomicFrom(availableCTEs, _),
-      (jt, lat, left, right, on) => Join(jt, lat, left, mergeAtomicFrom(availableCTEs, right), on)
+      mergeAtomicFrom(availableCTEs, refTracker, _),
+      (jt, lat, left, right, on) => Join(jt, lat, left, mergeAtomicFrom(availableCTEs, refTracker, right), on)
     )
   }
 
-  private def mergeAtomicFrom(availableCTEs: ACTEs, from: AtomicFrom): AtomicFrom = {
+  private def mergeAtomicFrom(availableCTEs: ACTEs, refTracker: RefTracker, from: AtomicFrom): AtomicFrom = {
     from match {
-      case s@FromStatement(stmt, _, _, _, _) => s.copy(statement = doMerge(availableCTEs, stmt))
+      case s@FromStatement(stmt, _, _, _, _) => s.copy(statement = doMerge(availableCTEs, refTracker, stmt))
       case fc: FromCTE => availableCTEs.rebase(fc)
       case other => other
     }
@@ -148,105 +190,110 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
 
   private def mergeSelects(
     availableCTEs: ACTEs,
+    refTracker: RefTracker,
     a: Select, aLabel: AutoTableLabel, aResourceName: Option[ScopedResourceName], aAlias: Option[ResourceName],
     b: Select, bRejoin: FromRewriter
-  ): Option[Statement] = {
-    // If we decide to merge this, we're going to create some flavor of
-    //   select merged_projection from bRejoin(FromStatement(a.from)) ...)
-    val newStatement: Option[Select] =
-      (a, b) match {
-        case (a, b) if definitelyRequiresSubselect(a, aLabel, b) =>
-          debug("declaining to merge - definitely requires subselect")
-          None
-        case (a, b@Select(bDistinct, bSelect, _oldA, None, Nil, None, Nil, bLim, bOff, None, bHint)) if !b.isAggregated =>
-          // Just projection change + possibly limit/offset and
-          // distinctiveness.  We can merge this onto almost anything,
-          // and what we can't merge it onto has been rejected by
-          // definitelyRequiresSubselect - with one exception!  It's
-          // possible for a parent's group-by to have been implicit in
-          // its select list, so we'll only accept this merge if the
-          // resulting query's aggregatedness is the same as the
-          // parent's.
-          debug("simple", a, b)
-          val (newLim, newOff) = Merger.combineLimits(a.limit, a.offset, bLim, bOff)
-          val selectList = mergeSelection(aLabel, a.selectedExprs, bSelect)
-          Some(
-            a.copy(
-              distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
-              selectList = selectList,
-              from = bRejoin(availableCTEs, a.from, replaceRefs(aLabel, a.selectedExprs, _)),
-              orderBy = orderByVsDistinct(a.orderBy, selectList.withValuesMapped(_.expr), bDistinct),
-              limit = newLim,
-              offset = newOff,
-              hint = a.hint ++ bHint
-            )
-          ).filter(_.isAggregated == a.isAggregated)
+  ): Option[Statement] =
+    try {
+      // If we decide to merge this, we're going to create some flavor of
+      //   select merged_projection from bRejoin(FromStatement(a.from)) ...)
+      val newStatement: Option[Select] =
+        (a, b) match {
+          case (a, b) if definitelyRequiresSubselect(a, aLabel, b) =>
+            debug("declining to merge - definitely requires subselect")
+            None
+          case (a, b@Select(bDistinct, bSelect, _oldA, None, Nil, None, Nil, bLim, bOff, None, bHint)) if !b.isAggregated =>
+            // Just projection change + possibly limit/offset and
+            // distinctiveness.  We can merge this onto almost anything,
+            // and what we can't merge it onto has been rejected by
+            // definitelyRequiresSubselect - with one exception!  It's
+            // possible for a parent's group-by to have been implicit in
+            // its select list, so we'll only accept this merge if the
+            // resulting query's aggregatedness is the same as the
+            // parent's.
+            debug("simple", a, b)
+            val (newLim, newOff) = Merger.combineLimits(a.limit, a.offset, bLim, bOff)
+            val selectList = mergeSelection(refTracker, aLabel, a.selectedExprs, bSelect)
+            Some(
+              a.copy(
+                distinctiveness = mergeDistinct(refTracker, aLabel, a.selectedExprs, bDistinct),
+                selectList = selectList,
+                from = bRejoin(availableCTEs, a.from, replaceRefs(refTracker, aLabel, a.selectedExprs, _, Site.Other)),
+                orderBy = orderByVsDistinct(a.orderBy, selectList.withValuesMapped(_.expr), bDistinct),
+                limit = newLim,
+                offset = newOff,
+                hint = a.hint ++ bHint
+              )
+            ).filter(_.isAggregated == a.isAggregated)
 
-        case (a@Select(_aDistinct, aSelect, aFrom, aWhere, Nil, None, aOrder, None, None, None, aHint),
-              b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if !a.isAggregated && !b.isAggregated =>
-          debug("non-aggregate on non-aggregate")
-          val selectList = mergeSelection(aLabel, a.selectedExprs, bSelect)
-          Some(a.copy(
-                 distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
-                 selectList = selectList,
-                 from = bRejoin(availableCTEs, a.from, replaceRefs(aLabel, a.selectedExprs, _)),
-                 where = mergeWhereLike(aLabel, a.selectedExprs, aWhere, bWhere),
-                 orderBy = mergeOrderBy(aLabel, a.selectedExprs, orderByVsDistinct(aOrder, selectList.withValuesMapped(_.expr), bDistinct), bOrder),
-                 limit = bLim,
-                 offset = bOff,
-                 hint = a.hint ++ bHint
-               ))
+          case (a@Select(_aDistinct, aSelect, aFrom, aWhere, Nil, None, aOrder, None, None, None, aHint),
+                b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if !a.isAggregated && !b.isAggregated =>
+            debug("non-aggregate on non-aggregate")
+            val selectList = mergeSelection(refTracker, aLabel, a.selectedExprs, bSelect)
+            Some(a.copy(
+                   distinctiveness = mergeDistinct(refTracker, aLabel, a.selectedExprs, bDistinct),
+                   selectList = selectList,
+                   from = bRejoin(availableCTEs, a.from, replaceRefs(refTracker, aLabel, a.selectedExprs, _, Site.Other)),
+                   where = mergeWhereLike(refTracker, aLabel, a.selectedExprs, aWhere, bWhere),
+                   orderBy = mergeOrderBy(refTracker, aLabel, a.selectedExprs, orderByVsDistinct(aOrder, selectList.withValuesMapped(_.expr), bDistinct), bOrder),
+                   limit = bLim,
+                   offset = bOff,
+                   hint = a.hint ++ bHint
+                 ))
 
-        case (a@Select(_aDistinct, aSelect, aFrom, aWhere, Nil, None, _aOrder, None, None, None, aHint),
-              b@Select(bDistinct, bSelect, _oldA, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, bHint)) if !a.isAggregated && b.isAggregated =>
-          debug("aggregate on non-aggregate")
-          Some(Select(
-                 distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
-                 selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
-                 from = bRejoin(availableCTEs, aFrom, replaceRefs(aLabel, a.selectedExprs, _)),
-                 where = mergeWhereLike(aLabel, a.selectedExprs, aWhere, bWhere),
-                 groupBy = mergeGroupBy(aLabel, a.selectedExprs, bGroup),
-                 having = mergeWhereLike(aLabel, a.selectedExprs, None, bHaving),
-                 orderBy = mergeOrderBy(aLabel, a.selectedExprs, Nil, bOrder),
-                 limit = bLim,
-                 offset = bOff,
-                 search = None,
-                 hint = aHint ++ bHint))
+          case (a@Select(_aDistinct, aSelect, aFrom, aWhere, Nil, None, _aOrder, None, None, None, aHint),
+                b@Select(bDistinct, bSelect, _oldA, bWhere, bGroup, bHaving, bOrder, bLim, bOff, None, bHint)) if !a.isAggregated && b.isAggregated =>
+            debug("aggregate on non-aggregate")
+            Some(Select(
+                   distinctiveness = mergeDistinct(refTracker, aLabel, a.selectedExprs, bDistinct),
+                   selectList = mergeSelection(refTracker, aLabel, a.selectedExprs, bSelect),
+                   from = bRejoin(availableCTEs, aFrom, replaceRefs(refTracker, aLabel, a.selectedExprs, _, Site.Other)),
+                   where = mergeWhereLike(refTracker, aLabel, a.selectedExprs, aWhere, bWhere),
+                   groupBy = mergeGroupBy(refTracker, aLabel, a.selectedExprs, bGroup),
+                   having = mergeWhereLike(refTracker, aLabel, a.selectedExprs, None, bHaving),
+                   orderBy = mergeOrderBy(refTracker, aLabel, a.selectedExprs, Nil, bOrder),
+                   limit = bLim,
+                   offset = bOff,
+                   search = None,
+                   hint = aHint ++ bHint))
 
-        case (a@Select(_aDistinct, aSelect, aFrom, aWhere, aGroup, aHaving, aOrder, None, None, None, aHint),
-              b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if a.isAggregated && !b.isAggregated =>
-          debug("non-aggregate on aggregate")
-          Some(
-            Select(
-              distinctiveness = mergeDistinct(aLabel, a.selectedExprs, bDistinct),
-              selectList = mergeSelection(aLabel, a.selectedExprs, bSelect),
-              from = bRejoin(availableCTEs, aFrom, replaceRefs(aLabel, a.selectedExprs, _)),
-              where = aWhere,
-              groupBy = aGroup,
-              having = mergeWhereLike(aLabel, a.selectedExprs, aHaving, bWhere),
-              orderBy = mergeOrderBy(aLabel, a.selectedExprs, aOrder, bOrder),
-              limit = bLim,
-              offset = bOff,
-              search = None,
-              hint = aHint ++ bHint)
-          ).filter(_.isAggregated) // again, just in case the aggregation was implicit and our merge removed it
-        case _ =>
-          debug("decline to merge - unknown pattern")
-          None
-      }
-
-    newStatement.map { select =>
-      // fix up hints - this new statement has the same schema as "b"
-      // so we can look up columns in b's select list using this
-      // statement's output column labels.
-      select.copy(
-        selectList = OrderedMap() ++ select.selectList.iterator.map { case (label, namedExpr) =>
-          val hint = ColumnHint.fromAnalyzedOption(b.schema(label).hint)
-          label -> namedExpr.copy(hint = hint)
+          case (a@Select(_aDistinct, aSelect, aFrom, aWhere, aGroup, aHaving, aOrder, None, None, None, aHint),
+                b@Select(bDistinct, bSelect, _oldA, bWhere, Nil, None, bOrder, bLim, bOff, None, bHint)) if a.isAggregated && !b.isAggregated =>
+            debug("non-aggregate on aggregate")
+            Some(
+              Select(
+                distinctiveness = mergeDistinct(refTracker, aLabel, a.selectedExprs, bDistinct),
+                selectList = mergeSelection(refTracker, aLabel, a.selectedExprs, bSelect),
+                from = bRejoin(availableCTEs, aFrom, replaceRefs(refTracker, aLabel, a.selectedExprs, _, Site.Other)),
+                where = aWhere,
+                groupBy = aGroup,
+                having = mergeWhereLike(refTracker, aLabel, a.selectedExprs, aHaving, bWhere),
+                orderBy = mergeOrderBy(refTracker, aLabel, a.selectedExprs, aOrder, bOrder),
+                limit = bLim,
+                offset = bOff,
+                search = None,
+                hint = aHint ++ bHint)
+            ).filter(_.isAggregated) // again, just in case the aggregation was implicit and our merge removed it
+          case _ =>
+            debug("decline to merge - unknown pattern")
+            None
         }
-      )
+
+      newStatement.map { select =>
+        // fix up hints - this new statement has the same schema as "b"
+        // so we can look up columns in b's select list using this
+        // statement's output column labels.
+        select.copy(
+          selectList = OrderedMap() ++ select.selectList.iterator.map { case (label, namedExpr) =>
+            val hint = ColumnHint.fromAnalyzedOption(b.schema(label).hint)
+            label -> namedExpr.copy(hint = hint)
+          }
+        )
+      }
+    } catch {
+      case _ : DontOvercomplicateThings =>
+        None
     }
-  }
 
   private def definitelyRequiresSubselect(a: Select, aLabel: AutoTableLabel, b: Select): Boolean = {
     if(b.hint(SelectHint.NoChainMerge)) {
@@ -345,26 +392,28 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
       q.distinctiveness != Distinctiveness.Indistinct()
 
   private def mergeDistinct(
+    refTracker: RefTracker,
     aTable: AutoTableLabel,
     aColumns: OrderedMap[AutoColumnLabel, Expr],
     b: Distinctiveness
   ): Distinctiveness =
     b match {
-      case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(replaceRefs(aTable, aColumns, _)))
+      case Distinctiveness.On(exprs) => Distinctiveness.On(exprs.map(replaceRefs(refTracker, aTable, aColumns, _, Site.Other)))
       case x@(Distinctiveness.Indistinct() | Distinctiveness.FullyDistinct()) => x
     }
 
   private def mergeSelection(
+    refTracker: RefTracker,
     aTable: AutoTableLabel,
     aColumns: OrderedMap[AutoColumnLabel, Expr],
     b: OrderedMap[AutoColumnLabel, NamedExpr]
   ): OrderedMap[AutoColumnLabel, NamedExpr] =
     b.withValuesMapped { bExpr =>
-      bExpr.copy(expr = replaceRefs(aTable, aColumns, bExpr.expr))
+      bExpr.copy(expr = replaceRefs(refTracker, aTable, aColumns, bExpr.expr, Site.TopLevelSelect))
     }
 
-  private def mergeGroupBy(aTable: AutoTableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr], gb: Seq[Expr]): Seq[Expr] = {
-    gb.map(replaceRefs(aTable, aColumns, _))
+  private def mergeGroupBy(refTracker: RefTracker, aTable: AutoTableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr], gb: Seq[Expr]): Seq[Expr] = {
+    gb.map(replaceRefs(refTracker, aTable, aColumns, _, Site.TopLevelGroupBy))
   }
 
   private def orderByVsDistinct(orderBy: Seq[OrderBy], columns: OrderedMap[AutoColumnLabel, Expr], bDistinct: Distinctiveness) = {
@@ -378,14 +427,16 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
   }
 
   private def mergeOrderBy(
+    refTracker: RefTracker,
     aTable: AutoTableLabel,
     aColumns: OrderedMap[AutoColumnLabel, Expr],
     obA: Seq[OrderBy],
     obB: Seq[OrderBy]
   ): Seq[OrderBy] =
-    obB.map { ob => ob.copy(expr = replaceRefs(aTable, aColumns, ob.expr)) } ++ obA
+    obB.map { ob => ob.copy(expr = replaceRefs(refTracker, aTable, aColumns, ob.expr, Site.TopLevelOrderBy)) } ++ obA
 
   private def mergeWhereLike(
+    refTracker: RefTracker,
     aTable: AutoTableLabel,
     aColumns: OrderedMap[AutoColumnLabel, Expr],
     a: Option[Expr],
@@ -394,20 +445,20 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
     (a, b) match {
       case (None, None) => None
       case (Some(a), None) => Some(a)
-      case (None, Some(b)) => Some(replaceRefs(aTable, aColumns, b))
-      case (Some(a), Some(b)) => Some(FunctionCall(and, Seq(a, replaceRefs(aTable, aColumns, b)))(FuncallPositionInfo.Synthetic))
+      case (None, Some(b)) => Some(replaceRefs(refTracker, aTable, aColumns, b, Site.Other))
+      case (Some(a), Some(b)) => Some(FunctionCall(and, Seq(a, replaceRefs(refTracker, aTable, aColumns, b, Site.Other)))(FuncallPositionInfo.Synthetic))
     }
 
-  private def replaceRefs(aTable: AutoTableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr], b: Expr) =
-    new ReplaceRefs(aTable, aColumns).go(b)
+  private def replaceRefs(refTracker: RefTracker, aTable: AutoTableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr], b: Expr, site: Site) =
+    new ReplaceRefs(refTracker, aTable, aColumns).go(b, site)
 
-  private class ReplaceRefs(aTable: AutoTableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr]) {
-    def go(b: Expr): Expr =
+  private class ReplaceRefs(refTracker: RefTracker, aTable: AutoTableLabel, aColumns: OrderedMap[AutoColumnLabel, Expr]) {
+    def go(b: Expr, site: Site): Expr =
       b match {
         case VirtualColumn(`aTable`, c : AutoColumnLabel, t) =>
           aColumns.get(c) match {
             case Some(aExpr) if aExpr.typ == t =>
-              aExpr
+              refTracker.addRef(aTable, c, aExpr, site)
             case Some(_) =>
               oops("Found a maltyped column reference!")
             case None =>
@@ -418,21 +469,21 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
         case l: Literal =>
           l
         case fc@FunctionCall(f, params) =>
-          FunctionCall(f, params.map(go _))(fc.position)
+          FunctionCall(f, params.map(go(_, Site.Other)))(fc.position)
         case fc@AggregateFunctionCall(f, params, distinct, filter) =>
           AggregateFunctionCall(
             f,
-            params.map(go _),
+            params.map(go(_, Site.Other)),
             distinct,
-            filter.map(go _)
+            filter.map(go(_, Site.Other))
           )(fc.position)
         case fc@WindowedFunctionCall(f, params, filter, partitionBy, orderBy, frame) =>
           WindowedFunctionCall(
             f,
-            params.map(go _),
-            filter.map(go _),
-            partitionBy.map(go _),
-            orderBy.map { ob => ob.copy(expr = go(ob.expr)) },
+            params.map(go(_, Site.Other)),
+            filter.map(go(_, Site.Other)),
+            partitionBy.map(go(_, Site.Other)),
+            orderBy.map { ob => ob.copy(expr = go(ob.expr, Site.Other)) },
             frame
           )(fc.position)
         case sr: SelectListReference =>
@@ -447,7 +498,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
 
   private var debugOne = false
   private def debugLine(s: => Any): Unit = { }
-  private def debug(message: String): Unit = {
+  private def debug(message: => String): Unit = {
     if(debugOne) {
       debugLine("-------------------------------------------------------------------------------")
     } else {
@@ -462,7 +513,7 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
       debugOne = false
     }
   }
-  private def debug(message: String, a: Statement, bs: Statement*): Unit = {
+  private def debug(message: => String, a: Statement, bs: Statement*): Unit = {
     debug(message)
     debug(a.debugStr)
     bs.foreach { b => debug(b.debugStr) }
@@ -470,6 +521,12 @@ class Merger[MT <: MetaTypes](and: MonomorphicFunction[MT#ColumnType]) extends S
 }
 
 object Merger {
+  def apply[MT <: MetaTypes](stmt: Statement[MT], and: types.MonomorphicFunction[MT]) =
+    new Merger(and, aggressive = false).merge(stmt)
+
+  def aggressive[MT <: MetaTypes](stmt: Statement[MT], and: types.MonomorphicFunction[MT]) =
+    new Merger(and, aggressive = true).merge(stmt)
+
   def combineLimits(aLim: Option[BigInt], aOff: Option[BigInt], bLim: Option[BigInt], bOff: Option[BigInt]): (Option[BigInt], Option[BigInt]) = {
     // ok, what we're doing here is basically finding the intersection of two segments of
     // the integers, where either segment may end at infinity.  Note that all the inputs are
