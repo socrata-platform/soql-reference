@@ -22,8 +22,6 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
   def find(predicate: Expr[MT] => Boolean) = None
   def contains(e: Expr[MT]): Boolean = false
 
-  lazy val resourceName = Some(definiteResourceName)
-
   lazy val schema = basedOn.schema.iterator.map { case (columnLabel, ent) =>
     From.SchemaEntry(
       label, columnLabel, ent.name, ent.typ, ent.hint,
@@ -45,7 +43,7 @@ trait FromCTEImpl[MT <: MetaTypes] { this: FromCTE[MT] =>
   private[analyzer2] def doRewriteDatabaseNames[MT2 <: MetaTypes](state: RewriteDatabaseNamesState[MT2]) =
     copy[MT2](
       basedOn = basedOn.doRewriteDatabaseNames(state),
-      definiteResourceName = state.changesOnlyLabels.convertRNSOnly(definiteResourceName)
+      resourceName = resourceName.map(state.changesOnlyLabels.convertRNSOnly(_))
     )
 
   private[analyzer2] def doRelabel(state: RelabelState) = {
@@ -109,7 +107,7 @@ trait OFromCTEImpl { this: FromCTE.type =>
       buffer.write(from.cteLabel)
       buffer.write(from.label)
       buffer.write(from.basedOn)
-      buffer.write(from.definiteResourceName)
+      buffer.write(from.resourceName)
       buffer.write(from.canonicalName)
       buffer.write(from.alias)
     }
@@ -121,8 +119,8 @@ trait OFromCTEImpl { this: FromCTE.type =>
         cteLabel = buffer.read[AutoCTELabel](),
         label = buffer.read[AutoTableLabel](),
         basedOn = buffer.read[Statement[MT]](),
-        definiteResourceName = buffer.read[ScopedResourceName](),
-        canonicalName = buffer.read[CanonicalName](),
+        resourceName = buffer.read[Option[ScopedResourceName]](),
+        canonicalName = buffer.read[Option[CanonicalName]](),
         alias = buffer.read[Option[ResourceName]]()
       )
     }

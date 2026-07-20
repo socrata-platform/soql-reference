@@ -75,7 +75,7 @@ object Pass {
   case object RemoveTrivialJoins extends Pass(semanticsPreserving = true, deep = true)
   case object RemoveSyntheticColumns extends Pass(semanticsPreserving = false, deep = false)
   case object RemoveSystemColumns extends Pass(semanticsPreserving = false, deep = false)
-  case object MaterializeNamedQueries extends Pass(semanticsPreserving = true, deep = true)
+  case object MaterializeQueries extends Pass(semanticsPreserving = true, deep = true)
 
   private[rewrite] def passBuilder[T >: Pass <: AnyRef](builder: SimpleHierarchyCodecBuilder[T]): SimpleHierarchyCodecBuilder[T] =
     builder
@@ -94,7 +94,7 @@ object Pass {
       .singleton("remove_trivial_joins", RemoveTrivialJoins)
       .singleton("remove_synthetic_columns", RemoveSyntheticColumns)
       .singleton("remove_system_columns", RemoveSystemColumns)
-      .singleton("materialize_named_queries", MaterializeNamedQueries)
+      .singleton("materialize_queries", MaterializeQueries)
 
   implicit val jCodec = passBuilder(AnyPass.codecBase[Pass]).build
 
@@ -116,7 +116,7 @@ object Pass {
         case 12 => RemoveTrivialJoins
         case 13 => RemoveSyntheticColumns
         case 14 => RemoveSystemColumns
-        case 15 => MaterializeNamedQueries
+        case 15 => MaterializeQueries
         case other => fail(s"Unknown rewrite pass type $other")
       }
 
@@ -151,7 +151,7 @@ object Pass {
           buffer.write(13)
         case RemoveSystemColumns =>
           buffer.write(14)
-        case MaterializeNamedQueries =>
+        case MaterializeQueries =>
           buffer.write(15)
       }
     }
