@@ -174,7 +174,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
     ((d"WITH" ++ Doc.lineSep ++ defDoc).nest(2) ++ Doc.lineSep ++ qDoc, augSchema)
   }
 
-  private def sqlizeMaterializedHint(h: MaterializedHint): Option[Doc] =
+  protected def sqlizeMaterializedHint(h: MaterializedHint): Option[Doc] =
     h match {
       case MaterializedHint.Default => None
       case MaterializedHint.Materialized => Some(d"MATERIALIZED")
