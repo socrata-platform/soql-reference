@@ -74,6 +74,11 @@ object TestFunctions {
   }
   val castIdentities = castIdentitiesByType.valuesIterator.toVector
 
+  val typeAssertionsByType = OrderedMap() ++ TestType.typesByName.iterator.map { case (n, t) =>
+    t -> mf(":!" + n.caseFolded, SpecialFunctions.TypeAssert(n), Seq(t), Seq.empty, t)
+  }
+  val typeAssertions = typeAssertionsByType.valuesIterator.toVector
+
   def potentialAccessors = for {
     method <- getClass.getMethods
     if Modifier.isPublic(method.getModifiers) && method.getParameterTypes.length == 0
@@ -88,7 +93,7 @@ object TestFunctions {
       method <- getClass.getMethods
       if Modifier.isPublic(method.getModifiers) && method.getParameterTypes.length == 0 && method.getReturnType == classOf[Function[_]]
     } yield method.invoke(this).asInstanceOf[Function[TestType]]
-    castIdentities ++ reflectedFunctions
+    castIdentities ++ typeAssertions ++ reflectedFunctions
   }
 
   val functionsByIdentity = allFunctions.foldLeft(Map.empty[String, Function[TestType]]) { (acc, func) =>
