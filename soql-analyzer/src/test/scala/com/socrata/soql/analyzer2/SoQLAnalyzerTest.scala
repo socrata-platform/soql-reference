@@ -1741,4 +1741,30 @@ class SoQLAnalyzerTest extends FunSuite with MustMatchers with TestHelper {
     val Right(ft2) = tf2.findTables(0, rn("ds1"), "select a, c", Map.empty)
     val Right(analysis2) = analyzer(ft2, UserParameters.empty)
   }
+
+  test("Type assertions disappear in analysis") {
+    val tf = tableFinder()
+    val Right(ft1) = tf.findTables(0, "SELECT 'hello' :! text from @single_row", Map.empty)
+    val Right(analysis1) = analyzer(ft1, UserParameters.empty)
+    val Right(ft2) = tf.findTables(0, "SELECT 'hello' from @single_row", Map.empty)
+    val Right(analysis2) = analyzer(ft2, UserParameters.empty)
+    analysis1.statement must be (isomorphicTo (analysis2.statement))
+  }
+
+  test("Incorrect assertions result in a type error") {
+    // type assertions are normal functions in the AST, but they're
+    // treated specially by the typechecker, so ensure that the
+    // failure case returns the correct error.
+    val tf = tableFinder()
+    val Right(ft) = tf.findTables(0, "SELECT true :! text from @single_row", Map.empty)
+    analyzer(ft, UserParameters.empty) match {
+      case Left(SoQLAnalyzerError.TypecheckError.TypeMismatch(_, expected, got)) =>
+        expected must equal (Set(TestText.name))
+        got must equal (TestBoolean.name)
+      case Right(_) =>
+        fail("Analysis should have failed")
+      case Left(err) =>
+        fail("Analysis failed with the wrong error: " + err)
+    }
+  }
 }

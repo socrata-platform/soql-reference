@@ -5,7 +5,7 @@ import scala.util.parsing.input.{Position, NoPosition}
 
 import com.socrata.soql.ast
 import com.socrata.soql.collection.{OrderedMap, CovariantSet}
-import com.socrata.soql.environment.{ColumnName, HoleName, ResourceName, Source, TableName, FunctionName, Provenance}
+import com.socrata.soql.environment.{ColumnName, HoleName, ResourceName, Source, TableName, FunctionName, Provenance, TypeName}
 import com.socrata.soql.functions.FunctionType
 import com.socrata.soql.typechecker.{TypeInfo2, FunctionInfo, FunctionCallTypechecker, Passed, TypeMismatchFailure}
 
@@ -88,6 +88,10 @@ class Typechecker[MT <: MetaTypes](
     Right(acc.valuesIterator.toVector)
   }
 
+  private object NamedType {
+    def unapply(name: TypeName): Option[CT] = typeInfo.typeFor(name)
+  }
+
   private def check(expr: ast.Expression): Either[Error, Seq[Expr]] = {
     expr match {
       case ast.FunctionCall(ast.SpecialFunctions.Parens, Seq(param), None, None) =>
@@ -150,6 +154,8 @@ class Typechecker[MT <: MetaTypes](
           case (Some(checked), Left(_)) => Right(checked)
           case (None, other) => other
         }
+      case ast.FunctionCall(ast.SpecialFunctions.TypeAssert(NamedType(typ)), Seq(param), None, None) =>
+        check(param).flatMap(disambiguate(_, Some(typ), param.position)).map(Seq(_))
       case fc: ast.FunctionCall =>
         checkFuncall(fc).flatMap(squash(_, fc.position))
       case col@ast.ColumnOrAliasRef(None, name) =>
