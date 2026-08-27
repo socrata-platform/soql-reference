@@ -680,7 +680,7 @@ object SoQLFunctions {
   // Sometimes the last few days of December may be considered the first week of
   // next year. See https://en.wikipedia.org/wiki/ISO_week_date for more info.
   val FloatingTimeStampExtractWoy = mf("floating timestamp extract week of year", FunctionName("date_extract_woy"), Seq(SoQLFloatingTimestamp), Seq.empty, SoQLNumber)(
-    "Extract the week of the year as an integer between 0 and 51"
+    "Extract the week of the year as an integer between 1 and 53"
   )
   // This is useful when you are also extracting the week (iso week). This is
   // because the iso year will give the year associated with the iso week whereas
