@@ -8,14 +8,14 @@ metadata:
     query language. Some keywords to make this entity more searchable - joins,
     unions, filters, group bys, sqlization.
   links:
-    - title: "On the Interpretation of SoQL"
-      url: "https://socrata.atlassian.net/wiki/spaces/PD/pages/2478702783/On+the+Interpretation+of+SoQL"
-    - title: "SoQL Function Documentation"
-      url: "https://github.com/socrata-platform/soql-reference/blob/main/soql-stdlib/src/main/scala/com/socrata/soql/functions/SoQLFunctions.scala#L14"
+  - title: "On the Interpretation of SoQL"
+    url: "https://socrata.atlassian.net/wiki/spaces/PD/pages/2478702783/On+the+Interpretation+of+SoQL"
+  - title: "SoQL Function Documentation"
+    url: "https://github.com/socrata-platform/soql-reference/blob/main/soql-stdlib/src/main/scala/com/socrata/soql/functions/SoQLFunctions.scala#L14"
   annotations:
     github.com/project-slug: 'socrata-platform/soql-postgres-adapter'
     backstage.io/techdocs-ref: dir:.
 spec:
   type: library
-  owner: egress
+  owner: platform-data-services
   lifecycle: production
