@@ -88,15 +88,15 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
   def funcallSqlizer = exprSqlizer.funcallSqlizer
   def exprSqlFactory = exprSqlizer.exprSqlFactory
 
-  def apply(
+  final def apply(
     analysis: SoQLAnalysis[MT],
     ec: ExtraContext
   )(implicit ct: ClassTag[CV]): Either[SqlizerError, Sqlizer.Result[MT]] = {
-    sqlize(analysis, true, ec).map { case (sql, augmentedSchema, dynamicContext) =>
+    sqlize(analysis, true, ec).map { case (sql, augmentedSchema, finishedEc) =>
       Sqlizer.Result(
         sql,
         new ResultExtractor(augmentedSchema),
-        ec.finish()
+        finishedEc
       )
     }
   }
@@ -111,7 +111,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
     analysis: SoQLAnalysis[MT],
     rewriteOutputColumns: Boolean,
     ec: ExtraContext
-  ): Either[SqlizerError, (Doc, AugmentedSchema, DynamicContext)] = {
+  ): Either[SqlizerError, (Doc, AugmentedSchema, MT#ExtraContextResult)] = {
     val rewritten = rewriteSearch(analysis.statement)
     val repFor = mkRepProvider(this, analysis.physicalTableMap, ec)
     val dynamicContext = Sqlizer.DynamicContext[MT](
@@ -125,7 +125,7 @@ class Sqlizer[MT <: MetaTypes with MetaTypesExt](
 
     try {
       val (sql, augmentedSchema) = sqlizeStatement(rewritten, AvailableSchemas.empty, dynamicContext, rewriteOutputColumns)
-      Right((sql, augmentedSchema, dynamicContext))
+      Right((sql, augmentedSchema, ec.finish()))
     } catch {
       case bail: Bail => Left(bail.err)
     }
