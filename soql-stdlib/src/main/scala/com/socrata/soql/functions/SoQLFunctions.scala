@@ -14,7 +14,7 @@ sealed abstract class SoQLFunctions
 object SoQLFunctions {
   private val log = org.slf4j.LoggerFactory.getLogger(classOf[SoQLFunctions])
 
-  import SoQLTypeClasses.{Ordered, Equatable, NumLike, RealNumLike, GeospatialLike, TimestampLike, PointLike, LineLike, PolygonLike, Stringable}
+  import SoQLTypeClasses.{Ordered, Equatable, NumLike, RealNumLike, GeospatialLike, TimestampLike, PointLike, LineLike, PolygonLike, Stringable, Fingerprintable}
   private val AllTypes = CovariantSet.from(SoQLType.typesByName.values.toSet)
 
   val NoDocs = "No documentation available"
@@ -952,6 +952,14 @@ object SoQLFunctions {
     """
     Return the value of the named context variable, or NULL if no such variable exists.
     """
+  )
+
+  val Fingerprint = f("fingerprint", FunctionName("fingerprint"),
+    Map("a" -> Fingerprintable),
+    Seq(VariableType("a")),
+    Seq.empty,
+    FixedType(SoQLText))(
+    "Produce a fixed-size hash of the given value.  The exact hash function and encoding of the results is not specified, only that if fingerprint(x) <> fingerprint(y) then x <> y and if fingerprint(x) = fingerprint(y) then x _probably_ is the same as y."
   )
 
   def potentialAccessors = for {

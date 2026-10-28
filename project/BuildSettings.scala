@@ -8,7 +8,7 @@ object BuildSettings {
     organization := "com.socrata",
     scalaVersion := "2.13.10",
     crossScalaVersions := Seq("2.12.17", scalaVersion.value),
-    externalResolvers ++= Seq("socrata artifactory" at "https://repo.socrata.com/artifactory/libs-release")
+    evictionErrorLevel := Level.Warn
   )
 
   def projectSettings(assembly: Boolean = false): Seq[Setting[_]] = buildSettings ++ Seq(

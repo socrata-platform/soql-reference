@@ -1,11 +1,3 @@
-externalResolvers ++= Seq(
-  "socrata releases" at "https://repo.socrata.com/artifactory/libs-release/",
-  Resolver.url(
-    "typesafe sbt-plugins",
-    url("https://dl.bintray.com/typesafe/sbt-plugins")
-  )(Resolver.ivyStylePatterns)
-)
-
 organization := "com.socrata"
 
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "1.1.0")
@@ -17,3 +9,5 @@ libraryDependencies ++= Seq(
   "org.apache.ant" % "ant" % "1.8.4",
   "com.rojoma" %% "simple-arm-v2" % "2.3.2"
 )
+
+evictionErrorLevel := Level.Warn
