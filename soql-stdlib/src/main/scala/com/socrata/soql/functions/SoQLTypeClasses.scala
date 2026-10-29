@@ -40,4 +40,6 @@ object SoQLTypeClasses {
     case SoQLID | SoQLVersion => false
     case _ => true
   } : _*)
+
+  val Fingerprintable = GeospatialLike
 }
