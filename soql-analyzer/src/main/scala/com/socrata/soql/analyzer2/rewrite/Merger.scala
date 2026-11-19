@@ -295,9 +295,22 @@ class Merger[MT <: MetaTypes](and: types.MonomorphicFunction[MT], aggressive: Bo
         None
     }
 
+  @tailrec
+  private def hasRightJoins(from: From): Boolean = {
+    from match {
+      case _: AtomicFrom => false
+      case Join(JoinType.RightOuter | JoinType.FullOuter, _, _, _, _) => true
+      case Join(_, _, left, _, _) => hasRightJoins(left)
+    }
+  }
+
   private def definitelyRequiresSubselect(a: Select, aLabel: AutoTableLabel, b: Select): Boolean = {
     if(b.hint(SelectHint.NoChainMerge)) {
       debug("B asks not to merge with its upstream")
+      return true
+    }
+
+    if(hasRightJoins(b.from)) {
       return true
     }
 

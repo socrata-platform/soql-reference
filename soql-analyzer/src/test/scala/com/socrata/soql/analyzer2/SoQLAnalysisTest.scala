@@ -506,6 +506,35 @@ select count(*) |> select 2 as s order by s
     analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
   }
 
+  test("merge - doesn't merge across joins that include a right bias") {
+    val tf = tableFinder(
+      (0, "a") -> D(
+        "x" -> TestNumber
+      ),
+      (0, "b") -> D(
+        "y" -> TestNumber
+      ),
+      (0, "c") -> D(
+        "z" -> TestNumber
+      ),
+      (0, "lhs") -> Q(
+        0, "a",
+        "select *, @b.* left outer join @b on x = @b.y where x = 5"
+      ),
+      (0, "join") -> Q(
+        0, "lhs",
+        "select *, @c.* full outer join @c on x = @c.z"
+      )
+    )
+
+    val analysis = analyzeSaved(tf, "join")
+
+    val expectedAnalysis = analyze(tf, "select @a.*, @b.* from @a left outer join @b on @a.x = @b.y where @a.x = 5 |> select *, @c.* full outer join @c on x = @c.z")
+
+    analysis.merge(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+    analysis.mergeAggressively(and).statement must be (isomorphicTo(expectedAnalysis.statement))
+  }
+
   test("remove unused columns - simple") {
     val tf = tableFinder(
       (0, "twocol") -> D("text" -> TestText, "num" -> TestNumber)
