@@ -358,10 +358,14 @@ trait SelectImpl[MT <: MetaTypes] { this: Select[MT] =>
         )
     }
 
+  private[analyzer2] def selectHintDebugDoc: Option[Doc[Nothing]] =
+    if(hint.isEmpty) None
+    else Some(d"HINT(" ++ hint.toSeq.sortBy(_.text).map(_.debugDoc).punctuate(d",").sep ++ d")")
+
   private[analyzer2] override def doDebugDoc(implicit ev: StatementDocProvider[MT]) =
     Seq[Option[Doc[Annotation[MT]]]](
       Some(
-        (Seq(Some(d"SELECT"), distinctiveness.debugDoc(ev)).flatten.hsep +:
+        (Seq(Some(d"SELECT"), selectHintDebugDoc, distinctiveness.debugDoc(ev)).flatten.hsep +:
           selectList.toSeq.zipWithIndex.map { case ((columnLabel, NamedExpr(expr, columnName, _hint, _isSynthetic)), idx) =>
             expr.debugDoc(ev).annotate(Annotation.SelectListDefinition[MT](idx+1)) ++ Doc.softlineSep ++ d"AS" +#+ columnLabel.debugDoc.annotate(Annotation.ColumnAliasDefinition[MT](columnName, columnLabel))
           }.punctuate(d",")).sep.nest(2)
