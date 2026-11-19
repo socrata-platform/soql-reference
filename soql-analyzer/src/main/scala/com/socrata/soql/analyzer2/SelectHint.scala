@@ -1,14 +1,17 @@
 package com.socrata.soql.analyzer2
 
 import com.socrata.soql.serialize.{Readable, ReadBuffer, Writable, WriteBuffer}
+import com.socrata.prettyprint.prelude._
 
-sealed trait SelectHint
+sealed abstract class SelectHint(val text: String) {
+  val debugDoc: Doc[Nothing] = Doc(text)
+}
 object SelectHint {
-  case object Materialized extends SelectHint
-  case object NoRollup extends SelectHint
-  case object NoChainMerge extends SelectHint
-  case object CompoundRollup extends SelectHint
-  case object RollupAtJoin extends SelectHint
+  case object Materialized extends SelectHint("materialized")
+  case object NoRollup extends SelectHint("no_rollup")
+  case object NoChainMerge extends SelectHint("no_chain_merge")
+  case object CompoundRollup extends SelectHint("compound")
+  case object RollupAtJoin extends SelectHint("rollup_at_join")
 
   implicit object serialize extends Writable[SelectHint] with Readable[SelectHint] {
     def writeTo(buffer: WriteBuffer, hint: SelectHint): Unit = {
